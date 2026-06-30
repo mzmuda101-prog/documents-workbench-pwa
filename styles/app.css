@@ -529,7 +529,7 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
 
 .doc-canvas.read-only .docx-preview-host { cursor: default; }
 .doc-canvas.edit-mode .docx-preview-host { cursor: default; }
-.doc-canvas.edit-mode .docx-editable-p { cursor: text; }
+.doc-canvas.edit-mode .docx-editable-p { cursor: text; white-space: pre-wrap; }
 .doc-canvas.edit-mode .docx-editable-p {
   outline: none; border-radius: 3px;
   transition: box-shadow var(--t), background var(--t);

@@ -49,33 +49,119 @@ function collectTextNodes(doc, scope) {
 }
 
 function getParagraphText(pEl) {
-  const texts = pEl.getElementsByTagNameNS(W_NS, "t");
   let out = "";
-  for (let i = 0; i < texts.length; i++) out += texts[i].textContent || "";
+  const runs = pEl.getElementsByTagNameNS(W_NS, "r");
+  for (let r = 0; r < runs.length; r++) {
+    const children = runs[r].childNodes;
+    for (let c = 0; c < children.length; c++) {
+      const child = children[c];
+      if (child.nodeType !== 1) continue;
+      if (child.localName === "t" && child.namespaceURI === W_NS) out += child.textContent || "";
+      else if (child.localName === "br" && child.namespaceURI === W_NS) out += "\n";
+    }
+  }
   return out;
 }
 
+function clearParagraphRuns(pEl) {
+  Array.from(pEl.getElementsByTagNameNS(W_NS, "r")).forEach((r) => r.parentNode.removeChild(r));
+}
+
 function setParagraphText(pEl, text) {
-  const runs = Array.from(pEl.getElementsByTagNameNS(W_NS, "r"));
   const sanitized = sanitizeXmlText(text);
-  if (!runs.length) {
-    const r = pEl.ownerDocument.createElementNS(W_NS, "r");
-    const t = pEl.ownerDocument.createElementNS(W_NS, "t");
-    t.textContent = sanitized;
-    r.appendChild(t);
+  clearParagraphRuns(pEl);
+  if (!sanitized) return;
+  const parts = sanitized.split("\n");
+  const doc = pEl.ownerDocument;
+  parts.forEach((part, i) => {
+    const r = doc.createElementNS(W_NS, "r");
+    if (part) {
+      const t = doc.createElementNS(W_NS, "t");
+      if (/^\s|\s$/.test(part)) t.setAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:space", "preserve");
+      t.textContent = part;
+      r.appendChild(t);
+    }
     pEl.appendChild(r);
-    return;
+    if (i < parts.length - 1) {
+      const brRun = doc.createElementNS(W_NS, "r");
+      brRun.appendChild(doc.createElementNS(W_NS, "br"));
+      pEl.appendChild(brRun);
+    }
+  });
+}
+
+function splitParagraphInXml(xml, index, beforeText, afterText) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, "application/xml");
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  const p = paragraphs[index];
+  if (!p) return { xml, count: 0 };
+  setParagraphText(p, beforeText);
+  const newP = p.cloneNode(true);
+  clearParagraphRuns(newP);
+  setParagraphText(newP, afterText);
+  if (p.nextSibling) p.parentNode.insertBefore(newP, p.nextSibling);
+  else p.parentNode.appendChild(newP);
+  return { xml: new XMLSerializer().serializeToString(doc), count: 1 };
+}
+
+function getWVal(el) {
+  if (!el) return null;
+  return el.getAttributeNS(W_NS, "val") ?? el.getAttribute("w:val") ?? el.getAttribute("val");
+}
+
+function setWVal(el, value) {
+  el.setAttributeNS(W_NS, "val", String(value));
+}
+
+function getParagraphListLevel(pEl) {
+  const pPr = pEl.getElementsByTagNameNS(W_NS, "pPr")[0];
+  const numPr = pPr?.getElementsByTagNameNS(W_NS, "numPr")[0];
+  if (!numPr) return -1;
+  const ilvl = numPr.getElementsByTagNameNS(W_NS, "ilvl")[0];
+  const raw = ilvl ? getWVal(ilvl) : "0";
+  const level = parseInt(raw, 10);
+  return Number.isFinite(level) ? level : 0;
+}
+
+function mergeParagraphInXml(xml, index) {
+  if (index <= 0) return { xml, count: 0 };
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, "application/xml");
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  const prev = paragraphs[index - 1];
+  const curr = paragraphs[index];
+  if (!prev || !curr) return { xml, count: 0 };
+  const joinAt = getParagraphText(prev).length;
+  setParagraphText(prev, getParagraphText(prev) + getParagraphText(curr));
+  curr.parentNode.removeChild(curr);
+  return { xml: new XMLSerializer().serializeToString(doc), count: 1, joinAt };
+}
+
+function changeListLevelInXml(xml, index, delta) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, "application/xml");
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  const p = paragraphs[index];
+  if (!p) return { xml, count: 0 };
+  let pPr = p.getElementsByTagNameNS(W_NS, "pPr")[0];
+  if (!pPr) {
+    pPr = doc.createElementNS(W_NS, "pPr");
+    p.insertBefore(pPr, p.firstChild);
   }
-  let firstT = runs[0].getElementsByTagNameNS(W_NS, "t")[0];
-  if (!firstT) {
-    firstT = pEl.ownerDocument.createElementNS(W_NS, "t");
-    runs[0].appendChild(firstT);
+  const numPr = pPr.getElementsByTagNameNS(W_NS, "numPr")[0];
+  if (!numPr) return { xml, count: 0 };
+  let ilvl = numPr.getElementsByTagNameNS(W_NS, "ilvl")[0];
+  if (!ilvl) {
+    ilvl = doc.createElementNS(W_NS, "ilvl");
+    numPr.insertBefore(ilvl, numPr.firstChild);
+    setWVal(ilvl, "0");
   }
-  firstT.textContent = sanitized;
-  for (let i = 1; i < runs.length; i++) {
-    const ts = runs[i].getElementsByTagNameNS(W_NS, "t");
-    for (let j = 0; j < ts.length; j++) ts[j].textContent = "";
-  }
+  const current = parseInt(getWVal(ilvl) || "0", 10);
+  const next = Math.max(0, Math.min(8, current + delta));
+  if (next === current) return { xml, count: 0 };
+  setWVal(ilvl, String(next));
+  return { xml: new XMLSerializer().serializeToString(doc), count: 1 };
 }
 
 async function extractParagraphTextsFromDocx(bytes) {
@@ -240,6 +326,9 @@ function applyParagraphTransformInXml(xml, edit, scope) {
 function applyEditToXml(xml, edit, opts = {}) {
   const scope = edit.scope || "all";
   if (edit.op === "paragraphBatch") return applyParagraphBatchInXml(xml, edit.items);
+  if (edit.op === "splitParagraph") return splitParagraphInXml(xml, edit.index, edit.before, edit.after);
+  if (edit.op === "mergeParagraph") return mergeParagraphInXml(xml, edit.index);
+  if (edit.op === "listLevel") return changeListLevelInXml(xml, edit.index, edit.delta);
   if (edit.op === "case" || edit.op === "trim" || edit.op === "affix") return applyParagraphTransformInXml(xml, edit, scope);
   return applyReplaceInXml(xml, edit, scope, opts);
 }

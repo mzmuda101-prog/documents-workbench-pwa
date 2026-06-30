@@ -70,13 +70,45 @@ async function run() {
       return { ok: false, step: "rerender", msg: hostText.slice(0, 200) };
     }
 
-    return { ok: true, replaceCount, paraCount: texts2.length };
+    // Enter — podział akapitu (Word-like)
+    const splitCount = await applyDocumentEdit({
+      op: "splitParagraph",
+      index: 0,
+      before: "ROUNDTRIP",
+      after: "INLINE EDIT",
+    });
+    if (!splitCount) return { ok: false, step: "split", msg: "splitParagraph returned 0" };
+
+    const afterSplit = await extractParagraphTextsFromDocx(originalFileBytes);
+    if (afterSplit[0] !== "ROUNDTRIP" || afterSplit[1] !== "INLINE EDIT") {
+      return { ok: false, step: "split-xml", msg: `${afterSplit[0]} | ${afterSplit[1]}` };
+    }
+
+    const mergeCount = await applyDocumentEdit({ op: "mergeParagraph", index: 1 });
+    if (!mergeCount) return { ok: false, step: "merge", msg: "mergeParagraph returned 0" };
+    const afterMerge = await extractParagraphTextsFromDocx(originalFileBytes);
+    if (afterMerge[0] !== "ROUNDTRIPINLINE EDIT") {
+      return { ok: false, step: "merge-xml", msg: afterMerge[0] };
+    }
+
+    const headingCount = getHeadingParaIndices().length;
+
+    await applyDocumentEdit({
+      op: "paragraphBatch",
+      items: [{ index: 0, text: "LINE1\nLINE2" }],
+    });
+    const afterSoft = await extractParagraphTextsFromDocx(originalFileBytes);
+    if (!afterSoft[0]?.includes("LINE1") || !afterSoft[0]?.includes("LINE2")) {
+      return { ok: false, step: "soft-break", msg: afterSoft[0] };
+    }
+
+    return { ok: true, replaceCount, paraCount: texts2.length, splitCount, mergeCount, headingCount };
   });
 
   if (!result.ok) throw new Error(`Roundtrip failed at ${result.step}: ${result.msg}`);
   assertNoErrors(errors, "save-roundtrip");
   await browser.close();
-  console.log(`✅  save-roundtrip-playwright passed (${result.paraCount} paragraphs, ${result.replaceCount} replace hits)`);
+  console.log(`✅  save-roundtrip-playwright passed (${result.paraCount} paragraphs, merge=${result.mergeCount}, headings=${result.headingCount})`);
 }
 
 run().catch((err) => {

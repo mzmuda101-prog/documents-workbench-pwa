@@ -108,6 +108,39 @@ async function downloadBytes(bytes, name) {
   URL.revokeObjectURL(url);
 }
 
+async function ensureWriteAccess() {
+  if (fileHandle && typeof fileHandle.createWritable === "function") {
+    let perm = await fileHandle.queryPermission({ mode: "readwrite" });
+    if (perm !== "granted") perm = await fileHandle.requestPermission({ mode: "readwrite" });
+    if (perm === "granted") return fileHandle;
+  }
+  if (!window.showOpenFilePicker) return null;
+  toast(t("savePickFileHint"), "info");
+  try {
+    const [handle] = await window.showOpenFilePicker({
+      mode: "readwrite",
+      types: [{
+        description: "Word Document",
+        accept: { "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"] },
+      }],
+      multiple: false,
+    });
+    const file = await handle.getFile();
+    if (currentFileName && file.name && file.name !== currentFileName) {
+      if (!window.confirm(t("saveDifferentFileWarn", { name: file.name }))) return null;
+    }
+    fileHandle = handle;
+    if (file.name) {
+      currentFileName = file.name;
+      setFileUi(currentFileName, originalFileBytes?.byteLength || file.size);
+    }
+    return handle;
+  } catch (e) {
+    if (e && e.name === "AbortError") return null;
+    throw e;
+  }
+}
+
 async function saveDocument() {
   if (!originalFileBytes) {
     toast(t("noFileToSave"), "warning");
@@ -116,24 +149,21 @@ async function saveDocument() {
   setLoading(true, t("savingFile"));
   try {
     const bytes = await buildDocumentForSave();
-    if (fileHandle && typeof fileHandle.createWritable === "function") {
-      if (!window.confirm(t("saveInPlaceWarn"))) return;
-      try {
-        const writable = await fileHandle.createWritable();
-        await writable.write(bytes);
-        await writable.close();
-        pendingDocEdits = [];
-        originalFileBytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-        await refreshInlineEditBaseline(originalFileBytes);
-        setDirtyState(false);
-        toast(t("saveDone"), "success");
-        if (typeof closeMobileSidebarIfOpen === "function") closeMobileSidebarIfOpen();
-        return;
-      } catch (_) {
-        toast(t("savePermissionDenied"), "warning");
-      }
+    const handle = await ensureWriteAccess();
+    if (!handle) {
+      toast(t("saveCancelled"), "info");
+      return;
     }
-    await saveDocumentAs();
+    if (!window.confirm(t("saveInPlaceWarn"))) return;
+    const writable = await handle.createWritable();
+    await writable.write(bytes);
+    await writable.close();
+    pendingDocEdits = [];
+    originalFileBytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    await refreshInlineEditBaseline(originalFileBytes);
+    setDirtyState(false);
+    toast(t("saveDone"), "success");
+    if (typeof closeMobileSidebarIfOpen === "function") closeMobileSidebarIfOpen();
   } catch (e) {
     log(String(e.message || e), "error");
     toast(t("saveFailed"), "error");
@@ -195,6 +225,7 @@ async function openFilePicker() {
   if (window.showOpenFilePicker) {
     try {
       const [handle] = await window.showOpenFilePicker({
+        mode: "readwrite",
         types: [{
           description: "Word Document",
           accept: { "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"] },

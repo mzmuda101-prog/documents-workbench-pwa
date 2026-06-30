@@ -9,22 +9,26 @@ function analyzeDocumentDom(root) {
   const content = getDocContentRoot(root);
   const text = content?.textContent || "";
   const words = text.trim() ? text.trim().split(/\s+/).filter(Boolean).length : 0;
+  const allParas = Array.from(content?.querySelectorAll("p") || []);
   const headings = [];
   const headingEls = content?.querySelectorAll("h1, h2, h3, h4, h5, h6, p[style*='heading']") || [];
-  headingEls.forEach((el, i) => {
+  headingEls.forEach((el) => {
     const label = (el.textContent || "").trim();
     if (!label) return;
-    headings.push({ index: i, label, el });
+    const paraIndex = allParas.indexOf(el);
+    headings.push({ index: headings.length, paraIndex, label, el });
   });
   if (!headings.length && content) {
-    content.querySelectorAll("p").forEach((el, i) => {
+    allParas.forEach((el, i) => {
       const label = (el.textContent || "").trim();
-      if (label && label.length < 120 && /^[A-Z0-9]/.test(label)) {
-        headings.push({ index: i, label, el });
+      const cls = el.className || "";
+      const isStyleHeading = /heading|docx-heading|Title|Subtitle/i.test(cls);
+      if (label && (isStyleHeading || (label.length < 120 && /^[A-Z0-9ĄĆĘŁŃÓŚŹŻ]/.test(label)))) {
+        headings.push({ index: headings.length, paraIndex: i, label, el });
       }
     });
   }
-  const paragraphs = content?.querySelectorAll("p")?.length || 0;
+  const paragraphs = allParas.length;
   const tables = content?.querySelectorAll("table")?.length || 0;
   return { words, chars: text.length, headings, paragraphs, tables, text };
 }
