@@ -1,10 +1,8 @@
 // Mobile doc layout: Word-like reflow on small screens (preview only — save unchanged).
 
 const MOBILE_MQ = window.matchMedia("(max-width: 768px)");
-const ZOOM_MIN_DESKTOP = 0.7;
-const ZOOM_MAX_DESKTOP = 1.4;
-const ZOOM_MIN_MOBILE = 0.35;
-const ZOOM_MAX_MOBILE = 1.4;
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 2;
 
 const docZoomShellEl = document.getElementById("docZoomShell");
 const zoomFitBtnEl = document.getElementById("zoomFitBtn");
@@ -32,9 +30,7 @@ function syncViewportClass() {
 }
 
 function getZoomLimits() {
-  return isMobileViewport()
-    ? { min: ZOOM_MIN_MOBILE, max: ZOOM_MAX_MOBILE }
-    : { min: ZOOM_MIN_DESKTOP, max: ZOOM_MAX_DESKTOP };
+  return { min: ZOOM_MIN, max: ZOOM_MAX };
 }
 
 function syncZoomSliderLimits() {
@@ -144,24 +140,8 @@ function computeFitZoom() {
   return Math.max(min, Math.min(max, Math.round(fit * 100) / 100));
 }
 
-function updateZoomShellHeight(zoom) {
-  if (!docZoomShellEl || !docCanvasEl || shouldUseMobileReflow()) {
-    if (docZoomShellEl) docZoomShellEl.style.height = "";
-    return;
-  }
-  if (!isMobileViewport()) {
-    docZoomShellEl.style.height = "";
-    return;
-  }
-  const host = docCanvasEl.querySelector(".docx-preview-host");
-  if (!host) {
-    docZoomShellEl.style.height = "";
-    return;
-  }
-  const canvasStyle = getComputedStyle(docCanvasEl);
-  const padY = (parseFloat(canvasStyle.paddingTop) || 0) + (parseFloat(canvasStyle.paddingBottom) || 0);
-  const scaled = (host.offsetHeight + padY) * zoom;
-  docZoomShellEl.style.height = `${Math.ceil(scaled)}px`;
+function updateZoomShellHeight(_zoom) {
+  if (docZoomShellEl) docZoomShellEl.style.height = ""; // [EN] CSS zoom expands layout — no manual height hack
 }
 
 function syncZoomFitButtonState() {

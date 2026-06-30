@@ -160,7 +160,7 @@ function toggleSidebar() {
 
 function applyZoom() {
   if (!docCanvasEl || !zoomLevelEl) return;
-  const { min, max } = typeof getZoomLimits === "function" ? getZoomLimits() : { min: 0.7, max: 1.4 };
+  const { min, max } = typeof getZoomLimits === "function" ? getZoomLimits() : { min: 0.5, max: 2 };
   let zoom = parseFloat(zoomLevelEl.value) || 1;
   zoom = Math.max(min, Math.min(max, zoom));
   zoomLevelEl.value = String(zoom);

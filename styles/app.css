@@ -486,10 +486,11 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
 }
 .doc-viewport {
   height: var(--doc-panel-height, 520px); overflow: auto;
+  overflow-x: auto; /* [EN] allow horizontal pan when zoomed in */
   background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 92%, white) 0%, color-mix(in srgb, var(--bg) 85%, white) 100%);
 }
-.doc-zoom-shell { width: 100%; }
-.doc-canvas { transform: scale(var(--doc-zoom, 1)); transform-origin: top center; padding: 24px 16px 48px; min-height: 100%; }
+.doc-zoom-shell { width: 100%; min-width: min-content; }
+.doc-canvas { zoom: var(--doc-zoom, 1); padding: 24px 16px 48px; min-height: 100%; } /* [EN] zoom expands scroll area; transform scale clips left edge */
 .docx-preview-host {
   max-width: 820px; margin: 0 auto; background: white; color: #111;
   box-shadow: var(--shadow-lg); border-radius: var(--r-sm);
@@ -809,12 +810,11 @@ html.is-mobile body.has-document .doc-panel {
     max-width: none;
   }
   .doc-canvas:not(.doc-reflow-mode) {
-    transform: none;
     zoom: var(--doc-zoom, 1);
     padding: 12px 8px 28px;
   }
   .docx-preview-host { max-width: 100%; }
-  .doc-zoom-shell { overflow: hidden; }
+  .doc-zoom-shell { overflow: visible; min-width: min-content; }
   .empty-state { min-height: 300px; padding: 28px 18px; }
 
   html.is-mobile .sidebar {
