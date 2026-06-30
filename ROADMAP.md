@@ -1,6 +1,6 @@
 # Documents Workbench PWA — Roadmap
 
-Stan na **v0.2** (czerwiec 2026). Ostatnia wersja cache: `20260630-09`.
+Stan na **v0.2** (czerwiec 2026). Ostatnia wersja cache: `20260630-12`.
 
 ---
 

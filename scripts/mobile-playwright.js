@@ -1,4 +1,4 @@
-// mobile-playwright.js — mobile viewport: fit zoom, panel sheet, no horizontal overflow.
+// mobile-playwright.js — mobile viewport: reflow layout, panel sheet, no horizontal overflow.
 
 const {
   createTestPage,
@@ -22,21 +22,38 @@ async function run() {
 
   const layout = await page.evaluate(() => {
     const vp = document.getElementById("docViewport");
+    const canvas = document.getElementById("docCanvas");
+    const section = document.querySelector(".docx-preview-host section.docx") || document.querySelector(".docx-preview-host .docx");
     const host = document.querySelector(".docx-preview-host");
-    const zoom = parseFloat(getComputedStyle(document.getElementById("docCanvas")).getPropertyValue("--doc-zoom")) || 1;
     return {
+      hasDocument: document.body.classList.contains("has-document"),
+      reflow: canvas?.classList.contains("doc-reflow-mode"),
       viewportScrollW: vp?.scrollWidth || 0,
       viewportClientW: vp?.clientWidth || 0,
       hostW: host?.getBoundingClientRect().width || 0,
-      zoom,
+      sectionW: section?.getBoundingClientRect().width || 0,
       hasHorizontalOverflow: (vp?.scrollWidth || 0) > (vp?.clientWidth || 0) + 2,
     };
   });
 
+  if (!layout.hasDocument) throw new Error("Brak klasy has-document po wczytaniu");
+  console.log("  ✓ Tryb pełnej szerokości (has-document)");
+
+  const langVisible = await page.evaluate(() => {
+    const el = document.getElementById("langSwitch");
+    return !!el && getComputedStyle(el).display !== "none";
+  });
+  if (!langVisible) throw new Error("Przełącznik PL/EN ukryty w trybie czytania");
+  console.log("  ✓ PL/EN dostępne podczas czytania");
+
   if (layout.hasHorizontalOverflow) {
     throw new Error(`Poziomy overflow: scroll=${layout.viewportScrollW} client=${layout.viewportClientW}`);
   }
-  console.log(`  ✓ Brak poziomego overflow (zoom ${Math.round(layout.zoom * 100)}%)`);
+  const widthUse = layout.hostW / layout.viewportClientW;
+  if (widthUse < 0.96) {
+    throw new Error(`Za wąski podgląd: host ${Math.round(layout.hostW)}px / viewport ${layout.viewportClientW}px (${Math.round(widthUse * 100)}%)`);
+  }
+  console.log(`  ✓ Pełna szerokość (${Math.round(layout.hostW)}px / ${layout.viewportClientW}px, reflow=${layout.reflow})`);
 
   await page.locator("#panelToggle").click();
   await page.waitForTimeout(250);
@@ -50,12 +67,9 @@ async function run() {
   if (!panelClosed) throw new Error("Panel nie zamknął się");
   console.log("  ✓ Panel zamknięty");
 
-  await page.evaluate(() => {
-    if (typeof applyFitToWidth === "function") applyFitToWidth();
-  });
-  const fitActive = await page.evaluate(() => document.getElementById("zoomFitBtn")?.classList.contains("primary"));
-  if (!fitActive) throw new Error("Przycisk „Dopasuj szerokość” nie jest aktywny");
-  console.log("  ✓ Fit-to-width aktywny");
+  const sliderHidden = await page.evaluate(() => document.getElementById("zoomSliderField")?.classList.contains("hidden"));
+  if (!sliderHidden) throw new Error("Suwak zoom powinien być ukryty w trybie reflow");
+  console.log("  ✓ Suwak zoom ukryty w reflow");
 
   assertNoErrors(errors, "mobile-playwright");
   await browser.close();

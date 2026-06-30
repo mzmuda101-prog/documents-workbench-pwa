@@ -76,6 +76,7 @@ async function ingestFile(file, options = {}) {
     setStatus(t("docLoaded"));
     if (!options.silent) toast(t("docLoaded"), "success");
     if (typeof closeMobileSidebarIfOpen === "function") closeMobileSidebarIfOpen();
+    syncDocumentShellClass();
     return true;
   } catch (e) {
     log(String(e.message || e), "error");

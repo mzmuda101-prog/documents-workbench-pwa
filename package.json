@@ -6,6 +6,7 @@
   "scripts": {
     "postinstall": "node scripts/vendor-libs.mjs",
     "icons": "python3 scripts/gen-icons.py",
+    "icons:normalize": "node scripts/normalize-icons.js",
     "serve": "python3 -m http.server 7823",
     "build": "node scripts/build-release.mjs",
     "test": "node scripts/smoke-playwright.js && node scripts/save-roundtrip-playwright.js && node scripts/load-fixture-playwright.js && node scripts/edit-tools-playwright.js && node scripts/mobile-playwright.js && node scripts/visual-audit-playwright.js",

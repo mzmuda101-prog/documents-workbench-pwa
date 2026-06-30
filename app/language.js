@@ -75,8 +75,9 @@ const I18N = {
     filePanel: "Plik",
     viewPanel: "Podgląd",
     zoomLabel: "Powiększenie",
-    zoomFit: "Dopasuj szerokość",
-    zoomReset: "100%",
+    zoomFit: "Dopasuj do ekranu",
+    zoomReset: "Układ strony",
+    zoomReflowHint: "Tekst dopasowuje się do szerokości ekranu — zapis pliku bez zmian.",
     dropText: "Przeciągnij plik",
     dropOr: "lub kliknij tutaj",
     dropBtn: "Wybierz plik",
@@ -87,7 +88,10 @@ const I18N = {
     save: "Zapisz",
     saveAs: "Zapisz jako",
     updateApp: "Aktualizuj",
-    pdfSoon: "Podgląd PDF — w przygotowaniu",
+    closeDocWarn: "Masz niezapisane zmiany. Zamknąć dokument?",
+    closeDocAria: "Zamknij dokument",
+    docClosed: "Dokument zamknięty",
+    closeDoc: "Zamknij",
     introAria: "Intro Mateusza",
     groupData: "Dane",
     groupTools: "Analiza i edycja",
@@ -165,8 +169,9 @@ const I18N = {
     filePanel: "File",
     viewPanel: "View",
     zoomLabel: "Zoom",
-    zoomFit: "Fit width",
-    zoomReset: "100%",
+    zoomFit: "Fit to screen",
+    zoomReset: "Page layout",
+    zoomReflowHint: "Text reflows to screen width — the saved file stays unchanged.",
     dropText: "Drop a file",
     dropOr: "or click here",
     dropBtn: "Choose file",
@@ -177,7 +182,10 @@ const I18N = {
     save: "Save",
     saveAs: "Save as",
     updateApp: "Update",
-    pdfSoon: "PDF preview — coming soon",
+    closeDocWarn: "You have unsaved changes. Close the document?",
+    closeDocAria: "Close document",
+    docClosed: "Document closed",
+    closeDoc: "Close",
     introAria: "Mateusz intro",
     groupData: "Data",
     groupTools: "Analysis & editing",
@@ -203,6 +211,10 @@ function applyLanguage() {
   document.querySelectorAll("[data-i18n]").forEach((el) => {
     const key = el.dataset.i18n;
     if (copy[key]) el.textContent = copy[key];
+  });
+  document.querySelectorAll("[data-i18n-aria]").forEach((el) => {
+    const key = el.dataset.i18nAria;
+    if (copy[key]) el.setAttribute("aria-label", copy[key]);
   });
   const introVid = document.getElementById("introVideo");
   if (introVid && copy.introAria) introVid.setAttribute("aria-label", copy.introAria);

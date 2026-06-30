@@ -62,6 +62,7 @@ const panelHandle = document.getElementById("panelHandle");
 const sidebarScrim = document.getElementById("sidebarScrim");
 const themeToggle = document.getElementById("themeToggle");
 const brandRefresh = document.getElementById("brandRefresh");
+const closeDocBtn = document.getElementById("closeDocBtn");
 const appUpdateBtn = document.getElementById("appUpdateBtn");
 const networkBadge = document.getElementById("networkBadge");
 const loadingOverlayEl = document.getElementById("loadingOverlay");
@@ -168,14 +169,22 @@ function applyZoom() {
   if (typeof updateZoomShellHeight === "function") updateZoomShellHeight(zoom);
 }
 
+function syncDocumentShellClass() {
+  document.body.classList.toggle("has-document", !!originalFileBytes);
+  if (closeDocBtn) closeDocBtn.classList.toggle("hidden", !originalFileBytes);
+  const closePanelBtn = document.getElementById("closeDocPanelBtn");
+  if (closePanelBtn) closePanelBtn.classList.toggle("hidden", !originalFileBytes);
+}
+
 function syncDocViewportHeight() {
   if (!docPanelEl) return;
   requestAnimationFrame(() => {
     const rect = docPanelEl.getBoundingClientRect();
     const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 720;
-    const bottomGap = window.matchMedia("(max-width: 768px)").matches ? 14 : 24;
+    const safeBottom = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--safe-bottom")) || 0;
+    const bottomGap = window.matchMedia("(max-width: 768px)").matches ? 8 + safeBottom : 24;
     const available = Math.floor(viewportHeight - rect.top - bottomGap);
-    const minHeight = window.matchMedia("(max-width: 768px)").matches ? 320 : 420;
+    const minHeight = window.matchMedia("(max-width: 768px)").matches ? 280 : 420;
     docPanelEl.style.setProperty("--doc-panel-height", `${Math.max(minHeight, available)}px`);
   });
 }
@@ -211,5 +220,6 @@ function clearDocumentState() {
   baselineParagraphTexts = [];
   setDirtyState(false);
   showEmptyState();
+  syncDocumentShellClass();
   if (typeof syncActionButtons === "function") syncActionButtons();
 }

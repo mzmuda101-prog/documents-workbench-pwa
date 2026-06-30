@@ -7,9 +7,20 @@ function syncLangSwitchPill() {
   if (!active) return;
   const switchRect = switchEl.getBoundingClientRect();
   const rect = active.getBoundingClientRect();
-  switchEl.style.setProperty("--lang-pill-x", `${rect.left - switchRect.left}px`);
+  const pad = 4;
+  const x = Math.max(0, rect.left - switchRect.left - pad);
+  const maxX = switchRect.width - rect.width - pad * 2;
+  switchEl.style.setProperty("--lang-pill-x", `${Math.min(x, Math.max(0, maxX))}px`);
   switchEl.style.setProperty("--lang-pill-width", `${rect.width}px`);
   switchEl.classList.add("is-ready");
+}
+
+function requestCloseDocument() {
+  if (!originalFileBytes) return;
+  if (hasUnsavedChanges && !window.confirm(t("closeDocWarn"))) return;
+  clearDocumentState();
+  setStatus(t("noFile"));
+  toast(t("docClosed"), "info");
 }
 
 function initTheme() {
@@ -250,6 +261,9 @@ function registerServiceWorker() {
 
 if (themeToggle) themeToggle.addEventListener("click", toggleTheme);
 if (brandRefresh) brandRefresh.addEventListener("click", () => location.reload());
+if (closeDocBtn) closeDocBtn.addEventListener("click", requestCloseDocument);
+const closeDocPanelBtn = document.getElementById("closeDocPanelBtn");
+if (closeDocPanelBtn) closeDocPanelBtn.addEventListener("click", requestCloseDocument);
 if (appUpdateBtn) {
   appUpdateBtn.addEventListener("click", () => {
     navigator.serviceWorker.getRegistration().then((reg) => {
@@ -295,6 +309,7 @@ window.addEventListener("online", syncNetworkBadge);
 window.addEventListener("offline", syncNetworkBadge);
 window.addEventListener("resize", () => {
   syncDocViewportHeight();
+  syncLangSwitchPill();
   if (typeof onViewportChange === "function") onViewportChange();
 });
 
