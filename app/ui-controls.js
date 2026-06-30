@@ -19,6 +19,46 @@ function initTheme() {
   rootEl.setAttribute("data-theme", theme);
 }
 
+function initIntroSplash() {
+  const splash = document.getElementById("heroSplash");
+  const vid = document.getElementById("introVideo");
+  if (!splash) return;
+
+  if (sessionStorage.getItem(INTRO_PLAYED_KEY)) {
+    splash.style.display = "none";
+    document.body.classList.remove("splashing");
+    return;
+  }
+
+  document.body.classList.add("splashing");
+
+  const hideSplash = () => {
+    if (!splash || splash.classList.contains("hide")) return;
+    splash.classList.add("hide");
+    sessionStorage.setItem(INTRO_PLAYED_KEY, "true");
+    setTimeout(() => {
+      splash.style.display = "none";
+      document.body.classList.remove("splashing");
+    }, 700);
+  };
+
+  if (vid) {
+    try {
+      vid.currentTime = 0;
+      vid.muted = true;
+      vid.playbackRate = 1.5;
+      const playPromise = vid.play();
+      if (playPromise && typeof playPromise.catch === "function") playPromise.catch(() => hideSplash());
+    } catch {
+      hideSplash();
+    }
+    const fallback = setTimeout(hideSplash, 10000);
+    vid.addEventListener("ended", () => { clearTimeout(fallback); hideSplash(); }, { once: true });
+  } else {
+    setTimeout(hideSplash, 6000);
+  }
+}
+
 function toggleTheme() {
   const next = rootEl.getAttribute("data-theme") === "dark" ? "light" : "dark";
   rootEl.setAttribute("data-theme", next);
@@ -249,6 +289,7 @@ window.addEventListener("offline", syncNetworkBadge);
 window.addEventListener("resize", syncDocViewportHeight);
 
 wireFileDrop();
+initIntroSplash();
 initTheme();
 syncNetworkBadge();
 syncActionButtons();

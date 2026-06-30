@@ -1,4 +1,4 @@
-const CACHE_VERSION = "20260630-02";
+const CACHE_VERSION = "20260630-03";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
 
@@ -6,20 +6,21 @@ const APP_ASSETS = [
   "./",
   "./index.html",
   "./manifest.json",
-  "./styles/app.css?v=20260630-02",
+  "./styles/app.css?v=20260630-03",
   "./assets/fonts/space-grotesk-latin.woff2",
   "./assets/fonts/space-grotesk-latin-ext.woff2",
+  "./assets/media/mateusz-intro.mp4",
   "./lib/jszip.min.js",
   "./lib/docx-preview.bundle.js",
-  "./app/core.js?v=20260630-02",
-  "./app/language.js?v=20260630-02",
-  "./app/docx-patch.js?v=20260630-02",
-  "./app/document.js?v=20260630-02",
-  "./app/docx-viewer.js?v=20260630-02",
-  "./app/analysis.js?v=20260630-02",
-  "./app/edit-tools.js?v=20260630-02",
-  "./app/ui-controls.js?v=20260630-02",
-  "./app/bootstrap.js?v=20260630-02",
+  "./app/core.js?v=20260630-03",
+  "./app/language.js?v=20260630-03",
+  "./app/docx-patch.js?v=20260630-03",
+  "./app/document.js?v=20260630-03",
+  "./app/docx-viewer.js?v=20260630-03",
+  "./app/analysis.js?v=20260630-03",
+  "./app/edit-tools.js?v=20260630-03",
+  "./app/ui-controls.js?v=20260630-03",
+  "./app/bootstrap.js?v=20260630-03",
   "./assets/images/favicon.png",
   "./assets/images/apple-touch-icon.png",
   "./assets/images/icon-512.png",
@@ -27,7 +28,7 @@ const APP_ASSETS = [
 ];
 
 function isStaticAsset(url) {
-  return /\.(?:css|js|png|svg|jpg|jpeg|gif|webp|ico|woff2?|docx|pdf)$/i.test(url.pathname);
+  return /\.(?:css|js|png|svg|jpg|jpeg|gif|webp|ico|woff2?|mp4|docx|pdf)$/i.test(url.pathname);
 }
 
 self.addEventListener("install", (event) => {

@@ -4,12 +4,17 @@ const APP_URL = process.env.APP_URL || "http://127.0.0.1:7823/";
 
 async function run() {
   const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
+  const context = await browser.newContext();
+  await context.addInitScript(() => sessionStorage.setItem("introPlayed", "true"));
+
+  const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
 
   await page.goto(APP_URL, { waitUntil: "load" });
+  await page.evaluate(() => document.getElementById("heroSplash")?.remove());
+
   const title = await page.title();
   if (!title.includes("Documents Workbench")) throw new Error(`Unexpected title: ${title}`);
 

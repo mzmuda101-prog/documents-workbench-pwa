@@ -13,9 +13,12 @@
     <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png" />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin.woff2" crossorigin />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin-ext.woff2" crossorigin />
-    <link rel="stylesheet" href="styles/app.css?v=20260630-02" />
+    <link rel="stylesheet" href="styles/app.css?v=20260630-03" />
   </head>
   <body>
+    <div class="hero-overlay" id="heroSplash">
+      <video src="assets/media/mateusz-intro.mp4" autoplay muted playsinline tabindex="-1" preload="metadata" id="introVideo"></video>
+    </div>
     <div class="app">
       <header class="hero">
         <div class="hero-left">
@@ -49,9 +52,16 @@
 
       <div class="workspace">
         <aside class="sidebar" aria-label="Tools panel">
-          <section class="sidebar-group">
+          <section class="sidebar-group" id="group-data">
+            <div class="sidebar-group-head">
+              <span class="sidebar-group-title" id="group-data-title" data-i18n="groupData">Dane</span>
+            </div>
             <details class="panel" id="panel-file" open>
               <summary>
+                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                </svg>
                 <span class="panel-title" data-i18n="filePanel">Plik</span>
                 <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
               </summary>
@@ -80,7 +90,7 @@
                   <button class="btn" id="loadBtn" type="button" data-i18n="openFile">Otwórz plik</button>
                   <button class="btn" id="loadSampleBtn" type="button" data-i18n="loadSample">Przykład</button>
                 </div>
-                <div class="btn-row">
+                <div class="btn-row stack-divider">
                   <button class="btn" id="saveBtn" type="button" data-i18n="save" disabled>Zapisz</button>
                   <button class="btn" id="saveAsBtn" type="button" data-i18n="saveAs" disabled>Zapisz jako</button>
                 </div>
@@ -89,6 +99,10 @@
 
             <details class="panel" id="panel-view">
               <summary>
+                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
                 <span class="panel-title" data-i18n="viewPanel">Podgląd</span>
                 <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
               </summary>
@@ -104,9 +118,18 @@
                 </label>
               </div>
             </details>
+          </section>
 
+          <section class="sidebar-group" id="group-tools">
+            <div class="sidebar-group-head">
+              <span class="sidebar-group-title" id="group-tools-title" data-i18n="groupTools">Analiza i edycja</span>
+            </div>
             <details class="panel" id="panel-search">
               <summary>
+                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
                 <span class="panel-title" data-i18n="searchPanel">Wyszukiwanie</span>
                 <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
               </summary>
@@ -118,8 +141,8 @@
                 <label class="field">
                   <span data-i18n="searchScopeLabel">Zakres</span>
                   <select id="searchScope">
-                    <option value="all">Wszystko</option>
-                    <option value="headings">Nagłówki</option>
+                    <option value="all" data-i18n="searchScopeAll">Wszystko</option>
+                    <option value="headings" data-i18n="searchScopeHeadings">Nagłówki</option>
                   </select>
                 </label>
                 <button class="btn" id="searchHighlightBtn" type="button" data-i18n="searchHighlight">Podświetl</button>
@@ -129,6 +152,14 @@
 
             <details class="panel" id="panel-structure">
               <summary>
+                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <line x1="8" y1="6" x2="21" y2="6" />
+                  <line x1="8" y1="12" x2="21" y2="12" />
+                  <line x1="8" y1="18" x2="21" y2="18" />
+                  <line x1="3" y1="6" x2="3.01" y2="6" />
+                  <line x1="3" y1="12" x2="3.01" y2="12" />
+                  <line x1="3" y1="18" x2="3.01" y2="18" />
+                </svg>
                 <span class="panel-title" data-i18n="structurePanel">Struktura</span>
                 <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
               </summary>
@@ -140,6 +171,10 @@
 
             <details class="panel" id="panel-edit-tools">
               <summary>
+                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                </svg>
                 <span class="panel-title" data-i18n="editToolsPanel">Narzędzia edycji</span>
                 <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
               </summary>
@@ -173,7 +208,7 @@
         <button class="sidebar-scrim hidden" id="sidebarScrim" type="button" aria-label="Close panel"></button>
 
         <main class="main">
-          <section class="doc-panel panel">
+          <section class="doc-panel">
             <div class="doc-viewport" id="docViewport">
               <div class="empty-state" id="emptyState">
                 <div class="empty-icon" aria-hidden="true">
@@ -209,14 +244,14 @@
     </div>
     <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-    <script defer src="app/core.js?v=20260630-02"></script>
-    <script defer src="app/language.js?v=20260630-02"></script>
-    <script defer src="app/docx-patch.js?v=20260630-02"></script>
-    <script defer src="app/document.js?v=20260630-02"></script>
-    <script defer src="app/docx-viewer.js?v=20260630-02"></script>
-    <script defer src="app/analysis.js?v=20260630-02"></script>
-    <script defer src="app/edit-tools.js?v=20260630-02"></script>
-    <script defer src="app/ui-controls.js?v=20260630-02"></script>
-    <script defer src="app/bootstrap.js?v=20260630-02"></script>
+    <script defer src="app/core.js?v=20260630-03"></script>
+    <script defer src="app/language.js?v=20260630-03"></script>
+    <script defer src="app/docx-patch.js?v=20260630-03"></script>
+    <script defer src="app/document.js?v=20260630-03"></script>
+    <script defer src="app/docx-viewer.js?v=20260630-03"></script>
+    <script defer src="app/analysis.js?v=20260630-03"></script>
+    <script defer src="app/edit-tools.js?v=20260630-03"></script>
+    <script defer src="app/ui-controls.js?v=20260630-03"></script>
+    <script defer src="app/bootstrap.js?v=20260630-03"></script>
   </body>
 </html>

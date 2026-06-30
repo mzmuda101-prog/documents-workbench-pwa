@@ -67,6 +67,11 @@ const I18N = {
     saveAs: "Zapisz jako",
     updateApp: "Aktualizuj",
     pdfSoon: "Podgląd PDF — w przygotowaniu",
+    introAria: "Intro Mateusza",
+    groupData: "Dane",
+    groupTools: "Analiza i edycja",
+    searchScopeAll: "Wszystko",
+    searchScopeHeadings: "Nagłówki",
   },
   en: {
     locale: "en-US",
@@ -131,6 +136,11 @@ const I18N = {
     saveAs: "Save as",
     updateApp: "Update",
     pdfSoon: "PDF preview — coming soon",
+    introAria: "Mateusz intro",
+    groupData: "Data",
+    groupTools: "Analysis & editing",
+    searchScopeAll: "Everything",
+    searchScopeHeadings: "Headings",
   },
 };
 
@@ -152,6 +162,8 @@ function applyLanguage() {
     const key = el.dataset.i18n;
     if (copy[key]) el.textContent = copy[key];
   });
+  const introVid = document.getElementById("introVideo");
+  if (introVid && copy.introAria) introVid.setAttribute("aria-label", copy.introAria);
   document.querySelectorAll(".lang-button").forEach((btn) => {
     const on = btn.dataset.lang === currentLang;
     btn.classList.toggle("is-active", on);
