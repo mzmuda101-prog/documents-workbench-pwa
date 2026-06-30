@@ -13,7 +13,7 @@
     <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png" />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin.woff2" crossorigin />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin-ext.woff2" crossorigin />
-    <link rel="stylesheet" href="styles/app.css?v=20260630-14" />
+    <link rel="stylesheet" href="styles/app.css?v=20260630-15" />
   </head>
   <body>
     <div class="hero-overlay" id="heroSplash">
@@ -198,6 +198,39 @@
               </div>
             </details>
 
+            <details class="panel" id="panel-grammar">
+              <summary>
+                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                </svg>
+                <span class="panel-title" data-i18n="grammarPanel">Korekta</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
+              </summary>
+              <div class="panel-body stack">
+                <label class="field">
+                  <span data-i18n="grammarLangLabel">Język</span>
+                  <select id="grammarLang">
+                    <option value="pl">PL</option>
+                    <option value="en">EN</option>
+                  </select>
+                </label>
+                <label class="field checkbox">
+                  <input id="grammarNbsp" type="checkbox" />
+                  <span data-i18n="grammarNbspLabel">Twarde spacje (PL)</span>
+                </label>
+                <div class="btn-row">
+                  <button class="btn primary" id="grammarScanBtn" type="button" data-i18n="grammarScan">Skanuj dokument</button>
+                </div>
+                <div class="hint" id="grammarStatus"></div>
+                <div id="grammarSuggestions" class="fr-preview grammar-suggestions"></div>
+                <div class="btn-row">
+                  <button class="btn" id="grammarApplyAllBtn" type="button" data-i18n="grammarApplyAll">Zastosuj wszystkie</button>
+                  <button class="btn" id="grammarClearBtn" type="button" data-i18n="grammarClear">Wyczyść</button>
+                </div>
+              </div>
+            </details>
+
             <details class="panel" id="panel-structure">
               <summary>
                 <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -335,18 +368,20 @@
     </div>
     <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-    <script defer src="app/core.js?v=20260630-14"></script>
-    <script defer src="app/language.js?v=20260630-14"></script>
-    <script defer src="app/docx-patch.js?v=20260630-14"></script>
-    <script defer src="app/docx-inline-edit.js?v=20260630-14"></script>
-    <script defer src="app/document.js?v=20260630-14"></script>
-    <script defer src="app/docx-render-fixes.js?v=20260630-14"></script>
-    <script defer src="app/docx-viewer.js?v=20260630-14"></script>
-    <script defer src="app/analysis.js?v=20260630-14"></script>
-    <script defer src="app/find-replace-workbench.js?v=20260630-14"></script>
-    <script defer src="app/edit-tools.js?v=20260630-14"></script>
-    <script defer src="app/mobile-doc-zoom.js?v=20260630-14"></script>
-    <script defer src="app/ui-controls.js?v=20260630-14"></script>
-    <script defer src="app/bootstrap.js?v=20260630-14"></script>
+    <script defer src="app/core.js?v=20260630-15"></script>
+    <script defer src="app/language.js?v=20260630-15"></script>
+    <script defer src="app/docx-patch.js?v=20260630-15"></script>
+    <script defer src="app/docx-inline-edit.js?v=20260630-15"></script>
+    <script defer src="app/document.js?v=20260630-15"></script>
+    <script defer src="app/docx-render-fixes.js?v=20260630-15"></script>
+    <script defer src="app/docx-viewer.js?v=20260630-15"></script>
+    <script defer src="app/analysis.js?v=20260630-15"></script>
+    <script defer src="app/grammar-style.js?v=20260630-15"></script>
+    <script defer src="app/grammar-panel.js?v=20260630-15"></script>
+    <script defer src="app/find-replace-workbench.js?v=20260630-15"></script>
+    <script defer src="app/edit-tools.js?v=20260630-15"></script>
+    <script defer src="app/mobile-doc-zoom.js?v=20260630-15"></script>
+    <script defer src="app/ui-controls.js?v=20260630-15"></script>
+    <script defer src="app/bootstrap.js?v=20260630-15"></script>
   </body>
 </html>

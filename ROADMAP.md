@@ -1,6 +1,6 @@
 # Documents Workbench PWA — Roadmap
 
-Stan na **v0.2** (czerwiec 2026). Ostatnia wersja cache: `20260630-14`.
+Stan na **v0.2** (czerwiec 2026). Ostatnia wersja cache: `20260630-15`.
 
 ---
 
@@ -21,6 +21,7 @@ Stan na **v0.2** (czerwiec 2026). Ostatnia wersja cache: `20260630-14`.
 | Audyt wizualny bulletów / wcięć | ✅ |
 | **Faza 2.5 — Mobile UX** (fit-width, bottom sheet, safe-area, kompaktowy hero) | ✅ |
 | **Faza 3.1 — Find/Replace workbench** (skan, nawigacja, podgląd XML, zamiana 1/wszystkie) | ✅ |
+| **Faza 4 v1 — Korekta typografii** (skan offline, reguły 1–6, panel, apply 1/reguła/wszystkie) | ✅ |
 
 **Poza pierwotnym planem (ale wartościowe):** `test-fixtures/`, `docx-render-fixes.js`, `visual-audit-playwright.js`, fix wyszukiwania (treść vs CSS).
 
@@ -76,9 +77,22 @@ Znane problemy (stan obecny):
 
 ---
 
+## Kolejność prac (ustalona)
+
+| # | Faza | Moduł | Status |
+|---|------|--------|--------|
+| 1 | **4** | Korekta językowa i typografia (offline) | ✅ v1 |
+| 2 | **3.2** | Placeholdery `{{pole}}` | **następny** |
+| 3 | **3.3** | Snippety / klauzule | plan |
+| 4 | **3.4** | Inspektor z akcjami | plan |
+| — | 3.5 | Metadane (`docProps`) | później |
+| — | 3.6 | Eksport TXT / HTML | później |
+
+---
+
 ## Faza 3: Moduły na edycji
 
-Priorytet po **Fazie 2.5 (mobile)** — **3.1 zrobione**, kolejne:
+**3.1 zrobione.** Kolejność po Fazie 4: **3.2 → 3.3 → 3.4** (patrz tabela powyżej).
 
 1. ~~**Find/Replace workbench**~~ ✅ — podgląd trafień przed „zamień wszystkie”, licznik, przejście trafienie po trafieniu
 2. **Placeholdery** `{{pole}}` — wykrywanie, formularz wypełniania, podmiana w XML
@@ -89,36 +103,29 @@ Priorytet po **Fazie 2.5 (mobile)** — **3.1 zrobione**, kolejne:
 
 ---
 
-## Faza 4: Korekta językowa i typografia (NOWE)
+## Faza 4: Korekta językowa i typografia — ✅ v1
 
-Lokalny, **offline-first** moduł — bez wysyłania tekstu na serwer (zgodnie z filozofią warsztatu).
+Lokalny, **offline-first** moduł — bez wysyłania tekstu na serwer.
 
-### Zakres v1 (reguły deterministyczne)
+### Zrobione (v1)
 
-Panel **„Korekta”** w sidebarze: skan dokumentu → lista sugestii → zastosuj pojedynczo lub wszystkie.
+- `app/grammar-style.js` — reguły offline + `scanDocument` / `scanParagraph`
+- `app/grammar-panel.js` — panel „Korekta”, skan, grupy `<details>`, apply 1 / reguła / wszystkie
+- Reguły: podwójne spacje, spacja przed interpunkcją, wielokropek, cudzysłowy PL, wielka po kropce, sierota „i”, NBSP (opcjonalnie)
+- Zapis przez `paragraphBatch` + auto-rescan
+- Test: `scripts/grammar-playwright.js` (`npm run test:grammar`)
 
-| Reguła | Przykład problemu | Propozycja |
-|--------|-------------------|------------|
-| Sierota „i” | `… coś i.` na końcu zdania / linii | Przenieś „i” przed ostatni wyraz lub połącz zdania |
-| Wielka litera po kropce | `coś. i następne` | `coś. I następne` (z kontekstem) |
-| Spacja przed interpunkcją | `słowo ,` | `słowo,` |
-| Podwójne spacje | `słowo  słowo` | pojedyncza spacja |
-| Twarde spacje (PL) | `w Polsce`, `i tak` | NBSP po jednoliterowych przyimkach/spójnikach (opcjonalna reguła) |
-| Cudzysłowy polskie | `"cytat"` | `„cytat”` |
-| Wielokropek / myślnik | `...` | `…` (opcjonalnie) |
-
-### Zakres v2 (później)
+### v2 (później)
 
 - Integracja z lokalnym słownikiem (np. Hunspell w WASM) — **ortografia**
 - Heurystyki gramatyczne (np. zgodność przyimków) — ostrożnie, bez halucynacji
-- Podświetlenie w podglądzie jak przy wyszukiwaniu (`search-hit`)
-- Testy Playwright na fixture z celowo zepsutą typografią
+- Podświetlenie w podglądzie jak przy wyszukiwaniu (`search-hit`) — per-trafienie w DOM
 
-### Implementacja (szkic)
+### Implementacja v1 (zrealizowane)
 
-- `app/grammar-style.js` — reguły jako `{ id, scan(text), suggest(text) }`
-- Pipeline jak `edit-tools`: skan → panel sugestii → `applyDocumentEdit` / batch patch
-- PL domyślnie; EN — uproszczony zestaw reguł
+- `app/grammar-style.js` — reguły jako `{ id, scan, fixAll }`
+- `app/grammar-panel.js` — skan → panel sugestii → `applyDocumentEdit` / `paragraphBatch`
+- PL domyślnie; EN — uproszczony zestaw reguł (bez cudzysłowów PL / sieroty „i”)
 
 ---
 
@@ -140,12 +147,9 @@ Panel **„Korekta”** w sidebarze: skan dokumentu → lista sugestii → zasto
 
 ## Rekomendowany następny krok
 
-**Faza 2.5 — Mobile UX** (na pierwszym miejscu):
+**Faza 3.2 — Placeholdery** (`{{pole}}`, formularz, podmiana w XML).
 
-1. Fit-to-width + auto zoom na telefonie  
-2. Naprawa panelu wysuwanego (bottom sheet, safe-area, scrim)
-
-Potem **Faza 3.1 — Find/Replace workbench**, a równolegle lub zaraz po — **Faza 4.1 — Korekta typografii**.
+Potem: **3.3 Snippety** → **3.4 Inspektor z akcjami**.
 
 ---
 

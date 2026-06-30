@@ -459,6 +459,25 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
 }
 .fr-preview-snippet { line-height: 1.35; word-break: break-word; }
 
+.grammar-suggestions { margin-top: 4px; }
+.grammar-rule-group { margin-bottom: 8px; border: 1px solid var(--border-subtle); border-radius: var(--r-sm); overflow: hidden; }
+.grammar-rule-summary {
+  display: flex; align-items: center; gap: 6px; padding: 8px 10px; cursor: pointer;
+  font-size: 12px; font-weight: 600; color: var(--ink); list-style: none;
+}
+.grammar-rule-summary::-webkit-details-marker { display: none; }
+.grammar-rule-name { flex: 1; }
+.grammar-rule-count { font-weight: 500; color: var(--ink-3); font-size: 11px; }
+.grammar-apply-rule { flex-shrink: 0; padding: 4px 8px; font-size: 10px; margin-left: auto; }
+.grammar-hit-list { max-height: 140px; padding: 0 8px 8px; }
+.grammar-hit-row { display: flex; gap: 6px; align-items: stretch; margin-bottom: 4px; }
+.grammar-hit-row .grammar-hit-item { flex: 1; min-width: 0; }
+.grammar-hit-row.is-active .grammar-hit-item {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent-light) 55%, var(--field));
+}
+.grammar-apply-one { flex-shrink: 0; padding: 4px 8px; font-size: 10px; align-self: stretch; }
+
 .doc-panel {
   overflow: hidden; min-height: var(--doc-panel-height, 520px);
   border-radius: var(--r-lg); border: 1px solid var(--glass-border);
