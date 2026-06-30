@@ -112,6 +112,8 @@ async function saveDocument() {
         await writable.write(bytes);
         await writable.close();
         pendingDocEdits = [];
+        originalFileBytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+        await refreshInlineEditBaseline(originalFileBytes);
         setDirtyState(false);
         toast(t("saveDone"), "success");
         return;
@@ -154,6 +156,7 @@ async function saveDocumentAs() {
       setFileUi(currentFileName, bytes.byteLength);
       originalFileBytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
       pendingDocEdits = [];
+      await refreshInlineEditBaseline(originalFileBytes);
       setDirtyState(false);
       toast(t("saveDone"), "success");
       return;
@@ -169,6 +172,7 @@ async function saveDocumentAs() {
   originalFileBytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   currentFileName = name;
   pendingDocEdits = [];
+  await refreshInlineEditBaseline(originalFileBytes);
   setDirtyState(false);
   toast(t("saveDone"), "success");
 }
@@ -272,10 +276,10 @@ if (zoomLevelEl) zoomLevelEl.addEventListener("input", applyZoom);
 if (readModeEl) {
   readModeEl.addEventListener("change", () => {
     readOnlyMode = readModeEl.checked;
-    docCanvasEl?.classList.toggle("read-only", readOnlyMode);
     const label = readModeEl.closest(".field")?.querySelector("span[data-i18n]");
     if (label) label.dataset.i18n = readOnlyMode ? "readModeOn" : "readModeOff";
     applyLanguage();
+    syncInlineEditMode();
   });
   docCanvasEl?.classList.add("read-only");
 }

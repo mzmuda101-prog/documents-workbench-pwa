@@ -4,13 +4,14 @@ Lokalny, offline-first warsztat do przeglądania, edycji i zapisywania plików `
 
 Siostrzana aplikacja [Sheet Workbench PWA](../sheet-workbench-pwa/README.md).
 
-## Funkcje (v0.1)
+## Funkcje (v0.2)
 
 - Otwarcie `.docx` (drag & drop, picker, File System Access API)
 - Podgląd dokumentu (`docx-preview`, leniwe ładowanie bibliotek)
+- **Edycja inline (WYSIWYG)** — kliknij akapit w trybie edycji, zapis przez ZIP-patch
 - Inspektor struktury: słowa, akapity, tabele, nawigacja po nagłówkach
 - Wyszukiwanie z podświetleniem
-- Narzędzia edycji: znajdź i zamień (ZIP-patch na `word/document.xml`)
+- Narzędzia edycji: znajdź i zamień, wielkość liter, trim/spacje, prefiks/sufiks
 - Zapis: w miejscu (FSA) lub „Zapisz jako” / pobranie
 - PWA: service worker, tryb offline po pierwszym załadowaniu
 - PL / EN, jasny / ciemny motyw
@@ -36,7 +37,8 @@ npm run build
 
 ```bash
 npm run serve   # w osobnym terminalu
-npm test
+npm test        # smoke + roundtrip + fixture + edit-tools
+npm run test:stress   # pełny przebieg na dużym .docx
 ```
 
 ## Deploy (GitHub + Vercel)

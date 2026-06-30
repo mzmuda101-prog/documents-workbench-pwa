@@ -412,6 +412,72 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
 }
 [data-theme="dark"] .docx-preview-host { background: #f8fafc; }
 
+/* Symbol/Wingdings bullets → native list markers (PUA glyphs = rectangles in browser) */
+.docx-preview-host section.docx p.docx-bullet-fixed,
+.docx-preview-host .docx p.docx-bullet-fixed {
+  list-style-position: outside !important;
+  text-indent: 0 !important; /* docx-preview uses negative indent for inside ::before bullets */
+  padding-inline-start: 0.35em !important;
+  /* margin-inline-start zostaje z docx-preview (36pt, 72pt…) — nie nadpisujemy */
+}
+.docx-preview-host p.docx-bullet-fixed::before {
+  content: none !important;
+  background: none !important;
+  display: none !important;
+}
+.docx-preview-host p.docx-bullet-fixed.docx-bullet-l0 { list-style-type: disc !important; }
+.docx-preview-host p.docx-bullet-fixed.docx-bullet-l1 { list-style-type: circle !important; }
+.docx-preview-host p.docx-bullet-fixed.docx-bullet-l2 { list-style-type: square !important; }
+
+/* Numbered / letter lists — ::before counter + negative text-indent misaligns text in edit mode */
+.docx-preview-host p.docx-list-numbered-fixed {
+  text-indent: 0 !important;
+}
+.docx-preview-host p.docx-list-numbered-fixed::before {
+  display: inline-block !important;
+  min-width: 1.85em;
+  text-align: end;
+  padding-inline-end: 0.45em;
+  vertical-align: top;
+  box-sizing: border-box;
+}
+
+.doc-canvas.read-only .docx-preview-host { cursor: default; }
+.doc-canvas.edit-mode .docx-preview-host { cursor: default; }
+.doc-canvas.edit-mode .docx-editable-p { cursor: text; }
+.doc-canvas.edit-mode .docx-editable-p {
+  outline: none; border-radius: 3px;
+  transition: box-shadow var(--t), background var(--t);
+}
+.doc-canvas.edit-mode .docx-editable-p:hover {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 42%, transparent);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+.doc-canvas.edit-mode .docx-editable-p:focus,
+.doc-canvas.edit-mode .docx-editable-p:focus-within {
+  box-shadow: inset 3px 0 0 var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+}
+/* list markers stay outside the text highlight band */
+.doc-canvas.edit-mode .docx-editable-p.docx-list-numbered-fixed:hover,
+.doc-canvas.edit-mode .docx-editable-p.docx-list-numbered-fixed:focus-within,
+.doc-canvas.edit-mode .docx-editable-p.docx-bullet-fixed:hover,
+.doc-canvas.edit-mode .docx-editable-p.docx-bullet-fixed:focus-within {
+  background: linear-gradient(
+    90deg,
+    transparent 2.4em,
+    color-mix(in srgb, var(--accent) 5%, transparent) 2.4em
+  );
+}
+.doc-canvas.edit-mode .docx-editable-p.docx-list-numbered-fixed:focus-within,
+.doc-canvas.edit-mode .docx-editable-p.docx-list-numbered-fixed:focus {
+  background: linear-gradient(
+    90deg,
+    transparent 2.4em,
+    color-mix(in srgb, var(--accent) 9%, transparent) 2.4em
+  );
+}
+
 .empty-state {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
   min-height: 360px; color: var(--muted); text-align: center; padding: 32px 24px;

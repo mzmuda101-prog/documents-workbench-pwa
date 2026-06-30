@@ -118,6 +118,7 @@ async function renderCurrentDocument() {
     documentStructure = analyzeDocumentDom(docCanvasEl);
     renderStructurePanel(documentStructure);
     if (searchQueryEl?.value.trim()) runDocumentSearch();
+    setupInlineEditingAfterRender();
   } finally {
     setLoading(false);
     syncDocViewportHeight();
@@ -126,14 +127,19 @@ async function renderCurrentDocument() {
 
 async function buildDocumentForSave() {
   if (!originalFileBytes) return null;
-  if (!pendingDocEdits.length) return originalFileBytes;
-  const { bytes } = await buildPatchedDocx(originalFileBytes, pendingDocEdits);
+  const inlineEdits = collectInlineParagraphEdits();
+  const edits = [...pendingDocEdits];
+  if (inlineEdits.length) edits.push({ op: "paragraphBatch", items: inlineEdits });
+  if (!edits.length) return originalFileBytes;
+  const { bytes } = await buildPatchedDocx(originalFileBytes, edits);
   return bytes;
 }
 
 async function applyDocumentEdit(edit) {
   if (!originalFileBytes) return 0;
-  recordPendingEdit(edit);
+  await mergeInlineEditsIntoBytes();
+  const normalized = edit.op ? edit : { ...edit, op: "replace" };
+  recordPendingEdit(normalized);
   const { bytes, changeCount } = await buildPatchedDocx(originalFileBytes, pendingDocEdits);
   pendingDocEdits = [];
   originalFileBytes = bytes;

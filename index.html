@@ -13,7 +13,7 @@
     <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png" />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin.woff2" crossorigin />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin-ext.woff2" crossorigin />
-    <link rel="stylesheet" href="styles/app.css?v=20260630-03" />
+    <link rel="stylesheet" href="styles/app.css?v=20260630-08" />
   </head>
   <body>
     <div class="hero-overlay" id="heroSplash">
@@ -180,16 +180,13 @@
               </summary>
               <div class="panel-body stack">
                 <label class="field">
-                  <span data-i18n="editFindLabel">Szukaj</span>
-                  <input id="editFind" type="text" autocomplete="off" />
-                </label>
-                <label class="field">
-                  <span data-i18n="editReplaceLabel">Zamień na</span>
-                  <input id="editReplace" type="text" autocomplete="off" />
-                </label>
-                <label class="field checkbox">
-                  <input id="editRegex" type="checkbox" />
-                  <span data-i18n="editRegexLabel">Wyrażenie regularne</span>
+                  <span data-i18n="editOpLabel">Operacja</span>
+                  <select id="editOp">
+                    <option value="replace" data-i18n="editOpReplace">Znajdź i zamień</option>
+                    <option value="case" data-i18n="editOpCase">Zmiana wielkości</option>
+                    <option value="trim" data-i18n="editOpTrim">Przytnij / spacje</option>
+                    <option value="affix" data-i18n="editOpAffix">Prefiks / sufiks</option>
+                  </select>
                 </label>
                 <label class="field">
                   <span data-i18n="editScopeLabel">Zakres</span>
@@ -198,6 +195,50 @@
                     <option value="body" data-i18n="editScopeBody">Treść główna</option>
                   </select>
                 </label>
+                <div id="editReplaceFields" class="stack">
+                  <label class="field">
+                    <span data-i18n="editFindLabel">Szukaj</span>
+                    <input id="editFind" type="text" autocomplete="off" />
+                  </label>
+                  <label class="field">
+                    <span data-i18n="editReplaceLabel">Zamień na</span>
+                    <input id="editReplace" type="text" autocomplete="off" />
+                  </label>
+                  <label class="field checkbox">
+                    <input id="editRegex" type="checkbox" />
+                    <span data-i18n="editRegexLabel">Wyrażenie regularne</span>
+                  </label>
+                </div>
+                <div id="editCaseFields" class="stack hidden">
+                  <label class="field">
+                    <span data-i18n="editCaseLabel">Wielkość liter</span>
+                    <select id="editCaseMode">
+                      <option value="upper" data-i18n="editCaseUpper">WIELKIE</option>
+                      <option value="lower" data-i18n="editCaseLower">małe</option>
+                      <option value="title" data-i18n="editCaseTitle">Jak Nazwa Własna</option>
+                    </select>
+                  </label>
+                </div>
+                <div id="editTrimFields" class="stack hidden">
+                  <label class="field">
+                    <span data-i18n="editTrimLabel">Tryb</span>
+                    <select id="editTrimMode">
+                      <option value="ends" data-i18n="editTrimEnds">Przytnij końce</option>
+                      <option value="collapse" data-i18n="editTrimCollapse">Zwiń wielokrotne spacje</option>
+                      <option value="hard" data-i18n="editTrimHard">Zamień twarde spacje</option>
+                    </select>
+                  </label>
+                </div>
+                <div id="editAffixFields" class="stack hidden">
+                  <label class="field">
+                    <span data-i18n="editPrefixLabel">Prefiks (z przodu)</span>
+                    <input id="editPrefix" type="text" autocomplete="off" />
+                  </label>
+                  <label class="field">
+                    <span data-i18n="editSuffixLabel">Sufiks (z tyłu)</span>
+                    <input id="editSuffix" type="text" autocomplete="off" />
+                  </label>
+                </div>
                 <button class="btn primary" id="applyEditToolBtn" type="button" data-i18n="applyEdit">Zastosuj</button>
               </div>
             </details>
@@ -244,14 +285,16 @@
     </div>
     <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-    <script defer src="app/core.js?v=20260630-03"></script>
-    <script defer src="app/language.js?v=20260630-03"></script>
-    <script defer src="app/docx-patch.js?v=20260630-03"></script>
-    <script defer src="app/document.js?v=20260630-03"></script>
-    <script defer src="app/docx-viewer.js?v=20260630-03"></script>
-    <script defer src="app/analysis.js?v=20260630-03"></script>
-    <script defer src="app/edit-tools.js?v=20260630-03"></script>
-    <script defer src="app/ui-controls.js?v=20260630-03"></script>
-    <script defer src="app/bootstrap.js?v=20260630-03"></script>
+    <script defer src="app/core.js?v=20260630-08"></script>
+    <script defer src="app/language.js?v=20260630-08"></script>
+    <script defer src="app/docx-patch.js?v=20260630-08"></script>
+    <script defer src="app/docx-inline-edit.js?v=20260630-08"></script>
+    <script defer src="app/document.js?v=20260630-08"></script>
+    <script defer src="app/docx-render-fixes.js?v=20260630-08"></script>
+    <script defer src="app/docx-viewer.js?v=20260630-08"></script>
+    <script defer src="app/analysis.js?v=20260630-08"></script>
+    <script defer src="app/edit-tools.js?v=20260630-08"></script>
+    <script defer src="app/ui-controls.js?v=20260630-08"></script>
+    <script defer src="app/bootstrap.js?v=20260630-08"></script>
   </body>
 </html>

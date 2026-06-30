@@ -20,4 +20,5 @@ async function renderDocxPreview(bytes, container) {
     renderFootnotes: true,
     renderEndnotes: true,
   });
+  fixDocxBulletRendering(wrapper);
 }

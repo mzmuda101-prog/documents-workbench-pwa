@@ -1,26 +1,31 @@
 // Document structure analysis and search highlighting.
 
-function analyzeDocumentDom(root) {
+function getDocContentRoot(root) {
   const host = root?.querySelector(".docx-preview-host") || root;
-  const text = host?.textContent || "";
+  return host?.querySelector("section.docx") || host?.querySelector(".docx") || host;
+}
+
+function analyzeDocumentDom(root) {
+  const content = getDocContentRoot(root);
+  const text = content?.textContent || "";
   const words = text.trim() ? text.trim().split(/\s+/).filter(Boolean).length : 0;
   const headings = [];
-  const headingEls = host?.querySelectorAll("h1, h2, h3, h4, h5, h6, p[style*='heading'], .docx h1, .docx h2, .docx h3") || [];
+  const headingEls = content?.querySelectorAll("h1, h2, h3, h4, h5, h6, p[style*='heading']") || [];
   headingEls.forEach((el, i) => {
     const label = (el.textContent || "").trim();
     if (!label) return;
     headings.push({ index: i, label, el });
   });
-  if (!headings.length && host) {
-    host.querySelectorAll("p").forEach((el, i) => {
+  if (!headings.length && content) {
+    content.querySelectorAll("p").forEach((el, i) => {
       const label = (el.textContent || "").trim();
       if (label && label.length < 120 && /^[A-Z0-9]/.test(label)) {
         headings.push({ index: i, label, el });
       }
     });
   }
-  const paragraphs = host?.querySelectorAll("p")?.length || 0;
-  const tables = host?.querySelectorAll("table")?.length || 0;
+  const paragraphs = content?.querySelectorAll("p")?.length || 0;
+  const tables = content?.querySelectorAll("table")?.length || 0;
   return { words, chars: text.length, headings, paragraphs, tables, text };
 }
 
@@ -82,7 +87,7 @@ function runDocumentSearch() {
     return;
   }
   const scope = searchScopeEl?.value || "all";
-  const root = docCanvasEl.querySelector(".docx-preview-host") || docCanvasEl;
+  const root = getDocContentRoot(docCanvasEl);
   const nodes = scope === "headings"
     ? root.querySelectorAll("h1, h2, h3, h4, h5, h6, p")
     : root.querySelectorAll("p, span, td, th, li");

@@ -42,10 +42,19 @@ const searchCountEl = document.getElementById("searchCount");
 const structureSummaryEl = document.getElementById("structureSummary");
 const headingNavEl = document.getElementById("headingNav");
 
+const editOpEl = document.getElementById("editOp");
 const editFindEl = document.getElementById("editFind");
 const editReplaceEl = document.getElementById("editReplace");
 const editRegexEl = document.getElementById("editRegex");
 const editScopeEl = document.getElementById("editScope");
+const editReplaceFieldsEl = document.getElementById("editReplaceFields");
+const editCaseFieldsEl = document.getElementById("editCaseFields");
+const editCaseModeEl = document.getElementById("editCaseMode");
+const editTrimFieldsEl = document.getElementById("editTrimFields");
+const editTrimModeEl = document.getElementById("editTrimMode");
+const editAffixFieldsEl = document.getElementById("editAffixFields");
+const editPrefixEl = document.getElementById("editPrefix");
+const editSuffixEl = document.getElementById("editSuffix");
 const applyEditToolBtnEl = document.getElementById("applyEditToolBtn");
 
 const panelToggle = document.getElementById("panelToggle");
@@ -193,6 +202,7 @@ function clearDocumentState() {
   if (searchCountEl) searchCountEl.textContent = "";
   if (fileNameEl) fileNameEl.classList.add("hidden");
   if (fileNameTextEl) fileNameTextEl.textContent = t("noFile");
+  baselineParagraphTexts = [];
   setDirtyState(false);
   showEmptyState();
   if (typeof syncActionButtons === "function") syncActionButtons();
