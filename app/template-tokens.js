@@ -13,6 +13,15 @@ function normalizeSnippetName(raw) {
   return SNIPPET_NAME_RE.test(s) ? s : "";
 }
 
+function normalizePlaceholderName(raw) {
+  const s = String(raw || "").trim().replace(/^\{\{\s*|\s*\}\}$/g, "").trim();
+  return /^[a-zA-Z0-9_.-]+$/.test(s) ? s : "";
+}
+
+function formatPlaceholderToken(name) {
+  return `{{${String(name || "").trim()}}}`;
+}
+
 function scanPlaceholdersInText(text) {
   const hits = [];
   if (!text) return hits;

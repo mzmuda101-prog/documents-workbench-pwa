@@ -356,13 +356,14 @@ function applyPlaceholderFillInXml(xml, values, scope) {
 function applySnippetExpandInXml(xml, snippetMap, scope) {
   let current = xml;
   let count = 0;
-  const names = Object.keys(snippetMap || {}).filter((n) => snippetMap[n]).sort((a, b) => b.length - a.length);
+  const resolved = resolveSnippetMapBodies(snippetMap);
+  const names = Object.keys(resolved).sort((a, b) => b.length - a.length);
   names.forEach((name) => {
     const safeName = String(name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const res = applyReplaceInXml(current, {
       op: "replace",
       find: `!${safeName}\\b`,
-      replace: sanitizeXmlText(String(snippetMap[name])),
+      replace: sanitizeXmlText(String(resolved[name])),
       regex: true,
       scope: scope || "all",
     });

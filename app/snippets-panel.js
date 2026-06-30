@@ -8,6 +8,8 @@ const snSaveBtn = document.getElementById("snSaveBtn");
 const snScanBtn = document.getElementById("snScanBtn");
 const snExpandBtn = document.getElementById("snExpandBtn");
 const snInsertBtn = document.getElementById("snInsertBtn");
+const snInsertTriggerBtn = document.getElementById("snInsertTriggerBtn");
+const snExpandModeEl = document.getElementById("snExpandMode");
 const snScopeEl = document.getElementById("snScope");
 const snStatusEl = document.getElementById("snStatus");
 const snListEl = document.getElementById("snList");
@@ -118,7 +120,7 @@ function insertSnippetAtCaret() {
   const name = normalizeSnippetName(snNameEl?.value);
   const list = loadSnippets();
   const sn = list.find((s) => s.name === name);
-  const body = sn?.body || snBodyEl?.value;
+  const body = resolveSnippetBody(sn?.body || snBodyEl?.value);
   if (!body?.trim()) {
     toast(t("snippetsInsertEmpty"), "error");
     return;
@@ -136,12 +138,47 @@ function insertSnippetAtCaret() {
   toast(t("snippetsInserted"), "success");
 }
 
+function insertSnippetTriggerAtCaret() {
+  if (readOnlyMode) {
+    toast(t("readModeOn"), "info");
+    return;
+  }
+  const name = normalizeSnippetName(snNameEl?.value);
+  if (!name) {
+    toast(t("snippetsSaveInvalid"), "error");
+    return;
+  }
+  const p = document.activeElement?.closest?.(".docx-editable-p");
+  if (!p) {
+    toast(t("snippetsInsertNoCaret"), "info");
+    return;
+  }
+  p.focus();
+  const trigger = formatSnippetTrigger(name);
+  const style = mergeRunStyles(getInheritedRunStyleAtCaret(p), activeTypingStyle);
+  if (runStyleHasProps(style)) insertStyledTextAtCaret(trigger, style, p);
+  else insertTextAtCaret(trigger);
+  onInlineParagraphInput();
+  toast(t("snippetsTriggerInserted", { name: trigger }), "success");
+}
+
+function syncSnippetExpandModeSelect() {
+  if (!snExpandModeEl) return;
+  snExpandModeEl.value = getSnippetExpandMode();
+}
+
 function wireSnippetsPanel() {
   snSaveBtn?.addEventListener("click", saveSnippetFromForm);
   snScanBtn?.addEventListener("click", runSnippetScan);
   snExpandBtn?.addEventListener("click", expandSnippetsInDocument);
   snInsertBtn?.addEventListener("click", insertSnippetAtCaret);
+  snInsertTriggerBtn?.addEventListener("click", insertSnippetTriggerAtCaret);
+  snExpandModeEl?.addEventListener("change", () => {
+    setSnippetExpandMode(snExpandModeEl.value);
+    toast(t("snippetsExpandModeSaved"), "success");
+  });
   if (snExpandBtn) snExpandBtn.disabled = true;
+  syncSnippetExpandModeSelect();
   renderSnippetList();
 }
 

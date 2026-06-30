@@ -8,6 +8,8 @@ const phClearBtn = document.getElementById("phClearBtn");
 const phScopeEl = document.getElementById("phScope");
 const phStatusEl = document.getElementById("phStatus");
 const phFormEl = document.getElementById("phForm");
+const phInsertNameEl = document.getElementById("phInsertName");
+const phInsertBtn = document.getElementById("phInsertBtn");
 
 function escapePhHtml(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -104,10 +106,35 @@ async function applyPlaceholderFill() {
   }
 }
 
+function insertPlaceholderAtCaret() {
+  if (readOnlyMode) {
+    toast(t("readModeOn"), "info");
+    return;
+  }
+  const name = normalizePlaceholderName(phInsertNameEl?.value);
+  if (!name) {
+    toast(t("placeholdersInsertInvalid"), "error");
+    return;
+  }
+  const p = document.activeElement?.closest?.(".docx-editable-p");
+  if (!p) {
+    toast(t("snippetsInsertNoCaret"), "info");
+    return;
+  }
+  p.focus();
+  const token = formatPlaceholderToken(name);
+  const style = mergeRunStyles(getInheritedRunStyleAtCaret(p), activeTypingStyle);
+  if (runStyleHasProps(style)) insertStyledTextAtCaret(token, style, p);
+  else insertTextAtCaret(token);
+  onInlineParagraphInput();
+  toast(t("placeholdersInserted", { token }), "success");
+}
+
 function wirePlaceholdersPanel() {
   phScanBtn?.addEventListener("click", runPlaceholderScan);
   phFillBtn?.addEventListener("click", applyPlaceholderFill);
   phClearBtn?.addEventListener("click", clearPlaceholderPanel);
+  phInsertBtn?.addEventListener("click", insertPlaceholderAtCaret);
   if (phFillBtn) phFillBtn.disabled = true;
 }
 

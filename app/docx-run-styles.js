@@ -388,3 +388,54 @@ function fontSizePtFromStyle(style) {
   const pt = cssFontSizeToPt(style.fontSize);
   return pt ? String(pt) : "";
 }
+
+function getTextBeforeCaret(rootEl) {
+  const sel = window.getSelection();
+  if (!sel?.rangeCount || !rootEl?.contains(sel.anchorNode)) return "";
+  const range = sel.getRangeAt(0);
+  if (!range.collapsed) return "";
+  const pre = range.cloneRange();
+  pre.selectNodeContents(rootEl);
+  pre.setEnd(range.startContainer, range.startOffset);
+  return pre.toString();
+}
+
+function replaceTextEndingBeforeCaret(rootEl, deleteLen, insertText, style) {
+  const sel = window.getSelection();
+  if (!sel?.rangeCount || deleteLen < 1) return false;
+  const endRange = sel.getRangeAt(0);
+  if (!rootEl.contains(endRange.startContainer)) return false;
+  const endOffset = getTextBeforeCaret(rootEl).length;
+  const startOffset = Math.max(0, endOffset - deleteLen);
+  const startPos = resolveTextPosition(rootEl, startOffset);
+  const endPos = resolveTextPosition(rootEl, endOffset);
+  if (!startPos || !endPos) return false;
+  const delRange = document.createRange();
+  delRange.setStart(startPos.node, startPos.offset);
+  delRange.setEnd(endPos.node, endPos.offset);
+  delRange.deleteContents();
+  const css = runStyleToCss(style || {});
+  const node = css
+    ? Object.assign(document.createElement("span"), { textContent: insertText })
+    : document.createTextNode(insertText);
+  if (css) node.setAttribute("style", css);
+  delRange.insertNode(node);
+  delRange.setStartAfter(node);
+  delRange.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(delRange);
+  return true;
+}
+
+function resolveTextPosition(rootEl, charOffset) {
+  let remaining = charOffset;
+  const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node) {
+    const len = (node.textContent || "").length;
+    if (remaining <= len) return { node, offset: remaining };
+    remaining -= len;
+    node = walker.nextNode();
+  }
+  return null;
+}

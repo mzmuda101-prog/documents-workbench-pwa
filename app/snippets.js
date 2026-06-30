@@ -1,6 +1,59 @@
 // Snippets — localStorage blocks triggered by !name; composable with {{placeholders}}.
 
 const SNIPPETS_STORAGE_KEY = "documents-workbench-snippets";
+const SNIPPET_SETTINGS_KEY = "documents-workbench-snippet-settings";
+const SNIPPET_EXPAND_DELIMITER_RE = /[\s.,;:!?)\]}]/;
+const SNIPPET_TRIGGER_AT_END_RE = /!([a-zA-Z][a-zA-Z0-9_-]*)$/;
+
+function getSnippetSettings() {
+  try {
+    const raw = localStorage.getItem(SNIPPET_SETTINGS_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    const mode = parsed.expandMode;
+    return { expandMode: mode === "auto" ? "auto" : "manual" };
+  } catch (_) {
+    return { expandMode: "manual" };
+  }
+}
+
+function setSnippetExpandMode(mode) {
+  const expandMode = mode === "auto" ? "auto" : "manual";
+  localStorage.setItem(SNIPPET_SETTINGS_KEY, JSON.stringify({ expandMode }));
+  return expandMode;
+}
+
+function getSnippetExpandMode() {
+  return getSnippetSettings().expandMode;
+}
+
+function getSnippetByName(name) {
+  const clean = normalizeSnippetName(name);
+  if (!clean) return null;
+  return loadSnippets().find((s) => s.name === clean) || null;
+}
+
+function resolveSnippetBody(body) {
+  let out = String(body || "");
+  const locale = (typeof currentLang !== "undefined" && currentLang === "en") ? "en-US" : "pl-PL";
+  const now = new Date();
+  const dateStr = now.toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" });
+  const timeStr = now.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" });
+  const dayStr = now.toLocaleDateString(locale, { weekday: "long" });
+  out = out.replace(/\{date\}/gi, dateStr);
+  out = out.replace(/\{time\}/gi, timeStr);
+  out = out.replace(/\{datetime\}/gi, `${dateStr} ${timeStr}`);
+  out = out.replace(/\{day\}/gi, dayStr);
+  out = out.replace(/\{cursor\}/gi, ""); // [EN] caret placement later; Raycast-style token removed on expand
+  return out;
+}
+
+function resolveSnippetMapBodies(map) {
+  const out = {};
+  Object.entries(map || {}).forEach(([name, body]) => {
+    if (body) out[name] = resolveSnippetBody(body);
+  });
+  return out;
+}
 
 function loadSnippets() {
   try {

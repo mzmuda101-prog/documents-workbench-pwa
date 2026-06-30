@@ -52,11 +52,28 @@ function onParagraphBeforeInput(e) {
   if (e.inputType !== "insertText" && e.inputType !== "insertReplacementText") return;
   const p = e.target.closest?.(".docx-editable-p");
   if (!p) return;
+  const ch = e.data || "";
+
+  if (ch && getSnippetExpandMode() === "auto" && SNIPPET_EXPAND_DELIMITER_RE.test(ch)) {
+    const before = getTextBeforeCaret(p);
+    const m = before.match(SNIPPET_TRIGGER_AT_END_RE);
+    const sn = m ? getSnippetByName(m[1]) : null;
+    if (sn) {
+      e.preventDefault();
+      const body = resolveSnippetBody(sn.body);
+      const style = mergeRunStyles(getInheritedRunStyleAtCaret(p), activeTypingStyle);
+      replaceTextEndingBeforeCaret(p, m[0].length, body + ch, style);
+      onInlineParagraphInput();
+      toast(t("snippetsAutoExpanded", { name: formatSnippetTrigger(sn.name) }), "success");
+      return;
+    }
+  }
+
   const inherited = getInheritedRunStyleAtCaret(p);
   const style = mergeRunStyles(inherited, activeTypingStyle);
   if (!runStyleHasProps(style)) return;
   e.preventDefault();
-  insertStyledTextAtCaret(e.data || "", style, p);
+  insertStyledTextAtCaret(ch, style, p);
   onInlineParagraphInput();
 }
 

@@ -55,6 +55,15 @@ async function run() {
     const finalText = (await extractParagraphTextsFromDocx(originalFileBytes)).join(" ");
     if (!finalText.includes("Anna Nowak")) return { ok: false, step: "final", msg: finalText };
 
+    const dynamic = resolveSnippetBody("Dnia {date} o {time}.");
+    if (!dynamic.includes("Dnia ") || dynamic.includes("{date}")) {
+      return { ok: false, step: "dynamic", msg: dynamic };
+    }
+
+    setSnippetExpandMode("auto");
+    if (getSnippetExpandMode() !== "auto") return { ok: false, step: "settings", msg: getSnippetExpandMode() };
+    setSnippetExpandMode("manual");
+
     return { ok: true, expanded, filled };
   });
 
