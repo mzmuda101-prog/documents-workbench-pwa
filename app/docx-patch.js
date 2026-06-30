@@ -89,7 +89,45 @@ async function extractParagraphTextsFromDocx(bytes) {
   return collectParagraphElements(doc.documentElement, "all").map(getParagraphText);
 }
 
-function applyReplaceInXml(xml, edit, scope) {
+function countFindInText(text, find, useRegex) {
+  if (!text || !find) return 0;
+  if (useRegex) {
+    try {
+      const re = new RegExp(find, "g");
+      return (text.match(re) || []).length;
+    } catch (_) {
+      return 0;
+    }
+  }
+  let n = 0;
+  let idx = 0;
+  while ((idx = text.indexOf(find, idx)) !== -1) {
+    n++;
+    idx += find.length || 1;
+  }
+  return n;
+}
+
+function countReplacePreview(texts, edit) {
+  const find = edit.find;
+  const useRegex = !!edit.regex;
+  let hits = 0;
+  let paras = 0;
+  const samples = [];
+  (texts || []).forEach((text, index) => {
+    const n = countFindInText(text, find, useRegex);
+    if (!n) return;
+    hits += n;
+    paras++;
+    if (samples.length < 8) {
+      const snippet = text.length > 72 ? `${text.slice(0, 69)}…` : text;
+      samples.push({ index, snippet, count: n });
+    }
+  });
+  return { hits, paras, samples };
+}
+
+function applyReplaceInXml(xml, edit, scope, opts = {}) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xml, "application/xml");
   const textNodes = collectTextNodes(doc, scope);
@@ -97,23 +135,41 @@ function applyReplaceInXml(xml, edit, scope) {
   const find = edit.find;
   const repl = edit.replace ?? "";
   const useRegex = !!edit.regex;
+  const maxRepl = opts.maxReplacements ?? Infinity;
+  let skip = opts.skipReplacements ?? 0;
+  let done = 0;
 
   textNodes.forEach((tEl) => {
-    const raw = tEl.textContent || "";
+    if (done >= maxRepl) return;
+    let raw = tEl.textContent || "";
     if (!raw) return;
     let next = raw;
     if (useRegex) {
       try {
         const re = new RegExp(find, "g");
-        const replaced = raw.replace(re, repl);
-        if (replaced !== raw) {
-          next = replaced;
-          count += (raw.match(re) || []).length;
-        }
+        next = raw.replace(re, (match) => {
+          if (done >= maxRepl) return match;
+          if (skip > 0) { skip--; return match; }
+          done++;
+          count++;
+          return repl;
+        });
       } catch (_) { /* invalid regex */ }
-    } else if (raw.includes(find)) {
-      next = raw.split(find).join(repl);
-      count += raw.split(find).length - 1;
+    } else {
+      let idx = 0;
+      while (done < maxRepl) {
+        const pos = next.indexOf(find, idx);
+        if (pos === -1) break;
+        if (skip > 0) {
+          skip--;
+          idx = pos + find.length;
+          continue;
+        }
+        next = next.slice(0, pos) + repl + next.slice(pos + find.length);
+        done++;
+        count++;
+        idx = pos + repl.length;
+      }
     }
     if (next !== raw) tEl.textContent = sanitizeXmlText(next);
   });
@@ -181,27 +237,29 @@ function applyParagraphTransformInXml(xml, edit, scope) {
   return { xml: new XMLSerializer().serializeToString(doc), count };
 }
 
-function applyEditToXml(xml, edit) {
+function applyEditToXml(xml, edit, opts = {}) {
   const scope = edit.scope || "all";
   if (edit.op === "paragraphBatch") return applyParagraphBatchInXml(xml, edit.items);
   if (edit.op === "case" || edit.op === "trim" || edit.op === "affix") return applyParagraphTransformInXml(xml, edit, scope);
-  return applyReplaceInXml(xml, edit, scope);
+  return applyReplaceInXml(xml, edit, scope, opts);
 }
 
 function recordPendingEdit(edit) {
   pendingDocEdits.push({ ...edit, ts: Date.now() });
 }
 
-async function buildPatchedDocx(bytes, edits) {
+async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
   if (!window.JSZip) throw new Error("JSZip missing");
   const zip = await window.JSZip.loadAsync(bytes);
   const docFile = zip.file("word/document.xml");
   if (!docFile) throw new Error("word/document.xml missing");
   let xml = await docFile.async("string");
   let total = 0;
-  for (const edit of edits) {
-    const normalized = edit.op ? edit : { ...edit, op: "replace" };
-    const res = applyEditToXml(xml, normalized);
+  const list = edits || [];
+  for (let i = 0; i < list.length; i++) {
+    const normalized = list[i].op ? list[i] : { ...list[i], op: "replace" };
+    const opts = i === list.length - 1 ? lastEditOpts : {};
+    const res = applyEditToXml(xml, normalized, opts);
     xml = res.xml;
     total += res.count;
   }

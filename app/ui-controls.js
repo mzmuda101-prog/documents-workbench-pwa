@@ -283,8 +283,11 @@ if (fileInput) {
     fileInput.value = "";
   });
 }
-if (searchHighlightBtn) searchHighlightBtn.addEventListener("click", runDocumentSearch);
-if (searchQueryEl) {
+const frWorkbenchActive = !!document.getElementById("frScanBtn");
+if (searchHighlightBtn && !frWorkbenchActive) {
+  searchHighlightBtn.addEventListener("click", runDocumentSearch);
+}
+if (searchQueryEl && !frWorkbenchActive) {
   searchQueryEl.addEventListener("keydown", (e) => {
     if (e.key === "Enter") runDocumentSearch();
   });

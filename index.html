@@ -13,7 +13,7 @@
     <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png" />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin.woff2" crossorigin />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin-ext.woff2" crossorigin />
-    <link rel="stylesheet" href="styles/app.css?v=20260630-13" />
+    <link rel="stylesheet" href="styles/app.css?v=20260630-14" />
   </head>
   <body>
     <div class="hero-overlay" id="heroSplash">
@@ -150,23 +150,51 @@
                   <circle cx="11" cy="11" r="8" />
                   <line x1="21" y1="21" x2="16.65" y2="16.65" />
                 </svg>
-                <span class="panel-title" data-i18n="searchPanel">Wyszukiwanie</span>
+                <span class="panel-title" data-i18n="frPanel">Znajdź i zamień</span>
                 <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
               </summary>
               <div class="panel-body stack">
                 <label class="field">
-                  <span data-i18n="searchQueryLabel">Fraza</span>
+                  <span data-i18n="editFindLabel">Szukaj</span>
                   <input id="searchQuery" type="search" autocomplete="off" />
                 </label>
                 <label class="field">
-                  <span data-i18n="searchScopeLabel">Zakres</span>
+                  <span data-i18n="editReplaceLabel">Zamień na</span>
+                  <input id="frReplace" type="text" autocomplete="off" />
+                </label>
+                <label class="field checkbox">
+                  <input id="frRegex" type="checkbox" />
+                  <span data-i18n="editRegexLabel">Wyrażenie regularne</span>
+                </label>
+                <label class="field">
+                  <span data-i18n="searchScopeLabel">Zakres podświetlenia</span>
                   <select id="searchScope">
                     <option value="all" data-i18n="searchScopeAll">Wszystko</option>
                     <option value="headings" data-i18n="searchScopeHeadings">Nagłówki</option>
                   </select>
                 </label>
-                <button class="btn" id="searchHighlightBtn" type="button" data-i18n="searchHighlight">Podświetl</button>
+                <label class="field">
+                  <span data-i18n="editScopeLabel">Zakres zapisu</span>
+                  <select id="frScope">
+                    <option value="all" data-i18n="editScopeAll">Cały dokument</option>
+                    <option value="body" data-i18n="editScopeBody">Treść główna</option>
+                  </select>
+                </label>
+                <div class="btn-row">
+                  <button class="btn" id="frPrevBtn" type="button" data-i18n="frPrev">Poprzednie</button>
+                  <button class="btn" id="frNextBtn" type="button" data-i18n="frNext">Następne</button>
+                </div>
+                <div class="btn-row">
+                  <button class="btn primary" id="frScanBtn" type="button" data-i18n="frScan">Szukaj</button>
+                  <button class="btn hidden" id="searchHighlightBtn" type="button" data-i18n="searchHighlight">Podświetl</button>
+                </div>
+                <div class="btn-row">
+                  <button class="btn" id="frReplaceOneBtn" type="button" data-i18n="frReplaceOne">Zamień bieżące</button>
+                  <button class="btn" id="frReplaceAllBtn" type="button" data-i18n="frReplaceAll">Zamień wszystkie</button>
+                </div>
+                <div class="hint" id="frStatus"></div>
                 <div class="hint" id="searchCount"></div>
+                <div id="frPreview" class="fr-preview"></div>
               </div>
             </details>
 
@@ -307,17 +335,18 @@
     </div>
     <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-    <script defer src="app/core.js?v=20260630-13"></script>
-    <script defer src="app/language.js?v=20260630-13"></script>
-    <script defer src="app/docx-patch.js?v=20260630-13"></script>
-    <script defer src="app/docx-inline-edit.js?v=20260630-13"></script>
-    <script defer src="app/document.js?v=20260630-13"></script>
-    <script defer src="app/docx-render-fixes.js?v=20260630-13"></script>
-    <script defer src="app/docx-viewer.js?v=20260630-13"></script>
-    <script defer src="app/analysis.js?v=20260630-13"></script>
-    <script defer src="app/edit-tools.js?v=20260630-13"></script>
-    <script defer src="app/mobile-doc-zoom.js?v=20260630-13"></script>
-    <script defer src="app/ui-controls.js?v=20260630-13"></script>
-    <script defer src="app/bootstrap.js?v=20260630-13"></script>
+    <script defer src="app/core.js?v=20260630-14"></script>
+    <script defer src="app/language.js?v=20260630-14"></script>
+    <script defer src="app/docx-patch.js?v=20260630-14"></script>
+    <script defer src="app/docx-inline-edit.js?v=20260630-14"></script>
+    <script defer src="app/document.js?v=20260630-14"></script>
+    <script defer src="app/docx-render-fixes.js?v=20260630-14"></script>
+    <script defer src="app/docx-viewer.js?v=20260630-14"></script>
+    <script defer src="app/analysis.js?v=20260630-14"></script>
+    <script defer src="app/find-replace-workbench.js?v=20260630-14"></script>
+    <script defer src="app/edit-tools.js?v=20260630-14"></script>
+    <script defer src="app/mobile-doc-zoom.js?v=20260630-14"></script>
+    <script defer src="app/ui-controls.js?v=20260630-14"></script>
+    <script defer src="app/bootstrap.js?v=20260630-14"></script>
   </body>
 </html>

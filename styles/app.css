@@ -441,6 +441,24 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
 .hidden { display: none !important; }
 .hint { font-size: 12px; color: var(--muted); min-height: 1.2em; }
 
+.fr-preview { margin-top: 4px; }
+.fr-preview-list { display: flex; flex-direction: column; gap: 6px; max-height: 160px; overflow-y: auto; }
+.fr-preview-item {
+  display: flex; gap: 8px; align-items: flex-start; width: 100%; text-align: left;
+  padding: 8px 10px; border-radius: var(--r-sm); border: 1px solid var(--border-subtle);
+  background: var(--field); font: inherit; font-size: 11px; color: var(--ink-2); cursor: pointer;
+  transition: border-color var(--t), background var(--t);
+}
+.fr-preview-item:hover {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent-light) 45%, var(--field));
+}
+.fr-preview-meta {
+  flex-shrink: 0; font-weight: 700; font-size: 10px; color: var(--accent);
+  min-width: 1.6em; text-align: right;
+}
+.fr-preview-snippet { line-height: 1.35; word-break: break-word; }
+
 .doc-panel {
   overflow: hidden; min-height: var(--doc-panel-height, 520px);
   border-radius: var(--r-lg); border: 1px solid var(--glass-border);

@@ -1,6 +1,6 @@
 # Documents Workbench PWA — Roadmap
 
-Stan na **v0.2** (czerwiec 2026). Ostatnia wersja cache: `20260630-12`.
+Stan na **v0.2** (czerwiec 2026). Ostatnia wersja cache: `20260630-14`.
 
 ---
 
@@ -19,12 +19,14 @@ Stan na **v0.2** (czerwiec 2026). Ostatnia wersja cache: `20260630-12`.
 | Bateria testów Playwright (`npm test`, `test:stress`, `test:visual`) | ✅ |
 | Poprawki wizualne list (kropki, numeracja, litery) | ✅ |
 | Audyt wizualny bulletów / wcięć | ✅ |
+| **Faza 2.5 — Mobile UX** (fit-width, bottom sheet, safe-area, kompaktowy hero) | ✅ |
+| **Faza 3.1 — Find/Replace workbench** (skan, nawigacja, podgląd XML, zamiana 1/wszystkie) | ✅ |
 
 **Poza pierwotnym planem (ale wartościowe):** `test-fixtures/`, `docx-render-fixes.js`, `visual-audit-playwright.js`, fix wyszukiwania (treść vs CSS).
 
 ---
 
-## Faza 2.5 — Mobile UX (PRIORYTET #1)
+## Faza 2.5 — Mobile UX ✅ (zrobione)
 
 Telefon / tablet to kluczowy scenariusz PWA. Word mobile daje tu dobry wzorzec — my nie kopiujemy reflow 1:1 (mamy `docx-preview` = układ strony), ale **dopasowanie do ekranu** i **czytelny panel** muszą działać tak samy dobrze.
 
@@ -76,9 +78,9 @@ Znane problemy (stan obecny):
 
 ## Faza 3: Moduły na edycji
 
-Priorytet po **Fazie 2.5 (mobile)**:
+Priorytet po **Fazie 2.5 (mobile)** — **3.1 zrobione**, kolejne:
 
-1. **Find/Replace workbench** — podgląd trafień przed „zamień wszystkie”, licznik, przejście trafienie po trafieniu
+1. ~~**Find/Replace workbench**~~ ✅ — podgląd trafień przed „zamień wszystkie”, licznik, przejście trafienie po trafieniu
 2. **Placeholdery** `{{pole}}` — wykrywanie, formularz wypełniania, podmiana w XML
 3. **Snippety / klauzule** — localStorage, wstawianie bloku tekstu
 4. **Inspektor z akcjami** — skok + szybka edycja z panelu struktury

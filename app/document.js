@@ -138,12 +138,12 @@ async function buildDocumentForSave() {
   return bytes;
 }
 
-async function applyDocumentEdit(edit) {
+async function applyDocumentEdit(edit, xmlOpts = {}) {
   if (!originalFileBytes) return 0;
   await mergeInlineEditsIntoBytes();
   const normalized = edit.op ? edit : { ...edit, op: "replace" };
   recordPendingEdit(normalized);
-  const { bytes, changeCount } = await buildPatchedDocx(originalFileBytes, pendingDocEdits);
+  const { bytes, changeCount } = await buildPatchedDocx(originalFileBytes, pendingDocEdits, xmlOpts);
   pendingDocEdits = [];
   originalFileBytes = bytes;
   await reloadFromBytes(bytes);
