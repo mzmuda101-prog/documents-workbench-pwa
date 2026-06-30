@@ -94,6 +94,11 @@ function syncSidebarHandle() {
   } else {
     panelHandle.style.left = "";
   }
+  if (panelToggle) {
+    const handleVisible = getComputedStyle(panelHandle).display !== "none";
+    panelToggle.hidden = handleVisible;
+    panelToggle.setAttribute("aria-hidden", handleVisible ? "true" : "false");
+  }
 }
 
 async function downloadBytes(bytes, name) {

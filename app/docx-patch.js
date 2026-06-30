@@ -90,16 +90,18 @@ function setParagraphText(pEl, text) {
   });
 }
 
-function splitParagraphInXml(xml, index, beforeText, afterText) {
+function splitParagraphInXml(xml, index, beforeText, afterText, beforeRuns, afterRuns) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xml, "application/xml");
   const paragraphs = collectParagraphElements(doc.documentElement, "all");
   const p = paragraphs[index];
   if (!p) return { xml, count: 0 };
-  setParagraphText(p, beforeText);
+  if (beforeRuns?.length) applyRunsToParagraphXml(p, beforeRuns);
+  else setParagraphText(p, beforeText);
   const newP = p.cloneNode(true);
   clearParagraphRuns(newP);
-  setParagraphText(newP, afterText);
+  if (afterRuns?.length) applyRunsToParagraphXml(newP, afterRuns);
+  else setParagraphText(newP, afterText);
   if (p.nextSibling) p.parentNode.insertBefore(newP, p.nextSibling);
   else p.parentNode.appendChild(newP);
   return { xml: new XMLSerializer().serializeToString(doc), count: 1 };
@@ -124,7 +126,7 @@ function getParagraphListLevel(pEl) {
   return Number.isFinite(level) ? level : 0;
 }
 
-function mergeParagraphInXml(xml, index) {
+function mergeParagraphInXml(xml, index, mergedRuns) {
   if (index <= 0) return { xml, count: 0 };
   const parser = new DOMParser();
   const doc = parser.parseFromString(xml, "application/xml");
@@ -133,7 +135,8 @@ function mergeParagraphInXml(xml, index) {
   const curr = paragraphs[index];
   if (!prev || !curr) return { xml, count: 0 };
   const joinAt = getParagraphText(prev).length;
-  setParagraphText(prev, getParagraphText(prev) + getParagraphText(curr));
+  if (mergedRuns?.length) applyRunsToParagraphXml(prev, mergedRuns);
+  else setParagraphText(prev, getParagraphText(prev) + getParagraphText(curr));
   curr.parentNode.removeChild(curr);
   return { xml: new XMLSerializer().serializeToString(doc), count: 1, joinAt };
 }
@@ -269,9 +272,16 @@ function applyParagraphBatchInXml(xml, items) {
   const doc = parser.parseFromString(xml, "application/xml");
   const paragraphs = collectParagraphElements(doc.documentElement, "all");
   let count = 0;
-  (items || []).forEach(({ index, text }) => {
+  (items || []).forEach(({ index, text, runs }) => {
     const p = paragraphs[index];
     if (!p) return;
+    if (runs?.length) {
+      const current = extractRunsFromParagraphXml(p);
+      if (runsEqual(current, runs)) return;
+      applyRunsToParagraphXml(p, runs);
+      count++;
+      return;
+    }
     const raw = getParagraphText(p);
     const next = sanitizeXmlText(text);
     if (next === raw) return;
@@ -326,8 +336,8 @@ function applyParagraphTransformInXml(xml, edit, scope) {
 function applyEditToXml(xml, edit, opts = {}) {
   const scope = edit.scope || "all";
   if (edit.op === "paragraphBatch") return applyParagraphBatchInXml(xml, edit.items);
-  if (edit.op === "splitParagraph") return splitParagraphInXml(xml, edit.index, edit.before, edit.after);
-  if (edit.op === "mergeParagraph") return mergeParagraphInXml(xml, edit.index);
+  if (edit.op === "splitParagraph") return splitParagraphInXml(xml, edit.index, edit.before, edit.after, edit.beforeRuns, edit.afterRuns);
+  if (edit.op === "mergeParagraph") return mergeParagraphInXml(xml, edit.index, edit.mergedRuns);
   if (edit.op === "listLevel") return changeListLevelInXml(xml, edit.index, edit.delta);
   if (edit.op === "case" || edit.op === "trim" || edit.op === "affix") return applyParagraphTransformInXml(xml, edit, scope);
   return applyReplaceInXml(xml, edit, scope, opts);

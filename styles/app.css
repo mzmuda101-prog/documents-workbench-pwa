@@ -294,7 +294,7 @@ body.splashing {
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn.primary { background: var(--accent); color: white; border-color: transparent; box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 28%, transparent); }
 .btn.primary:hover:not(:disabled) { background: var(--accent-h); }
-.panel-toggle { background: var(--accent); color: white; border-color: transparent; }
+.panel-toggle { background: var(--accent); color: white; border-color: transparent; display: none; } /* [EN] hidden when side handle is visible */
 .btn-row .btn { flex: 1 1 0; min-width: 0; }
 
 .theme-toggle {
@@ -529,6 +529,9 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
 
 .doc-canvas.read-only .docx-preview-host { cursor: default; }
 .doc-canvas.edit-mode .docx-preview-host { cursor: default; }
+.format-toolbar { margin-top: 6px; gap: 6px; }
+.format-btn { min-width: 34px; padding: 6px 10px; font-size: 13px; line-height: 1; }
+
 .doc-canvas.edit-mode .docx-editable-p { cursor: text; white-space: pre-wrap; }
 .doc-canvas.edit-mode .docx-editable-p {
   outline: none; border-radius: 3px;
@@ -711,6 +714,11 @@ html.is-mobile body.has-document .doc-panel {
     white-space: nowrap;
   }
   .hero-sub { display: none; }
+  html.is-mobile:not(.sidebar-open) .panel-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
   .panel-toggle { grid-area: panel; width: 100%; }
   .lang-switch {
     grid-area: lang;

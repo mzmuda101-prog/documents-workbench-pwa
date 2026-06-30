@@ -263,6 +263,7 @@ function initMobileDocZoom() {
   syncViewportClass();
   syncZoomSliderLimits();
   syncMobileZoomUi();
+  if (typeof syncSidebarHandle === "function") syncSidebarHandle();
 
   if (zoomFitBtnEl) zoomFitBtnEl.addEventListener("click", applyFitToWidth);
   if (zoomResetBtnEl) zoomResetBtnEl.addEventListener("click", resetZoomTo100);

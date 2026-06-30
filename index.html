@@ -13,7 +13,7 @@
     <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png" />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin.woff2" crossorigin />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin-ext.woff2" crossorigin />
-    <link rel="stylesheet" href="styles/app.css?v=20260630-18" />
+    <link rel="stylesheet" href="styles/app.css?v=20260630-22" />
   </head>
   <body>
     <div class="hero-overlay" id="heroSplash">
@@ -118,7 +118,7 @@
                   <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
                   <circle cx="12" cy="12" r="3" />
                 </svg>
-                <span class="panel-title" data-i18n="viewPanel">Podgląd</span>
+                <span class="panel-title" data-i18n="viewPanel">Narzędzia i widok</span>
                 <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
               </summary>
               <div class="panel-body stack">
@@ -137,6 +137,11 @@
                   <span data-i18n="readModeOn">Tylko odczyt</span>
                 </label>
                 <p class="hint" id="inlineEditHint" data-i18n="inlineEditHint"></p>
+                <div class="format-toolbar btn-row hidden" id="formatToolbar">
+                  <button type="button" class="btn format-btn" id="fmtBold" title="Ctrl+B"><b>B</b></button>
+                  <button type="button" class="btn format-btn" id="fmtItalic" title="Ctrl+I"><i>I</i></button>
+                  <button type="button" class="btn format-btn" id="fmtUnderline" title="Ctrl+U"><u>U</u></button>
+                </div>
               </div>
             </details>
           </section>
@@ -369,20 +374,21 @@
     </div>
     <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-    <script defer src="app/core.js?v=20260630-18"></script>
-    <script defer src="app/language.js?v=20260630-18"></script>
-    <script defer src="app/docx-patch.js?v=20260630-18"></script>
-    <script defer src="app/docx-inline-edit.js?v=20260630-18"></script>
-    <script defer src="app/document.js?v=20260630-18"></script>
-    <script defer src="app/docx-render-fixes.js?v=20260630-18"></script>
-    <script defer src="app/docx-viewer.js?v=20260630-18"></script>
-    <script defer src="app/analysis.js?v=20260630-18"></script>
-    <script defer src="app/grammar-style.js?v=20260630-18"></script>
-    <script defer src="app/grammar-panel.js?v=20260630-18"></script>
-    <script defer src="app/find-replace-workbench.js?v=20260630-18"></script>
-    <script defer src="app/edit-tools.js?v=20260630-18"></script>
-    <script defer src="app/mobile-doc-zoom.js?v=20260630-18"></script>
-    <script defer src="app/ui-controls.js?v=20260630-18"></script>
-    <script defer src="app/bootstrap.js?v=20260630-18"></script>
+    <script defer src="app/core.js?v=20260630-22"></script>
+    <script defer src="app/language.js?v=20260630-22"></script>
+    <script defer src="app/docx-patch.js?v=20260630-22"></script>
+    <script defer src="app/docx-run-styles.js?v=20260630-22"></script>
+    <script defer src="app/docx-inline-edit.js?v=20260630-22"></script>
+    <script defer src="app/document.js?v=20260630-22"></script>
+    <script defer src="app/docx-render-fixes.js?v=20260630-22"></script>
+    <script defer src="app/docx-viewer.js?v=20260630-22"></script>
+    <script defer src="app/analysis.js?v=20260630-22"></script>
+    <script defer src="app/grammar-style.js?v=20260630-22"></script>
+    <script defer src="app/grammar-panel.js?v=20260630-22"></script>
+    <script defer src="app/find-replace-workbench.js?v=20260630-22"></script>
+    <script defer src="app/edit-tools.js?v=20260630-22"></script>
+    <script defer src="app/mobile-doc-zoom.js?v=20260630-22"></script>
+    <script defer src="app/ui-controls.js?v=20260630-22"></script>
+    <script defer src="app/bootstrap.js?v=20260630-22"></script>
   </body>
 </html>
