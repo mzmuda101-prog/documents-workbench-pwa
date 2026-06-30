@@ -477,6 +477,14 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
   background: color-mix(in srgb, var(--accent-light) 55%, var(--field));
 }
 .grammar-apply-one { flex-shrink: 0; padding: 4px 8px; font-size: 10px; align-self: stretch; }
+.ph-form .ph-field-hint { margin: -4px 0 6px; font-size: 10.5px; }
+
+.help-panel { gap: 14px; }
+.help-section + .help-section { padding-top: 10px; border-top: 1px solid var(--border-subtle); }
+.help-heading { margin: 0 0 6px; font-size: 11.5px; font-weight: 700; color: var(--ink); letter-spacing: 0.01em; }
+.help-text { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.help-list { margin: 6px 0 0; padding-left: 1.1em; font-size: 11.5px; line-height: 1.45; color: var(--muted); }
+.help-list li + li { margin-top: 4px; }
 
 .doc-panel {
   overflow: hidden; min-height: var(--doc-panel-height, 520px);

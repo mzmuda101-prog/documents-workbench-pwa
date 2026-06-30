@@ -13,7 +13,7 @@
     <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png" />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin.woff2" crossorigin />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin-ext.woff2" crossorigin />
-    <link rel="stylesheet" href="styles/app.css?v=20260630-24" />
+    <link rel="stylesheet" href="styles/app.css?v=20260630-26" />
   </head>
   <body>
     <div class="hero-overlay" id="heroSplash">
@@ -144,6 +144,43 @@
                 </div>
               </div>
             </details>
+
+            <details class="panel" id="panel-help">
+              <summary>
+                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                <span class="panel-title" data-i18n="helpPanel">Skróty i informacje</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
+              </summary>
+              <div class="panel-body stack stack-tight help-panel">
+                <section class="help-section">
+                  <h4 class="help-heading" data-i18n="helpPhTitle">Placeholdery</h4>
+                  <p class="help-text" data-i18n="helpPhIntro">Szablony z polami do wypełnienia — bez ręcznego szukania w tekście.</p>
+                  <ul class="help-list">
+                    <li data-i18n="helpPhItem1">Składnia: {{nazwa}} — litery, cyfry, _, -, . (spacje w nawiasach są OK)</li>
+                    <li data-i18n="helpPhItem2">Skanuj pola → wpisz wartości → Wypełnij → Zapisz</li>
+                    <li data-i18n="helpPhItem3">Puste pola w formularzu są pomijane</li>
+                    <li data-i18n="helpPhItem4">Ten sam {{pole}} w wielu miejscach — jedna wartość wszędzie</li>
+                    <li data-i18n="helpPhItem5">Przykład: Umowa z {{imie}} {{nazwisko}}, data {{data}}.</li>
+                  </ul>
+                </section>
+                <section class="help-section">
+                  <h4 class="help-heading" data-i18n="helpEditTitle">Edycja w podglądzie</h4>
+                  <p class="help-text" data-i18n="inlineEditHint">Enter — akapit · Shift+Enter — linia · Backspace — scal · Tab — lista · Ctrl+Tab — nagłówek · Ctrl+B/I/U — styl</p>
+                </section>
+                <section class="help-section">
+                  <h4 class="help-heading" data-i18n="helpFrTitle">Znajdź i zamień</h4>
+                  <p class="help-text" data-i18n="helpFrText">Skanuj trafienia przed zamianą; „Zamień bieżące” lub „Zamień wszystkie”.</p>
+                </section>
+                <section class="help-section">
+                  <h4 class="help-heading" data-i18n="helpGrammarTitle">Korekta</h4>
+                  <p class="help-text" data-i18n="helpGrammarText">Offline — podwójne spacje, interpunkcja, cudzysłowy PL i inne reguły typografii.</p>
+                </section>
+              </div>
+            </details>
           </section>
 
           <section class="sidebar-group" id="group-tools">
@@ -233,6 +270,36 @@
                 <div class="btn-row">
                   <button class="btn" id="grammarApplyAllBtn" type="button" data-i18n="grammarApplyAll">Zastosuj wszystkie</button>
                   <button class="btn" id="grammarClearBtn" type="button" data-i18n="grammarClear">Wyczyść</button>
+                </div>
+              </div>
+            </details>
+
+            <details class="panel" id="panel-placeholders">
+              <summary>
+                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <rect x="3" y="5" width="18" height="14" rx="2" />
+                  <path d="M7 9h.01M7 13h10" />
+                </svg>
+                <span class="panel-title" data-i18n="placeholdersPanel">Placeholdery</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
+              </summary>
+              <div class="panel-body stack">
+                <label class="field">
+                  <span data-i18n="editScopeLabel">Zakres</span>
+                  <select id="phScope">
+                    <option value="all" data-i18n="editScopeAll">Cały dokument</option>
+                    <option value="body" data-i18n="editScopeBody">Treść główna</option>
+                  </select>
+                </label>
+                <p class="hint" data-i18n="placeholdersHint">Pola w formacie {{nazwa}} — skanuj, wypełnij, zapisz plik. Szczegóły w „Skróty i informacje”.</p>
+                <div class="btn-row">
+                  <button class="btn primary" id="phScanBtn" type="button" data-i18n="placeholdersScan">Skanuj pola</button>
+                </div>
+                <div class="hint" id="phStatus"></div>
+                <div id="phForm" class="stack stack-tight ph-form"></div>
+                <div class="btn-row">
+                  <button class="btn" id="phFillBtn" type="button" data-i18n="placeholdersFill">Wypełnij</button>
+                  <button class="btn" id="phClearBtn" type="button" data-i18n="placeholdersClear">Wyczyść</button>
                 </div>
               </div>
             </details>
@@ -374,21 +441,23 @@
     </div>
     <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-    <script defer src="app/core.js?v=20260630-24"></script>
-    <script defer src="app/language.js?v=20260630-24"></script>
-    <script defer src="app/docx-patch.js?v=20260630-24"></script>
-    <script defer src="app/docx-run-styles.js?v=20260630-24"></script>
-    <script defer src="app/docx-inline-edit.js?v=20260630-24"></script>
-    <script defer src="app/document.js?v=20260630-24"></script>
-    <script defer src="app/docx-render-fixes.js?v=20260630-24"></script>
-    <script defer src="app/docx-viewer.js?v=20260630-24"></script>
-    <script defer src="app/analysis.js?v=20260630-24"></script>
-    <script defer src="app/grammar-style.js?v=20260630-24"></script>
-    <script defer src="app/grammar-panel.js?v=20260630-24"></script>
-    <script defer src="app/find-replace-workbench.js?v=20260630-24"></script>
-    <script defer src="app/edit-tools.js?v=20260630-24"></script>
-    <script defer src="app/mobile-doc-zoom.js?v=20260630-24"></script>
-    <script defer src="app/ui-controls.js?v=20260630-24"></script>
-    <script defer src="app/bootstrap.js?v=20260630-24"></script>
+    <script defer src="app/core.js?v=20260630-26"></script>
+    <script defer src="app/language.js?v=20260630-26"></script>
+    <script defer src="app/docx-patch.js?v=20260630-26"></script>
+    <script defer src="app/docx-run-styles.js?v=20260630-26"></script>
+    <script defer src="app/docx-inline-edit.js?v=20260630-26"></script>
+    <script defer src="app/document.js?v=20260630-26"></script>
+    <script defer src="app/docx-render-fixes.js?v=20260630-26"></script>
+    <script defer src="app/docx-viewer.js?v=20260630-26"></script>
+    <script defer src="app/analysis.js?v=20260630-26"></script>
+    <script defer src="app/grammar-style.js?v=20260630-26"></script>
+    <script defer src="app/grammar-panel.js?v=20260630-26"></script>
+    <script defer src="app/placeholders.js?v=20260630-26"></script>
+    <script defer src="app/placeholders-panel.js?v=20260630-26"></script>
+    <script defer src="app/find-replace-workbench.js?v=20260630-26"></script>
+    <script defer src="app/edit-tools.js?v=20260630-26"></script>
+    <script defer src="app/mobile-doc-zoom.js?v=20260630-26"></script>
+    <script defer src="app/ui-controls.js?v=20260630-26"></script>
+    <script defer src="app/bootstrap.js?v=20260630-26"></script>
   </body>
 </html>

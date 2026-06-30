@@ -22,8 +22,9 @@ Stan na **v0.2** (czerwiec 2026). Ostatnia wersja cache: `20260630-15`.
 | **Faza 2.5 — Mobile UX** (fit-width, bottom sheet, safe-area, kompaktowy hero) | ✅ |
 | **Faza 3.1 — Find/Replace workbench** (skan, nawigacja, podgląd XML, zamiana 1/wszystkie) | ✅ |
 | **Faza 4 v1 — Korekta typografii** (skan offline, reguły 1–6, panel, apply 1/reguła/wszystkie) | ✅ |
+| **Faza 3.2 — Placeholdery** `{{pole}}` (skan, formularz, podmiana w XML) | ✅ |
 
-**Poza pierwotnym planem (ale wartościowe):** `test-fixtures/`, `docx-render-fixes.js`, `visual-audit-playwright.js`, fix wyszukiwania (treść vs CSS).
+**Poza pierwotnym planem (ale wartościowe):** `test-fixtures/`, `docx-render-fixes.js`, `visual-audit-playwright.js`, fix wyszukiwania (treść vs CSS), edycja inline ze stylami runów, zoom 0.5–2.
 
 ---
 
@@ -82,8 +83,8 @@ Znane problemy (stan obecny):
 | # | Faza | Moduł | Status |
 |---|------|--------|--------|
 | 1 | **4** | Korekta językowa i typografia (offline) | ✅ v1 |
-| 2 | **3.2** | Placeholdery `{{pole}}` | **następny** |
-| 3 | **3.3** | Snippety / klauzule | plan |
+| 2 | **3.2** | Placeholdery `{{pole}}` | ✅ v1 |
+| 3 | **3.3** | Snippety / klauzule | **następny** |
 | 4 | **3.4** | Inspektor z akcjami | plan |
 | — | 3.5 | Metadane (`docProps`) | później |
 | — | 3.6 | Eksport TXT / HTML | później |
@@ -95,7 +96,7 @@ Znane problemy (stan obecny):
 **3.1 zrobione.** Kolejność po Fazie 4: **3.2 → 3.3 → 3.4** (patrz tabela powyżej).
 
 1. ~~**Find/Replace workbench**~~ ✅ — podgląd trafień przed „zamień wszystkie”, licznik, przejście trafienie po trafieniu
-2. **Placeholdery** `{{pole}}` — wykrywanie, formularz wypełniania, podmiana w XML
+2. ~~**Placeholdery** `{{pole}}`~~ ✅ — wykrywanie, formularz wypełniania, podmiana w XML
 3. **Snippety / klauzule** — localStorage, wstawianie bloku tekstu
 4. **Inspektor z akcjami** — skok + szybka edycja z panelu struktury
 5. **Metadane** — `docProps/core.xml` (tytuł, autor, słowa kluczowe)
@@ -147,9 +148,9 @@ Lokalny, **offline-first** moduł — bez wysyłania tekstu na serwer.
 
 ## Rekomendowany następny krok
 
-**Faza 3.2 — Placeholdery** (`{{pole}}`, formularz, podmiana w XML).
+**Faza 3.3 — Snippety / klauzule** (localStorage, wstawianie bloku tekstu do dokumentu).
 
-Potem: **3.3 Snippety** → **3.4 Inspektor z akcjami**.
+Potem: **3.4 Inspektor z akcjami**.
 
 ---
 

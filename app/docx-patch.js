@@ -333,9 +333,30 @@ function applyParagraphTransformInXml(xml, edit, scope) {
   return { xml: new XMLSerializer().serializeToString(doc), count };
 }
 
+function applyPlaceholderFillInXml(xml, values, scope) {
+  let current = xml;
+  let count = 0;
+  Object.entries(values || {}).forEach(([name, val]) => {
+    if (val == null || val === "") return;
+    const safeName = String(name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const res = applyReplaceInXml(current, {
+      op: "replace",
+      find: `\\{\\{\\s*${safeName}\\s*\\}\\}`,
+      replace: sanitizeXmlText(String(val)),
+      regex: true,
+      scope: scope || "all",
+    });
+    current = res.xml;
+    count += res.count;
+  });
+  if (!count) return { xml, count: 0 };
+  return { xml: current, count };
+}
+
 function applyEditToXml(xml, edit, opts = {}) {
   const scope = edit.scope || "all";
   if (edit.op === "paragraphBatch") return applyParagraphBatchInXml(xml, edit.items);
+  if (edit.op === "placeholderFill") return applyPlaceholderFillInXml(xml, edit.values, scope);
   if (edit.op === "splitParagraph") return splitParagraphInXml(xml, edit.index, edit.before, edit.after, edit.beforeRuns, edit.afterRuns);
   if (edit.op === "mergeParagraph") return mergeParagraphInXml(xml, edit.index, edit.mergedRuns);
   if (edit.op === "listLevel") return changeListLevelInXml(xml, edit.index, edit.delta);
