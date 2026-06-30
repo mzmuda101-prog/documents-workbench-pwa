@@ -39,6 +39,20 @@ npm run serve   # w osobnym terminalu
 npm test
 ```
 
+## Deploy (GitHub + Vercel)
+
+```bash
+# 1. Repozytorium GitHub (jednorazowo)
+gh repo create documents-workbench-pwa --public --source=. --remote=origin --push
+
+# 2. Vercel (build → dist/)
+npx vercel --prod
+# Build Command: npm run build
+# Output Directory: dist
+```
+
+Konfiguracja jest już w `vercel.json`.
+
 ## Author
 
 Mateusz Zmuda

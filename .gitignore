@@ -1,7 +1,52 @@
+# ── Zależności i build ──────────────────────────────────────────
 node_modules/
 dist/
-.DS_Store
+
+# ── Sekrety i env (bezwzględnie poza repo) ─────────────────────
 .env
 .env.*
+.env.local
+*.local
+credentials.json
+secrets.json
+*.pem
+*.key
+*.p12
+*.pfx
+
+# ── Pliki użytkownika / dev (nie wystawiać na GitHub) ───────────
+# Tylko docs/samples/ jest wyjątkiem — celowy fixture testowy.
+*.docx
+!docs/samples/
+!docs/samples/**
+*.doc
+*.pdf
+*.xlsx
+*.xlsm
+*.csv
+*.tsv
+
+# ── Artefakty testów ─────────────────────────────────────────────
+coverage/
+playwright-report/
+test-results/
+output/
+
+# ── Logi i pliki tymczasowe ────────────────────────────────────
 *.log
-.vercel
+*.tmp
+*.bak
+*.swp
+*.swo
+.cache/
+
+# ── OS i edytory ───────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.cursor/
+.aider*
+
+# ── Deploy (lokalny stan Vercel) ───────────────────────────────
+.vercel/
