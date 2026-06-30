@@ -13,6 +13,16 @@ function parseCssColorToWordHex(color) {
   return null;
 }
 
+function cssFontSizeToPt(val) {
+  if (!val) return null;
+  const px = String(val).match(/^([\d.]+)px$/i);
+  if (px) return Math.round(parseFloat(px[1]) * 0.75 * 2) / 2;
+  const pt = String(val).match(/^([\d.]+)pt$/i);
+  if (pt) return parseFloat(pt[1]);
+  const num = parseFloat(val);
+  return Number.isFinite(num) ? num : null;
+}
+
 function parseSpanStyle(cssText) {
   const style = {};
   if (!cssText) return style;
@@ -26,7 +36,10 @@ function parseSpanStyle(cssText) {
     if (key === "text-decoration" && val.includes("underline")) style.underline = true;
     if (key === "color") style.color = val;
     if (key === "font-family") style.fontFamily = val.replace(/^["']|["']$/g, "").split(",")[0].trim();
-    if (key === "font-size") style.fontSize = val;
+    if (key === "font-size") {
+      const pt = cssFontSizeToPt(val);
+      if (pt) style.fontSize = `${pt}pt`;
+    }
   });
   return style;
 }
@@ -271,4 +284,107 @@ function applyRunsToPreviewParagraph(pEl, runs) {
       pEl.appendChild(document.createTextNode(run.text));
     }
   });
+}
+
+function runStyleHasProps(style) {
+  return !!(style?.bold || style?.italic || style?.underline || style?.color || style?.fontFamily || style?.fontSize);
+}
+
+function accumulateElementStyle(el, style) {
+  if (!el || el.nodeType !== 1) return;
+  const tag = el.localName.toLowerCase();
+  if (tag === "span") Object.assign(style, parseSpanStyle(el.getAttribute("style") || ""));
+  if (tag === "b" || tag === "strong") style.bold = true;
+  if (tag === "i" || tag === "em") style.italic = true;
+  if (tag === "u") style.underline = true;
+}
+
+function getInheritedRunStyleAtCaret(rootEl) {
+  const sel = window.getSelection();
+  if (!sel?.rangeCount || !rootEl) return {};
+  const range = sel.getRangeAt(0);
+  if (!rootEl.contains(range.startContainer)) return {};
+  const style = {};
+  let node = range.startContainer;
+  const offset = range.startOffset;
+  if (node.nodeType === Node.TEXT_NODE && offset === 0) {
+    let sib = node.previousSibling;
+    while (sib) {
+      if (sib.nodeType === 1) {
+        accumulateElementStyle(sib, style);
+        break;
+      }
+      if (sib.nodeType === Node.TEXT_NODE && sib.textContent) {
+        let p = sib.parentElement;
+        while (p && p !== rootEl) {
+          accumulateElementStyle(p, style);
+          p = p.parentElement;
+        }
+        break;
+      }
+      sib = sib.previousSibling;
+    }
+  }
+  if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
+  while (node && node !== rootEl) {
+    accumulateElementStyle(node, style);
+    node = node.parentElement;
+  }
+  return style;
+}
+
+function mergeRunStyles(base, extra) {
+  return { ...base, ...Object.fromEntries(Object.entries(extra || {}).filter(([, v]) => v != null && v !== "")) };
+}
+
+function insertStyledTextAtCaret(text, style, rootEl) {
+  const sel = window.getSelection();
+  if (!sel?.rangeCount) return false;
+  const range = sel.getRangeAt(0);
+  if (rootEl && !rootEl.contains(range.startContainer)) return false;
+  range.deleteContents();
+  const css = runStyleToCss(style || {});
+  let node;
+  if (css) {
+    const span = document.createElement("span");
+    span.setAttribute("style", css);
+    span.textContent = text;
+    node = span;
+  } else {
+    node = document.createTextNode(text);
+  }
+  range.insertNode(node);
+  range.setStartAfter(node);
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+  return true;
+}
+
+function applyRunStyleToSelection(style, rootEl) {
+  const sel = window.getSelection();
+  if (!sel?.rangeCount || !rootEl?.contains(sel.anchorNode)) return false;
+  const range = sel.getRangeAt(0);
+  if (range.collapsed) return false;
+  const fragment = range.extractContents();
+  const css = runStyleToCss(style || {});
+  if (!css) {
+    range.insertNode(fragment);
+    return true;
+  }
+  const span = document.createElement("span");
+  span.setAttribute("style", css);
+  span.appendChild(fragment);
+  range.insertNode(span);
+  range.selectNodeContents(span);
+  range.collapse(false);
+  sel.removeAllRanges();
+  sel.addRange(range);
+  return true;
+}
+
+function fontSizePtFromStyle(style) {
+  if (!style?.fontSize) return "";
+  const pt = cssFontSizeToPt(style.fontSize);
+  return pt ? String(pt) : "";
 }

@@ -353,10 +353,31 @@ function applyPlaceholderFillInXml(xml, values, scope) {
   return { xml: current, count };
 }
 
+function applySnippetExpandInXml(xml, snippetMap, scope) {
+  let current = xml;
+  let count = 0;
+  const names = Object.keys(snippetMap || {}).filter((n) => snippetMap[n]).sort((a, b) => b.length - a.length);
+  names.forEach((name) => {
+    const safeName = String(name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const res = applyReplaceInXml(current, {
+      op: "replace",
+      find: `!${safeName}\\b`,
+      replace: sanitizeXmlText(String(snippetMap[name])),
+      regex: true,
+      scope: scope || "all",
+    });
+    current = res.xml;
+    count += res.count;
+  });
+  if (!count) return { xml, count: 0 };
+  return { xml: current, count };
+}
+
 function applyEditToXml(xml, edit, opts = {}) {
   const scope = edit.scope || "all";
   if (edit.op === "paragraphBatch") return applyParagraphBatchInXml(xml, edit.items);
   if (edit.op === "placeholderFill") return applyPlaceholderFillInXml(xml, edit.values, scope);
+  if (edit.op === "snippetExpand") return applySnippetExpandInXml(xml, edit.snippets, scope);
   if (edit.op === "splitParagraph") return splitParagraphInXml(xml, edit.index, edit.before, edit.after, edit.beforeRuns, edit.afterRuns);
   if (edit.op === "mergeParagraph") return mergeParagraphInXml(xml, edit.index, edit.mergedRuns);
   if (edit.op === "listLevel") return changeListLevelInXml(xml, edit.index, edit.delta);

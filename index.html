@@ -13,7 +13,7 @@
     <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png" />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin.woff2" crossorigin />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin-ext.woff2" crossorigin />
-    <link rel="stylesheet" href="styles/app.css?v=20260630-26" />
+    <link rel="stylesheet" href="styles/app.css?v=20260630-27" />
   </head>
   <body>
     <div class="hero-overlay" id="heroSplash">
@@ -137,10 +137,29 @@
                   <span data-i18n="readModeOn">Tylko odczyt</span>
                 </label>
                 <p class="hint" id="inlineEditHint" data-i18n="inlineEditHint"></p>
-                <div class="format-toolbar btn-row hidden" id="formatToolbar">
-                  <button type="button" class="btn format-btn" id="fmtBold" title="Ctrl+B"><b>B</b></button>
-                  <button type="button" class="btn format-btn" id="fmtItalic" title="Ctrl+I"><i>I</i></button>
-                  <button type="button" class="btn format-btn" id="fmtUnderline" title="Ctrl+U"><u>U</u></button>
+                <div class="format-toolbar hidden" id="formatToolbar">
+                  <div class="btn-row">
+                    <button type="button" class="btn format-btn" id="fmtBold" title="Ctrl+B"><b>B</b></button>
+                    <button type="button" class="btn format-btn" id="fmtItalic" title="Ctrl+I"><i>I</i></button>
+                    <button type="button" class="btn format-btn" id="fmtUnderline" title="Ctrl+U"><u>U</u></button>
+                  </div>
+                  <label class="field format-size-field">
+                    <span data-i18n="fmtFontSizeLabel">Rozmiar czcionki</span>
+                    <select id="fmtFontSize">
+                      <option value="" data-i18n="fmtFontSizeInherit">Jak w akapicie</option>
+                      <option value="9">9 pt</option>
+                      <option value="10">10 pt</option>
+                      <option value="11">11 pt</option>
+                      <option value="12">12 pt</option>
+                      <option value="14">14 pt</option>
+                      <option value="16">16 pt</option>
+                      <option value="18">18 pt</option>
+                      <option value="20">20 pt</option>
+                      <option value="24">24 pt</option>
+                      <option value="28">28 pt</option>
+                      <option value="36">36 pt</option>
+                    </select>
+                  </label>
                 </div>
               </div>
             </details>
@@ -165,6 +184,16 @@
                     <li data-i18n="helpPhItem3">Puste pola w formularzu są pomijane</li>
                     <li data-i18n="helpPhItem4">Ten sam {{pole}} w wielu miejscach — jedna wartość wszędzie</li>
                     <li data-i18n="helpPhItem5">Przykład: Umowa z {{imie}} {{nazwisko}}, data {{data}}.</li>
+                    <li data-i18n="helpPhItem6">Po snippetach: najpierw Rozwiń !snippety, potem Wypełnij {{placeholdery}}</li>
+                  </ul>
+                </section>
+                <section class="help-section">
+                  <h4 class="help-heading" data-i18n="helpSnTitle">Snippety !nazwa</h4>
+                  <p class="help-text" data-i18n="helpSnIntro">Wstawiane bloki tekstu — bezpieczniejsze z prefiksem ! niż zwykłe słowo.</p>
+                  <ul class="help-list">
+                    <li data-i18n="helpSnItem1">W dokumencie wpisz !testowysnippet — aplikacja rozpozna trigger</li>
+                    <li data-i18n="helpSnItem2">Snippet może zawierać {{placeholdery}} — rozwiń snippet, potem wypełnij pola</li>
+                    <li data-i18n="helpSnItem3">Zapisz klauzulę w panelu Snippety, skanuj dokument, Rozwiń</li>
                   </ul>
                 </section>
                 <section class="help-section">
@@ -291,7 +320,7 @@
                     <option value="body" data-i18n="editScopeBody">Treść główna</option>
                   </select>
                 </label>
-                <p class="hint" data-i18n="placeholdersHint">Pola w formacie {{nazwa}} — skanuj, wypełnij, zapisz plik. Szczegóły w „Skróty i informacje”.</p>
+                <p class="hint" data-i18n="placeholdersHint">Pola {{nazwa}} — wypełnij po ewentualnym rozwinięciu !snippetów (patrz „Skróty i informacje”).</p>
                 <div class="btn-row">
                   <button class="btn primary" id="phScanBtn" type="button" data-i18n="placeholdersScan">Skanuj pola</button>
                 </div>
@@ -301,6 +330,47 @@
                   <button class="btn" id="phFillBtn" type="button" data-i18n="placeholdersFill">Wypełnij</button>
                   <button class="btn" id="phClearBtn" type="button" data-i18n="placeholdersClear">Wyczyść</button>
                 </div>
+              </div>
+            </details>
+
+            <details class="panel" id="panel-snippets">
+              <summary>
+                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z" />
+                  <polyline points="14 3 14 8 19 8" />
+                  <line x1="8" y1="13" x2="16" y2="13" />
+                  <line x1="8" y1="17" x2="13" y2="17" />
+                </svg>
+                <span class="panel-title" data-i18n="snippetsPanel">Snippety</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
+              </summary>
+              <div class="panel-body stack">
+                <p class="hint" data-i18n="snippetsHint">Używaj prefiksu ! w dokumencie, np. !testowysnippet — unikasz przypadkowych dopasowań.</p>
+                <label class="field">
+                  <span data-i18n="snippetsNameLabel">Nazwa (w dokumencie: !nazwa)</span>
+                  <input id="snName" type="text" autocomplete="off" placeholder="testowysnippet" />
+                </label>
+                <label class="field">
+                  <span data-i18n="snippetsBodyLabel">Treść bloku</span>
+                  <textarea id="snBody" rows="4" placeholder="{{imie}} {{nazwisko}}"></textarea>
+                </label>
+                <div class="btn-row">
+                  <button class="btn primary" id="snSaveBtn" type="button" data-i18n="snippetsSave">Zapisz snippet</button>
+                  <button class="btn" id="snInsertBtn" type="button" data-i18n="snippetsInsert">Wstaw w kursor</button>
+                </div>
+                <div id="snList" class="stack stack-tight snippet-list"></div>
+                <label class="field stack-divider">
+                  <span data-i18n="editScopeLabel">Zakres rozwinięcia</span>
+                  <select id="snScope">
+                    <option value="all" data-i18n="editScopeAll">Cały dokument</option>
+                    <option value="body" data-i18n="editScopeBody">Treść główna</option>
+                  </select>
+                </label>
+                <div class="btn-row">
+                  <button class="btn" id="snScanBtn" type="button" data-i18n="snippetsScan">Skanuj !triggery</button>
+                  <button class="btn" id="snExpandBtn" type="button" data-i18n="snippetsExpand">Rozwiń w dokumencie</button>
+                </div>
+                <div class="hint" id="snStatus"></div>
               </div>
             </details>
 
@@ -441,23 +511,26 @@
     </div>
     <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-    <script defer src="app/core.js?v=20260630-26"></script>
-    <script defer src="app/language.js?v=20260630-26"></script>
-    <script defer src="app/docx-patch.js?v=20260630-26"></script>
-    <script defer src="app/docx-run-styles.js?v=20260630-26"></script>
-    <script defer src="app/docx-inline-edit.js?v=20260630-26"></script>
-    <script defer src="app/document.js?v=20260630-26"></script>
-    <script defer src="app/docx-render-fixes.js?v=20260630-26"></script>
-    <script defer src="app/docx-viewer.js?v=20260630-26"></script>
-    <script defer src="app/analysis.js?v=20260630-26"></script>
-    <script defer src="app/grammar-style.js?v=20260630-26"></script>
-    <script defer src="app/grammar-panel.js?v=20260630-26"></script>
-    <script defer src="app/placeholders.js?v=20260630-26"></script>
-    <script defer src="app/placeholders-panel.js?v=20260630-26"></script>
-    <script defer src="app/find-replace-workbench.js?v=20260630-26"></script>
-    <script defer src="app/edit-tools.js?v=20260630-26"></script>
-    <script defer src="app/mobile-doc-zoom.js?v=20260630-26"></script>
-    <script defer src="app/ui-controls.js?v=20260630-26"></script>
-    <script defer src="app/bootstrap.js?v=20260630-26"></script>
+    <script defer src="app/core.js?v=20260630-27"></script>
+    <script defer src="app/language.js?v=20260630-27"></script>
+    <script defer src="app/docx-patch.js?v=20260630-27"></script>
+    <script defer src="app/template-tokens.js?v=20260630-27"></script>
+    <script defer src="app/docx-run-styles.js?v=20260630-27"></script>
+    <script defer src="app/docx-inline-edit.js?v=20260630-27"></script>
+    <script defer src="app/document.js?v=20260630-27"></script>
+    <script defer src="app/docx-render-fixes.js?v=20260630-27"></script>
+    <script defer src="app/docx-viewer.js?v=20260630-27"></script>
+    <script defer src="app/analysis.js?v=20260630-27"></script>
+    <script defer src="app/grammar-style.js?v=20260630-27"></script>
+    <script defer src="app/grammar-panel.js?v=20260630-27"></script>
+    <script defer src="app/placeholders.js?v=20260630-27"></script>
+    <script defer src="app/placeholders-panel.js?v=20260630-27"></script>
+    <script defer src="app/snippets.js?v=20260630-27"></script>
+    <script defer src="app/snippets-panel.js?v=20260630-27"></script>
+    <script defer src="app/find-replace-workbench.js?v=20260630-27"></script>
+    <script defer src="app/edit-tools.js?v=20260630-27"></script>
+    <script defer src="app/mobile-doc-zoom.js?v=20260630-27"></script>
+    <script defer src="app/ui-controls.js?v=20260630-27"></script>
+    <script defer src="app/bootstrap.js?v=20260630-27"></script>
   </body>
 </html>

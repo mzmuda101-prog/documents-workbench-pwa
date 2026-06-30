@@ -4,6 +4,7 @@ let baselineParagraphTexts = [];
 let baselineParagraphRuns = [];
 let pendingInlineCursor = null;
 let inlineKeyboardBound = false;
+let activeTypingStyle = null;
 
 function normalizePreviewText(s) {
   return String(s || "").replace(/\r\n/g, "\n");
@@ -44,6 +45,28 @@ function collectInlineParagraphEdits() {
 
 function onInlineParagraphInput() {
   if (!readOnlyMode) setDirtyState(true);
+}
+
+function onParagraphBeforeInput(e) {
+  if (readOnlyMode || e.isComposing) return;
+  if (e.inputType !== "insertText" && e.inputType !== "insertReplacementText") return;
+  const p = e.target.closest?.(".docx-editable-p");
+  if (!p) return;
+  const inherited = getInheritedRunStyleAtCaret(p);
+  const style = mergeRunStyles(inherited, activeTypingStyle);
+  if (!runStyleHasProps(style)) return;
+  e.preventDefault();
+  insertStyledTextAtCaret(e.data || "", style, p);
+  onInlineParagraphInput();
+}
+
+function onFormatSelectionChange() {
+  if (readOnlyMode) return;
+  const p = document.activeElement?.closest?.(".docx-editable-p");
+  const fmtFontSize = document.getElementById("fmtFontSize");
+  if (!fmtFontSize || !p) return;
+  const pt = fontSizePtFromStyle(getInheritedRunStyleAtCaret(p));
+  if (pt) fmtFontSize.value = pt;
 }
 
 function resolveParaIndex(p) {
@@ -278,6 +301,23 @@ function execInlineFormat(command) {
   onInlineParagraphInput();
 }
 
+function applyFontSizePt(pt) {
+  if (readOnlyMode) return;
+  const raw = String(pt || "").trim();
+  if (!raw) {
+    if (activeTypingStyle) delete activeTypingStyle.fontSize;
+    return;
+  }
+  const sizeStyle = { fontSize: `${raw}pt` };
+  activeTypingStyle = mergeRunStyles(activeTypingStyle || {}, sizeStyle);
+  const p = document.activeElement?.closest?.(".docx-editable-p");
+  const sel = window.getSelection();
+  if (p && sel?.rangeCount && !sel.getRangeAt(0).collapsed) {
+    const merged = mergeRunStyles(getInheritedRunStyleAtCaret(p), sizeStyle);
+    if (applyRunStyleToSelection(merged, p)) onInlineParagraphInput();
+  }
+}
+
 function handleFormatShortcut(e) {
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
   const cmd = { b: "bold", i: "italic", u: "underline" }[e.key.toLowerCase()];
@@ -347,9 +387,16 @@ function syncInlineEditMode() {
     if (editable && !p.dataset.inlineBound) {
       p.dataset.inlineBound = "1";
       p.addEventListener("input", onInlineParagraphInput);
+      p.addEventListener("beforeinput", onParagraphBeforeInput);
     }
   });
-  if (editable) bindInlineEditKeyboard();
+  if (editable) {
+    bindInlineEditKeyboard();
+    if (!docCanvasEl.dataset.formatSelBound) {
+      docCanvasEl.dataset.formatSelBound = "1";
+      document.addEventListener("selectionchange", onFormatSelectionChange);
+    }
+  }
   docCanvasEl?.classList.toggle("edit-mode", editable);
   docCanvasEl?.classList.toggle("read-only", readOnlyMode);
   syncFormatToolbar();
@@ -384,5 +431,6 @@ function wireFormatToolbar() {
   ].forEach(([id, cmd]) => {
     document.getElementById(id)?.addEventListener("click", () => execInlineFormat(cmd));
   });
+  document.getElementById("fmtFontSize")?.addEventListener("change", (e) => applyFontSizePt(e.target.value));
 }
 wireFormatToolbar();

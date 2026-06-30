@@ -55,7 +55,8 @@ async function run() {
     const hasItalic = xmlRuns.some((r) => r.italic);
     const hasUnderline = xmlRuns.some((r) => r.underline);
     const hasMono = xmlRuns.some((r) => (r.fontFamily || "").includes("Courier"));
-    if (!hasBold || !hasColor || !hasItalic || !hasUnderline || !hasMono) {
+    const hasSize = xmlRuns.some((r) => (r.fontSize || "").includes("14"));
+    if (!hasBold || !hasColor || !hasItalic || !hasUnderline || !hasMono || !hasSize) {
       return { ok: false, step: "xml", msg: JSON.stringify(xmlRuns) };
     }
 
@@ -88,6 +89,7 @@ async function run() {
     if (!found) return { ok: false, step: "select", msg: "Nie znaleziono NOWY" };
     document.execCommand("bold", false, null);
     document.execCommand("underline", false, null);
+    applyFontSizePt("18");
     p.dispatchEvent(new Event("input", { bubbles: true }));
     const domAfterEdit = extractRunsFromPreviewParagraph(p);
     const nowyRun = domAfterEdit.find((r) => (r.text || "").includes("NOWY"));
@@ -102,6 +104,9 @@ async function run() {
     }
     if (!nowyXml?.underline) {
       return { ok: false, step: "edit-underline", msg: JSON.stringify(afterRuns) };
+    }
+    if (!nowyXml?.fontSize || !nowyXml.fontSize.includes("18")) {
+      return { ok: false, step: "edit-size", msg: JSON.stringify(nowyXml) };
     }
 
     return { ok: true, runs: afterRuns.length };

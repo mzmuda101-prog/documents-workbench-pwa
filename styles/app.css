@@ -406,12 +406,12 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
 .stack-divider { padding-top: 6px; border-top: 1px solid var(--border-subtle); margin-top: 2px; }
 
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink-3); }
-.field input, .field select {
+.field input, .field select, .field textarea {
   padding: 9px 11px; border-radius: var(--r-sm); border: 1px solid var(--border);
   background: var(--field); color: var(--ink); font: inherit; font-weight: 400;
   transition: border-color var(--t), box-shadow var(--t);
 }
-.field input:focus, .field select:focus {
+.field input:focus, .field select:focus, .field textarea:focus {
   outline: none; border-color: var(--border-focus);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
@@ -538,8 +538,14 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
 
 .doc-canvas.read-only .docx-preview-host { cursor: default; }
 .doc-canvas.edit-mode .docx-preview-host { cursor: default; }
-.format-toolbar { margin-top: 6px; gap: 6px; }
+.format-toolbar { margin-top: 6px; display: flex; flex-direction: column; gap: 8px; }
+.format-toolbar .btn-row { gap: 6px; }
 .format-btn { min-width: 34px; padding: 6px 10px; font-size: 13px; line-height: 1; }
+.format-size-field { margin: 0; }
+.snippet-list { max-height: 140px; overflow-y: auto; }
+.snippet-row { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid var(--border-subtle); border-radius: var(--r-sm); background: var(--field); }
+.snippet-name { flex: 1; font-size: 12px; font-weight: 600; font-family: var(--font-mono, monospace); color: var(--accent); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.snippet-use-btn, .snippet-del-btn { flex-shrink: 0; padding: 4px 8px; font-size: 10px; }
 
 .doc-canvas.edit-mode .docx-editable-p { cursor: text; white-space: pre-wrap; }
 .doc-canvas.edit-mode .docx-editable-p {

@@ -1,18 +1,5 @@
 // Placeholder fields — scan {{name}} tokens and fill via XML replace.
 
-const PLACEHOLDER_TOKEN_RE = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;
-
-function scanPlaceholdersInText(text) {
-  const hits = [];
-  if (!text) return hits;
-  const re = new RegExp(PLACEHOLDER_TOKEN_RE.source, "g");
-  let m;
-  while ((m = re.exec(text)) !== null) {
-    hits.push({ token: m[0], name: m[1], start: m.index, end: m.index + m[0].length });
-  }
-  return hits;
-}
-
 async function scanPlaceholders(bytes) {
   const texts = await extractParagraphTextsFromDocx(bytes);
   const fields = new Map();
