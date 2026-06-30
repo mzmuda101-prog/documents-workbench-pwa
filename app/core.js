@@ -148,6 +148,8 @@ function setSidebarOpen(open) {
   rootEl.classList.toggle("sidebar-open", !!open);
   if (sidebarScrim) sidebarScrim.classList.toggle("hidden", !open);
   if (panelToggle) panelToggle.textContent = open ? t("panelOpen") : t("panelClosed");
+  const mobile = window.matchMedia("(max-width: 768px)").matches;
+  document.body.style.overflow = open && mobile ? "hidden" : "";
   if (typeof syncSidebarHandle === "function") syncSidebarHandle();
 }
 
@@ -157,9 +159,13 @@ function toggleSidebar() {
 
 function applyZoom() {
   if (!docCanvasEl || !zoomLevelEl) return;
-  const zoom = parseFloat(zoomLevelEl.value) || 1;
+  const { min, max } = typeof getZoomLimits === "function" ? getZoomLimits() : { min: 0.7, max: 1.4 };
+  let zoom = parseFloat(zoomLevelEl.value) || 1;
+  zoom = Math.max(min, Math.min(max, zoom));
+  zoomLevelEl.value = String(zoom);
   docCanvasEl.style.setProperty("--doc-zoom", String(zoom));
   if (zoomValueEl) zoomValueEl.textContent = `${Math.round(zoom * 100)}%`;
+  if (typeof updateZoomShellHeight === "function") updateZoomShellHeight(zoom);
 }
 
 function syncDocViewportHeight() {

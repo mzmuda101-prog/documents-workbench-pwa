@@ -7,6 +7,7 @@ if (sidebarScrim) sidebarScrim.addEventListener("click", () => setSidebarOpen(fa
 applyLanguage();
 syncLangSwitchPill();
 setSidebarOpen(window.matchMedia("(min-width: 1100px)").matches);
+if (typeof initMobileDocZoom === "function") initMobileDocZoom();
 syncDocViewportHeight();
 applyZoom();
 setDirtyState(false);

@@ -116,6 +116,7 @@ async function saveDocument() {
         await refreshInlineEditBaseline(originalFileBytes);
         setDirtyState(false);
         toast(t("saveDone"), "success");
+        if (typeof closeMobileSidebarIfOpen === "function") closeMobileSidebarIfOpen();
         return;
       } catch (_) {
         toast(t("savePermissionDenied"), "warning");
@@ -159,6 +160,7 @@ async function saveDocumentAs() {
       await refreshInlineEditBaseline(originalFileBytes);
       setDirtyState(false);
       toast(t("saveDone"), "success");
+      if (typeof closeMobileSidebarIfOpen === "function") closeMobileSidebarIfOpen();
       return;
     } catch (e) {
       if (e && e.name === "AbortError") return;
@@ -175,6 +177,7 @@ async function saveDocumentAs() {
   await refreshInlineEditBaseline(originalFileBytes);
   setDirtyState(false);
   toast(t("saveDone"), "success");
+  if (typeof closeMobileSidebarIfOpen === "function") closeMobileSidebarIfOpen();
 }
 
 async function openFilePicker() {
@@ -272,7 +275,7 @@ if (searchQueryEl) {
     if (e.key === "Enter") runDocumentSearch();
   });
 }
-if (zoomLevelEl) zoomLevelEl.addEventListener("input", applyZoom);
+if (zoomLevelEl) zoomLevelEl.addEventListener("input", typeof onZoomSliderInput === "function" ? onZoomSliderInput : applyZoom);
 if (readModeEl) {
   readModeEl.addEventListener("change", () => {
     readOnlyMode = readModeEl.checked;
@@ -290,7 +293,10 @@ document.querySelectorAll(".lang-button").forEach((btn) => {
 
 window.addEventListener("online", syncNetworkBadge);
 window.addEventListener("offline", syncNetworkBadge);
-window.addEventListener("resize", syncDocViewportHeight);
+window.addEventListener("resize", () => {
+  syncDocViewportHeight();
+  if (typeof onViewportChange === "function") onViewportChange();
+});
 
 wireFileDrop();
 initIntroSplash();

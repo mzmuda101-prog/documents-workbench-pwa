@@ -404,6 +404,7 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
   height: var(--doc-panel-height, 520px); overflow: auto;
   background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 92%, white) 0%, color-mix(in srgb, var(--bg) 85%, white) 100%);
 }
+.doc-zoom-shell { width: 100%; }
 .doc-canvas { transform: scale(var(--doc-zoom, 1)); transform-origin: top center; padding: 24px 16px 48px; min-height: 100%; }
 .docx-preview-host {
   max-width: 820px; margin: 0 auto; background: white; color: #111;
@@ -547,8 +548,69 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
 .log-line { padding: 2px 0; }
 
 @media (max-width: 768px) {
-  .app { padding: 12px 12px 24px; }
+  .app { padding: 12px 12px max(24px, env(safe-area-inset-bottom)); }
   .hero { padding: 12px 14px; }
   .hero-right { justify-content: flex-start; width: 100%; }
-  .sidebar { top: auto; max-height: calc(100vh - 80px); }
+  .toast-container {
+    left: 12px; right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); max-width: none;
+  }
+  .doc-canvas {
+    transform: none;
+    zoom: var(--doc-zoom, 1);
+    padding: 12px 8px 28px;
+  }
+  .docx-preview-host { max-width: 100%; }
+  .doc-zoom-shell { overflow: hidden; }
+
+  html.is-mobile .sidebar {
+    top: auto; bottom: 0; left: 0; right: 0;
+    width: 100%; max-width: none;
+    max-height: min(85dvh, calc(100dvh - env(safe-area-inset-top) - 56px));
+    padding: 0 12px calc(12px + env(safe-area-inset-bottom));
+    border-radius: var(--r-xl) var(--r-xl) 0 0;
+    background: var(--glass-bg-strong);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 -16px 48px rgba(8, 14, 28, 0.18);
+    transform: translateY(110%);
+    opacity: 1;
+    pointer-events: none;
+  }
+  html.is-mobile .sidebar::before {
+    content: ""; display: block; width: 36px; height: 4px; margin: 10px auto 6px;
+    border-radius: 999px; background: var(--border); flex-shrink: 0;
+  }
+  html.is-mobile.sidebar-open .sidebar {
+    transform: translateY(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+  html.is-mobile .sidebar-handle { display: none; }
+  html.is-mobile.sidebar-open .sidebar-handle {
+    display: block;
+    top: auto;
+    bottom: max(14px, env(safe-area-inset-bottom));
+    left: 50% !important;
+    width: min(220px, calc(100vw - 32px));
+    height: 44px;
+    transform: translateX(-50%);
+    border-radius: 999px;
+    border-color: color-mix(in srgb, var(--accent) 10%, white);
+    background: color-mix(in srgb, var(--accent) 92%, black);
+    color: white;
+    opacity: 0.88;
+    box-shadow: 0 18px 38px rgba(18, 30, 23, 0.28);
+  }
+  html.is-mobile.sidebar-open .sidebar-handle:hover {
+    transform: translateX(-50%) translateY(-1px);
+  }
+  html.is-mobile.sidebar-open .sidebar-handle::before {
+    content: "×"; top: 50%; left: 18px; transform: translateY(-50%);
+    border-color: rgba(255, 255, 255, 0.32); background: rgba(255, 255, 255, 0.16); color: white;
+  }
+  html.is-mobile.sidebar-open .sidebar-handle::after {
+    content: "Schowaj panel"; top: 50%; left: 54%; transform: translate(-50%, -50%);
+    letter-spacing: 0.04em; font-size: 11px;
+  }
+  html[lang="en"].is-mobile.sidebar-open .sidebar-handle::after,
+  html.is-mobile[lang="en"].sidebar-open .sidebar-handle::after { content: "Hide panel"; }
 }

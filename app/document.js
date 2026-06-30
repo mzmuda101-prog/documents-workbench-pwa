@@ -75,6 +75,7 @@ async function ingestFile(file, options = {}) {
     await renderCurrentDocument();
     setStatus(t("docLoaded"));
     if (!options.silent) toast(t("docLoaded"), "success");
+    if (typeof closeMobileSidebarIfOpen === "function") closeMobileSidebarIfOpen();
     return true;
   } catch (e) {
     log(String(e.message || e), "error");
@@ -119,6 +120,7 @@ async function renderCurrentDocument() {
     renderStructurePanel(documentStructure);
     if (searchQueryEl?.value.trim()) runDocumentSearch();
     setupInlineEditingAfterRender();
+    if (typeof syncMobileDocZoomAfterRender === "function") syncMobileDocZoomAfterRender();
   } finally {
     setLoading(false);
     syncDocViewportHeight();

@@ -13,7 +13,7 @@
     <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png" />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin.woff2" crossorigin />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin-ext.woff2" crossorigin />
-    <link rel="stylesheet" href="styles/app.css?v=20260630-08" />
+    <link rel="stylesheet" href="styles/app.css?v=20260630-09" />
   </head>
   <body>
     <div class="hero-overlay" id="heroSplash">
@@ -112,6 +112,10 @@
                   <input id="zoomLevel" type="range" min="0.7" max="1.4" step="0.05" value="1" aria-describedby="zoomValue" />
                   <span class="zoom-value" id="zoomValue">100%</span>
                 </label>
+                <div class="btn-row">
+                  <button type="button" id="zoomFitBtn" class="btn" data-i18n="zoomFit">Dopasuj szerokość</button>
+                  <button type="button" id="zoomResetBtn" class="btn" data-i18n="zoomReset">100%</button>
+                </div>
                 <label class="field checkbox">
                   <input id="readMode" type="checkbox" checked />
                   <span data-i18n="readModeOn">Tylko odczyt</span>
@@ -263,7 +267,9 @@
                 <h2 id="emptyTitle" data-i18n="emptyTitle">Wczytaj dokument .docx</h2>
                 <p id="emptySub" data-i18n="emptySub">Plik zostaje w przeglądarce — bez wysyłania na serwer.</p>
               </div>
-              <div class="doc-canvas hidden" id="docCanvas"></div>
+              <div class="doc-zoom-shell" id="docZoomShell">
+                <div class="doc-canvas hidden" id="docCanvas"></div>
+              </div>
             </div>
           </section>
           <footer class="status-bar">
@@ -285,16 +291,17 @@
     </div>
     <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-    <script defer src="app/core.js?v=20260630-08"></script>
-    <script defer src="app/language.js?v=20260630-08"></script>
-    <script defer src="app/docx-patch.js?v=20260630-08"></script>
-    <script defer src="app/docx-inline-edit.js?v=20260630-08"></script>
-    <script defer src="app/document.js?v=20260630-08"></script>
-    <script defer src="app/docx-render-fixes.js?v=20260630-08"></script>
-    <script defer src="app/docx-viewer.js?v=20260630-08"></script>
-    <script defer src="app/analysis.js?v=20260630-08"></script>
-    <script defer src="app/edit-tools.js?v=20260630-08"></script>
-    <script defer src="app/ui-controls.js?v=20260630-08"></script>
-    <script defer src="app/bootstrap.js?v=20260630-08"></script>
+    <script defer src="app/core.js?v=20260630-09"></script>
+    <script defer src="app/language.js?v=20260630-09"></script>
+    <script defer src="app/docx-patch.js?v=20260630-09"></script>
+    <script defer src="app/docx-inline-edit.js?v=20260630-09"></script>
+    <script defer src="app/document.js?v=20260630-09"></script>
+    <script defer src="app/docx-render-fixes.js?v=20260630-09"></script>
+    <script defer src="app/docx-viewer.js?v=20260630-09"></script>
+    <script defer src="app/analysis.js?v=20260630-09"></script>
+    <script defer src="app/edit-tools.js?v=20260630-09"></script>
+    <script defer src="app/mobile-doc-zoom.js?v=20260630-09"></script>
+    <script defer src="app/ui-controls.js?v=20260630-09"></script>
+    <script defer src="app/bootstrap.js?v=20260630-09"></script>
   </body>
 </html>
