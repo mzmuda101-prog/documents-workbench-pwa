@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="pl" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta id="pageDescription" name="description" content="Lokalne przeglądanie, edycja i analiza dokumentów Word" />
+    <title>Documents Workbench</title>
+    <meta name="application-name" content="Documents Workbench" />
+    <meta name="apple-mobile-web-app-title" content="Documents Workbench" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <link rel="icon" type="image/png" href="assets/images/favicon.png" />
+    <link rel="manifest" href="manifest.json" />
+    <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png" />
+    <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin.woff2" crossorigin />
+    <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin-ext.woff2" crossorigin />
+    <link rel="stylesheet" href="styles/app.css?v=20260630-02" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="hero">
+        <div class="hero-left">
+          <div class="hero-logo" aria-hidden="true">
+            <svg width="38" height="38" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="38" height="38" rx="11" fill="var(--accent)" />
+              <path d="M12 10h14a2 2 0 0 1 2 2v16l-4-3-4 3-4-3-4 3V12a2 2 0 0 1 2-2z" stroke="white" stroke-width="1.5" fill="none" />
+              <line x1="15" y1="16" x2="23" y2="16" stroke="white" stroke-width="1.5" />
+              <line x1="15" y1="20" x2="23" y2="20" stroke="white" stroke-width="1.5" />
+            </svg>
+          </div>
+          <div class="hero-info">
+            <div class="hero-title">Documents Workbench</div>
+            <div class="hero-sub" data-i18n="description">Lokalne przeglądanie, edycja i analiza dokumentów Word</div>
+          </div>
+        </div>
+        <div class="hero-right">
+          <button class="panel-toggle" id="panelToggle" type="button">Panel</button>
+          <div class="lang-switch" role="group" aria-label="Language" id="langSwitch">
+            <span class="lang-switch-indicator" aria-hidden="true"></span>
+            <button class="lang-button is-active" type="button" data-lang="pl" aria-pressed="true">PL</button>
+            <button class="lang-button" type="button" data-lang="en" aria-pressed="false">EN</button>
+          </div>
+          <span class="hero-badge pwa-badge">PWA</span>
+          <span class="hero-badge network-badge" id="networkBadge">Online</span>
+          <button class="theme-toggle" id="themeToggle" type="button" aria-label="Theme"></button>
+          <button class="logo-badge" id="brandRefresh" type="button" aria-label="Refresh">↻</button>
+          <button class="app-update-btn hidden" id="appUpdateBtn" type="button" data-i18n="updateApp">Aktualizuj</button>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <aside class="sidebar" aria-label="Tools panel">
+          <section class="sidebar-group">
+            <details class="panel" id="panel-file" open>
+              <summary>
+                <span class="panel-title" data-i18n="filePanel">Plik</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
+              </summary>
+              <div class="panel-body stack">
+                <label class="drop-zone" id="dropZone">
+                  <div class="drop-icon" aria-hidden="true">
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                      <line x1="12" y1="11" x2="12" y2="17" />
+                      <polyline points="9 14 12 11 15 14" />
+                    </svg>
+                  </div>
+                  <p class="drop-text"><span data-i18n="dropText">Przeciągnij plik</span> <strong>.docx</strong></p>
+                  <span class="drop-btn" data-i18n="dropOr">lub kliknij tutaj</span>
+                  <input id="fileInput" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden />
+                </label>
+                <div class="file-name hidden" id="fileName">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                  </svg>
+                  <span id="fileNameText">Brak pliku</span>
+                </div>
+                <div class="btn-row">
+                  <button class="btn" id="loadBtn" type="button" data-i18n="openFile">Otwórz plik</button>
+                  <button class="btn" id="loadSampleBtn" type="button" data-i18n="loadSample">Przykład</button>
+                </div>
+                <div class="btn-row">
+                  <button class="btn" id="saveBtn" type="button" data-i18n="save" disabled>Zapisz</button>
+                  <button class="btn" id="saveAsBtn" type="button" data-i18n="saveAs" disabled>Zapisz jako</button>
+                </div>
+              </div>
+            </details>
+
+            <details class="panel" id="panel-view">
+              <summary>
+                <span class="panel-title" data-i18n="viewPanel">Podgląd</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
+              </summary>
+              <div class="panel-body stack">
+                <label class="field">
+                  <span data-i18n="zoomLabel">Powiększenie</span>
+                  <input id="zoomLevel" type="range" min="0.7" max="1.4" step="0.05" value="1" aria-describedby="zoomValue" />
+                  <span class="zoom-value" id="zoomValue">100%</span>
+                </label>
+                <label class="field checkbox">
+                  <input id="readMode" type="checkbox" checked />
+                  <span data-i18n="readModeOn">Tylko odczyt</span>
+                </label>
+              </div>
+            </details>
+
+            <details class="panel" id="panel-search">
+              <summary>
+                <span class="panel-title" data-i18n="searchPanel">Wyszukiwanie</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
+              </summary>
+              <div class="panel-body stack">
+                <label class="field">
+                  <span data-i18n="searchQueryLabel">Fraza</span>
+                  <input id="searchQuery" type="search" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span data-i18n="searchScopeLabel">Zakres</span>
+                  <select id="searchScope">
+                    <option value="all">Wszystko</option>
+                    <option value="headings">Nagłówki</option>
+                  </select>
+                </label>
+                <button class="btn" id="searchHighlightBtn" type="button" data-i18n="searchHighlight">Podświetl</button>
+                <div class="hint" id="searchCount"></div>
+              </div>
+            </details>
+
+            <details class="panel" id="panel-structure">
+              <summary>
+                <span class="panel-title" data-i18n="structurePanel">Struktura</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
+              </summary>
+              <div class="panel-body stack">
+                <div id="structureSummary"></div>
+                <div id="headingNav"></div>
+              </div>
+            </details>
+
+            <details class="panel" id="panel-edit-tools">
+              <summary>
+                <span class="panel-title" data-i18n="editToolsPanel">Narzędzia edycji</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
+              </summary>
+              <div class="panel-body stack">
+                <label class="field">
+                  <span data-i18n="editFindLabel">Szukaj</span>
+                  <input id="editFind" type="text" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span data-i18n="editReplaceLabel">Zamień na</span>
+                  <input id="editReplace" type="text" autocomplete="off" />
+                </label>
+                <label class="field checkbox">
+                  <input id="editRegex" type="checkbox" />
+                  <span data-i18n="editRegexLabel">Wyrażenie regularne</span>
+                </label>
+                <label class="field">
+                  <span data-i18n="editScopeLabel">Zakres</span>
+                  <select id="editScope">
+                    <option value="all" data-i18n="editScopeAll">Cały dokument</option>
+                    <option value="body" data-i18n="editScopeBody">Treść główna</option>
+                  </select>
+                </label>
+                <button class="btn primary" id="applyEditToolBtn" type="button" data-i18n="applyEdit">Zastosuj</button>
+              </div>
+            </details>
+          </section>
+        </aside>
+
+        <button class="sidebar-handle" id="panelHandle" type="button" aria-label="Panel"></button>
+        <button class="sidebar-scrim hidden" id="sidebarScrim" type="button" aria-label="Close panel"></button>
+
+        <main class="main">
+          <section class="doc-panel panel">
+            <div class="doc-viewport" id="docViewport">
+              <div class="empty-state" id="emptyState">
+                <div class="empty-icon" aria-hidden="true">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="8" y1="13" x2="16" y2="13" />
+                    <line x1="8" y1="17" x2="14" y2="17" />
+                  </svg>
+                </div>
+                <h2 id="emptyTitle" data-i18n="emptyTitle">Wczytaj dokument .docx</h2>
+                <p id="emptySub" data-i18n="emptySub">Plik zostaje w przeglądarce — bez wysyłania na serwer.</p>
+              </div>
+              <div class="doc-canvas hidden" id="docCanvas"></div>
+            </div>
+          </section>
+          <footer class="status-bar">
+            <span id="status">Brak pliku</span>
+            <details class="log-panel">
+              <summary>Log</summary>
+              <div id="log"></div>
+            </details>
+          </footer>
+        </main>
+      </div>
+    </div>
+
+    <div class="loading-overlay hidden" id="loadingOverlay" aria-live="polite">
+      <div class="loading-card">
+        <div class="spinner" aria-hidden="true"></div>
+        <div id="loadingText">Ładowanie…</div>
+      </div>
+    </div>
+    <div class="toast-container" id="toastContainer" aria-live="polite"></div>
+
+    <script defer src="app/core.js?v=20260630-02"></script>
+    <script defer src="app/language.js?v=20260630-02"></script>
+    <script defer src="app/docx-patch.js?v=20260630-02"></script>
+    <script defer src="app/document.js?v=20260630-02"></script>
+    <script defer src="app/docx-viewer.js?v=20260630-02"></script>
+    <script defer src="app/analysis.js?v=20260630-02"></script>
+    <script defer src="app/edit-tools.js?v=20260630-02"></script>
+    <script defer src="app/ui-controls.js?v=20260630-02"></script>
+    <script defer src="app/bootstrap.js?v=20260630-02"></script>
+  </body>
+</html>

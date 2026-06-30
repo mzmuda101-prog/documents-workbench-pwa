@@ -1,0 +1,15 @@
+{
+  "name": "Documents Workbench",
+  "short_name": "Docs Workbench",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#e8ecf4",
+  "theme_color": "#185abd",
+  "icons": [
+    {
+      "src": "assets/images/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

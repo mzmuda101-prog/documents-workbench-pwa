@@ -1,0 +1,23 @@
+{
+  "name": "documents-workbench-pwa",
+  "version": "0.1.0",
+  "description": "Local, offline-first document workbench for viewing, editing, and saving .docx files in the browser.",
+  "private": true,
+  "scripts": {
+    "postinstall": "node scripts/vendor-libs.mjs",
+    "icons": "python3 scripts/gen-icons.py",
+    "serve": "python3 -m http.server 7823",
+    "build": "node scripts/build-release.mjs",
+    "test": "node scripts/smoke-playwright.js"
+  },
+  "license": "MIT",
+  "type": "commonjs",
+  "devDependencies": {
+    "esbuild": "^0.28.1",
+    "playwright": "^1.60.0"
+  },
+  "dependencies": {
+    "docx-preview": "^0.3.7",
+    "jszip": "^3.10.1"
+  }
+}
