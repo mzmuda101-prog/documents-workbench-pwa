@@ -1,5 +1,7 @@
 // App bootstrap: event wiring and startup.
 
+if (typeof initLazyFeaturePanels === "function") initLazyFeaturePanels();
+
 if (panelToggle) panelToggle.addEventListener("click", toggleSidebar);
 if (panelHandle) panelHandle.addEventListener("click", toggleSidebar);
 if (sidebarScrim) sidebarScrim.addEventListener("click", () => setSidebarOpen(false));

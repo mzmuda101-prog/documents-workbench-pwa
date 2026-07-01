@@ -343,6 +343,14 @@ body.splashing {
   z-index: 30; transform: translateX(calc(-100% - 24px)); opacity: 0; pointer-events: none;
   transition: transform var(--t-slow), opacity var(--t);
 }
+/* [EN] Skip paint for collapsed sidebar panels while scrolling */
+.sidebar .panel {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 52px;
+}
+html.low-power .sidebar .panel {
+  content-visibility: visible;
+}
 .sidebar-group { display: flex; flex-direction: column; gap: 10px; }
 .sidebar-group + .sidebar-group { margin-top: 2px; padding-top: 6px; border-top: 1px solid var(--border-subtle); }
 .sidebar-group-head {

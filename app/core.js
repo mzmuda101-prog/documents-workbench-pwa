@@ -1,5 +1,7 @@
 // Core runtime: DOM refs, shared state, and base UI helpers.
 
+const APP_BUILD_VERSION = "20260702-01";
+
 const IS_LOW_POWER = (() => {
   try {
     const cores = navigator.hardwareConcurrency || 8;

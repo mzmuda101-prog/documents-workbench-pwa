@@ -27,8 +27,9 @@ async function createTestPage(viewport = { width: 1280, height: 900 }) {
 async function bootApp(page) {
   await page.goto(APP_URL, { waitUntil: "load" });
   await page.evaluate(() => document.getElementById("heroSplash")?.remove());
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     if (typeof setSidebarOpen === "function") setSidebarOpen(false);
+    if (typeof ensureLazyFeature === "function") await ensureLazyFeature("find-replace");
   });
 }
 

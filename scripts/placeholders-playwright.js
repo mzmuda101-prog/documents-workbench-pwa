@@ -21,9 +21,13 @@ async function run() {
     const idx = texts.findIndex((t) => t && t.trim().length > 0);
     if (idx < 0) return { ok: false, step: "fixture", msg: "Brak akapitu" };
 
+    const phIdx = texts.findIndex((t) => t && t.includes("{{placeholder}}"));
+    const items = [{ index: idx, text: template }];
+    if (phIdx >= 0 && phIdx !== idx) items.push({ index: phIdx, text: "Akapit bez tokenów." });
+
     await applyDocumentEdit({
       op: "paragraphBatch",
-      items: [{ index: idx, text: template }],
+      items,
     });
 
     const scan = await scanPlaceholders(originalFileBytes);
