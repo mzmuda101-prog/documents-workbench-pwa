@@ -1,6 +1,6 @@
 // Core runtime: DOM refs, shared state, and base UI helpers.
 
-const APP_BUILD_VERSION = "20260702-01";
+const APP_BUILD_VERSION = "20260703-01";
 
 const IS_LOW_POWER = (() => {
   try {
@@ -42,7 +42,6 @@ const searchHighlightBtn = document.getElementById("searchHighlightBtn");
 const searchCountEl = document.getElementById("searchCount");
 
 const structureSummaryEl = document.getElementById("structureSummary");
-const headingNavEl = document.getElementById("headingNav");
 
 const editOpEl = document.getElementById("editOp");
 const editFindEl = document.getElementById("editFind");
@@ -215,7 +214,8 @@ function clearDocumentState() {
   activeSearchIndex = -1;
   if (docCanvasEl) docCanvasEl.replaceChildren();
   if (structureSummaryEl) structureSummaryEl.replaceChildren();
-  if (headingNavEl) headingNavEl.replaceChildren();
+  if (typeof resetStructurePanelUi === "function") resetStructurePanelUi();
+  if (typeof loadMetadataFromDocument === "function") loadMetadataFromDocument().catch(() => {});
   if (searchCountEl) searchCountEl.textContent = "";
   if (fileNameEl) fileNameEl.classList.add("hidden");
   if (fileNameTextEl) fileNameTextEl.textContent = t("noFile");

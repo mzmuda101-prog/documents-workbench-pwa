@@ -1,12 +1,14 @@
 // [EN] Lazy-load sidebar feature bundles on first panel open — keeps boot parse lighter.
 const LAZY_FEATURE_SCRIPTS = {
   grammar: ["app/grammar-panel.js"],
+  metadata: ["app/metadata-panel.js"],
   placeholders: ["app/placeholders-panel.js"],
   "snippets-panel": ["app/snippets-panel.js"],
   "find-replace": ["app/find-replace-workbench.js"],
 };
 
 const PANEL_LAZY_FEATURE = {
+  "panel-metadata": "metadata",
   "panel-grammar": "grammar",
   "panel-placeholders": "placeholders",
   "panel-snippets": "snippets-panel",
@@ -58,7 +60,11 @@ function initLazyFeaturePanels() {
     if (!featureKey) return;
     panel.addEventListener("toggle", () => {
       if (!panel.open) return;
-      ensureLazyFeature(featureKey).catch(() => {});
+      ensureLazyFeature(featureKey).then(() => {
+        if (panel.id === "panel-metadata" && typeof loadMetadataFromDocument === "function") {
+          loadMetadataFromDocument().catch(() => {});
+        }
+      }).catch(() => {});
     });
   });
 }

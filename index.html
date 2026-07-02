@@ -13,7 +13,7 @@
     <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png" />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin.woff2" crossorigin />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin-ext.woff2" crossorigin />
-    <link rel="stylesheet" href="styles/app.css?v=20260702-01" />
+    <link rel="stylesheet" href="styles/app.css?v=20260703-01" />
   </head>
   <body>
     <div class="hero-overlay" id="heroSplash">
@@ -109,6 +109,37 @@
                   <button class="btn" id="saveAsBtn" type="button" data-i18n="saveAs" disabled>Zapisz jako</button>
                 </div>
                 <button class="btn doc-close-panel-btn hidden" id="closeDocPanelBtn" type="button" data-i18n="closeDoc">Zamknij dokument</button>
+              </div>
+            </details>
+
+            <details class="panel" id="panel-metadata">
+              <summary>
+                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+                </svg>
+                <span class="panel-title" data-i18n="metadataPanel">Metadane</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
+              </summary>
+              <div class="panel-body stack">
+                <p class="hint" data-i18n="metadataIntro">Właściwości pliku z docProps/core.xml — widoczne w Eksploratorze / Wordzie, nie w treści dokumentu.</p>
+                <label class="field">
+                  <span data-i18n="metadataTitleLabel">Tytuł</span>
+                  <input id="metaTitle" type="text" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span data-i18n="metadataCreatorLabel">Autor</span>
+                  <input id="metaCreator" type="text" autocomplete="off" />
+                </label>
+                <label class="field">
+                  <span data-i18n="metadataKeywordsLabel">Słowa kluczowe</span>
+                  <input id="metaKeywords" type="text" autocomplete="off" placeholder="tag1, tag2" />
+                </label>
+                <div class="btn-row">
+                  <button class="btn" id="metaReloadBtn" type="button" data-i18n="metadataReload">Wczytaj z pliku</button>
+                  <button class="btn primary" id="metaApplyBtn" type="button" data-i18n="metadataApply">Zastosuj</button>
+                </div>
+                <div class="hint" id="metaStatus"></div>
               </div>
             </details>
 
@@ -408,7 +439,46 @@
               </summary>
               <div class="panel-body stack">
                 <div id="structureSummary"></div>
-                <div id="headingNav"></div>
+                <label class="field">
+                  <span data-i18n="structureSearchLabel">Szukaj w strukturze</span>
+                  <input id="structureSearch" type="search" autocomplete="off" data-i18n-placeholder="structureSearchPlaceholder" placeholder="fraza w nagłówku lub akapicie…" />
+                </label>
+                <div class="structure-toolbar">
+                  <label class="field structure-toolbar-field">
+                    <span data-i18n="structureFilterLabel">Pokaż</span>
+                    <select id="structureFilter">
+                      <option value="all" data-i18n="structureFilterAll">Wszystko</option>
+                      <option value="headings" data-i18n="structureFilterHeadings">Nagłówki</option>
+                      <option value="paragraphs" data-i18n="structureFilterParagraphs">Akapity</option>
+                      <option value="tables" data-i18n="structureFilterTables">Tabele</option>
+                    </select>
+                  </label>
+                  <label class="field structure-toolbar-field">
+                    <span data-i18n="structurePageSizeLabel">Na stronie</span>
+                    <select id="structurePageSize">
+                      <option value="10">10</option>
+                      <option value="20" selected>20</option>
+                      <option value="30">30</option>
+                      <option value="40">40</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="structure-pager btn-row">
+                  <button class="btn" id="structurePrevPage" type="button" data-i18n="structurePrevPage">Poprzednia</button>
+                  <span class="structure-page-info hint" id="structurePageInfo" aria-live="polite"></span>
+                  <button class="btn" id="structureNextPage" type="button" data-i18n="structureNextPage">Następna</button>
+                </div>
+                <div id="structureOutline" class="structure-outline" aria-live="polite"></div>
+                <div id="structureQuickEdit" class="structure-quick-edit hidden">
+                  <label class="field">
+                    <span data-i18n="structureQuickEditLabel">Szybka edycja akapitu</span>
+                    <textarea id="structureQuickEditText" rows="3" autocomplete="off"></textarea>
+                  </label>
+                  <div class="btn-row">
+                    <button class="btn primary" id="structureQuickApplyBtn" type="button" data-i18n="structureQuickApply">Zastosuj</button>
+                    <button class="btn" id="structureQuickFocusBtn" type="button" data-i18n="structureQuickFocus">Edytuj w podglądzie</button>
+                  </div>
+                </div>
               </div>
             </details>
 
@@ -530,23 +600,25 @@
     </div>
     <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-    <script defer src="app/core.js?v=20260702-01"></script>
-    <script defer src="app/language.js?v=20260702-01"></script>
-    <script defer src="app/docx-patch.js?v=20260702-01"></script>
-    <script defer src="app/template-tokens.js?v=20260702-01"></script>
-    <script defer src="app/docx-run-styles.js?v=20260702-01"></script>
-    <script defer src="app/docx-inline-edit.js?v=20260702-01"></script>
-    <script defer src="app/document.js?v=20260702-01"></script>
-    <script defer src="app/docx-render-fixes.js?v=20260702-01"></script>
-    <script defer src="app/docx-viewer.js?v=20260702-01"></script>
-    <script defer src="app/analysis.js?v=20260702-01"></script>
-    <script defer src="app/grammar-style.js?v=20260702-01"></script>
-    <script defer src="app/placeholders.js?v=20260702-01"></script>
-    <script defer src="app/snippets.js?v=20260702-01"></script>
-    <script defer src="app/edit-tools.js?v=20260702-01"></script>
-    <script defer src="app/mobile-doc-zoom.js?v=20260702-01"></script>
-    <script defer src="app/ui-controls.js?v=20260702-01"></script>
-    <script defer src="app/lazy-features.js?v=20260702-01"></script>
-    <script defer src="app/bootstrap.js?v=20260702-01"></script>
+    <script defer src="app/core.js?v=20260703-01"></script>
+    <script defer src="app/language.js?v=20260703-01"></script>
+    <script defer src="app/docx-metadata.js?v=20260703-01"></script>
+    <script defer src="app/docx-patch.js?v=20260703-01"></script>
+    <script defer src="app/template-tokens.js?v=20260703-01"></script>
+    <script defer src="app/docx-run-styles.js?v=20260703-01"></script>
+    <script defer src="app/docx-inline-edit.js?v=20260703-01"></script>
+    <script defer src="app/document.js?v=20260703-01"></script>
+    <script defer src="app/docx-render-fixes.js?v=20260703-01"></script>
+    <script defer src="app/docx-viewer.js?v=20260703-01"></script>
+    <script defer src="app/analysis.js?v=20260703-01"></script>
+    <script defer src="app/structure-panel.js?v=20260703-01"></script>
+    <script defer src="app/grammar-style.js?v=20260703-01"></script>
+    <script defer src="app/placeholders.js?v=20260703-01"></script>
+    <script defer src="app/snippets.js?v=20260703-01"></script>
+    <script defer src="app/edit-tools.js?v=20260703-01"></script>
+    <script defer src="app/mobile-doc-zoom.js?v=20260703-01"></script>
+    <script defer src="app/ui-controls.js?v=20260703-01"></script>
+    <script defer src="app/lazy-features.js?v=20260703-01"></script>
+    <script defer src="app/bootstrap.js?v=20260703-01"></script>
   </body>
 </html>

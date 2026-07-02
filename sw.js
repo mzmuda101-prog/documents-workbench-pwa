@@ -1,8 +1,8 @@
-const CACHE_VERSION = "20260702-01";
+const CACHE_VERSION = "20260703-01";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
-const ASSET_V = "20260702-01";
+const ASSET_V = "20260703-01";
 
 const SHELL_ASSETS = [
   "./",
@@ -13,6 +13,7 @@ const SHELL_ASSETS = [
   "./assets/fonts/space-grotesk-latin-ext.woff2",
   `./app/core.js?v=${ASSET_V}`,
   `./app/language.js?v=${ASSET_V}`,
+  `./app/docx-metadata.js?v=${ASSET_V}`,
   `./app/docx-patch.js?v=${ASSET_V}`,
   `./app/template-tokens.js?v=${ASSET_V}`,
   `./app/docx-run-styles.js?v=${ASSET_V}`,
@@ -21,6 +22,7 @@ const SHELL_ASSETS = [
   `./app/docx-render-fixes.js?v=${ASSET_V}`,
   `./app/docx-viewer.js?v=${ASSET_V}`,
   `./app/analysis.js?v=${ASSET_V}`,
+  `./app/structure-panel.js?v=${ASSET_V}`,
   `./app/grammar-style.js?v=${ASSET_V}`,
   `./app/placeholders.js?v=${ASSET_V}`,
   `./app/snippets.js?v=${ASSET_V}`,
@@ -39,6 +41,7 @@ const SHELL_ASSETS = [
   `./app/placeholders-panel.js?v=${ASSET_V}`,
   `./app/snippets-panel.js?v=${ASSET_V}`,
   `./app/find-replace-workbench.js?v=${ASSET_V}`,
+  `./app/metadata-panel.js?v=${ASSET_V}`,
 ];
 
 // [EN] Large libs + media — separate bucket; still precached for offline after install

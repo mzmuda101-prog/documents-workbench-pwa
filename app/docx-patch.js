@@ -397,15 +397,31 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
   if (!docFile) throw new Error("word/document.xml missing");
   let xml = await docFile.async("string");
   let total = 0;
+  let coreXml = null;
   const list = edits || [];
   for (let i = 0; i < list.length; i++) {
     const normalized = list[i].op ? list[i] : { ...list[i], op: "replace" };
+    if (normalized.op === "coreMetadata") {
+      if (typeof prepareCoreMetadataInZip === "function" && coreXml === null) {
+        coreXml = await prepareCoreMetadataInZip(zip);
+      } else if (coreXml === null) {
+        const coreFile = zip.file("docProps/core.xml");
+        coreXml = coreFile ? await coreFile.async("string") : (typeof createDefaultCoreXml === "function" ? createDefaultCoreXml() : "");
+      }
+      if (typeof applyCoreMetadataInXml === "function" && coreXml) {
+        const res = applyCoreMetadataInXml(coreXml, normalized.fields || {});
+        coreXml = res.xml;
+        total += res.count;
+      }
+      continue;
+    }
     const opts = i === list.length - 1 ? lastEditOpts : {};
     const res = applyEditToXml(xml, normalized, opts);
     xml = res.xml;
     total += res.count;
   }
   zip.file("word/document.xml", xml);
+  if (coreXml !== null) zip.file("docProps/core.xml", coreXml);
   const out = await zip.generateAsync({
     type: "uint8array",
     compression: "DEFLATE",

@@ -75,6 +75,7 @@ async function ingestFile(file, options = {}) {
     await renderCurrentDocument();
     setStatus(t("docLoaded"));
     if (!options.silent) toast(t("docLoaded"), "success");
+    if (typeof loadMetadataFromDocument === "function") loadMetadataFromDocument().catch(() => {});
     if (typeof closeMobileSidebarIfOpen === "function") closeMobileSidebarIfOpen();
     syncDocumentShellClass();
     return true;

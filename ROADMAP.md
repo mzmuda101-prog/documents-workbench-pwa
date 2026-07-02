@@ -1,6 +1,6 @@
 # Documents Workbench PWA — Roadmap
 
-Stan na **v0.2** (czerwiec 2026). Ostatnia wersja cache: `20260630-15`.
+Stan na **v0.2** (lipiec 2026). Ostatnia wersja cache: `20260702-03`.
 
 ---
 
@@ -24,6 +24,8 @@ Stan na **v0.2** (czerwiec 2026). Ostatnia wersja cache: `20260630-15`.
 | **Faza 4 v1 — Korekta typografii** (skan offline, reguły 1–6, panel, apply 1/reguła/wszystkie) | ✅ |
 | **Faza 3.2 — Placeholdery** `{{pole}}` (skan, formularz, podmiana w XML) | ✅ |
 | **Faza 3.3 — Snippety / klauzule** (`!nazwa`, localStorage, rozwinięcie + współpraca z {{}}) | ✅ |
+| **Faza 3.4 — Inspektor z akcjami** (outline, filtr, skok, szybka edycja) | ✅ |
+| **Faza 3.5 — Metadane** (`docProps/core.xml`: tytuł, autor, słowa kluczowe) | ✅ |
 
 **Poza pierwotnym planem (ale wartościowe):** … edycja inline ze stylami runów + rozmiar czcionki, zoom 0.5–2.
 
@@ -86,9 +88,9 @@ Znane problemy (stan obecny):
 | 1 | **4** | Korekta językowa i typografia (offline) | ✅ v1 |
 | 2 | **3.2** | Placeholdery `{{pole}}` | ✅ v1 |
 | 3 | **3.3** | Snippety / klauzule | ✅ v1 |
-| 4 | **3.4** | Inspektor z akcjami | **następny** |
-| — | 3.5 | Metadane (`docProps`) | później |
-| — | 3.6 | Eksport TXT / HTML | później |
+| 4 | **3.4** | Inspektor z akcjami | ✅ |
+| 5 | **3.5** | Metadane (`docProps`) | ✅ |
+| 6 | **3.6** | Eksport TXT / HTML | **następny** |
 
 ---
 
@@ -99,8 +101,8 @@ Znane problemy (stan obecny):
 1. ~~**Find/Replace workbench**~~ ✅ — podgląd trafień przed „zamień wszystkie”, licznik, przejście trafienie po trafieniu
 2. ~~**Placeholdery** `{{pole}}`~~ ✅ — wykrywanie, formularz wypełniania, podmiana w XML
 3. ~~**Snippety / klauzule**~~ ✅ — `!nazwa`, localStorage, rozwinięcie; snippet może zawierać `{{placeholdery}}`
-4. **Inspektor z akcjami** — skok + szybka edycja z panelu struktury
-5. **Metadane** — `docProps/core.xml` (tytuł, autor, słowa kluczowe)
+4. ~~**Inspektor z akcjami**~~ ✅ — outline w kolejności dokumentu, filtr, skok + podświetlenie, kopiuj, edycja w podglądzie, szybka edycja akapitu
+5. ~~**Metadane**~~ ✅ — `docProps/core.xml` (tytuł, autor, słowa kluczowe); tworzy brakujące części pakietu
 6. **Eksport** — pobranie TXT / HTML (bez backendu)
 
 ---
@@ -149,7 +151,7 @@ Lokalny, **offline-first** moduł — bez wysyłania tekstu na serwer.
 
 ## Rekomendowany następny krok
 
-**Faza 3.4 — Inspektor z akcjami** (skok + szybka edycja z panelu struktury).
+**Faza 3.6 — Eksport TXT / HTML** (pobranie bez backendu).
 
 ---
 
