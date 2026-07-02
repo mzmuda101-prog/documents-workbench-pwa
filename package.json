@@ -4,6 +4,7 @@
   "description": "Local, offline-first document workbench for viewing, editing, and saving .docx files in the browser.",
   "private": true,
   "scripts": {
+    "dev": "python3 -m http.server 3000 --bind 127.0.0.1",
     "postinstall": "node scripts/vendor-libs.mjs",
     "icons": "python3 scripts/gen-icons.py",
     "icons:normalize": "node scripts/normalize-icons.js",
