@@ -3,6 +3,9 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- [EN] CSP — offline-first app, locked to 'self'. docx-preview injects <style>
+         elements and blob: images from .docx, hence 'unsafe-inline' styles + blob: imgs. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; media-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
     <meta id="pageDescription" name="description" content="Lokalne przeglądanie, edycja i analiza dokumentów Word" />
     <title>Documents Workbench</title>
     <meta name="application-name" content="Documents Workbench" />
