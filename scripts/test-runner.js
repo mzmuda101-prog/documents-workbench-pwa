@@ -49,15 +49,14 @@ async function run() {
   ok(`Struktura: ${stats.words} słów, ${stats.paras} akapitów, ${stats.tables} tabel, ${stats.headings} nagłówków`);
 
   log("SEARCH", "podświetlanie");
-  await page.evaluate(() => {
-    const host = document.querySelector(".docx-preview-host section.docx") || document.querySelector(".docx-preview-host .docx");
+  const hits = await page.evaluate(async () => {
+    const host = document.querySelector(".docx-preview-host section.docx > article") || document.querySelector(".docx-preview-host .docx");
     const token = (host?.textContent || "").trim().split(/\s+/).find((w) => w.length > 3) || "a";
     const q = document.getElementById("searchQuery");
     if (q) q.value = token.slice(0, 12);
-    if (typeof runDocumentSearch === "function") runDocumentSearch();
+    if (typeof runDocumentSearch === "function") await runDocumentSearch();
+    return typeof frMatches !== "undefined" ? frMatches.length : document.querySelectorAll(".search-hit").length;
   });
-  await page.waitForTimeout(350);
-  const hits = await page.locator(".search-hit").count();
   if (hits > 0) ok(`${hits} trafień wyszukiwania`);
   else ok("Wyszukiwanie — brak trafień (akceptowalne dla krótkiego tokenu)");
 

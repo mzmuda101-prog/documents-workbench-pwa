@@ -251,23 +251,31 @@
                   <span data-i18n="editReplaceLabel">Zamień na</span>
                   <input id="frReplace" type="text" autocomplete="off" />
                 </label>
-                <label class="field checkbox">
-                  <input id="frRegex" type="checkbox" />
-                  <span data-i18n="editRegexLabel">Wyrażenie regularne</span>
-                </label>
+                <div class="fr-options">
+                  <label class="field checkbox">
+                    <input id="frMatchCase" type="checkbox" />
+                    <span data-i18n="frMatchCase">Rozróżniaj wielkość liter</span>
+                  </label>
+                  <label class="field checkbox">
+                    <input id="frWholeWord" type="checkbox" />
+                    <span data-i18n="frWholeWord">Tylko całe słowa</span>
+                  </label>
+                  <label class="field checkbox">
+                    <input id="frRegex" type="checkbox" />
+                    <span data-i18n="editRegexLabel">Wyrażenie regularne</span>
+                  </label>
+                </div>
+                <p class="hint fr-regex-hint" data-i18n="frRegexHint">W polu „Zamień na”: $1, $2… = grupy z nawiasów, $&amp; = całe trafienie.</p>
                 <label class="field">
-                  <span data-i18n="searchScopeLabel">Zakres podświetlenia</span>
+                  <span data-i18n="frScopeLabel">Szukaj w</span>
                   <select id="searchScope">
-                    <option value="all" data-i18n="searchScopeAll">Wszystko</option>
-                    <option value="headings" data-i18n="searchScopeHeadings">Nagłówki</option>
+                    <option value="all" data-i18n="frScopeAll">Cała treść</option>
+                    <option value="headings" data-i18n="frScopeHeadings">Tylko nagłówki sekcji</option>
                   </select>
                 </label>
-                <label class="field">
-                  <span data-i18n="editScopeLabel">Zakres zapisu</span>
-                  <select id="frScope">
-                    <option value="all" data-i18n="editScopeAll">Cały dokument</option>
-                    <option value="body" data-i18n="editScopeBody">Treść główna</option>
-                  </select>
+                <label class="field checkbox">
+                  <input id="frOtherParts" type="checkbox" />
+                  <span data-i18n="frOtherPartsLabel">„Zamień wszystkie” także w nagłówkach, stopkach i przypisach</span>
                 </label>
                 <div class="btn-row">
                   <button class="btn primary" id="frScanBtn" type="button" data-i18n="frScan">Szukaj</button>

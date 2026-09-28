@@ -53,6 +53,7 @@ async function ingestFile(file, options = {}) {
   const type = detectFileType(file.name, file.type);
   if (type !== "docx") {
     if (type === "pdf") toast(t("pdfSoon"), "info");
+    else if (/\.doc$/i.test(file.name || "")) toast(t("docOldFormat"), "warning");
     else toast(t("unsupportedType"), "warning");
     return false;
   }
@@ -91,6 +92,7 @@ async function ingestFile(file, options = {}) {
 // name: plik z docs/samples/ (bez rozszerzenia). Tylko [a-z0-9-] — adres ?sample=… nie może
 // wskazać niczego poza tym katalogiem.
 async function loadSampleDocument(name = "sample") {
+  if (typeof confirmDiscardChanges === "function" && !confirmDiscardChanges()) return false;
   const safe = /^[a-z0-9-]{1,40}$/.test(String(name)) ? name : "sample";
   setLoading(true, t("loadingFile"));
   try {

@@ -9,6 +9,10 @@
 // puszczeniu palców zatwierdzamy prawdziwy zoom i dosuwamy przewinięcie tak, żeby punkt
 // pod palcami został pod palcami. Używamy zdarzeń touch*, bo pointer events kończą się
 // pointercancel, gdy przeglądarka zacznie przewijać jednym palcem.
+//
+// Jak w Wordzie: w trakcie gestu nad dokumentem widać plakietkę z aktualnym procentem (i ten
+// sam procent na pasku), a w pobliżu 100% zoom „przyciąga się” do 100%, żeby łatwo trafić
+// w naturalną wielkość. Plakietka gaśnie chwilę po puszczeniu palców.
 
 (() => {
   const coarse = matchMedia("(pointer: coarse)");
@@ -18,6 +22,32 @@
 
   let g = null; // { z0, ratio, ox, oy, fx0, fy0, dist0, mx, my }
   let raf = 0;
+  const SNAP_TO_100 = 0.05; // ±5 punktów procentowych wokół 100% = dokładnie 100%
+
+  // ── plakietka z procentem ──────────────────────────────────────────────────
+  const badge = document.createElement("div");
+  badge.className = "zoom-badge";
+  badge.setAttribute("aria-hidden", "true");
+  document.body.appendChild(badge);
+  const zoomNowEl = document.getElementById("zoomNow");
+  let badgeTimer = 0;
+  function showBadge(z) {
+    const pct = `${Math.round(z * 100)}%`;
+    if (badge.textContent !== pct) badge.textContent = pct;
+    badge.classList.toggle("is-snap", Math.abs(z - 1) < 0.001);
+    if (!badge.classList.contains("is-on")) {
+      const r = vp.getBoundingClientRect();
+      badge.style.left = `${r.left + r.width / 2}px`;
+      badge.style.top = `${Math.max(r.top, 0) + 14}px`;
+      badge.classList.add("is-on");
+    }
+    if (zoomNowEl) zoomNowEl.textContent = pct; // pasek też na żywo
+    clearTimeout(badgeTimer);
+  }
+  function hideBadgeSoon() {
+    clearTimeout(badgeTimer);
+    badgeTimer = setTimeout(() => badge.classList.remove("is-on"), 700);
+  }
 
   const dist = (a, b) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
   const mid = (a, b) => ({ x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 });
@@ -61,6 +91,7 @@
     shell.style.transformOrigin = `${g.ox}px ${g.oy}px`;
     shell.style.willChange = "transform";
     rootEl.classList.add("is-pinching");
+    showBadge(g.z0);
   }
 
   function end() {
@@ -72,7 +103,11 @@
     shell.style.transformOrigin = "";
     shell.style.willChange = "";
     rootEl.classList.remove("is-pinching");
-    if (Math.abs(s.ratio - 1) < 0.01 && Math.abs(s.mx - s.fx0) + Math.abs(s.my - s.fy0) < 2) return;
+    hideBadgeSoon();
+    if (Math.abs(s.ratio - 1) < 0.01 && Math.abs(s.mx - s.fx0) + Math.abs(s.my - s.fy0) < 2) {
+      if (typeof applyZoom === "function") applyZoom(); // pasek z powrotem na prawdziwą wartość
+      return;
+    }
     const z1 = commitDocZoom(s.z0 * s.ratio);
     const u = z1 / s.z0;
     // znak, który był pod palcami, ląduje pod ich ostatnim położeniem
@@ -99,8 +134,14 @@
     if (e.cancelable) e.preventDefault(); // dwa palce = zoom, nie przewijanie
     const [a, b] = [e.touches[0], e.touches[1]];
     const { min, max } = getZoomLimits();
-    const z = Math.max(min, Math.min(max, g.z0 * (dist(a, b) / g.dist0)));
+    let z = Math.max(min, Math.min(max, g.z0 * (dist(a, b) / g.dist0)));
+    if (Math.abs(z - 1) < SNAP_TO_100) {
+      if (!g.snapped && navigator.vibrate) navigator.vibrate(8); // Android: lekkie „tyk” (iOS nie ma API)
+      z = 1;
+      g.snapped = true;
+    } else g.snapped = false;
     g.ratio = z / g.z0;
+    showBadge(z);
     const m = mid(a, b);
     g.mx = m.x;
     g.my = m.y;

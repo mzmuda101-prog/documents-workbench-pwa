@@ -41,6 +41,8 @@ Stan na **v0.2** (lipiec 2026). Ostatnia wersja cache: `20260702-03`.
 
 | **Paczka G — pinch-zoom** (`app/pinch-zoom.js`: dwa palce przybliżają/oddalają dokument także przy „Dopasuj” — tekst skaluje się i dalej zawija; transform w trakcie gestu + zatwierdzenie zoomu po puszczeniu; miejsce w TEKŚCIE pod palcami zostaje pod palcami; zakres 35–300%; sprawdzone gestem na symulatorze iPhone'a. GOTCHA: `zoom: 1 !important` w trybie Dopasuj po cichu zerował gest — strażnik `test:pinch` mierzy wielkość tekstu na ekranie, nie zmienną) | ✅ 2026-09-28 |
 
+| **Paczka J — Znajdź i zamień v2 + przegląd funkcji** (jeden silnik szukania/liczenia/zamiany po tekście całego akapitu: wielkość liter, całe słowa, `$1`, tylko nagłówki, nagłówki/stopki/przypisy, podświetlenie trafienia CSS Highlight, historia; procent na żywo przy pinch. **Naprawione przy przeglądzie:** placeholder/snippet „Wstaw” gubił kursor (pamięć kursora), rozmiar czcionki z listy nie działał na zaznaczeniu, skany (placeholdery, snippety, korekta) nie widziały tekstu wpisanego w podglądzie, Korekta nadpisywała świeżo dopisany tekst i zdejmowała formatowanie akapitu, „wielka po kropce” psuła „sp. z o.o.”, zamykający cudzysłów był prosty, „sierota i” przestawiała słowa, Shift+Enter zapisywał spację zamiast łamania wiersza, wklejanie wstawiało surowy HTML, ↶ po wstawieniu z panelu cofało też wcześniejsze pisanie, „Otwórz”/„Przykładowy” bez pytania o niezapisane zmiany, brak tekstu dla PDF/.doc. Strażnicy `test:find`, `test:flows`) | ✅ 2026-09-29 |
+
 | **Paczka I — Recenzja** (`app/docx-revisions.js` + `app/review-panel.js`: śledzone zmiany we wszystkich częściach pliku, komentarze z odpowiedziami, przypisy; Akceptuj/Odrzuć pojedynczo, wszystkie lub autora — z łączeniem akapitów i przywracaniem właściwości jak w Wordzie; usuwanie komentarzy; licznik + komunikat po otwarciu. **Naprawione przy okazji (starsze błędy):** podgląd liczył akapity nagłówka/przypisów i tylko PIERWSZĄ sekcję → edycje w plikach z nagłówkiem lub podziałem strony trafiały w cudze akapity; akapity z przypisem/obrazem/polem/linkiem/śledzoną zmianą są teraz tylko do odczytu w Edycji. Strażnik `test:review`) | ✅ 2026-09-28 |
 
 | **Paczka H — eksport i statystyki** (`app/export-panel.js`: TXT/MD/HTML + druk/PDF; `app/stats-panel.js`: liczby, czas czytania, najczęstsze słowa, najdłuższe zdania ze skokiem, zaznaczenie; eksport/import JSON snippetów i wartości pól; „Usuń dane osobowe” w metadanych; strażnik `test:export`) | ✅ 2026-09-28 |
@@ -171,7 +173,7 @@ Lokalny, **offline-first** moduł — bez wysyłania tekstu na serwer.
 
 ## Rekomendowany następny krok
 
-**Znajdź i zamień v2** (całe słowa, wielkość liter, nagłówki/stopki, historia). Dalej: edycja akapitów z linkami/przypisami bez gubienia ich (zamiast blokady), „Ostatnio otwierane”, tabele, porównanie dwóch wersji.
+Edycja akapitów z linkami/przypisami bez gubienia ich (zamiast blokady), „Ostatnio otwierane”, tabele, porównanie dwóch wersji.
 
 ---
 

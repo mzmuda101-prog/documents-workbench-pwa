@@ -31,19 +31,19 @@ async function run() {
   if (stats.words < 1) throw new Error("Panel struktury — brak słów");
   if (stats.paras < 1) throw new Error("Brak akapitów w podglądzie");
 
-  await page.evaluate(() => {
-    const host = document.querySelector(".docx-preview-host section.docx") || document.querySelector(".docx-preview-host .docx");
+  // Znajdź i zamień v2: trafienia z pliku (async), podświetlony sam wyraz (CSS Highlight)
+  const hitCount = await page.evaluate(async () => {
+    const host = document.querySelector(".docx-preview-host section.docx > article") || document.querySelector(".docx-preview-host .docx");
     const words = (host?.textContent || "").match(/[\p{L}\p{N}]{4,}/gu) || [];
     for (const w of words.slice(0, 30)) {
       const q = document.getElementById("searchQuery");
       if (q) q.value = w;
-      if (typeof runDocumentSearch === "function") runDocumentSearch();
-      if (document.querySelectorAll(".search-hit").length) return;
+      if (typeof runDocumentSearch === "function") await runDocumentSearch();
+      const n = (window.CSS?.highlights?.get("dwb-find")?.size || 0) + document.querySelectorAll(".search-hit").length;
+      if (n) return n;
     }
+    return 0;
   });
-  await page.waitForTimeout(300);
-
-  const hitCount = await page.locator(".search-hit").count();
   if (hitCount < 1) throw new Error("Wyszukiwanie — brak trafień (sprawdź tokeny z treści)");
 
   assertNoErrors(errors, "load-fixture");

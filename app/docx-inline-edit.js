@@ -218,6 +218,62 @@ function getCaretOffset(el) {
   return pre.toString().length;
 }
 
+// ── pamięć kursora w dokumencie ──────────────────────────────────────────────
+// Przyciski i pola w panelu („Wstaw placeholder”, „Wstaw treść” snippetu, rozmiar czcionki)
+// zabierają fokus — w chwili kliknięcia activeElement to już pole/przycisk, a na iPhonie
+// zaznaczenie w tekście znika. Dawniej wynik: „Ustaw kursor w akapicie”, choć kursor był.
+// Pamiętamy ostatnie położenie kursora/zaznaczenia w edytowalnym akapicie i przywracamy je.
+let lastDocCaret = null; // { p, range }
+document.addEventListener("selectionchange", () => {
+  const sel = window.getSelection?.();
+  if (!sel?.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  const node = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
+  const p = node?.closest?.(".docx-editable-p");
+  if (p && docCanvasEl?.contains(p)) lastDocCaret = { p, range: range.cloneRange() };
+});
+
+// Akapit z kursorem: bieżący, a gdy fokus uciekł do panelu — ostatni zapamiętany (przywrócony).
+function restoreDocCaret() {
+  if (readOnlyMode) return null;
+  const active = document.activeElement?.closest?.(".docx-editable-p");
+  if (active) return active;
+  const saved = lastDocCaret;
+  if (!saved || !saved.p.isConnected || !saved.p.classList.contains("docx-editable-p")) return null;
+  saved.p.focus({ preventScroll: true });
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  try { sel.addRange(saved.range); } catch (_) {
+    const r = document.createRange(); r.selectNodeContents(saved.p); r.collapse(false); sel.addRange(r);
+  }
+  return saved.p;
+}
+
+// Wstawienie z panelu jako osobny krok cofania (undo.js ładuje się później — sprawdzamy w chwili użycia).
+function asUndoStep(label, fn) {
+  return typeof dwbUndo !== "undefined" && dwbUndo.record ? dwbUndo.record(label, fn) : fn();
+}
+
+// Wklejanie: czysty tekst w formacie miejsca kursora (jak „Wklej tylko tekst” w Wordzie).
+// Bez tego przeglądarka wklejała surowy HTML z Worda/strony — obce style, a akapity z
+// wklejanego tekstu jako <p> w środku akapitu (rozjeżdżało numerację akapitów z plikiem).
+// Kolejne wiersze = łamania wiersza (jak Shift+Enter), całość = jeden krok cofania.
+function onDocPaste(e) {
+  const p = e.target?.closest?.(".docx-editable-p");
+  if (!p || readOnlyMode) return;
+  const text = e.clipboardData?.getData("text/plain");
+  if (text == null) return;
+  e.preventDefault();
+  const lines = text.replace(/\r\n?/g, "\n").replace(/\n+$/, "").split("\n");
+  asUndoStep("undoOpPaste", () => {
+    lines.forEach((line, i) => {
+      if (i) document.execCommand("insertLineBreak");
+      if (line) document.execCommand("insertText", false, line);
+    });
+  });
+  onInlineParagraphInput();
+}
+
 function insertTextAtCaret(text) {
   const sel = window.getSelection();
   if (!sel?.rangeCount) return false;
@@ -495,6 +551,7 @@ function applyInlineStructuralEdit(edit) {
 
 function execInlineFormat(command) {
   if (readOnlyMode) return;
+  if (!restoreDocCaret()) return; // przycisk na pasku / w panelu — wracamy do zaznaczenia w tekście
   document.execCommand(command, false, null);
   onInlineParagraphInput();
 }
@@ -508,7 +565,7 @@ function applyFontSizePt(pt) {
   }
   const sizeStyle = { fontSize: `${raw}pt` };
   activeTypingStyle = mergeRunStyles(activeTypingStyle || {}, sizeStyle);
-  const p = document.activeElement?.closest?.(".docx-editable-p");
+  const p = restoreDocCaret(); // lista rozmiarów zabrała fokus — wracamy do zaznaczenia
   const sel = window.getSelection();
   if (p && sel?.rangeCount && !sel.getRangeAt(0).collapsed) {
     const merged = mergeRunStyles(getInheritedRunStyleAtCaret(p), sizeStyle);
@@ -569,6 +626,7 @@ function bindInlineEditKeyboard() {
   if (!docCanvasEl || inlineKeyboardBound) return;
   inlineKeyboardBound = true;
   docCanvasEl.addEventListener("keydown", onDocCanvasKeydown);
+  docCanvasEl.addEventListener("paste", onDocPaste);
 }
 
 // Jeden akapit (nowy po Enterze) — zamiast syncInlineEditMode() na WSZYSTKICH akapitach
@@ -664,7 +722,11 @@ function wireFormatToolbar() {
     ["fmtItalic", "italic"],
     ["fmtUnderline", "underline"],
   ].forEach(([id, cmd]) => {
-    document.getElementById(id)?.addEventListener("click", () => execInlineFormat(cmd));
+    const btn = document.getElementById(id);
+    // jak w Wordzie: przycisk formatu nie zabiera fokusu (zaznaczenie w tekście zostaje,
+    // na iPhonie klawiatura się nie chowa)
+    btn?.addEventListener("mousedown", (e) => e.preventDefault());
+    btn?.addEventListener("click", () => execInlineFormat(cmd));
   });
   document.getElementById("fmtFontSize")?.addEventListener("change", (e) => applyFontSizePt(e.target.value));
 }

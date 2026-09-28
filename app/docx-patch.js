@@ -203,93 +203,304 @@ async function extractParagraphTextsFromDocx(bytes) {
   return collectParagraphElements(doc.documentElement, "all").map(getParagraphText);
 }
 
-function countFindInText(text, find, useRegex) {
-  if (!text || !find) return 0;
-  if (useRegex) {
-    try {
-      const re = new RegExp(find, "g");
-      return (text.match(re) || []).length;
-    } catch (_) {
-      return 0;
-    }
+// ── Znajdź i zamień: JEDEN silnik dla szukania, licznika i zamiany ─────────────
+// Dawniej szukanie w podglądzie ignorowało wielkość liter, a zamiana i licznik ją
+// rozróżniały → „Zamień bieżące” trafiało w INNE wystąpienie niż podświetlone. Zamiana szła
+// po pojedynczych <w:t>, więc słowo rozcięte między fragmenty (poprawka pisowni, zmiana
+// formatu w środku) było znajdowane, ale nie zamieniane. Teraz wszystko liczy po tekście
+// całego akapitu (jego <w:t> po kolei) tym samym wyrażeniem.
+//
+// edit: { find, replace, regex, matchCase, wholeWord }. matchCase domyślnie TAK (jak dawniej —
+// snippety, pola, Narzędzia edycji); panel Znajdź i zamień podaje go jawnie.
+function buildFindRegex(edit) {
+  if (!edit?.find) return null;
+  const matchCase = edit.matchCase !== false;
+  let src = edit.regex ? edit.find : edit.find.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  let flags = matchCase ? "g" : "gi";
+  if (edit.wholeWord) {
+    src = `(?<![\\p{L}\\p{N}_])(?:${src})(?![\\p{L}\\p{N}_])`;
+    flags += "u"; // \p{…} wymaga u; bez „całych słów” u nie włączamy (psuje część zwykłych wzorców)
   }
-  let n = 0;
-  let idx = 0;
-  while ((idx = text.indexOf(find, idx)) !== -1) {
-    n++;
-    idx += find.length || 1;
-  }
-  return n;
+  try { return new RegExp(src, flags); } catch (_) { return null; }
 }
 
+// Wszystkie trafienia w tekście: [{ start, end, m }] (m = wynik exec — grupy dla $1).
+function findAllMatches(text, re) {
+  const out = [];
+  if (!text || !re) return out;
+  re.lastIndex = 0;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    if (!m[0].length) { re.lastIndex++; continue; } // puste dopasowanie nic nie zamienia
+    out.push({ start: m.index, end: m.index + m[0].length, m });
+  }
+  return out;
+}
+
+// Tekst zastępczy: w trybie wyrażeń $& $1…$99 $$ jak w JS; w zwykłym dosłownie.
+function expandReplacement(repl, m, regex) {
+  const s = String(repl ?? "");
+  if (!regex) return s;
+  return s.replace(/\$(\$|&|\d{1,2})/g, (all, g) => {
+    if (g === "$") return "$";
+    if (g === "&") return m[0];
+    const v = m[Number(g)];
+    return v === undefined ? all : v;
+  });
+}
+
+// <w:t> NALEŻĄCE do akapitu (bez akapitów zagnieżdżonych, np. w polu tekstowym).
+function paragraphTextNodes(p) {
+  return Array.from(p.getElementsByTagNameNS(W_NS, "t")).filter((t) => {
+    let n = t.parentNode;
+    while (n && !(n.localName === "p" && n.namespaceURI === W_NS)) n = n.parentNode;
+    return n === p;
+  });
+}
+
+function paragraphSearchText(p) {
+  return paragraphTextNodes(p).map((t) => t.textContent || "").join("");
+}
+
+// Zamienia wybrane trafienia w akapicie. pick(k) — czy zamienić k-te trafienie w akapicie.
+// Tekst zastępczy trafia do fragmentu, w którym zaczyna się trafienie (bierze jego format —
+// jak w Wordzie); z kolejnych fragmentów znika zamieniona część.
+function replaceInParagraphXml(p, re, edit, pick) {
+  const nodes = paragraphTextNodes(p);
+  if (!nodes.length) return 0;
+  const texts = nodes.map((t) => t.textContent || "");
+  const starts = [];
+  let acc = 0;
+  texts.forEach((s) => { starts.push(acc); acc += s.length; });
+  const matches = findAllMatches(texts.join(""), re);
+  let count = 0;
+  for (let k = matches.length - 1; k >= 0; k--) { // od końca: wcześniejsze przesunięcia się nie zmieniają
+    if (!pick(k)) continue;
+    const { start, end, m } = matches[k];
+    spliceTextNodes(texts, starts, start, end, sanitizeXmlText(expandReplacement(edit.replace, m, !!edit.regex && !edit.literalReplace)));
+    count++;
+  }
+  if (!count) return 0;
+  writeTextNodes(nodes, texts);
+  return count;
+}
+
+// Wstaw `repl` w miejsce [start, end) tekstu akapitu rozłożonego na fragmenty (texts/starts
+// z CHWILI przed zmianami). Zmiany robić od końca akapitu. Tekst trafia do fragmentu, w którym
+// zaczyna się zakres (bierze jego formatowanie).
+function spliceTextNodes(texts, starts, start, end, repl) {
+  let a = 0;
+  while (a < texts.length - 1 && starts[a] + texts[a].length <= start && !(start === end && starts[a] + texts[a].length === start)) a++;
+  if (start === end) { // samo wstawienie
+    const from = Math.max(0, start - starts[a]);
+    texts[a] = texts[a].slice(0, from) + repl + texts[a].slice(from);
+    return;
+  }
+  for (let i = a; i < texts.length && starts[i] < end; i++) {
+    const cur = texts[i];
+    const from = Math.max(0, start - starts[i]);
+    const to = Math.min(cur.length, end - starts[i]);
+    texts[i] = cur.slice(0, from) + (i === a ? repl : "") + cur.slice(to);
+  }
+}
+
+function writeTextNodes(nodes, texts) {
+  nodes.forEach((t, i) => {
+    if (t.textContent === texts[i]) return;
+    t.textContent = texts[i];
+    t.setAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:space", "preserve");
+  });
+}
+
+// Minimalne różnice a → b: [{ start, end, text }] we współrzędnych a (Myers, O((N+M)·D)).
+// Duże albo bardzo różne teksty → jeden zakres (środek między wspólnym początkiem i końcem).
+function diffTextSegments(a, b) {
+  if (a === b) return [];
+  let pre = 0;
+  while (pre < a.length && pre < b.length && a[pre] === b[pre]) pre++;
+  let suf = 0;
+  while (suf < a.length - pre && suf < b.length - pre && a[a.length - 1 - suf] === b[b.length - 1 - suf]) suf++;
+  const A = a.slice(pre, a.length - suf);
+  const B = b.slice(pre, b.length - suf);
+  const whole = [{ start: pre, end: pre + A.length, text: B }];
+  const N = A.length;
+  const M = B.length;
+  if (!N || !M || N + M > 6000) return whole;
+  const max = N + M;
+  const off = max;
+  let v = new Int32Array(2 * max + 2);
+  const trace = [];
+  let found = false;
+  for (let d = 0; d <= max && d <= 300; d++) {
+    trace.push(v.slice());
+    for (let k = -d; k <= d; k += 2) {
+      let x = (k === -d || (k !== d && v[off + k - 1] < v[off + k + 1])) ? v[off + k + 1] : v[off + k - 1] + 1;
+      let y = x - k;
+      while (x < N && y < M && A[x] === B[y]) { x++; y++; }
+      v[off + k] = x;
+      if (x >= N && y >= M) { found = true; break; }
+    }
+    if (found) break;
+  }
+  if (!found) return whole;
+  const ops = []; // { at, del, ins } w A
+  let x = N;
+  let y = M;
+  for (let d = trace.length - 1; d > 0; d--) {
+    const vv = trace[d];
+    const k = x - y;
+    const prevK = (k === -d || (k !== d && vv[off + k - 1] < vv[off + k + 1])) ? k + 1 : k - 1;
+    const prevX = vv[off + prevK];
+    const prevY = prevX - prevK;
+    while (x > prevX && y > prevY) { x--; y--; }
+    if (x === prevX) ops.push({ at: prevX, del: 0, ins: B[prevY] });
+    else ops.push({ at: prevX, del: 1, ins: "" });
+    x = prevX;
+    y = prevY;
+  }
+  ops.reverse();
+  const segs = [];
+  ops.forEach((o) => {
+    const last = segs[segs.length - 1];
+    if (last && last.end === o.at) { last.end += o.del; last.text += o.ins; }
+    else segs.push({ start: o.at, end: o.at + o.del, text: o.ins });
+  });
+  return segs.map((sg) => ({ start: sg.start + pre, end: sg.end + pre, text: sg.text }));
+}
+
+// Nowy tekst akapitu BEZ gubienia formatowania: zmieniamy tylko różniące się znaki
+// (Korekta, szybka edycja w Strukturze). Dawniej cały akapit stawał się jednym zwykłym
+// fragmentem — znikały pogrubienia, kursywa, kolory. false = nie da się (np. łamanie wiersza).
+function setParagraphTextPreservingRuns(p, next) {
+  const nodes = paragraphTextNodes(p);
+  if (!nodes.length || next.includes("\n")) return false;
+  const texts = nodes.map((t) => t.textContent || "");
+  const cur = texts.join("");
+  if (cur !== getParagraphText(p)) return false; // łamania wiersza, tekst poza <w:t> itp.
+  const starts = [];
+  let acc = 0;
+  texts.forEach((s) => { starts.push(acc); acc += s.length; });
+  const segs = diffTextSegments(cur, next);
+  for (let i = segs.length - 1; i >= 0; i--) spliceTextNodes(texts, starts, segs[i].start, segs[i].end, segs[i].text);
+  writeTextNodes(nodes, texts);
+  return true;
+}
+
+// Akapity w zakresie: "headings" = tylko nagłówki sekcji (style z docHeadingStyleClasses).
+function paragraphsInFindScope(doc, scope) {
+  const all = collectParagraphElements(doc.documentElement, scope === "body" ? "body" : "all");
+  if (scope !== "headings") return all;
+  const headingClasses = typeof docHeadingStyleClasses !== "undefined" ? docHeadingStyleClasses : new Map();
+  return all.map((p, i) => [p, i]).filter(([p]) => {
+    const pStyle = p.getElementsByTagNameNS(W_NS, "pStyle")[0];
+    const id = pStyle ? getWVal(pStyle) : "";
+    return id && typeof docxStyleClassName === "function" && headingClasses.has(docxStyleClassName(id));
+  });
+}
+
+// Lista trafień w treści: [{ paraIndex, occurrence, start, end, text, context }] — kolejność
+// dokumentu; ta sama numeracja co w zamianie (target).
+// textOverride: Map(paraIndex → tekst) — akapity zmienione w podglądzie, jeszcze nie w pliku
+// (tańsze niż przebudowa całego pliku przed każdym szukaniem).
+function scanFindMatchesInDoc(doc, edit, scope, textOverride) {
+  const re = buildFindRegex(edit);
+  if (!re) return [];
+  const paras = collectParagraphElements(doc.documentElement, "all");
+  const inScope = scope === "headings"
+    ? new Set(paragraphsInFindScope(doc, "headings").map(([, i]) => i))
+    : null;
+  const out = [];
+  paras.forEach((p, paraIndex) => {
+    if (inScope && !inScope.has(paraIndex)) return;
+    const text = textOverride?.has(paraIndex) ? textOverride.get(paraIndex) : paragraphSearchText(p);
+    findAllMatches(text, re).forEach(({ start, end }, occurrence) => {
+      out.push({ paraIndex, occurrence, start, end, text: text.slice(start, end), context: text });
+    });
+  });
+  return out;
+}
+
+// Dla testów/zgodności: licznik po gotowych tekstach akapitów.
 function countReplacePreview(texts, edit) {
-  const find = edit.find;
-  const useRegex = !!edit.regex;
+  const re = buildFindRegex(edit);
   let hits = 0;
   let paras = 0;
   const samples = [];
   (texts || []).forEach((text, index) => {
-    const n = countFindInText(text, find, useRegex);
+    const n = findAllMatches(text, re).length;
     if (!n) return;
     hits += n;
     paras++;
-    if (samples.length < 8) {
-      const snippet = text.length > 72 ? `${text.slice(0, 69)}…` : text;
-      samples.push({ index, snippet, count: n });
-    }
+    if (samples.length < 8) samples.push({ index, snippet: text.length > 72 ? `${text.slice(0, 69)}…` : text, count: n });
   });
   return { hits, paras, samples };
 }
 
+// opts.target = { paraIndex, occurrence } — dokładnie to jedno trafienie (panel: „Zamień bieżące”).
+// opts.maxReplacements / skipReplacements — dawne API (zostaje dla zgodności).
 function applyReplaceInXml(xml, edit, scope, opts = {}) {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(xml, "application/xml");
-  const textNodes = collectTextNodes(doc, scope);
-  let count = 0;
-  const find = edit.find;
-  const repl = edit.replace ?? "";
-  const useRegex = !!edit.regex;
-  const maxRepl = opts.maxReplacements ?? Infinity;
-  let skip = opts.skipReplacements ?? 0;
-  let done = 0;
-
-  textNodes.forEach((tEl) => {
-    if (done >= maxRepl) return;
-    let raw = tEl.textContent || "";
-    if (!raw) return;
-    let next = raw;
-    if (useRegex) {
-      try {
-        const re = new RegExp(find, "g");
-        next = raw.replace(re, (match) => {
-          if (done >= maxRepl) return match;
-          if (skip > 0) { skip--; return match; }
-          done++;
-          count++;
-          return repl;
-        });
-      } catch (_) { /* invalid regex */ }
-    } else {
-      let idx = 0;
-      while (done < maxRepl) {
-        const pos = next.indexOf(find, idx);
-        if (pos === -1) break;
-        if (skip > 0) {
-          skip--;
-          idx = pos + find.length;
-          continue;
-        }
-        next = next.slice(0, pos) + repl + next.slice(pos + find.length);
-        done++;
-        count++;
-        idx = pos + repl.length;
-      }
-    }
-    if (next !== raw) tEl.textContent = sanitizeXmlText(next);
-  });
-
+  const re = buildFindRegex(edit);
+  if (!re) return { xml, count: 0 };
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  const count = replaceInDocParagraphs(doc, re, edit, scope, opts);
   if (!count) return { xml, count: 0 };
   return { xml: new XMLSerializer().serializeToString(doc), count };
+}
+
+function replaceInDocParagraphs(doc, re, edit, scope, opts = {}) {
+  const isBody = !!doc.getElementsByTagNameNS(W_NS, "body")[0];
+  const list = isBody
+    ? (scope === "headings" ? paragraphsInFindScope(doc, "headings") : collectParagraphElements(doc.documentElement, scope === "body" ? "body" : "all").map((p, i) => [p, i]))
+    : Array.from(doc.getElementsByTagNameNS(W_NS, "p")).map((p, i) => [p, i]); // nagłówek/stopka/przypisy
+  const target = opts.target;
+  const max = opts.maxReplacements ?? Infinity;
+  let skip = opts.skipReplacements ?? 0;
+  let done = 0;
+  let count = 0;
+  for (const [p, paraIndex] of list) {
+    if (done >= max) break;
+    if (target && paraIndex !== target.paraIndex) continue;
+    if (target) { count += replaceInParagraphXml(p, re, edit, (k) => k === target.occurrence); break; }
+    if (max === Infinity && !skip) { count += replaceInParagraphXml(p, re, edit, () => true); continue; }
+    // dawne API: pomiń `skip` pierwszych, zamień do `max` — liczone w kolejności dokumentu
+    const n = findAllMatches(paragraphSearchText(p), re).length;
+    const chosen = new Set();
+    for (let k = 0; k < n && done < max; k++) {
+      if (skip > 0) { skip--; continue; }
+      chosen.add(k);
+      done++;
+    }
+    if (chosen.size) count += replaceInParagraphXml(p, re, edit, (k) => chosen.has(k));
+  }
+  return count;
+}
+
+// Nagłówki, stopki, przypisy: części poza document.xml (lista części z docx-revisions.js).
+async function replaceInOtherParts(zip, edit) {
+  const re = buildFindRegex(edit);
+  if (!re) return 0;
+  let total = 0;
+  const names = Object.keys(zip.files).filter((n) => /^word\/(header\d*|footer\d*|footnotes|endnotes)\.xml$/.test(n));
+  for (const name of names) {
+    const doc = new DOMParser().parseFromString(await zip.file(name).async("string"), "application/xml");
+    const n = replaceInDocParagraphs(doc, re, edit, "all");
+    if (!n) continue;
+    total += n;
+    zip.file(name, new XMLSerializer().serializeToString(doc));
+  }
+  return total;
+}
+
+async function countInOtherParts(bytes, edit) {
+  const re = buildFindRegex(edit);
+  if (!re || !bytes) return 0;
+  const zip = await loadDocxZipCached(bytes);
+  let total = 0;
+  for (const name of Object.keys(zip.files).filter((n) => /^word\/(header\d*|footer\d*|footnotes|endnotes)\.xml$/.test(n))) {
+    const doc = new DOMParser().parseFromString(await zip.file(name).async("string"), "application/xml");
+    Array.from(doc.getElementsByTagNameNS(W_NS, "p")).forEach((p) => { total += findAllMatches(paragraphSearchText(p), re).length; });
+  }
+  return total;
 }
 
 function applyParagraphBatchInXml(xml, items) {
@@ -310,7 +521,7 @@ function applyParagraphBatchInXml(xml, items) {
     const raw = getParagraphText(p);
     const next = sanitizeXmlText(text);
     if (next === raw) return;
-    setParagraphText(p, next);
+    if (!setParagraphTextPreservingRuns(p, next)) setParagraphText(p, next);
     count++;
   });
   if (!count) return { xml, count: 0 };
@@ -369,6 +580,7 @@ function applyPlaceholderFillInXml(xml, values, scope) {
       find: `\\{\\{\\s*${safeName}\\s*\\}\\}`,
       replace: sanitizeXmlText(String(val)),
       regex: true,
+      literalReplace: true, // wartość/treść wstawiana dosłownie — „$100” to nie odwołanie do grupy
       scope: scope || "all",
     });
     current = res.xml;
@@ -390,6 +602,7 @@ function applySnippetExpandInXml(xml, snippetMap, scope) {
       find: `!${safeName}\\b`,
       replace: sanitizeXmlText(String(resolved[name])),
       regex: true,
+      literalReplace: true, // wartość/treść wstawiana dosłownie — „$100” to nie odwołanie do grupy
       scope: scope || "all",
     });
     current = res.xml;
@@ -450,6 +663,8 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
     const res = applyEditToXml(xml, normalized, opts);
     xml = res.xml;
     total += res.count;
+    // „Zamień wszystkie” z zaznaczonym „też w nagłówkach, stopkach i przypisach”
+    if (normalized.op === "replace" && normalized.otherParts && !opts.target) total += await replaceInOtherParts(zip, normalized);
   }
   zip.file("word/document.xml", xml);
   if (coreXml !== null) zip.file("docProps/core.xml", coreXml);

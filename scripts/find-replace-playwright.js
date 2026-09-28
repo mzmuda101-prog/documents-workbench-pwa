@@ -41,7 +41,8 @@ async function run() {
     q.value = needle;
     r.value = markerOne;
     await runDocumentSearch();
-    const domHits = document.querySelectorAll(".search-hit").length;
+    // v2: podświetlane jest samo trafienie (CSS Highlight), a gdy się nie da — akapit
+    const domHits = (window.CSS?.highlights?.get("dwb-find")?.size || 0) + document.querySelectorAll(".search-hit").length;
     if (!domHits) return { ok: false, step: "scan", msg: `Brak trafień DOM dla: ${needle}` };
 
     const preview = countReplacePreview(texts, { op: "replace", find: needle, replace: markerOne, regex: false, scope: "all" });

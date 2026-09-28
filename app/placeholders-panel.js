@@ -73,6 +73,8 @@ async function runPlaceholderScan() {
     toast(t("noFileToSave"), "error");
     return;
   }
+  // tekst wpisany w podglądzie (np. właśnie wstawione {{pole}}) musi być w pliku, zanim go przeczytamy
+  if (typeof mergeInlineEditsIntoBytes === "function") await mergeInlineEditsIntoBytes();
   placeholderScan = await scanPlaceholders(originalFileBytes);
   syncPlaceholderStatus();
   renderPlaceholderForm();
@@ -120,16 +122,17 @@ function insertPlaceholderAtCaret() {
     toast(t("placeholdersInsertInvalid"), "error");
     return;
   }
-  const p = document.activeElement?.closest?.(".docx-editable-p");
+  const p = restoreDocCaret(); // kliknięcie w pole/przycisk zabrało fokus — wracamy do kursora
   if (!p) {
     toast(t("snippetsInsertNoCaret"), "info");
     return;
   }
-  p.focus();
   const token = formatPlaceholderToken(name);
   const style = mergeRunStyles(getInheritedRunStyleAtCaret(p), activeTypingStyle);
-  if (runStyleHasProps(style)) insertStyledTextAtCaret(token, style, p);
-  else insertTextAtCaret(token);
+  asUndoStep("undoOpInsert", () => {
+    if (runStyleHasProps(style)) insertStyledTextAtCaret(token, style, p);
+    else insertTextAtCaret(token);
+  });
   onInlineParagraphInput();
   toast(t("placeholdersInserted", { token }), "success");
 }

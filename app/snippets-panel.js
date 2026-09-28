@@ -75,9 +75,10 @@ async function runSnippetScan() {
     toast(t("noFileToSave"), "error");
     return;
   }
+  // tekst wpisany w podglądzie (np. właśnie wstawione !nazwa) musi być w pliku, zanim go przeczytamy
+  if (typeof mergeInlineEditsIntoBytes === "function") await mergeInlineEditsIntoBytes();
   snippetScan = await scanSnippetTriggers(originalFileBytes);
   syncSnippetStatus();
-  if (snExpandBtn) snExpandBtn.disabled = !snippetScan.triggers.some((tr) => tr.hasDefinition);
 }
 
 function saveSnippetFromForm() {
@@ -93,7 +94,7 @@ function saveSnippetFromForm() {
 
 async function expandSnippetsInDocument() {
   if (!originalFileBytes) return;
-  if (!snippetScan) await runSnippetScan();
+  await runSnippetScan(); // zawsze świeżo — dawniej przycisk był wyszarzony do ręcznego „Skanuj”
   const expandMap = buildSnippetExpandMap(snippetScan?.triggers || [], snippetScan?.stored || snippetsToMap(loadSnippets()));
   const keys = Object.keys(expandMap);
   if (!keys.length) {
@@ -128,15 +129,16 @@ function insertSnippetAtCaret() {
     toast(t("snippetsInsertEmpty"), "error");
     return;
   }
-  const p = document.activeElement?.closest?.(".docx-editable-p");
+  const p = restoreDocCaret(); // kliknięcie w pole/przycisk zabrało fokus — wracamy do kursora
   if (!p) {
     toast(t("snippetsInsertNoCaret"), "info");
     return;
   }
-  p.focus();
   const style = mergeRunStyles(getInheritedRunStyleAtCaret(p), activeTypingStyle);
-  if (runStyleHasProps(style)) insertStyledTextAtCaret(body, style, p);
-  else insertTextAtCaret(body);
+  asUndoStep("undoOpInsert", () => {
+    if (runStyleHasProps(style)) insertStyledTextAtCaret(body, style, p);
+    else insertTextAtCaret(body);
+  });
   onInlineParagraphInput();
   toast(t("snippetsInserted"), "success");
 }
@@ -151,16 +153,17 @@ function insertSnippetTriggerAtCaret() {
     toast(t("snippetsSaveInvalid"), "error");
     return;
   }
-  const p = document.activeElement?.closest?.(".docx-editable-p");
+  const p = restoreDocCaret(); // kliknięcie w pole/przycisk zabrało fokus — wracamy do kursora
   if (!p) {
     toast(t("snippetsInsertNoCaret"), "info");
     return;
   }
-  p.focus();
   const trigger = formatSnippetTrigger(name);
   const style = mergeRunStyles(getInheritedRunStyleAtCaret(p), activeTypingStyle);
-  if (runStyleHasProps(style)) insertStyledTextAtCaret(trigger, style, p);
-  else insertTextAtCaret(trigger);
+  asUndoStep("undoOpInsert", () => {
+    if (runStyleHasProps(style)) insertStyledTextAtCaret(trigger, style, p);
+    else insertTextAtCaret(trigger);
+  });
   onInlineParagraphInput();
   toast(t("snippetsTriggerInserted", { name: trigger }), "success");
 }
@@ -180,7 +183,6 @@ function wireSnippetsPanel() {
     setSnippetExpandMode(snExpandModeEl.value);
     toast(t("snippetsExpandModeSaved"), "success");
   });
-  if (snExpandBtn) snExpandBtn.disabled = true;
   syncSnippetExpandModeSelect();
   renderSnippetList();
 }

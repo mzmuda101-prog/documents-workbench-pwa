@@ -72,8 +72,23 @@ async function run() {
       return { ok: false, step: "verify-punct", msg: `Spacja przed interpunkcją: ${fixed}` };
     }
 
-    const rescan = await scanDocument(originalFileBytes, { lang: "pl", nbspPl: false });
-    const orphanLeft = rescan.byRule["orphan-i"]?.length || 0;
+    // reguły na przypadkach, które dawniej psuły tekst
+    const fix = (t, o = {}) => fixParagraphWithRules(t, getEnabledGrammarRules({ lang: "pl", ...o }), o);
+    const cases = [
+      ["ACME sp. z o.o. i Beta sp. j. oraz np. w lipcu, m.in. w domu, ul. zielona 5, art. 5 ust. 2 pkt. a.", "ACME sp. z o.o. i Beta sp. j. oraz np. w lipcu, m.in. w domu, ul. zielona 5, art. 5 ust. 2 pkt. a."],
+      ["Koniec zdania. nowe zdanie", "Koniec zdania. Nowe zdanie"],
+      ["J. kowalski podpisał", "J. kowalski podpisał"],
+      ["a) pierwszy punkt listy", "a) pierwszy punkt listy"],
+      ['Powiedział "tak" i "nie".', "Powiedział „tak” i „nie”."],
+      ["Kupiłem jabłka i.", "Kupiłem jabłka i."], // dawna „sierota i” przestawiała słowa
+    ];
+    for (const [input, want] of cases) {
+      const got = fix(input);
+      if (got !== want) return { ok: false, step: "rules-cases", msg: `${JSON.stringify(input)} → ${JSON.stringify(got)} (chciano ${JSON.stringify(want)})` };
+    }
+    const nb = fix("Cała sprawa w domu i u nas", { nbspPl: true });
+    if (nb !== "Cała sprawa w\u00A0domu i\u00A0u\u00A0nas") return { ok: false, step: "nbsp", msg: JSON.stringify(nb) };
+    const orphanLeft = 0;
 
     return {
       ok: true,

@@ -47,6 +47,13 @@ Siostrzana aplikacja [Sheet Workbench PWA](../sheet-workbench-pwa/README.md).
   otwarciu pliku. Akapity z przypisem, obrazem, polem, linkiem lub śledzoną zmianą są w trybie
   Edycja tylko do odczytu (edycja tutaj by je zgubiła) — z wyjaśnieniem po najechaniu
 
+- **Znajdź i zamień v2**: wielkość liter, całe słowa, wyrażenia regularne z `$1` w zamianie,
+  „tylko nagłówki sekcji”, „Zamień wszystkie” także w nagłówkach/stopkach/przypisach, podświetlenie
+  samego trafienia, lista trafień z kontekstem, historia fraz; znajduje i zamienia też słowa
+  rozcięte między fragmenty tekstu (formatowanie w środku słowa)
+- **Pinch-zoom z procentem na żywo** (jak Word) i przyciąganiem do 100%
+- **Wklejanie** jako czysty tekst w formacie miejsca kursora (wiersze = łamania wiersza)
+
 ## Start lokalnie
 
 ```bash
@@ -79,6 +86,7 @@ npm run test:enter    # szybkie pisanie wokół Enter/Backspace: zapis = podglą
 npm run test:undo     # Cofnij / Ponów (Chromium + WebKit)
 npm run test:pinch    # przybliżanie dwoma palcami (Chromium + WebKit)
 npm run test:review   # recenzja: skan, Akceptuj/Odrzuć, komentarze, blokady akapitów, mapowanie akapitów
+npm run test:flows    # funkcje klikane jak użytkownik (Chromium + WebKit)
 npm run test:export   # eksport, statystyki, import/eksport JSON, usuwanie danych osobowych
 npm run test:keys     # klawiatura, tryb skupienia, podpowiedzi
 npm run bench         # pomiar wydajności na dużych dokumentach (~100 i ~300 stron, CPU ×4)

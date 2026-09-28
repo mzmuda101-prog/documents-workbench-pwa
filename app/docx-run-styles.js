@@ -88,7 +88,13 @@ function extractRunsFromPreviewParagraph(pEl) {
   function walk(node, inherited = {}) {
     if (node.nodeType === Node.TEXT_NODE) {
       const text = node.textContent || "";
-      if (text) runs.push({ text, ...inherited });
+      if (!text) return;
+      // Shift+Enter / wklejone wiersze: przeglądarka przy white-space: pre-wrap wstawia znak
+      // „\n” zamiast <br>. W pliku musi to być <w:br/> — „\n” w <w:t> Word pokazuje jako spację.
+      text.split("\n").forEach((part, i) => {
+        if (i) runs.push({ break: true });
+        if (part) runs.push({ text: part, ...inherited });
+      });
       return;
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return;

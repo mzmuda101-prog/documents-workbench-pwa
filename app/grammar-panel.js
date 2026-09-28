@@ -126,6 +126,9 @@ async function runGrammarScan() {
     return;
   }
   grammarActiveHitId = null;
+  // tekst wpisany w podglądzie musi być w pliku — inaczej „Popraw” liczyłoby poprawkę ze
+  // starej wersji akapitu i nadpisało nią świeżo dopisany tekst
+  if (typeof mergeInlineEditsIntoBytes === "function") await mergeInlineEditsIntoBytes();
   grammarScan = await scanDocument(originalFileBytes, grammarScanOpts());
   renderGrammarSuggestions();
   syncGrammarStatus();
@@ -138,6 +141,11 @@ async function runGrammarScan() {
 
 async function applyGrammarOne(hit) {
   if (!originalFileBytes || !hit) return;
+  if (typeof mergeInlineEditsIntoBytes === "function" && (await mergeInlineEditsIntoBytes()) > 0) {
+    toast(t("grammarRescanned"), "info"); // akapit zmienił się od skanu — nie nadpisujemy go starą wersją
+    await runGrammarScan();
+    return;
+  }
   const count = await applyDocumentEdit({
     op: "paragraphBatch",
     items: [{ index: hit.paraIndex, text: hit.fixedParagraph }],
@@ -155,6 +163,10 @@ async function applyGrammarBatch(filterRuleId = null) {
   }
   const opts = grammarScanOpts();
   await ensureDocLibs(false);
+  if (typeof mergeInlineEditsIntoBytes === "function" && (await mergeInlineEditsIntoBytes()) > 0) {
+    await runGrammarScan(); // coś dopisano od skanu — poprawki od nowa, na aktualnym tekście
+    if (!grammarScan?.hits?.length) return;
+  }
   const texts = await extractParagraphTextsFromDocx(originalFileBytes);
   const hits = filterRuleId
     ? grammarScan.hits.filter((h) => h.ruleId === filterRuleId)

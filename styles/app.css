@@ -1360,3 +1360,26 @@ button.stat-row { cursor: pointer; }
 
 /* Akapit tylko do odczytu w trybie Edycja (przypis, obraz, pole, link, śledzona zmiana) */
 .docx-locked-p { cursor: not-allowed; outline: 1px dashed color-mix(in srgb, var(--muted) 45%, transparent); outline-offset: 2px; border-radius: 2px; }
+
+/* Znajdź i zamień v2: podświetlenie SAMEGO trafienia (CSS Custom Highlight API) */
+::highlight(dwb-find) { background-color: color-mix(in srgb, var(--warning) 38%, transparent); }
+::highlight(dwb-find-active) { background-color: color-mix(in srgb, var(--accent) 42%, transparent); color: inherit; }
+.fr-options { display: flex; flex-direction: column; gap: 2px; }
+.fr-regex-hint { display: none; }
+.panel-body:has(#frRegex:checked) .fr-regex-hint { display: block; }
+.fr-preview-list { max-height: 240px; }
+.fr-preview-item.is-active { border-color: var(--accent); }
+.fr-preview-snippet mark { background: color-mix(in srgb, var(--warning) 45%, transparent); color: inherit; border-radius: 2px; padding: 0 1px; }
+
+/* Pinch-zoom: procent na żywo (jak Word) */
+.zoom-badge {
+  position: fixed; z-index: 60; transform: translate(-50%, -6px) scale(0.96);
+  padding: 6px 14px; border-radius: var(--r-full);
+  background: color-mix(in srgb, var(--ink) 82%, transparent); color: var(--surface);
+  font: 700 15px/1.2 var(--font); font-variant-numeric: tabular-nums; letter-spacing: 0.01em;
+  box-shadow: 0 6px 18px rgba(8, 14, 28, 0.22);
+  opacity: 0; pointer-events: none; transition: opacity 160ms ease, transform 160ms ease;
+}
+.zoom-badge.is-on { opacity: 1; transform: translate(-50%, 0) scale(1); }
+.zoom-badge.is-snap { background: var(--accent); color: #fff; }
+@media (prefers-reduced-motion: reduce) { .zoom-badge { transition: none; } }

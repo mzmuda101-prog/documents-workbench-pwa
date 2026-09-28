@@ -94,7 +94,7 @@ async function run() {
 
   // Esc czyści podświetlenia szukania
   await page.keyboard.press("Escape");
-  check("Esc (dokument) czyści podświetlenia szukania", await page.evaluate(() => !document.querySelector(".search-hit") && document.getElementById("searchPos").textContent === ""));
+  check("Esc (dokument) czyści podświetlenia szukania", await page.evaluate(() => !document.querySelector(".search-hit") && !(window.CSS?.highlights?.has?.("dwb-find")) && document.getElementById("searchPos").textContent === ""));
 
   // panel
   await page.keyboard.press("Control+Alt+Digit1");

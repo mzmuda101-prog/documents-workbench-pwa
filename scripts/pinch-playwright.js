@@ -65,6 +65,25 @@ async function run() {
   check("touch-action: pan-x pan-y na dokumencie (przeglądarka nie przybliża sama)",
     await page.evaluate(() => getComputedStyle(document.getElementById("docViewport")).touchAction === "pan-x pan-y"));
 
+  // w trakcie gestu: plakietka z procentem nad dokumentem + ten sam procent na pasku (jak Word)
+  await fingers(page, "touchstart", 100);
+  await fingers(page, "touchmove", 150);
+  await page.waitForTimeout(80);
+  const mid = await page.evaluate(() => {
+    const b = document.querySelector(".zoom-badge");
+    return { on: b.classList.contains("is-on"), text: b.textContent, bar: document.getElementById("zoomNow").textContent, op: getComputedStyle(b).opacity };
+  });
+  check("w trakcie gestu: plakietka „150%” nad dokumentem", mid.on && mid.text === "150%", JSON.stringify(mid));
+  check("w trakcie gestu: pasek też pokazuje 150%", mid.bar === "150%", mid.bar);
+  await fingers(page, "touchmove", 104); // ~104% → przyciąga do 100%
+  await page.waitForTimeout(60);
+  const snap = await page.evaluate(() => ({ text: document.querySelector(".zoom-badge").textContent, snap: document.querySelector(".zoom-badge").classList.contains("is-snap") }));
+  check("w pobliżu 100% przyciąga do równych 100% (wyróżnione)", snap.text === "100%" && snap.snap, JSON.stringify(snap));
+  await fingers(page, "touchend", 104);
+  await page.waitForTimeout(900);
+  check("po puszczeniu palców plakietka gaśnie", await page.evaluate(() => !document.querySelector(".zoom-badge").classList.contains("is-on")));
+  check("przyciągnięte 100% zatwierdzone", (await state(page)).zoom === 1);
+
   await pinch(page, 100, 200);
   const s1 = await state(page);
   check("rozsunięcie palców przybliża (~2×) mimo Dopasuj", s1.zoom > 1.8 && s1.zoom <= 2.05, JSON.stringify(s1));

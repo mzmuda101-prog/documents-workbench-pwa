@@ -2,6 +2,31 @@
 
 const NBSP = "\u00A0";
 
+// Skróty, po których kropka NIE kończy zdania („sp. z o.o.”, „np. w”, „art. 5 ust. 2 pkt. a”).
+// Dawniej reguła wielkiej litery robiła z „ACME sp. z o.o.” → „sp. Z o.o.”.
+const ABBREVIATIONS = new Set(`sp np m.in in ul al pl os tj tzn tzw itd itp jw ok godz min max zł gr r rr w ww wg tel
+ nr poz pkt ust art par str s t tys mln mld dr prof mgr inż hab lek im św gen płk kpt por ks bp pn woj pow gm m st
+ ang łac niem zob cd cdn dot ew wyd oprac red tłum zw mies tyg kw sek pon wt śr czw pt sob niedz sty lut mar kwi
+ cze lip sie wrz paź lis gru vs etc e.g i.e mr mrs ms jr sr inc ltd co no vol fig approx dept z o.o p.n.e n.e
+ n.p.m j.w tj r.p b.r ub.r bm b.m`.split(/\s+/).filter(Boolean));
+
+// Czy małej litery na pozycji `letterPos` NIE podnosić: kropka po skrócie, po inicjale albo
+// w środku skrótu z kropkami („o.o.”, „m.in.”); na początku akapitu: punkt listy „a) …”.
+function isCapAfterPeriodException(text, matchStart, letterPos) {
+  if (letterPos === 0 || !/[.!?]/.test(text[matchStart] || "")) {
+    return /^[a-ząćęłńóśźż][).]/u.test(text.slice(letterPos, letterPos + 2)); // „a) …”, „b. …”
+  }
+  if (text[matchStart] !== ".") return false; // po ! i ? zawsze nowe zdanie
+  const before = text.slice(0, matchStart);
+  const word = (before.match(/([\p{L}.]+)$/u) || [])[1] || "";
+  const bare = word.toLocaleLowerCase("pl-PL").replace(/^\.+/, "");
+  if (!bare) return false;
+  if (ABBREVIATIONS.has(bare) || ABBREVIATIONS.has(bare.replace(/\./g, ""))) return true;
+  if (/\./.test(bare)) return true; // „o.o”, „m.in”, „p.n.e” — kropki w środku = skrót
+  if (/^\p{L}$/u.test(bare)) return true; // inicjał / pojedyncza litera („J. kowalski”, „pkt a. b”)
+  return /\w\.\w/.test(text.slice(Math.max(0, letterPos - 4), letterPos + 2));
+}
+
 const GRAMMAR_RULES = [
   {
     id: "double-space",
@@ -58,12 +83,12 @@ const GRAMMAR_RULES = [
           start: m.index,
           end: m.index + m[0].length,
           before: m[0],
-          after: `„${inner}"`,
+          after: `„${inner}”`, // polski zamykający to ” (U+201D), nie prosty "
         });
       }
       return hits;
     },
-    fixAll(text) { return text.replace(/"([^"\n]+)"/g, "„$1\""); },
+    fixAll(text) { return text.replace(/"([^"\n]+)"/g, "„$1”"); },
   },
   {
     id: "cap-after-period",
@@ -76,7 +101,7 @@ const GRAMMAR_RULES = [
         const prefix = m[1];
         const letter = m[2];
         const start = m.index + prefix.length;
-        if (/\w\.\w/.test(text.slice(Math.max(0, start - 4), start + 2))) continue; // skip abbreviations
+        if (isCapAfterPeriodException(text, m.index, start)) continue;
         hits.push({
           start,
           end: start + 1,
@@ -90,35 +115,8 @@ const GRAMMAR_RULES = [
       const locale = currentLang === "en" ? "en-US" : "pl-PL";
       return text.replace(/(^|[.!?]\s+)([a-ząćęłńóśźż])/gu, (full, prefix, letter, offset, src) => {
         const pos = offset + prefix.length;
-        if (/\w\.\w/.test(src.slice(Math.max(0, pos - 4), pos + 2))) return full;
+        if (isCapAfterPeriodException(src, offset, pos)) return full;
         return prefix + letter.toLocaleUpperCase(locale);
-      });
-    },
-  },
-  {
-    id: "orphan-i",
-    langs: ["pl"],
-    scan(text) {
-      const hits = [];
-      const re = /(\S+)\s+(i)\.\s*$/u;
-      const m = text.match(re);
-      if (!m) return hits;
-      const start = m.index;
-      const prefix = text.slice(0, start);
-      const lead = prefix.length && !/\s$/.test(prefix) ? " " : "";
-      hits.push({
-        start,
-        end: text.length,
-        before: m[0],
-        after: `${lead}${m[2]} ${m[1]}.`,
-      });
-      return hits;
-    },
-    fixAll(text) {
-      return text.replace(/(\S+)\s+(i)\.\s*$/u, (full, word, conj, offset, src) => {
-        const prefix = src.slice(0, offset);
-        const lead = prefix.length && !/\s$/.test(prefix) ? " " : "";
-        return `${lead}${conj} ${word}.`;
       });
     },
   },
@@ -129,7 +127,7 @@ const GRAMMAR_RULES = [
     scan(text, opts) {
       if (!opts?.nbspPl) return [];
       const hits = [];
-      const re = /\b([wzioua])\s+/giu;
+      const re = /(?<![\p{L}\p{N}])([wzioua])[ \t]+/giu; // \b nie zna polskich liter („cała sprawa”)
       let m;
       while ((m = re.exec(text)) !== null) {
         hits.push({
@@ -143,7 +141,7 @@ const GRAMMAR_RULES = [
     },
     fixAll(text, opts) {
       if (!opts?.nbspPl) return text;
-      return text.replace(/\b([wzioua])\s+/giu, (_, ch) => ch + NBSP);
+      return text.replace(/(?<![\p{L}\p{N}])([wzioua])[ \t]+/giu, (_, ch) => ch + NBSP);
     },
   },
 ];

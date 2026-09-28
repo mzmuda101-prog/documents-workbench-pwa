@@ -95,8 +95,10 @@
 
   function clearSearchHighlights() {
     const hl = docCanvasEl?.querySelectorAll(".search-hit");
-    if (!hl?.length) return false;
-    hl.forEach((el) => el.classList.remove("search-hit", "search-hit-active"));
+    const precise = !!window.CSS?.highlights?.has?.("dwb-find"); // dokładne podświetlenie trafień (Znajdź i zamień)
+    if (!hl?.length && !precise) return false;
+    hl?.forEach((el) => el.classList.remove("search-hit", "search-hit-active"));
+    if (precise) { CSS.highlights.delete("dwb-find"); CSS.highlights.delete("dwb-find-active"); }
     if (typeof frMatches !== "undefined") { frMatches = []; frActiveIndex = -1; }
     if (typeof appFrame !== "undefined") appFrame.syncPanelCounts();
     // fraza zostaje w polu, ale bez „0” — to nie brak wyników, tylko schowane podświetlenia

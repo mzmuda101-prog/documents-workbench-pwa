@@ -90,8 +90,18 @@ const dwbUndo = (() => {
 
   function endBurst() { burst = null; }
 
+  // Operacja w podglądzie spoza klawiatury (wstawienie z panelu, wklejenie) = JEDEN osobny
+  // krok. Dawniej doklejała się do poprzedniego pisania i ↶ zabierało oba naraz.
+  let opInProgress = false;
+  function record(label, fn) {
+    endBurst();
+    push(label);
+    opInProgress = true;
+    try { return fn(); } finally { opInProgress = false; endBurst(); }
+  }
+
   function typing() {
-    if (applying || !originalFileBytes || readOnlyMode) return;
+    if (applying || opInProgress || !originalFileBytes || readOnlyMode) return;
     const now = Date.now();
     if (!burst || now - burst.lastAt > UNDO_TYPING_PAUSE_MS) {
       push("undoOpTyping");
@@ -269,5 +279,5 @@ const dwbUndo = (() => {
   }, true);
 
   sync();
-  return { undo: () => step("undo"), redo: () => step("redo"), clear, changesSinceSave, sync, canUndo: () => undoStack.length > 0, canRedo: () => redoStack.length > 0, _debug: () => ({ undo: undoStack.map((e) => e.label), redo: redoStack.map((e) => e.label), savedPos }) };
+  return { record, undo: () => step("undo"), redo: () => step("redo"), clear, changesSinceSave, sync, canUndo: () => undoStack.length > 0, canRedo: () => redoStack.length > 0, _debug: () => ({ undo: undoStack.map((e) => e.label), redo: redoStack.map((e) => e.label), savedPos }) };
 })();

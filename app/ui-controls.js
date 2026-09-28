@@ -105,7 +105,9 @@ async function downloadBytes(bytes, name) {
   a.href = url;
   a.download = name;
   a.click();
-  URL.revokeObjectURL(url);
+  // Nie od razu: Safari (iPhone — jedyna droga zapisu bez File System Access) potrafi
+  // przerwać pobieranie, gdy adres zniknie w tym samym zadaniu co kliknięcie.
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
 async function ensureWriteAccess() {
@@ -228,7 +230,14 @@ async function saveDocumentAs() {
   if (typeof closeMobileSidebarIfOpen === "function") closeMobileSidebarIfOpen();
 }
 
+// Nowy plik w miejsce dokumentu z niezapisanymi zmianami — zapytaj (jak przy zamykaniu
+// i upuszczaniu pliku). Dawniej „Otwórz” i „Przykładowy dokument” podmieniały bez słowa.
+function confirmDiscardChanges() {
+  return !originalFileBytes || !hasUnsavedChanges || window.confirm(t("closeDocWarn"));
+}
+
 async function openFilePicker() {
+  if (!confirmDiscardChanges()) return;
   if (window.showOpenFilePicker) {
     try {
       const [handle] = await window.showOpenFilePicker({
