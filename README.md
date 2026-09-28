@@ -22,6 +22,11 @@ Siostrzana aplikacja [Sheet Workbench PWA](../sheet-workbench-pwa/README.md).
   zwijany nagłówek na telefonie, upuszczanie pliku w dowolnym miejscu okna
 - **Cofnij / Ponów** (Ctrl/⌘+Z, Ctrl/⌘+Shift+Z, Ctrl+Y, przyciski ↶ ↷): operacje z panelu,
   formatowanie i pisanie w podglądzie; licznik przy „Zapisz” = kroki od ostatniego zapisu
+- **Klawiatura i podpowiedzi**: Ctrl/⌘+F szukaj, Enter / Shift+Enter / F3 po trafieniach,
+  Ctrl/⌘+Alt+E Czytanie ⇄ Edycja, Ctrl/⌘+Alt+1/2/3 panel / pasek / dokument (F6), Esc krok wstecz,
+  „Przejdź do dokumentu” (Tab); podpowiedzi po najechaniu (cursor-hint z Sheet)
+- **Tryb skupienia i pełny ekran** (Ctrl/⌘+Alt+F, przycisk na pasku, menu ⋯): sam dokument
+  z paskiem — 85–87% ekranu zamiast 43–69%
 - **Dotyk / iPhone** (sprawdzone na symulatorze iOS): pisanie z klawiaturą ekranową bez
   uciekania paska, brak przybliżania strony przy polach, „Zapisz” w Safari = zapis kopii,
   lżejsze efekty na dotyku; `?sample=nazwa` otwiera `docs/samples/nazwa.docx`
@@ -55,6 +60,7 @@ npm run test:frame    # rama ekranu (Chromium + WebKit)
 npm run test:touch    # lekcje z iPhone'a (dotyk)
 npm run test:enter    # szybkie pisanie wokół Enter/Backspace: zapis = podgląd
 npm run test:undo     # Cofnij / Ponów (Chromium + WebKit)
+npm run test:keys     # klawiatura, tryb skupienia, podpowiedzi
 npm run test:stress   # pełny przebieg na dużym .docx (wymaga npm run serve)
 ```
 

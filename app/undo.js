@@ -160,10 +160,12 @@ const dwbUndo = (() => {
     if (undoBtn) {
       undoBtn.disabled = !has || !undoStack.length;
       undoBtn.setAttribute("aria-label", nextUndo ? t("undoWhat", { what: t(nextUndo.label) }) : t("undoLabel"));
+      undoBtn.dataset.hint = undoBtn.getAttribute("aria-label"); // cursor-hint: ten sam, żywy opis
     }
     if (redoBtn) {
       redoBtn.disabled = !has || !redoStack.length;
       redoBtn.setAttribute("aria-label", nextRedo ? t("redoWhat", { what: t(nextRedo.label) }) : t("redoLabel"));
+      redoBtn.dataset.hint = redoBtn.getAttribute("aria-label");
     }
     if (typeof appFrame !== "undefined") appFrame.syncSave();
   }

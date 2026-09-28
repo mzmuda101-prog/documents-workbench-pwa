@@ -35,7 +35,9 @@ Stan na **v0.2** (lipiec 2026). Ostatnia wersja cache: `20260702-03`.
 
 | **Paczka D — Cofnij / Ponów** (`app/undo.js`: migawki bajtów + zmienionych akapitów, kroki z nazwą dla operacji z panelu, formatowanie osobno, pisanie grupowane jak w Wordzie; ↶ ↷ na pasku, Ctrl/⌘+Z / Shift+Z / Ctrl+Y, historyUndo z menu/iOS; licznik „Zapisz” = kroki od zapisu; strażnik `test:undo`) | ✅ 2026-09-28 |
 
-**Dalej (przenoszenie z Sheet Workbench):** E klawiatura + cursor-hint (dziś brak podpowiedzi na najechanie przy ikonkach paska) → F wydajność dużych dokumentów. Później: „Ostatnio otwierane” (tylko Chrome/Edge, uchwyty plików w IndexedDB — lokalnie).
+| **Paczka E — klawiatura, podpowiedzi, miejsce na dokument** (`app/keyboard.js`, `app/view-mode.js`, cursor-hint z Sheet; skróty Ctrl/⌘+F, Enter/F3, Ctrl/⌘+Alt+1/2/3/E/F, F6, stopniowe Esc, skip-link, inert schowanego panelu; tryb skupienia + pełny ekran: dokument 85–87% ekranu; ciaśniejsze odstępy; strażnik `test:keys`) | ✅ 2026-09-28 |
+
+**Dalej (przenoszenie z Sheet Workbench):** F wydajność dużych dokumentów. Później: „Ostatnio otwierane” (tylko Chrome/Edge, uchwyty plików w IndexedDB — lokalnie).
 
 **Poza pierwotnym planem (ale wartościowe):** … edycja inline ze stylami runów + rozmiar czcionki, zoom 0.5–2.
 

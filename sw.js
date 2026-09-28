@@ -1,4 +1,4 @@
-const CACHE_VERSION = "20260928-15";
+const CACHE_VERSION = "20260928-18";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
@@ -37,6 +37,9 @@ const SHELL_ASSETS = [
   `./app/app-frame.js?v=${ASSET_V}`,
   `./app/touch.js?v=${ASSET_V}`,
   `./app/undo.js?v=${ASSET_V}`,
+  `./app/view-mode.js?v=${ASSET_V}`,
+  `./app/keyboard.js?v=${ASSET_V}`,
+  `./app/cursor-hint.js?v=${ASSET_V}`,
   `./app/bootstrap.js?v=${ASSET_V}`,
   "./assets/images/favicon.png",
   "./assets/images/apple-touch-icon.png",

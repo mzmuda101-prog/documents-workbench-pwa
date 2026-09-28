@@ -307,9 +307,14 @@ const appFrame = (() => {
       ensureLazyFeature(FR).then(() => stepFrMatch(d)).catch(() => {});
     });
   });
+  // Telefon: ↑ ↓ tylko przy wpisanej frazie — puste pole szukania dostaje ich miejsce.
+  const docToolbarEl = document.getElementById("docToolbar");
+  const syncHasQuery = () => docToolbarEl?.classList.toggle("has-query", !!searchQueryEl?.value.trim());
   searchQueryEl?.addEventListener("input", () => {
     if (!searchQueryEl.value.trim() && searchPosEl) searchPosEl.textContent = "";
+    syncHasQuery();
   });
+  syncHasQuery();
 
   // ── liczniki: przy sekcjach panelu i na ⚙ ──────────────────────────────────
   function setSummaryCount(panelId, n) {

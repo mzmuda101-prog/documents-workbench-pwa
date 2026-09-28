@@ -1212,6 +1212,8 @@ body.drag-active .doc-panel { outline: 2px dashed var(--accent); outline-offset:
      tekst dokumentu). Na dotyku tła pełne. */
   .hero, .status-bar { background: var(--glass-sheen), var(--surface); }
   .panel { background: var(--surface); }
+  /* toast bez rozmycia był przezroczysty i nachodził na pasek — nieczytelny */
+  .toast, .loading-card { background: var(--surface); }
   .btn.primary, .empty-icon, .lang-switch-indicator { box-shadow: none; }
   /* strony dokumentu: jedna twarda linia zamiast rozmytego cienia na każdej stronie */
   .doc-canvas:not(.doc-reflow-mode) .docx-wrapper > section.docx { box-shadow: 0 0 0 1px rgba(16, 32, 64, 0.14) !important; }
@@ -1246,3 +1248,62 @@ body.kb-open .section-strip, body.kb-open .status-bar { display: none !important
   .zoom-now { min-width: 0; padding: 0 4px 0 8px; }
   .doc-toolbar-row-2 { gap: 6px; }
 }
+
+/* =====================================================================
+   KLAWIATURA, PODPOWIEDZI, TRYB SKUPIENIA, MIEJSCE NA DOKUMENT (paczka E)
+   ===================================================================== */
+/* link „Przejdź do dokumentu” — niewidoczny, dopóki nie dostanie fokusu z Tab */
+.skip-link {
+  position: fixed; top: 8px; left: 8px; z-index: 20001; transform: translateY(-160%);
+  padding: 10px 16px; border-radius: 12px; background: var(--accent); color: #fff;
+  font-weight: 700; font-size: 13px; text-decoration: none; box-shadow: var(--shadow-lg);
+  transition: transform var(--t);
+}
+.skip-link:focus { transform: none; outline: none; }
+/* dokument z fokusem (strzałki / PgUp / PgDn przewijają) — widać, gdzie jest klawiatura */
+.doc-viewport:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.section-chip:focus-visible, .mode-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.app-menu-kbd { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* ── podpowiedzi (cursor-hint, silnik z Sheet) ── */
+.cursor-hint { position: fixed; top: 0; left: 0; z-index: 9998; display: inline-flex; pointer-events: none; opacity: 0; transition: opacity 140ms ease; will-change: transform, opacity; }
+.cursor-hint.is-fading { opacity: 0 !important; transition: opacity var(--hint-fade-ms, 460ms) ease-out !important; }
+.cursor-hint.is-visible { opacity: 1; visibility: visible; }
+.cursor-hint-scaler {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 60px; max-width: min(420px, calc(100vw - 32px));
+  padding: 0.5rem 0.8rem; border-radius: 12px; border: 1px solid var(--accent-border);
+  background: var(--surface); color: var(--ink); box-shadow: 0 10px 28px rgba(16, 32, 64, 0.18);
+  font-size: 12px; font-weight: 600; line-height: 1.3; text-align: left; transform-origin: left bottom; transition: transform 140ms ease;
+}
+[data-theme="dark"] .cursor-hint-scaler { box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45); }
+
+/* ── tryb skupienia (view-mode.js) ── */
+#focusModeBtn .fm-exit { display: none; }
+.focus-mode #focusModeBtn .fm-enter { display: none; }
+.focus-mode #focusModeBtn .fm-exit { display: block; }
+.fm-hero-slot { display: none; }
+.focus-mode .fm-hero-slot { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.focus-mode .fm-hero-slot .hero-save { height: 36px; }
+.focus-mode .hero, .focus-mode .hero-grip, .focus-mode .status-bar, .focus-mode .section-strip,
+.focus-mode .sidebar-handle { display: none !important; }
+.focus-mode .app { padding-top: max(8px, var(--safe-top)); padding-bottom: max(8px, var(--safe-bottom)); }
+.focus-mode .main { gap: 0; }
+:root.focus-mode.sidebar-docked:not(.sidebar-open) .main { margin-left: 0; }
+@media (max-width: 768px) {
+  .focus-mode .app { padding-top: max(0px, var(--safe-top)); }
+  /* telefon: w rzędzie z szukaniem mieści się tylko ikona zapisu (+ liczba zmian);
+     ⋯ zostaje w nagłówku — po wyjściu z trybu */
+  .focus-mode .fm-hero-slot .hero-save { height: 40px; padding: 0 10px; }
+  .focus-mode .fm-hero-slot .hero-save-label, .focus-mode .fm-hero-slot .app-menu-btn { display: none; }
+  .focus-mode .fm-hero-slot .hero-save-icon { display: block; }
+}
+
+/* ── więcej miejsca na dokument (drobne, ale sumują się) ── */
+.app { padding-top: max(12px, var(--safe-top)); padding-bottom: max(16px, var(--safe-bottom)); }
+.hero { padding: 10px 16px; margin-bottom: 10px; }
+.main { gap: 8px; }
+.status-bar { padding: 6px 12px; }
+.doc-toolbar { padding: 8px 10px; gap: 6px; }
+.doc-canvas { padding-top: 14px; }
+.hero-save-icon { display: none; }
+@media (max-width: 480px) { .doc-toolbar:not(.has-query) .doc-search-nav { display: none; } }

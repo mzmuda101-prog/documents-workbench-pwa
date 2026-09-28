@@ -139,6 +139,20 @@ const I18N = {
     loadSample: "Przykład",
     save: "Zapisz",
     saveAs: "Zapisz jako",
+    // ── klawiatura, tryb skupienia (paczka E) ──
+    skipToDoc: "Przejdź do dokumentu",
+    docRegionAria: "Dokument",
+    focusModeAria: "Tryb skupienia",
+    focusModeExitAria: "Wyjdź z trybu skupienia",
+    focusModeMenu: "Tryb skupienia",
+    focusModeMenuExit: "Wyjdź z trybu skupienia",
+    focusModeOn: "Tryb skupienia — Esc albo ten sam przycisk, żeby wyjść",
+    focusModeOnTouch: "Tryb skupienia — ten sam przycisk przywraca widok",
+    fullscreenMenu: "Pełny ekran",
+    fullscreenMenuExit: "Wyjdź z pełnego ekranu",
+    fullscreenFailed: "Przeglądarka nie pozwoliła na pełny ekran — został tryb skupienia",
+    helpKeysTitle: "Klawiatura",
+    helpKeysText: "Ctrl/⌘+F — szukaj · Enter / Shift+Enter (albo F3) — następne / poprzednie · Ctrl/⌘+S — zapisz · Ctrl/⌘+Alt+E — Czytanie ⇄ Edycja · Ctrl/⌘+Alt+F — tryb skupienia · Ctrl/⌘+Alt+1 / 2 / 3 — panel / pasek / dokument (F6 — po kolei) · Esc — krok wstecz",
     // ── Cofnij / Ponów (undo.js) ──
     undoGroupAria: "Cofnij i ponów",
     helpUndoTitle: "Cofnij / Ponów",
@@ -446,6 +460,20 @@ const I18N = {
     loadSample: "Sample",
     save: "Save",
     saveAs: "Save as",
+    // ── keyboard, focus mode (package E) ──
+    skipToDoc: "Skip to the document",
+    docRegionAria: "Document",
+    focusModeAria: "Focus mode",
+    focusModeExitAria: "Exit focus mode",
+    focusModeMenu: "Focus mode",
+    focusModeMenuExit: "Exit focus mode",
+    focusModeOn: "Focus mode — press Esc or the same button to exit",
+    focusModeOnTouch: "Focus mode — the same button brings the view back",
+    fullscreenMenu: "Full screen",
+    fullscreenMenuExit: "Exit full screen",
+    fullscreenFailed: "The browser refused full screen — focus mode is on",
+    helpKeysTitle: "Keyboard",
+    helpKeysText: "Ctrl/⌘+F — search · Enter / Shift+Enter (or F3) — next / previous · Ctrl/⌘+S — save · Ctrl/⌘+Alt+E — Reading ⇄ Editing · Ctrl/⌘+Alt+F — focus mode · Ctrl/⌘+Alt+1 / 2 / 3 — panel / toolbar / document (F6 — in turn) · Esc — step back",
     // ── Undo / Redo (undo.js) ──
     undoGroupAria: "Undo and redo",
     helpUndoTitle: "Undo / Redo",
@@ -656,6 +684,7 @@ function applyLanguage() {
   if (documentStructure && typeof renderStructurePanel === "function") renderStructurePanel(documentStructure);
   if (typeof appFrame !== "undefined") appFrame.onLanguageChange();
   if (typeof dwbUndo !== "undefined") dwbUndo.sync();
+  if (typeof dwbView !== "undefined") dwbView.syncMenu();
 }
 
 function setLanguage(lang) {
