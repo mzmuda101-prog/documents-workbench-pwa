@@ -39,6 +39,8 @@ Stan na **v0.2** (lipiec 2026). Ostatnia wersja cache: `20260702-03`.
 
 | **Paczka F — wydajność dużych dokumentów** (`npm run bench`; ~300 stron, CPU ×4: cofnięcie pisania 5,1 s → 0,06 s, szukanie 322 → 135 ms, 1. klawisz 88 → 46 ms, Enter widoczny 243 → 88 ms, otwarcie 5,0 → 4,1 s; wspólna pamięć rozpakowanego pliku, śledzenie zmienionych akapitów (MutationObserver), szybka ścieżka Cofnij, biblioteki dociągane po starcie) | ✅ 2026-09-28 |
 
+| **Paczka G — pinch-zoom** (`app/pinch-zoom.js`: dwa palce przybliżają/oddalają dokument także przy „Dopasuj”, transform w trakcie gestu + zatwierdzenie zoomu po puszczeniu, punkt pod palcami zostaje na miejscu, zakres 35–300%; strażnik `test:pinch`) | ✅ 2026-09-28 |
+
 **Plan przenoszenia z Sheet Workbench (A–F) zakończony.** Otwarte tematy: cofnięcie kroku z Enterem nadal rysuje dokument od nowa (~4 s przy 300 stronach); pierwszy układ bardzo długiego dokumentu jest kosztem docx-preview (content-visibility odrzucone — psuje numerację list przez izolację stylów). Później: „Ostatnio otwierane” (tylko Chrome/Edge, uchwyty plików w IndexedDB — lokalnie).
 
 **Poza pierwotnym planem (ale wartościowe):** … edycja inline ze stylami runów + rozmiar czcionki, zoom 0.5–2.

@@ -260,7 +260,7 @@ const appFrame = (() => {
   function syncZoomNow() {
     if (!zoomNowEl) return;
     const reflow = typeof shouldUseMobileReflow === "function" && shouldUseMobileReflow();
-    zoomNowEl.textContent = reflow ? t("zoomFitShort") : `${Math.round((parseFloat(zoomLevelEl?.value) || 1) * 100)}%`;
+    zoomNowEl.textContent = reflow && !(typeof isReflowScaled === "function" && isReflowScaled()) ? t("zoomFitShort") : `${Math.round((parseFloat(zoomLevelEl?.value) || 1) * 100)}%`;
   }
   function stepZoom(dir) {
     if (!zoomLevelEl) return;

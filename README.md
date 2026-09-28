@@ -29,7 +29,8 @@ Siostrzana aplikacja [Sheet Workbench PWA](../sheet-workbench-pwa/README.md).
   z paskiem — 85–87% ekranu zamiast 43–69%
 - **Dotyk / iPhone** (sprawdzone na symulatorze iOS): pisanie z klawiaturą ekranową bez
   uciekania paska, brak przybliżania strony przy polach, „Zapisz” w Safari = zapis kopii,
-  lżejsze efekty na dotyku; `?sample=nazwa` otwiera `docs/samples/nazwa.docx`
+  lżejsze efekty na dotyku, **przybliżanie dwoma palcami** (też przy „Dopasuj”: tekst skaluje się
+  i dalej zawija; „Dopasuj” wraca do 100%; zakres 35–300%); `?sample=nazwa` otwiera `docs/samples/nazwa.docx`
 
 ## Start lokalnie
 
@@ -60,6 +61,7 @@ npm run test:frame    # rama ekranu (Chromium + WebKit)
 npm run test:touch    # lekcje z iPhone'a (dotyk)
 npm run test:enter    # szybkie pisanie wokół Enter/Backspace: zapis = podgląd
 npm run test:undo     # Cofnij / Ponów (Chromium + WebKit)
+npm run test:pinch    # przybliżanie dwoma palcami (Chromium + WebKit)
 npm run test:keys     # klawiatura, tryb skupienia, podpowiedzi
 npm run bench         # pomiar wydajności na dużych dokumentach (~100 i ~300 stron, CPU ×4)
 npm run test:stress   # pełny przebieg na dużym .docx (wymaga npm run serve)

@@ -2,7 +2,8 @@
 
 const MOBILE_MQ = window.matchMedia("(max-width: 768px)");
 const ZOOM_MIN = 0.5;
-const ZOOM_MAX = 2;
+const ZOOM_MIN_MOBILE = 0.35; // [PL] telefon: pinch może zejść niżej (cała strona na ekranie)
+const ZOOM_MAX = 3;
 
 const docZoomShellEl = document.getElementById("docZoomShell");
 const zoomFitBtnEl = document.getElementById("zoomFitBtn");
@@ -10,6 +11,7 @@ const zoomResetBtnEl = document.getElementById("zoomResetBtn");
 const zoomSliderFieldEl = document.getElementById("zoomSliderField");
 const zoomReflowHintEl = document.getElementById("zoomReflowHint");
 
+let reflowScale = 1; // [PL] skala tekstu w trybie „Dopasuj” (pinch): tekst dalej zawija się do szerokości
 let zoomMode = "fit"; // [EN] fit = mobile reflow; manual = print layout + zoom slider
 
 function isMobileViewport() {
@@ -30,7 +32,7 @@ function syncViewportClass() {
 }
 
 function getZoomLimits() {
-  return { min: ZOOM_MIN, max: ZOOM_MAX };
+  return { min: isMobileViewport() ? ZOOM_MIN_MOBILE : ZOOM_MIN, max: ZOOM_MAX };
 }
 
 function syncZoomSliderLimits() {
@@ -161,7 +163,7 @@ function setZoomMode(mode, options = {}) {
     return;
   }
   if (shouldUseMobileReflow()) {
-    if (zoomLevelEl) zoomLevelEl.value = "1";
+    if (zoomLevelEl) zoomLevelEl.value = String(reflowScale);
     applyZoom();
     const host = docCanvasEl?.querySelector(".docx-preview-host");
     if (host) applyMobileReflowLayout(host);
@@ -170,7 +172,9 @@ function setZoomMode(mode, options = {}) {
 
 function applyFitToWidth() {
   if (isMobileViewport()) {
+    reflowScale = 1;
     setZoomMode("fit");
+    if (shouldUseMobileReflow() && zoomLevelEl) { zoomLevelEl.value = "1"; applyZoom(); }
     return;
   }
   // Szeroki ekran: strona dopasowana do szerokości obszaru dokumentu (układ strony zostaje).
@@ -192,7 +196,7 @@ function syncMobileDocZoomAfterRender() {
   syncMobileZoomUi();
   if (!isMobileViewport()) return;
   if (shouldUseMobileReflow()) {
-    if (zoomLevelEl) zoomLevelEl.value = "1";
+    if (zoomLevelEl) zoomLevelEl.value = String(reflowScale);
     applyZoom();
     const host = docCanvasEl?.querySelector(".docx-preview-host");
     if (host) applyMobileReflowLayout(host);
@@ -205,6 +209,11 @@ function syncMobileDocZoomAfterRender() {
 }
 
 function onZoomSliderInput() {
+  if (shouldUseMobileReflow()) { // [PL] +/− w trybie „Dopasuj” skalują tekst, nie wychodzą z dopasowania
+    reflowScale = parseFloat(zoomLevelEl?.value) || 1;
+    applyZoom();
+    return;
+  }
   setZoomMode("manual", { skipRerender: true });
   applyZoom();
   updateZoomShellHeight(parseFloat(zoomLevelEl?.value) || 1);
@@ -231,7 +240,7 @@ function onViewportChange() {
     return;
   }
   if (shouldUseMobileReflow()) {
-    if (zoomLevelEl) zoomLevelEl.value = "1";
+    if (zoomLevelEl) zoomLevelEl.value = String(reflowScale);
     applyZoom();
     const host = docCanvasEl?.querySelector(".docx-preview-host");
     if (host) applyMobileReflowLayout(host);
@@ -258,4 +267,23 @@ function initMobileDocZoom() {
   ensureMobileReflowObserver();
   MOBILE_MQ.addEventListener("change", onViewportChange);
   window.addEventListener("orientationchange", () => setTimeout(onViewportChange, 120));
+}
+
+// [PL] Dla pinch-zoom.js: jedno miejsce, gdzie gest zatwierdza nowy zoom.
+function getDocZoom() {
+  return shouldUseMobileReflow() ? reflowScale : parseFloat(zoomLevelEl?.value) || 1;
+}
+
+function commitDocZoom(zoom) {
+  const { min, max } = getZoomLimits();
+  const z = Math.round(Math.max(min, Math.min(max, zoom)) * 100) / 100;
+  if (shouldUseMobileReflow()) reflowScale = z;
+  else if (zoomMode !== "manual") setZoomMode("manual", { skipRerender: true });
+  if (zoomLevelEl) zoomLevelEl.value = String(z);
+  applyZoom();
+  return z;
+}
+
+function isReflowScaled() {
+  return shouldUseMobileReflow() && Math.abs(reflowScale - 1) > 0.005;
 }

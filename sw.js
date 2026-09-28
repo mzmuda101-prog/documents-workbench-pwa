@@ -1,4 +1,4 @@
-const CACHE_VERSION = "20260928-19";
+const CACHE_VERSION = "20260928-20";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
@@ -36,6 +36,7 @@ const SHELL_ASSETS = [
   `./app/lazy-features.js?v=${ASSET_V}`,
   `./app/app-frame.js?v=${ASSET_V}`,
   `./app/touch.js?v=${ASSET_V}`,
+  `./app/pinch-zoom.js?v=${ASSET_V}`,
   `./app/undo.js?v=${ASSET_V}`,
   `./app/view-mode.js?v=${ASSET_V}`,
   `./app/keyboard.js?v=${ASSET_V}`,

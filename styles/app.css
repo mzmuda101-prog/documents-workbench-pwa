@@ -1307,3 +1307,9 @@ body.kb-open .section-strip, body.kb-open .status-bar { display: none !important
 .doc-canvas { padding-top: 14px; }
 .hero-save-icon { display: none; }
 @media (max-width: 480px) { .doc-toolbar:not(.has-query) .doc-search-nav { display: none; } }
+
+/* Pinch-zoom dokumentu (app/pinch-zoom.js): przeglądarka nie przybliża strony sama. */
+@media (pointer: coarse) {
+  .doc-viewport { touch-action: pan-x pan-y; }
+}
+html.is-pinching .doc-viewport { overflow: hidden; }
