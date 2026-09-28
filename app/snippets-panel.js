@@ -33,6 +33,10 @@ function syncSnippetStatus() {
     : t("snippetsFound", { count: snippetScan.triggers.length, total: snippetScan.total });
 }
 
+let snFilter = "";
+
+// Lista: nazwa + podgląd treści, „Wstaw” (w miejscu kursora), „Edytuj” (do formularza), „Usuń”.
+// Filtr przy dłuższej liście; pusta lista proponuje zestaw startowy.
 function renderSnippetList() {
   if (!snListEl) return;
   snListEl.replaceChildren();
@@ -41,33 +45,61 @@ function renderSnippetList() {
     const empty = document.createElement("p");
     empty.className = "hint";
     empty.textContent = t("snippetsEmpty");
-    snListEl.appendChild(empty);
+    const starter = Object.assign(document.createElement("button"), { type: "button", className: "btn", id: "snStarterBtn", textContent: t("snippetsStarter") });
+    starter.addEventListener("click", () => {
+      const n = addStarterSnippets();
+      renderSnippetList();
+      toast(t("snippetsStarterAdded", { count: n }), "success");
+    });
+    snListEl.append(empty, starter);
     return;
   }
-  list.forEach((sn) => {
-    const row = document.createElement("div");
-    row.className = "snippet-row";
-    row.innerHTML = `<span class="snippet-name">${escapeSnHtml(formatSnippetTrigger(sn.name))}</span>`;
-    const useBtn = document.createElement("button");
-    useBtn.type = "button";
-    useBtn.className = "btn snippet-use-btn";
-    useBtn.textContent = t("snippetsUse");
-    useBtn.addEventListener("click", () => {
-      if (snNameEl) snNameEl.value = sn.name;
-      if (snBodyEl) snBodyEl.value = sn.body;
+  if (list.length > 5) {
+    const filter = Object.assign(document.createElement("input"), { type: "search", className: "sn-filter", placeholder: t("snippetsFilter"), value: snFilter });
+    filter.addEventListener("input", () => { snFilter = filter.value; renderRows(); });
+    snListEl.append(filter);
+  }
+  const rows = document.createElement("div");
+  rows.className = "stack stack-tight";
+  snListEl.append(rows);
+  function renderRows() {
+    rows.replaceChildren();
+    const q = snFilter.trim().toLocaleLowerCase("pl-PL");
+    list.filter((sn) => !q || sn.name.toLocaleLowerCase("pl-PL").includes(q) || sn.body.toLocaleLowerCase("pl-PL").includes(q)).forEach((sn) => {
+      const row = document.createElement("div");
+      row.className = "snippet-row";
+      const info = document.createElement("div");
+      info.className = "snippet-info";
+      const name = Object.assign(document.createElement("span"), { className: "snippet-name", textContent: formatSnippetTrigger(sn.name) });
+      const pv = Object.assign(document.createElement("span"), { className: "snippet-preview", textContent: sn.body.replace(/\s*\n\s*/g, " ⏎ ") });
+      info.append(name, pv);
+      const mk = (label, cls, fn) => {
+        const b = Object.assign(document.createElement("button"), { type: "button", className: `btn ${cls}`, textContent: label });
+        // przycisk nie zabiera fokusu z tekstu (kursor zostaje tam, gdzie był)
+        b.addEventListener("mousedown", (e) => e.preventDefault());
+        b.addEventListener("click", fn);
+        return b;
+      };
+      const insertBtn = mk(t("snippetsInsertShort"), "snippet-insert-btn", () => insertSnippetAtCaret(sn));
+      const editBtn = mk(t("snippetsEdit"), "snippet-use-btn", () => {
+        if (snNameEl) snNameEl.value = sn.name;
+        if (snBodyEl) snBodyEl.value = sn.body;
+        snBodyEl?.focus();
+      });
+      const delBtn = mk("✕", "snippet-del-btn", () => {
+        if (!confirm(t("snippetsDeleteConfirm", { name: formatSnippetTrigger(sn.name) }))) return;
+        deleteSnippet(sn.name);
+        renderSnippetList();
+      });
+      delBtn.setAttribute("aria-label", t("snippetsDelete"));
+      const actions = document.createElement("div");
+      actions.className = "snippet-actions";
+      actions.append(insertBtn, editBtn, delBtn);
+      row.append(info, actions);
+      rows.appendChild(row);
     });
-    const delBtn = document.createElement("button");
-    delBtn.type = "button";
-    delBtn.className = "btn snippet-del-btn";
-    delBtn.textContent = t("snippetsDelete");
-    delBtn.addEventListener("click", () => {
-      if (!confirm(t("snippetsDeleteConfirm", { name: formatSnippetTrigger(sn.name) }))) return;
-      deleteSnippet(sn.name);
-      renderSnippetList();
-    });
-    row.append(useBtn, delBtn);
-    snListEl.appendChild(row);
-  });
+  }
+  renderRows();
 }
 
 async function runSnippetScan() {
@@ -87,7 +119,7 @@ function saveSnippetFromForm() {
     toast(t("snippetsSaveInvalid"), "error");
     return;
   }
-  toast(t("snippetsSaved", { name: formatSnippetTrigger(entry.name) }), "success");
+  toast(t(entry.existed ? "snippetsUpdated" : "snippetsSaved", { name: formatSnippetTrigger(entry.name) }), "success");
   renderSnippetList();
   if (originalFileBytes) runSnippetScan();
 }
@@ -116,16 +148,18 @@ async function expandSnippetsInDocument() {
   }
 }
 
-function insertSnippetAtCaret() {
+// sn — z listy; bez sn: z formularza (zapisany pod tą nazwą albo sama wpisana treść).
+async function insertSnippetAtCaret(sn) {
   if (readOnlyMode) {
     toast(t("readModeOn"), "info");
     return;
   }
-  const name = normalizeSnippetName(snNameEl?.value);
-  const list = loadSnippets();
-  const sn = list.find((s) => s.name === name);
-  const body = resolveSnippetBody(sn?.body || snBodyEl?.value);
-  if (!body?.trim()) {
+  if (!sn || !sn.name) {
+    const name = normalizeSnippetName(snNameEl?.value);
+    const stored = loadSnippets().find((s) => s.name === name);
+    sn = stored || { name: name || "snippet", body: snBodyEl?.value || "" };
+  }
+  if (!String(sn.body || "").trim()) {
     toast(t("snippetsInsertEmpty"), "error");
     return;
   }
@@ -134,13 +168,7 @@ function insertSnippetAtCaret() {
     toast(t("snippetsInsertNoCaret"), "info");
     return;
   }
-  const style = mergeRunStyles(getInheritedRunStyleAtCaret(p), activeTypingStyle);
-  asUndoStep("undoOpInsert", () => {
-    if (runStyleHasProps(style)) insertStyledTextAtCaret(body, style, p);
-    else insertTextAtCaret(body);
-  });
-  onInlineParagraphInput();
-  toast(t("snippetsInserted"), "success");
+  if (await expandSnippetAtCaret(p, sn, 0)) toast(t("snippetsInserted"), "success");
 }
 
 function insertSnippetTriggerAtCaret() {
@@ -177,7 +205,7 @@ function wireSnippetsPanel() {
   snSaveBtn?.addEventListener("click", saveSnippetFromForm);
   snScanBtn?.addEventListener("click", runSnippetScan);
   snExpandBtn?.addEventListener("click", expandSnippetsInDocument);
-  snInsertBtn?.addEventListener("click", insertSnippetAtCaret);
+  snInsertBtn?.addEventListener("click", () => insertSnippetAtCaret());
   snInsertTriggerBtn?.addEventListener("click", insertSnippetTriggerAtCaret);
   snExpandModeEl?.addEventListener("change", () => {
     setSnippetExpandMode(snExpandModeEl.value);

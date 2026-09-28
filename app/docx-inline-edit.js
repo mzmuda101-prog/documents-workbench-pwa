@@ -165,11 +165,8 @@ function onParagraphBeforeInput(e) {
     const sn = m ? getSnippetByName(m[1]) : null;
     if (sn) {
       e.preventDefault();
-      const body = resolveSnippetBody(sn.body);
-      const style = mergeRunStyles(getInheritedRunStyleAtCaret(p), activeTypingStyle);
-      replaceTextEndingBeforeCaret(p, m[0].length, body + ch, style);
-      onInlineParagraphInput();
-      toast(t("snippetsAutoExpanded", { name: formatSnippetTrigger(sn.name) }), "success");
+      // wspólna droga (snippet-suggest.js): pola {{…}}, {cursor}, osobny krok cofania
+      expandSnippetAtCaret(p, sn, m[0].length, ch);
       return;
     }
   }

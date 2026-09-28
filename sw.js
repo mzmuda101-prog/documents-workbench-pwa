@@ -1,4 +1,4 @@
-const CACHE_VERSION = "20260928-26";
+const CACHE_VERSION = "20260929-03";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
@@ -31,6 +31,7 @@ const SHELL_ASSETS = [
   `./app/grammar-style.js?v=${ASSET_V}`,
   `./app/placeholders.js?v=${ASSET_V}`,
   `./app/snippets.js?v=${ASSET_V}`,
+  `./app/snippet-suggest.js?v=${ASSET_V}`,
   `./app/edit-tools.js?v=${ASSET_V}`,
   `./app/mobile-doc-zoom.js?v=${ASSET_V}`,
   `./app/ui-controls.js?v=${ASSET_V}`,
@@ -127,8 +128,12 @@ self.addEventListener("activate", (event) => {
     )
   );
   self.clients.claim();
-  // Ciężkie zasoby dogrywamy po chwili, już poza ścieżką krytyczną startu.
-  event.waitUntil(precacheHeavyAssetsLater());
+  // Ciężkie zasoby dogrywamy po chwili, już poza ścieżką krytyczną startu — ale NIE przez
+  // event.waitUntil: dopóki aktywacja trwa, przeglądarka wstrzymuje WSZYSTKIE zapytania
+  // strony. Dawniej po „Aktualizuj” biały ekran wisiał 8 s zwłoki + pobieranie bibliotek
+  // i filmu (na telefonie przy słabym zasięgu dłużej). Gdy worker zostanie uśpiony, zanim
+  // skończy — pliki trafią do cache przy pierwszym użyciu.
+  precacheHeavyAssetsLater();
 });
 
 self.addEventListener("message", (event) => {

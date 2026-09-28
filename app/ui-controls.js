@@ -299,6 +299,15 @@ async function hardRefreshApp() {
     if ("serviceWorker" in navigator) {
       const registrations = await navigator.serviceWorker.getRegistrations();
       await Promise.all(registrations.map((registration) => registration.update().catch(() => {})));
+      // Czekająca nowa wersja NIE włącza się sama przy przeładowaniu (stara dalej trzyma
+      // stronę) — bez tego po przeładowaniu znów było „Aktualizuj”. Każemy jej przejąć
+      // i chwilę czekamy, aż przejmie.
+      const waiting = registrations.map((r) => r.waiting).filter(Boolean);
+      if (waiting.length) {
+        const took = new Promise((resolve) => navigator.serviceWorker.addEventListener("controllerchange", resolve, { once: true }));
+        waiting.forEach((w) => w.postMessage({ type: "SKIP_WAITING" }));
+        await Promise.race([took, new Promise((r) => setTimeout(r, 3000))]);
+      }
     }
     if ("caches" in window) {
       const keys = await caches.keys();

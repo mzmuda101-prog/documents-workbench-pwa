@@ -3,7 +3,9 @@
 const SNIPPETS_STORAGE_KEY = "documents-workbench-snippets";
 const SNIPPET_SETTINGS_KEY = "documents-workbench-snippet-settings";
 const SNIPPET_EXPAND_DELIMITER_RE = /[\s.,;:!?)\]}]/;
-const SNIPPET_TRIGGER_AT_END_RE = /!([a-zA-Z][a-zA-Z0-9_-]*)$/;
+const SNIPPET_TRIGGER_AT_END_RE = /(?<![\p{L}\p{N}_!])!([\p{L}][\p{L}\p{N}_-]*)$/u;
+const SNIPPET_CURSOR_MARK = "\uE000"; // znacznik {cursor} na czas wstawiania (znak z obszaru prywatnego)
+const SNIPPET_NEST_DEPTH = 3;
 
 function getSnippetSettings() {
   try {
@@ -32,18 +34,39 @@ function getSnippetByName(name) {
   return loadSnippets().find((s) => s.name === clean) || null;
 }
 
-function resolveSnippetBody(body) {
+// Treść snippetu gotowa do wstawienia:
+//   {date} {date:short} {date:iso} {date:long}, {date+14} {date-1:short} (przesunięcie o dni),
+//   {time} {datetime} {day} {month} {year} (też z przesunięciem), {cursor} — gdzie stanie kursor,
+//   !inny — snippet w snippecie (do 3 poziomów).
+// opts.cursorMark — zostaw znacznik kursora (wstawianie w podglądzie); w pliku {cursor} znika.
+function resolveSnippetBody(body, opts = {}, depth = 0) {
   let out = String(body || "");
   const locale = (typeof currentLang !== "undefined" && currentLang === "en") ? "en-US" : "pl-PL";
-  const now = new Date();
-  const dateStr = now.toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" });
-  const timeStr = now.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" });
-  const dayStr = now.toLocaleDateString(locale, { weekday: "long" });
-  out = out.replace(/\{date\}/gi, dateStr);
-  out = out.replace(/\{time\}/gi, timeStr);
-  out = out.replace(/\{datetime\}/gi, `${dateStr} ${timeStr}`);
-  out = out.replace(/\{day\}/gi, dayStr);
-  out = out.replace(/\{cursor\}/gi, ""); // [EN] caret placement later; Raycast-style token removed on expand
+  out = out.replace(/\{(date|time|datetime|day|month|year)([+-]\d{1,4})?(?::(short|iso|long))?\}/gi, (_, kind, shift, fmt) => {
+    const d = new Date();
+    if (shift) d.setDate(d.getDate() + Number(shift));
+    const k = kind.toLowerCase();
+    const f = (fmt || "").toLowerCase();
+    const pad = (n) => String(n).padStart(2, "0");
+    const date = f === "short" ? `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`
+      : f === "iso" ? `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+      : f === "long" ? d.toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric" })
+      : d.toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" });
+    const time = d.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" });
+    if (k === "date") return date;
+    if (k === "time") return time;
+    if (k === "datetime") return `${date} ${time}`;
+    if (k === "day") return d.toLocaleDateString(locale, { weekday: "long" });
+    if (k === "month") return d.toLocaleDateString(locale, { month: "long" });
+    return String(d.getFullYear());
+  });
+  if (depth < SNIPPET_NEST_DEPTH) {
+    const stored = snippetsToMap(loadSnippets());
+    out = out.replace(new RegExp(SNIPPET_TRIGGER_RE.source, "gu"), (tok, name) => (stored[name] != null ? resolveSnippetBody(stored[name], { ...opts, cursorMark: false }, depth + 1) : tok));
+  }
+  // tylko pierwszy {cursor} ma znaczenie; reszta znika
+  let first = true;
+  out = out.replace(/\{cursor\}/gi, () => { const r = first && opts.cursorMark ? SNIPPET_CURSOR_MARK : ""; first = false; return r; });
   return out;
 }
 
@@ -81,9 +104,11 @@ function upsertSnippet(name, body) {
   if (!cleanName) return null;
   const text = String(body ?? "");
   if (!text.trim()) return null;
-  const list = loadSnippets().filter((s) => s.name !== cleanName);
-  const entry = { name: cleanName, body: text, updatedAt: Date.now() };
-  list.push(entry);
+  const all = loadSnippets();
+  const existed = all.some((s) => s.name === cleanName);
+  const list = all.filter((s) => s.name !== cleanName);
+  const entry = { name: cleanName, body: text, updatedAt: Date.now(), existed };
+  list.push({ name: entry.name, body: entry.body, updatedAt: entry.updatedAt });
   list.sort((a, b) => a.name.localeCompare(b.name, "pl"));
   persistSnippets(list);
   return entry;
@@ -176,4 +201,28 @@ function importSnippetsData(data) {
     if (existing.has(entry.name)) updated++; else { added++; existing.add(entry.name); }
   });
   return { added, updated };
+}
+
+// ── zestaw startowy (pusty panel) ────────────────────────────────────────────
+const SNIPPET_STARTER_PACK = [
+  { name: "dzis", body: "{date:short}" },
+  { name: "termin14", body: "{date+14:short}" },
+  { name: "pozdrawiam", body: "Z poważaniem\n{{imie_nazwisko}}" },
+  { name: "adres", body: "{{firma}}\nul. {{ulica}}\n{{kod}} {{miasto}}" },
+  { name: "rodo", body: "Wyrażam zgodę na przetwarzanie moich danych osobowych w celu {{cel}} zgodnie z RODO." },
+];
+function addStarterSnippets() {
+  const have = new Set(loadSnippets().map((s) => s.name));
+  let n = 0;
+  SNIPPET_STARTER_PACK.forEach((sn) => { if (!have.has(sn.name) && upsertSnippet(sn.name, sn.body)) n++; });
+  return n;
+}
+
+// Ostatnio wpisane wartości pól {{…}} w snippetach — podpowiedź przy następnym wstawieniu.
+const SNIPPET_FIELD_VALUES_KEY = "documents-workbench-snippet-fields";
+function loadSnippetFieldValues() {
+  try { return JSON.parse(localStorage.getItem(SNIPPET_FIELD_VALUES_KEY) || "{}") || {}; } catch (_) { return {}; }
+}
+function saveSnippetFieldValues(values) {
+  try { localStorage.setItem(SNIPPET_FIELD_VALUES_KEY, JSON.stringify({ ...loadSnippetFieldValues(), ...values })); } catch (_) { /* prywatne okno */ }
 }

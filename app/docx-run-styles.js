@@ -150,36 +150,32 @@ function getParagraphRunElements(pEl) {
 function extractRunsFromParagraphXml(pEl) {
   const runs = [];
   getParagraphRunElements(pEl).forEach((r) => {
-    const br = Array.from(r.childNodes).find((n) => n.localName === "br" && n.namespaceURI === W_NS);
-    if (br) {
-      runs.push({ break: true });
-      return;
-    }
-    let text = "";
-    Array.from(r.childNodes).forEach((n) => {
-      if (n.localName === "t" && n.namespaceURI === W_NS) text += n.textContent || "";
-    });
-    if (!text) return;
-    const run = { text };
+    const style = {};
     const rPr = Array.from(r.childNodes).find((n) => n.localName === "rPr" && n.namespaceURI === W_NS);
     if (rPr) {
-      if (Array.from(rPr.childNodes).some((n) => n.localName === "b")) run.bold = true;
-      if (Array.from(rPr.childNodes).some((n) => n.localName === "i")) run.italic = true;
-      if (Array.from(rPr.childNodes).some((n) => n.localName === "u")) run.underline = true;
+      if (Array.from(rPr.childNodes).some((n) => n.localName === "b")) style.bold = true;
+      if (Array.from(rPr.childNodes).some((n) => n.localName === "i")) style.italic = true;
+      if (Array.from(rPr.childNodes).some((n) => n.localName === "u")) style.underline = true;
       const colorEl = Array.from(rPr.childNodes).find((n) => n.localName === "color");
       const hex = colorEl ? getWVal(colorEl) : null;
-      if (hex) run.color = `#${hex.replace(/^#/, "")}`;
+      if (hex) style.color = `#${hex.replace(/^#/, "")}`;
       const fonts = Array.from(rPr.childNodes).find((n) => n.localName === "rFonts");
       if (fonts) {
-        run.fontFamily = fonts.getAttributeNS(W_NS, "ascii") || fonts.getAttributeNS(W_NS, "hAnsi") || getWVal(fonts);
+        style.fontFamily = fonts.getAttributeNS(W_NS, "ascii") || fonts.getAttributeNS(W_NS, "hAnsi") || getWVal(fonts);
       }
       const sz = Array.from(rPr.childNodes).find((n) => n.localName === "sz");
       if (sz) {
         const half = parseInt(getWVal(sz) || "0", 10);
-        if (half) run.fontSize = `${half / 2}pt`;
+        if (half) style.fontSize = `${half / 2}pt`;
       }
     }
-    runs.push(run);
+    // Tekst i łamania w kolejności: jeden fragment może mieć <w:t>a</w:t><w:br/><w:t>b</w:t>
+    // (tak zapisujemy wielowierszowe wstawienia). Dawniej samo <w:br/> kasowało tekst fragmentu.
+    Array.from(r.childNodes).forEach((n) => {
+      if (n.namespaceURI !== W_NS) return;
+      if (n.localName === "br") runs.push({ break: true });
+      else if (n.localName === "t" && n.textContent) runs.push({ text: n.textContent, ...style });
+    });
   });
   return mergeAdjacentRuns(runs);
 }

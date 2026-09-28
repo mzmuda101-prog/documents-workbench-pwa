@@ -217,6 +217,7 @@ function buildFindRegex(edit) {
   const matchCase = edit.matchCase !== false;
   let src = edit.regex ? edit.find : edit.find.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   let flags = matchCase ? "g" : "gi";
+  if (edit.unicode && !edit.wholeWord) flags += "u";
   if (edit.wholeWord) {
     src = `(?<![\\p{L}\\p{N}_])(?:${src})(?![\\p{L}\\p{N}_])`;
     flags += "u"; // \p{…} wymaga u; bez „całych słów” u nie włączamy (psuje część zwykłych wzorców)
@@ -309,7 +310,30 @@ function writeTextNodes(nodes, texts) {
     if (t.textContent === texts[i]) return;
     t.textContent = texts[i];
     t.setAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:space", "preserve");
+    if (texts[i].includes("\n")) splitNewlinesIntoBreaks(t);
   });
+}
+
+// „\n” we wstawianym tekście (wielowierszowy snippet, wartość pola z adresem) = łamanie
+// wiersza. W <w:t> Word pokazałby spację — w obrębie tego samego fragmentu robimy
+// <w:t>a</w:t><w:br/><w:t>b</w:t> (ten sam format dla wszystkich wierszy).
+function splitNewlinesIntoBreaks(t) {
+  const parts = t.textContent.split("\n");
+  const doc = t.ownerDocument;
+  const XML_NS = "http://www.w3.org/XML/1998/namespace";
+  t.textContent = parts[0];
+  let after = t;
+  for (let i = 1; i < parts.length; i++) {
+    const br = doc.createElementNS(W_NS, "w:br");
+    after.parentNode.insertBefore(br, after.nextSibling);
+    after = br;
+    if (!parts[i]) continue;
+    const nt = doc.createElementNS(W_NS, "w:t");
+    nt.setAttributeNS(XML_NS, "xml:space", "preserve");
+    nt.textContent = parts[i];
+    after.parentNode.insertBefore(nt, after.nextSibling);
+    after = nt;
+  }
 }
 
 // Minimalne różnice a → b: [{ start, end, text }] we współrzędnych a (Myers, O((N+M)·D)).
@@ -599,7 +623,9 @@ function applySnippetExpandInXml(xml, snippetMap, scope) {
     const safeName = String(name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const res = applyReplaceInXml(current, {
       op: "replace",
-      find: `!${safeName}\\b`,
+      // jak w podglądzie: tylko na początku słowa i całe słowo (polskie litery)
+      find: `(?<![\\p{L}\\p{N}_!])!${safeName}(?![\\p{L}\\p{N}_-])`,
+      unicode: true,
       replace: sanitizeXmlText(String(resolved[name])),
       regex: true,
       literalReplace: true, // wartość/treść wstawiana dosłownie — „$100” to nie odwołanie do grupy
