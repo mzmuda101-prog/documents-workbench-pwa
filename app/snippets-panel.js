@@ -12,6 +12,9 @@ const snInsertTriggerBtn = document.getElementById("snInsertTriggerBtn");
 const snExpandModeEl = document.getElementById("snExpandMode");
 const snScopeEl = document.getElementById("snScope");
 const snStatusEl = document.getElementById("snStatus");
+const snExportBtn = document.getElementById("snExportBtn");
+const snImportBtn = document.getElementById("snImportBtn");
+const snImportFile = document.getElementById("snImportFile");
 const snListEl = document.getElementById("snList");
 
 function escapeSnHtml(s) {
@@ -183,3 +186,19 @@ function wireSnippetsPanel() {
 }
 
 wireSnippetsPanel();
+
+snExportBtn?.addEventListener("click", () => {
+  const data = buildSnippetsExport();
+  if (!data.items.length) { toast(t("snippetsEmpty"), "info"); return; }
+  downloadJsonFile(data, "snippety-documents-workbench.json");
+  toast(t("snExported", { count: data.items.length }), "success");
+});
+
+snImportBtn?.addEventListener("click", async () => {
+  const data = await pickJsonFile(snImportFile);
+  if (data === null) return;
+  const res = data === undefined ? null : importSnippetsData(data);
+  if (!res) { toast(t("importBadFile"), "error"); return; }
+  renderSnippetList();
+  toast(t("snImported", res), "success");
+});

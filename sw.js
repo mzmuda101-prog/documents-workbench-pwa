@@ -1,4 +1,4 @@
-const CACHE_VERSION = "20260928-20";
+const CACHE_VERSION = "20260928-23";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
@@ -48,6 +48,8 @@ const SHELL_ASSETS = [
   "./assets/images/icon-512.png",
   "./docs/samples/sample.docx",
   // [EN] Lazy panel UI — cached for offline after first open
+  `./app/export-panel.js?v=${ASSET_V}`,
+  `./app/stats-panel.js?v=${ASSET_V}`,
   `./app/grammar-panel.js?v=${ASSET_V}`,
   `./app/placeholders-panel.js?v=${ASSET_V}`,
   `./app/snippets-panel.js?v=${ASSET_V}`,

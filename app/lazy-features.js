@@ -5,6 +5,8 @@ const LAZY_FEATURE_SCRIPTS = {
   placeholders: ["app/placeholders-panel.js"],
   "snippets-panel": ["app/snippets-panel.js"],
   "find-replace": ["app/find-replace-workbench.js"],
+  export: ["app/export-panel.js"],
+  stats: ["app/stats-panel.js"],
 };
 
 const PANEL_LAZY_FEATURE = {
@@ -13,6 +15,8 @@ const PANEL_LAZY_FEATURE = {
   "panel-placeholders": "placeholders",
   "panel-snippets": "snippets-panel",
   "panel-search": "find-replace",
+  "panel-export": "export",
+  "panel-stats": "stats",
 };
 
 const lazyFeatureLoaded = new Set();
@@ -64,6 +68,7 @@ function initLazyFeaturePanels() {
         if (panel.id === "panel-metadata" && typeof loadMetadataFromDocument === "function") {
           loadMetadataFromDocument().catch(() => {});
         }
+        if (panel.id === "panel-stats" && typeof renderDocumentStats === "function") renderDocumentStats();
       }).catch(() => {});
     });
   });

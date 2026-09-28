@@ -16,7 +16,7 @@
     <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png" />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin.woff2" crossorigin />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin-ext.woff2" crossorigin />
-    <link rel="stylesheet" href="styles/app.css?v=20260928-20" />
+    <link rel="stylesheet" href="styles/app.css?v=20260928-23" />
   </head>
   <body>
     <!-- Pierwszy przystanek Tab: skok prosto do dokumentu (panel to kilkadziesiąt kontrolek). -->
@@ -186,7 +186,48 @@
                   <button class="btn" id="metaReloadBtn" type="button" data-i18n="metadataReload">Wczytaj z pliku</button>
                   <button class="btn primary" id="metaApplyBtn" type="button" data-i18n="metadataApply">Zastosuj</button>
                 </div>
+                <button class="btn" id="metaScrubBtn" type="button" data-i18n="metadataScrub" data-hint data-hint-pl="Czyści autora, ostatnio zmieniającego, opis i temat — przed wysłaniem pliku dalej" data-hint-en="Clears author, last modified by, description and subject — before sharing the file">Usuń dane osobowe</button>
                 <div class="hint" id="metaStatus"></div>
+              </div>
+            </details>
+
+            <details class="panel" id="panel-export">
+              <summary>
+                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3v12" /><polyline points="7 10 12 15 17 10" /><path d="M5 21h14" /></svg>
+                <span class="panel-title" data-i18n="exportPanel">Eksport</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
+              </summary>
+              <div class="panel-body stack">
+                <p class="hint" data-i18n="exportIntro">Pobierz treść dokumentu (razem z Twoimi edycjami) jako tekst, Markdown lub HTML. Wszystko lokalnie.</p>
+                <div class="btn-row">
+                  <button class="btn" id="exTxtBtn" type="button">TXT</button>
+                  <button class="btn" id="exMdBtn" type="button">Markdown</button>
+                  <button class="btn" id="exHtmlBtn" type="button">HTML</button>
+                </div>
+                <button class="btn primary" id="exPrintBtn" type="button" data-i18n="exportPrint">Drukuj / zapisz jako PDF</button>
+                <p class="hint" data-i18n="exportPrintHint">W oknie druku wybierz „Zapisz jako PDF”. Układ stron jak w podglądzie.</p>
+                <div class="hint" id="exStatus"></div>
+              </div>
+            </details>
+
+            <details class="panel" id="panel-stats">
+              <summary>
+                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="6" y1="20" x2="6" y2="11" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="18" y1="20" x2="18" y2="14" /></svg>
+                <span class="panel-title" data-i18n="statsPanel">Statystyki</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
+              </summary>
+              <div class="panel-body stack">
+                <div class="stat-grid" id="stGrid"></div>
+                <div class="hint" id="stSelection"></div>
+                <span class="stat-head" data-i18n="statsTopWords">Najczęstsze słowa</span>
+                <div class="stack stack-tight" id="stTopWords"></div>
+                <label class="field">
+                  <span data-i18n="statsLongLimit">Długie zdanie = więcej niż (słów)</span>
+                  <input id="stLongLimit" type="number" min="10" max="200" step="5" value="35" inputmode="numeric" />
+                </label>
+                <span class="stat-head" data-i18n="statsLongHead">Najdłuższe zdania</span>
+                <div class="stack stack-tight" id="stLongSentences"></div>
+                <button class="btn" id="stRefreshBtn" type="button" data-i18n="statsRefresh">Odśwież</button>
               </div>
             </details>
           </section>
@@ -380,6 +421,11 @@
                 <div class="btn-row stack-divider">
                   <button class="btn primary" id="phScanBtn" type="button" data-i18n="placeholdersScan">Skanuj pola</button>
                 </div>
+                <div class="btn-row">
+                  <button class="btn" id="phExportBtn" type="button" data-i18n="phExportValues">Zapisz wartości (JSON)</button>
+                  <button class="btn" id="phImportBtn" type="button" data-i18n="phImportValues">Wczytaj wartości</button>
+                </div>
+                <input id="phImportFile" type="file" accept=".json,application/json" hidden />
                 <div class="hint" id="phStatus"></div>
                 <div id="phForm" class="stack stack-tight ph-form"></div>
                 <div class="btn-row">
@@ -434,6 +480,11 @@
                   <button class="btn" id="snScanBtn" type="button" data-i18n="snippetsScan">Skanuj !triggery</button>
                   <button class="btn" id="snExpandBtn" type="button" data-i18n="snippetsExpand">Rozwiń w dokumencie</button>
                 </div>
+                <div class="btn-row">
+                  <button class="btn" id="snExportBtn" type="button" data-i18n="snExportAll">Eksport snippetów</button>
+                  <button class="btn" id="snImportBtn" type="button" data-i18n="snImportAll">Import snippetów</button>
+                </div>
+                <input id="snImportFile" type="file" accept=".json,application/json" hidden />
                 <div class="hint" id="snStatus"></div>
               </div>
             </details>
@@ -730,31 +781,31 @@
       <div class="cursor-hint-scaler"><span id="cursorHintText"></span></div>
     </div>
 
-    <script defer src="app/core.js?v=20260928-20"></script>
-    <script defer src="app/language.js?v=20260928-20"></script>
-    <script defer src="app/docx-metadata.js?v=20260928-20"></script>
-    <script defer src="app/docx-patch.js?v=20260928-20"></script>
-    <script defer src="app/template-tokens.js?v=20260928-20"></script>
-    <script defer src="app/docx-run-styles.js?v=20260928-20"></script>
-    <script defer src="app/docx-inline-edit.js?v=20260928-20"></script>
-    <script defer src="app/document.js?v=20260928-20"></script>
-    <script defer src="app/docx-render-fixes.js?v=20260928-20"></script>
-    <script defer src="app/docx-viewer.js?v=20260928-20"></script>
-    <script defer src="app/analysis.js?v=20260928-20"></script>
-    <script defer src="app/structure-panel.js?v=20260928-20"></script>
-    <script defer src="app/grammar-style.js?v=20260928-20"></script>
-    <script defer src="app/placeholders.js?v=20260928-20"></script>
-    <script defer src="app/snippets.js?v=20260928-20"></script>
-    <script defer src="app/edit-tools.js?v=20260928-20"></script>
-    <script defer src="app/mobile-doc-zoom.js?v=20260928-20"></script>
-    <script defer src="app/ui-controls.js?v=20260928-20"></script>
-    <script defer src="app/lazy-features.js?v=20260928-20"></script>
-    <script defer src="app/app-frame.js?v=20260928-20"></script>
-    <script defer src="app/touch.js?v=20260928-20"></script>
-    <script defer src="app/pinch-zoom.js?v=20260928-20"></script>
-    <script defer src="app/undo.js?v=20260928-20"></script>
-    <script defer src="app/view-mode.js?v=20260928-20"></script>
-    <script defer src="app/keyboard.js?v=20260928-20"></script>
-    <script defer src="app/bootstrap.js?v=20260928-20"></script>
+    <script defer src="app/core.js?v=20260928-23"></script>
+    <script defer src="app/language.js?v=20260928-23"></script>
+    <script defer src="app/docx-metadata.js?v=20260928-23"></script>
+    <script defer src="app/docx-patch.js?v=20260928-23"></script>
+    <script defer src="app/template-tokens.js?v=20260928-23"></script>
+    <script defer src="app/docx-run-styles.js?v=20260928-23"></script>
+    <script defer src="app/docx-inline-edit.js?v=20260928-23"></script>
+    <script defer src="app/document.js?v=20260928-23"></script>
+    <script defer src="app/docx-render-fixes.js?v=20260928-23"></script>
+    <script defer src="app/docx-viewer.js?v=20260928-23"></script>
+    <script defer src="app/analysis.js?v=20260928-23"></script>
+    <script defer src="app/structure-panel.js?v=20260928-23"></script>
+    <script defer src="app/grammar-style.js?v=20260928-23"></script>
+    <script defer src="app/placeholders.js?v=20260928-23"></script>
+    <script defer src="app/snippets.js?v=20260928-23"></script>
+    <script defer src="app/edit-tools.js?v=20260928-23"></script>
+    <script defer src="app/mobile-doc-zoom.js?v=20260928-23"></script>
+    <script defer src="app/ui-controls.js?v=20260928-23"></script>
+    <script defer src="app/lazy-features.js?v=20260928-23"></script>
+    <script defer src="app/app-frame.js?v=20260928-23"></script>
+    <script defer src="app/touch.js?v=20260928-23"></script>
+    <script defer src="app/pinch-zoom.js?v=20260928-23"></script>
+    <script defer src="app/undo.js?v=20260928-23"></script>
+    <script defer src="app/view-mode.js?v=20260928-23"></script>
+    <script defer src="app/keyboard.js?v=20260928-23"></script>
+    <script defer src="app/bootstrap.js?v=20260928-23"></script>
   </body>
 </html>

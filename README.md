@@ -32,6 +32,14 @@ Siostrzana aplikacja [Sheet Workbench PWA](../sheet-workbench-pwa/README.md).
   lżejsze efekty na dotyku, **przybliżanie dwoma palcami** (też przy „Dopasuj”: tekst skaluje się
   i dalej zawija; „Dopasuj” wraca do 100%; zakres 35–300%); `?sample=nazwa` otwiera `docs/samples/nazwa.docx`
 
+- **Eksport**: TXT, Markdown, HTML (z Twoimi edycjami: nagłówki, listy, tabele) oraz
+  „Drukuj / zapisz jako PDF” z układem stron jak w podglądzie
+- **Statystyki**: słowa, znaki (ze spacjami i bez), zdania, akapity, tabele, czas czytania,
+  słów na zdanie, najczęstsze słowa, najdłuższe zdania ze skokiem do miejsca, statystyki zaznaczenia
+- **Kopie JSON**: eksport / import snippetów (przeniesienie na inne urządzenie) i wartości pól
+  `{{…}}` (ten sam szablon wypełniany wiele razy); **„Usuń dane osobowe”** w Metadanych
+  (autor, ostatnio zmieniający, opis, temat — przed wysłaniem pliku dalej)
+
 ## Start lokalnie
 
 ```bash
@@ -62,6 +70,7 @@ npm run test:touch    # lekcje z iPhone'a (dotyk)
 npm run test:enter    # szybkie pisanie wokół Enter/Backspace: zapis = podgląd
 npm run test:undo     # Cofnij / Ponów (Chromium + WebKit)
 npm run test:pinch    # przybliżanie dwoma palcami (Chromium + WebKit)
+npm run test:export   # eksport, statystyki, import/eksport JSON, usuwanie danych osobowych
 npm run test:keys     # klawiatura, tryb skupienia, podpowiedzi
 npm run bench         # pomiar wydajności na dużych dokumentach (~100 i ~300 stron, CPU ×4)
 npm run test:stress   # pełny przebieg na dużym .docx (wymaga npm run serve)

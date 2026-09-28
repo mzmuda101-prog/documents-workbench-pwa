@@ -713,7 +713,9 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
 
 /* Mobile reflow — Word-like reading width (preview only, save unchanged) */
 html.is-mobile .doc-canvas.doc-reflow-mode {
-  zoom: 1 !important;
+  /* zoom zostaje (pinch w „Dopasuj”): blok o szerokości auto z zoom dalej wypełnia ekran,
+     a tekst zawija się do węższej szerokości logicznej — bez poziomego przewijania. */
+  zoom: var(--doc-zoom, 1);
   padding: 0;
   min-height: 0;
 }
@@ -1313,3 +1315,14 @@ body.kb-open .section-strip, body.kb-open .status-bar { display: none !important
   .doc-viewport { touch-action: pan-x pan-y; }
 }
 html.is-pinching .doc-viewport { overflow: hidden; }
+
+/* Panel Statystyki */
+.stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.stat-cell { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--field); }
+.stat-cell strong { font-size: 16px; line-height: 1.2; }
+.stat-cell span { font-size: 11px; color: var(--muted); }
+.stat-head { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted-strong); }
+.stat-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; width: 100%; padding: 6px 8px; border: 1px solid var(--border-subtle); border-radius: var(--r-sm); background: var(--field); font: inherit; font-size: 12px; color: var(--ink-2); text-align: left; }
+button.stat-row { cursor: pointer; }
+.stat-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stat-row em { font-style: normal; color: var(--muted); flex-shrink: 0; }

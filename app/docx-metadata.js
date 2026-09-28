@@ -87,6 +87,10 @@ function applyCoreMetadataInXml(xml, fields) {
   if (fields.creator !== undefined && setMetaText(doc, root, "creator", DC_NS, fields.creator)) count++;
   if (fields.keywords !== undefined && setMetaText(doc, root, "keywords", CP_NS, fields.keywords)) count++;
 
+  if (fields.lastModifiedBy !== undefined && setMetaText(doc, root, "lastModifiedBy", CP_NS, fields.lastModifiedBy)) count++;
+  if (fields.description !== undefined && setMetaText(doc, root, "description", DC_NS, fields.description)) count++;
+  if (fields.subject !== undefined && setMetaText(doc, root, "subject", DC_NS, fields.subject)) count++;
+
   if (count > 0) touchCoreModified(doc, root);
   return { xml: new XMLSerializer().serializeToString(doc), count };
 }

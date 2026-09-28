@@ -38,6 +38,8 @@ const state = (page) => page.evaluate(() => ({
   reflow: document.getElementById("docCanvas").classList.contains("doc-reflow-mode"),
   sw: document.getElementById("docViewport").scrollWidth - document.getElementById("docViewport").clientWidth,
   transform: document.getElementById("docZoomShell").style.transform,
+  // to, co widać: wysokość linii tekstu na ekranie (nie tylko zmienna CSS)
+  lineH: (() => { const p = [...document.querySelectorAll(".docx-preview-host p")].find((e) => e.textContent.trim().length > 40); const r = document.createRange(); r.selectNodeContents(p); return r.getClientRects()[0]?.height || 0; })(),
 }));
 
 async function run() {
@@ -67,6 +69,7 @@ async function run() {
   const s1 = await state(page);
   check("rozsunięcie palców przybliża (~2×) mimo Dopasuj", s1.zoom > 1.8 && s1.zoom <= 2.05, JSON.stringify(s1));
   check("zostaje w trybie Dopasuj (tekst zawija się)", s1.mode === "fit" && s1.reflow);
+  check("tekst NA EKRANIE jest ~2× większy (nie tylko zmienna)", s1.lineH > s0.lineH * 1.7, `${s0.lineH} → ${s1.lineH}`);
   check("bez poziomego przewijania po przybliżeniu", s1.sw <= 1, String(s1.sw));
   check("pasek pokazuje procent zamiast „Dopasuj”", /^\d+%$/.test(s1.now), s1.now);
   check("po geście transform tymczasowy zdjęty", s1.transform === "");
@@ -74,6 +77,7 @@ async function run() {
   await pinch(page, 200, 100);
   const s2 = await state(page);
   check("zsunięcie palców wraca do ~1×", Math.abs(s2.zoom - s1.zoom / 2) < 0.1, JSON.stringify(s2));
+  check("tekst na ekranie wraca do pierwotnej wielkości", Math.abs(s2.lineH - s0.lineH) < s0.lineH * 0.15, `${s0.lineH} / ${s2.lineH}`);
 
   await pinch(page, 300, 20);
   const s3 = await state(page);
@@ -81,6 +85,33 @@ async function run() {
   await pinch(page, 20, 600);
   const s4 = await state(page);
   check("góra zakresu 3×", s4.zoom <= 3.001 && s4.zoom >= 2.9, String(s4.zoom));
+
+  // miejsce pod palcami zostaje pod palcami (tekst w „Dopasuj” zawija się na nowo)
+  await page.click("#zoomFitBtn");
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { document.getElementById("docViewport").scrollTop = 400; });
+  await page.waitForTimeout(100);
+  const probe = () => page.evaluate(() => {
+    const r = document.caretRangeFromPoint ? document.caretRangeFromPoint(195, 500) : null;
+    if (r) return r.startContainer.textContent.slice(r.startOffset, r.startOffset + 12);
+    const p = document.caretPositionFromPoint(195, 500);
+    return p.offsetNode.textContent.slice(p.offset, p.offset + 12);
+  });
+  const wordBefore = await probe();
+  const markBefore = await page.evaluate(() => {
+    const r = document.caretRangeFromPoint ? document.caretRangeFromPoint(195, 500) : (() => { const p = document.caretPositionFromPoint(195, 500); const x = document.createRange(); x.setStart(p.offsetNode, p.offset); return x; })();
+    window.__anchorNode = r.startContainer; window.__anchorOff = r.startOffset;
+    return true;
+  });
+  await pinch(page, 100, 200, 195, 500);
+  const drift = await page.evaluate(() => {
+    const r = document.createRange();
+    r.setStart(window.__anchorNode, window.__anchorOff);
+    r.setEnd(window.__anchorNode, Math.min(window.__anchorOff + 1, window.__anchorNode.length));
+    const b = r.getBoundingClientRect();
+    return { dy: Math.round(b.top + b.height / 2 - 500), top: document.getElementById("docViewport").scrollTop };
+  });
+  check("tekst pod palcami zostaje pod palcami (bez skoku na początek)", markBefore && Math.abs(drift.dy) < 60 && drift.top > 400, `${wordBefore} ${JSON.stringify(drift)}`);
 
   await page.click("#zoomFitBtn");
   await page.waitForTimeout(300);
@@ -107,6 +138,7 @@ async function run() {
   await pinch(page, 100, 160, 410, 500);
   const t1 = await state(page);
   check("tablet: pinch zmienia zoom i przechodzi w tryb ręczny", t1.mode === "manual" && t1.zoom > t0.zoom * 1.4, JSON.stringify({ t0: t0.zoom, t1: t1.zoom, mode: t1.mode }));
+  check("tablet: tekst na ekranie faktycznie większy", t1.lineH > t0.lineH * 1.4, `${t0.lineH} → ${t1.lineH}`);
 
   if (errors.length) check("brak błędów strony", false, errors.slice(0, 3).join(" | "));
   await browser.close();

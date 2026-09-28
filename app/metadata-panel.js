@@ -5,6 +5,7 @@ const metaCreatorEl = document.getElementById("metaCreator");
 const metaKeywordsEl = document.getElementById("metaKeywords");
 const metaReloadBtn = document.getElementById("metaReloadBtn");
 const metaApplyBtn = document.getElementById("metaApplyBtn");
+const metaScrubBtn = document.getElementById("metaScrubBtn");
 const metaStatusEl = document.getElementById("metaStatus");
 
 let metadataBaseline = null;
@@ -80,7 +81,20 @@ async function applyMetadataEdit() {
   }
 }
 
+// „Usuń dane osobowe”: autor, ostatnio zmieniający, opis, temat — przed wysłaniem pliku dalej.
+async function scrubPersonalMetadata() {
+  if (!originalFileBytes) { toast(t("noFileToSave"), "warning"); return; }
+  if (!confirm(t("metadataScrubConfirm"))) return;
+  const count = await applyDocumentEdit({
+    op: "coreMetadata",
+    fields: { creator: "", lastModifiedBy: "", description: "", subject: "" },
+  });
+  await loadMetadataFromDocument();
+  toast(count > 0 ? t("metadataScrubbed") : t("metadataScrubNothing"), count > 0 ? "success" : "info");
+}
+
 function wireMetadataPanel() {
+  metaScrubBtn?.addEventListener("click", () => { scrubPersonalMetadata().catch(() => {}); });
   metaReloadBtn?.addEventListener("click", () => { loadMetadataFromDocument().catch(() => {}); });
   metaApplyBtn?.addEventListener("click", () => { applyMetadataEdit().catch(() => {}); });
   [metaTitleEl, metaCreatorEl, metaKeywordsEl].forEach((el) => {

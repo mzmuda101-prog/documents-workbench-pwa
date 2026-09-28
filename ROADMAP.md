@@ -39,7 +39,9 @@ Stan na **v0.2** (lipiec 2026). Ostatnia wersja cache: `20260702-03`.
 
 | **Paczka F — wydajność dużych dokumentów** (`npm run bench`; ~300 stron, CPU ×4: cofnięcie pisania 5,1 s → 0,06 s, szukanie 322 → 135 ms, 1. klawisz 88 → 46 ms, Enter widoczny 243 → 88 ms, otwarcie 5,0 → 4,1 s; wspólna pamięć rozpakowanego pliku, śledzenie zmienionych akapitów (MutationObserver), szybka ścieżka Cofnij, biblioteki dociągane po starcie) | ✅ 2026-09-28 |
 
-| **Paczka G — pinch-zoom** (`app/pinch-zoom.js`: dwa palce przybliżają/oddalają dokument także przy „Dopasuj”, transform w trakcie gestu + zatwierdzenie zoomu po puszczeniu, punkt pod palcami zostaje na miejscu, zakres 35–300%; strażnik `test:pinch`) | ✅ 2026-09-28 |
+| **Paczka G — pinch-zoom** (`app/pinch-zoom.js`: dwa palce przybliżają/oddalają dokument także przy „Dopasuj” — tekst skaluje się i dalej zawija; transform w trakcie gestu + zatwierdzenie zoomu po puszczeniu; miejsce w TEKŚCIE pod palcami zostaje pod palcami; zakres 35–300%; sprawdzone gestem na symulatorze iPhone'a. GOTCHA: `zoom: 1 !important` w trybie Dopasuj po cichu zerował gest — strażnik `test:pinch` mierzy wielkość tekstu na ekranie, nie zmienną) | ✅ 2026-09-28 |
+
+| **Paczka H — eksport i statystyki** (`app/export-panel.js`: TXT/MD/HTML + druk/PDF; `app/stats-panel.js`: liczby, czas czytania, najczęstsze słowa, najdłuższe zdania ze skokiem, zaznaczenie; eksport/import JSON snippetów i wartości pól; „Usuń dane osobowe” w metadanych; strażnik `test:export`) | ✅ 2026-09-28 |
 
 **Plan przenoszenia z Sheet Workbench (A–F) zakończony.** Otwarte tematy: cofnięcie kroku z Enterem nadal rysuje dokument od nowa (~4 s przy 300 stronach); pierwszy układ bardzo długiego dokumentu jest kosztem docx-preview (content-visibility odrzucone — psuje numerację list przez izolację stylów). Później: „Ostatnio otwierane” (tylko Chrome/Edge, uchwyty plików w IndexedDB — lokalnie).
 
@@ -106,7 +108,7 @@ Znane problemy (stan obecny):
 | 3 | **3.3** | Snippety / klauzule | ✅ v1 |
 | 4 | **3.4** | Inspektor z akcjami | ✅ |
 | 5 | **3.5** | Metadane (`docProps`) | ✅ |
-| 6 | **3.6** | Eksport TXT / HTML | **następny** |
+| 6 | **3.6** | Eksport TXT / HTML / MD + druk PDF | ✅ |
 
 ---
 
@@ -119,7 +121,7 @@ Znane problemy (stan obecny):
 3. ~~**Snippety / klauzule**~~ ✅ — `!nazwa`, localStorage, rozwinięcie; snippet może zawierać `{{placeholdery}}`
 4. ~~**Inspektor z akcjami**~~ ✅ — outline w kolejności dokumentu, filtr, skok + podświetlenie, kopiuj, edycja w podglądzie, szybka edycja akapitu
 5. ~~**Metadane**~~ ✅ — `docProps/core.xml` (tytuł, autor, słowa kluczowe); tworzy brakujące części pakietu
-6. **Eksport** — pobranie TXT / HTML (bez backendu)
+6. ~~**Eksport**~~ ✅ — TXT / HTML / Markdown + druk / PDF (bez backendu)
 
 ---
 
@@ -167,7 +169,7 @@ Lokalny, **offline-first** moduł — bez wysyłania tekstu na serwer.
 
 ## Rekomendowany następny krok
 
-**Faza 3.6 — Eksport TXT / HTML** (pobranie bez backendu).
+**Recenzja: komentarze, śledzone zmiany, przypisy** (odczyt + skok, potem Akceptuj/Odrzuć wszystkie). Dalej: Znajdź i zamień v2, „Ostatnio otwierane”, tabele, porównanie dwóch wersji.
 
 ---
 

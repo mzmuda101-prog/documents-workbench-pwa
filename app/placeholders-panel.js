@@ -9,6 +9,9 @@ const phScopeEl = document.getElementById("phScope");
 const phStatusEl = document.getElementById("phStatus");
 const phFormEl = document.getElementById("phForm");
 const phInsertNameEl = document.getElementById("phInsertName");
+const phExportBtn = document.getElementById("phExportBtn");
+const phImportBtn = document.getElementById("phImportBtn");
+const phImportFile = document.getElementById("phImportFile");
 const phInsertBtn = document.getElementById("phInsertBtn");
 
 function escapePhHtml(s) {
@@ -131,7 +134,31 @@ function insertPlaceholderAtCaret() {
   toast(t("placeholdersInserted", { token }), "success");
 }
 
+function exportPlaceholderValues() {
+  const values = collectPlaceholderValues();
+  if (!Object.keys(values).length) { toast(t("placeholdersEmptyValues"), "error"); return; }
+  downloadJsonFile({ app: "documents-workbench", type: "placeholder-values", version: 1, values }, "wartosci-pol.json");
+  toast(t("phExported", { count: Object.keys(values).length }), "success");
+}
+
+// Wartości z pliku trafiają do pól formularza (nie do dokumentu) — resztę robi „Wypełnij”.
+async function importPlaceholderValues() {
+  const data = await pickJsonFile(phImportFile);
+  if (data === null) return;
+  const values = data && data.type === "placeholder-values" && typeof data.values === "object" ? data.values : null;
+  if (!values) { toast(t("importBadFile"), "error"); return; }
+  if (!placeholderScan && originalFileBytes) await runPlaceholderScan();
+  let filled = 0;
+  phFormEl?.querySelectorAll("input[data-ph-name]").forEach((input) => {
+    const v = values[input.dataset.phName];
+    if (v != null && String(v) !== "") { input.value = String(v); filled++; }
+  });
+  toast(t("phImported", { filled, total: Object.keys(values).length }), filled ? "success" : "info");
+}
+
 function wirePlaceholdersPanel() {
+  phExportBtn?.addEventListener("click", exportPlaceholderValues);
+  phImportBtn?.addEventListener("click", () => { importPlaceholderValues().catch(() => {}); });
   phScanBtn?.addEventListener("click", runPlaceholderScan);
   phFillBtn?.addEventListener("click", applyPlaceholderFill);
   phClearBtn?.addEventListener("click", clearPlaceholderPanel);

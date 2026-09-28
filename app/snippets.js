@@ -135,3 +135,45 @@ function buildSnippetExpandMap(triggers, storedMap) {
   });
   return map;
 }
+
+// ── kopia zapasowa / przenoszenie między urządzeniami (JSON) ────────────────
+function downloadJsonFile(obj, name) {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(obj, null, 2)], { type: "application/json;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function pickJsonFile(inputEl) {
+  return new Promise((resolve) => {
+    if (!inputEl) return resolve(null);
+    inputEl.value = "";
+    inputEl.onchange = async () => {
+      const file = inputEl.files?.[0];
+      if (!file) return resolve(null);
+      try { resolve(JSON.parse(await file.text())); } catch (_) { resolve(undefined); }
+    };
+    inputEl.click();
+  });
+}
+
+function buildSnippetsExport() {
+  return { app: "documents-workbench", type: "snippets", version: 1, items: loadSnippets().map(({ name, body }) => ({ name, body })) };
+}
+
+// Zwraca { added, updated } albo null, gdy to nie jest plik snippetów. Scala po nazwie (import nadpisuje).
+function importSnippetsData(data) {
+  const items = Array.isArray(data) ? data : data?.type === "snippets" ? data.items : null;
+  if (!Array.isArray(items)) return null;
+  const existing = new Set(loadSnippets().map((s) => s.name));
+  let added = 0;
+  let updated = 0;
+  items.forEach((it) => {
+    const entry = upsertSnippet(it?.name, it?.body);
+    if (!entry) return;
+    if (existing.has(entry.name)) updated++; else { added++; existing.add(entry.name); }
+  });
+  return { added, updated };
+}
