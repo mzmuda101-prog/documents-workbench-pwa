@@ -50,3 +50,6 @@ Thumbs.db
 
 # ── Deploy (lokalny stan Vercel) ───────────────────────────────
 .vercel/
+
+# ── Czasy testów (runner) ───────────────────────────────────
+.test-timings.json

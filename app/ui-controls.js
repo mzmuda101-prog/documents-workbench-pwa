@@ -280,34 +280,96 @@ function wireFileDrop() {
   });
 }
 
+async function hardRefreshApp() {
+  // Sygnał NATYCHMIAST po kliknięciu — czyszczenie cache i update() potrafią na
+  // telefonie trwać sekundę i dłużej, a bez toastu klik wyglądał na niezłapany.
+  toast(t("cacheRefresh"), "info");
+  try {
+    if ("serviceWorker" in navigator) {
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(registrations.map((registration) => registration.update().catch(() => {})));
+    }
+    if ("caches" in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.filter((key) => key.startsWith("docs-wb-")).map((key) => caches.delete(key).catch(() => false)));
+    }
+  } catch {
+    // cache/SW nie dały się posprzątać — i tak przeładuj, toast już poszedł
+  }
+  window.location.reload();
+}
+
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("./sw.js").then((reg) => {
-    reg.addEventListener("updatefound", () => {
-      const worker = reg.installing;
+  let waitingServiceWorker = null;
+  let refreshingForUpdate = false;
+
+  const showAppUpdate = (worker) => {
+    waitingServiceWorker = worker;
+    if (!appUpdateBtn) return;
+    appUpdateBtn.classList.remove("hidden");
+    toast(t("updateAvailable"), "info");
+  };
+
+  if (appUpdateBtn) {
+    appUpdateBtn.addEventListener("click", () => {
+      if (appUpdateBtn.classList.contains("is-busy")) return;
+      // Najpierw WIDOCZNA zmiana stanu, dopiero potem robota — aktywacja nowego workera
+      // i przeładowanie trwają od kilkuset ms do paru sekund.
+      appUpdateBtn.classList.add("is-busy");
+      appUpdateBtn.setAttribute("aria-busy", "true");
+      appUpdateBtn.disabled = true;
+      appUpdateBtn.textContent = t("refreshingApp");
+      if (!waitingServiceWorker) {
+        hardRefreshApp();
+        return;
+      }
+      // Przeładowanie robi controllerchange (niżej) — dopiero gdy nowy SW przejął stronę.
+      // Dawniej reload szedł od razu i strona wstawała jeszcze pod starym workerem.
+      waitingServiceWorker.postMessage({ type: "SKIP_WAITING" });
+      // Bezpiecznik: gdyby nowy worker nie przejął kontroli, nie zostawiaj wiecznego
+      // „Odświeżam…" — po 4 s twarda ścieżka (czyszczenie cache + reload).
+      window.setTimeout(() => {
+        if (!refreshingForUpdate) hardRefreshApp();
+      }, 4000);
+    });
+  }
+
+  // Strona była JUŻ kontrolowana przy starcie → późniejszy controllerchange = aktualizacja
+  // → przeładuj. Przy pierwszym wejściu controllerchange pochodzi z clients.claim() — to
+  // nie aktualizacja, więc bez zbędnego mignięcia.
+  const hadControllerAtStart = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (refreshingForUpdate || !hadControllerAtStart) return;
+    refreshingForUpdate = true;
+    window.location.reload();
+  });
+
+  // ?v= w adresie SW: każde wydanie = nowy adres = pewne wykrycie aktualizacji.
+  navigator.serviceWorker.register(`./sw.js?v=${APP_BUILD_VERSION}`).then((registration) => {
+    if (registration.waiting && navigator.serviceWorker.controller) showAppUpdate(registration.waiting);
+    registration.addEventListener("updatefound", () => {
+      const worker = registration.installing;
       if (!worker) return;
       worker.addEventListener("statechange", () => {
-        if (worker.state === "installed" && navigator.serviceWorker.controller && appUpdateBtn) {
-          appUpdateBtn.classList.remove("hidden");
-        }
+        if (worker.state === "installed" && navigator.serviceWorker.controller) showAppUpdate(worker);
       });
     });
+    // PWA wznowiona z tła / trzymana otwarta: sprawdzaj nową wersję przy powrocie na
+    // pierwszy plan i co 30 min — inaczej z ikony siedzi się na starym buildzie.
+    const checkForUpdate = () => registration.update().catch(() => {});
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") checkForUpdate();
+    });
+    window.setInterval(checkForUpdate, 30 * 60 * 1000);
   }).catch(() => {});
 }
 
 if (themeToggle) themeToggle.addEventListener("click", toggleTheme);
-if (brandRefresh) brandRefresh.addEventListener("click", () => location.reload());
+if (brandRefresh) brandRefresh.addEventListener("click", hardRefreshApp);
 if (closeDocBtn) closeDocBtn.addEventListener("click", requestCloseDocument);
 const closeDocPanelBtn = document.getElementById("closeDocPanelBtn");
 if (closeDocPanelBtn) closeDocPanelBtn.addEventListener("click", requestCloseDocument);
-if (appUpdateBtn) {
-  appUpdateBtn.addEventListener("click", () => {
-    navigator.serviceWorker.getRegistration().then((reg) => {
-      reg?.waiting?.postMessage({ type: "SKIP_WAITING" });
-      location.reload();
-    });
-  });
-}
 if (loadBtn) loadBtn.addEventListener("click", openFilePicker);
 if (loadSampleBtn) loadSampleBtn.addEventListener("click", loadSampleDocument);
 if (saveBtn) saveBtn.addEventListener("click", saveDocument);

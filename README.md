@@ -36,10 +36,27 @@ npm run build
 ## Testy
 
 ```bash
-npm run serve   # w osobnym terminalu
-npm test        # smoke + roundtrip + fixture + edit-tools
-npm run test:stress   # pełny przebieg na dużym .docx
+npm test              # wszystkie testy, 2 naraz (serwer testów startuje sam, port 7823)
+npm run test:fast     # 5 naraz — szybciej, komputer mocniej pracuje
+npm test -- pwa find  # tylko kroki, których komenda zawiera któreś słowo
+npm run test:serial   # po kolei, jak dawniej
+npm run test:pwa      # service worker: offline, zawieszona sieć, aktualizacja
+npm run test:stress   # pełny przebieg na dużym .docx (wymaga npm run serve)
 ```
+
+Runner nie zatrzymuje się na pierwszym błędzie; to, co padło, powtarza raz pojedynczo
+(przejście za drugim razem = „niestabilny”, wypisany osobno).
+
+## Wydanie nowej wersji
+
+```bash
+npm run release              # podbija wersję (YYYYMMDD-NN) w sw.js, core.js i ?v= w index.html
+npm run release 20261001-02  # albo konkretna wersja
+```
+
+Bez tego telefon z zainstalowaną PWA nie dostanie zmian — pliki z `?v=` są brane
+wprost z cache, a nowy `sw.js` pojawia się tylko przy nowej wersji. Po wydaniu apka
+pokazuje przycisk „Aktualizuj”.
 
 ## Deploy (GitHub + Vercel)
 

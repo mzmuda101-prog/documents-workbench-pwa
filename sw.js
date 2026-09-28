@@ -1,8 +1,12 @@
-const CACHE_VERSION = "20260703-01";
+const CACHE_VERSION = "20260928-01";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
-const ASSET_V = "20260703-01";
+// Spięte z CACHE_VERSION (nie osobna stała) — inaczej `npm run release` podbija tylko
+// CACHE_VERSION i ?v= w index.html, a precache celuje w adresy, o które strona już nie prosi.
+const ASSET_V = CACHE_VERSION;
+// Po tylu ms bez odpowiedzi sieci start idzie z cache (patrz handler nawigacji).
+const NAVIGATION_TIMEOUT_MS = 3000;
 
 const SHELL_ASSETS = [
   "./",
@@ -44,7 +48,7 @@ const SHELL_ASSETS = [
   `./app/metadata-panel.js?v=${ASSET_V}`,
 ];
 
-// [EN] Large libs + media — separate bucket; still precached for offline after install
+// Ciężkie biblioteki + film intro — osobny kubełek, dogrywany PO aktywacji (niżej).
 const HEAVY_ASSETS = [
   "./lib/jszip.min.js",
   "./lib/docx-preview.bundle.js",
@@ -60,19 +64,46 @@ function isHeavyAsset(url) {
     || /\/assets\/media\/mateusz-intro\.mp4$/i.test(url.pathname);
 }
 
+// Lokalnie (npm run dev) pliki zmieniają się bez podbicia ?v=, więc tam zostaje
+// stale-while-revalidate — inaczej po edycji widać by było stary kod aż do release.
+function isImmutableAsset(url) {
+  if (/^(?:localhost|127\.0\.0\.1|\[::1\])$/.test(self.location.hostname)) return false;
+  return url.searchParams.has("v");
+}
+
 function cacheNameForUrl(url) {
   if (isHeavyAsset(url)) return HEAVY_CACHE;
   return RUNTIME_CACHE;
 }
 
+// Instalacja pobiera TYLKO lekką powłokę. Ciężkie zasoby (docx-preview, jszip, film
+// intro ~1,6 MB) szły wcześniej w tej samej paczce — czyli zaraz po każdej aktualizacji
+// telefon ściągał kilka megabajtów dokładnie wtedy, gdy użytkownik otwiera dokument.
+// Teraz dogrywamy je po aktywacji, z opóźnieniem; gdyby SW został w międzyczasie
+// uśpiony — i tak trafią do cache przy pierwszym użyciu (handler fetch niżej).
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    Promise.all([
-      caches.open(APP_CACHE).then((cache) => cache.addAll(SHELL_ASSETS)),
-      caches.open(HEAVY_CACHE).then((cache) => cache.addAll(HEAVY_ASSETS)),
-    ]).catch(() => {})
+    caches.open(APP_CACHE).then((cache) => cache.addAll(SHELL_ASSETS)).catch(() => {})
   );
 });
+
+function precacheHeavyAssetsLater(delayMs = 8000) {
+  return new Promise((resolve) => {
+    setTimeout(async () => {
+      try {
+        const cache = await caches.open(HEAVY_CACHE);
+        for (const asset of HEAVY_ASSETS) {
+          // Pojedynczo i sekwencyjnie — równoległe addAll potrafi zapchać łącze telefonu.
+          if (await cache.match(asset)) continue;
+          try { await cache.add(asset); } catch (_) { /* dogramy przy pierwszym użyciu */ }
+        }
+      } catch (_) {
+        // brak miejsca / tryb prywatny — zostaje ścieżka „cache przy pierwszym użyciu"
+      }
+      resolve();
+    }, delayMs);
+  });
+}
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
@@ -85,6 +116,8 @@ self.addEventListener("activate", (event) => {
     )
   );
   self.clients.claim();
+  // Ciężkie zasoby dogrywamy po chwili, już poza ścieżką krytyczną startu.
+  event.waitUntil(precacheHeavyAssetsLater());
 });
 
 self.addEventListener("message", (event) => {
@@ -98,14 +131,49 @@ self.addEventListener("fetch", (event) => {
   const sameOrigin = reqUrl.origin === self.location.origin;
 
   if (request.mode === "navigate") {
+    // Sieć najpierw (świeży index.html), ale z LIMITEM czasu. Bez niego przy słabym
+    // zasięgu („jest kreska, a nic nie przechodzi") start z ikony wisiał na białym
+    // ekranie nawet kilkadziesiąt sekund, choć cała apka leży w cache. Po limicie
+    // podajemy stronę z cache; żądanie leci dalej w tle i odświeża cache na następny raz.
+    const network = fetch(request).then((response) => {
+      if (response && response.ok) {
+        const copy = response.clone();
+        caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, copy)).catch(() => {});
+      }
+      return response;
+    });
+    const fromCache = async () => (await caches.match(request)) || caches.match("./index.html");
+    event.respondWith(new Promise((resolve) => {
+      let settled = false;
+      const finish = (res) => { if (!settled && res) { settled = true; resolve(res); } };
+      const timer = setTimeout(async () => {
+        const cached = await fromCache();
+        if (cached) finish(cached);
+      }, NAVIGATION_TIMEOUT_MS);
+      network
+        .then((res) => { clearTimeout(timer); finish(res); })
+        .catch(async () => {
+          clearTimeout(timer);
+          const cached = await fromCache();
+          finish(cached || Response.error());
+        });
+    }));
+    event.waitUntil(network.catch(() => {}));
+    return;
+  }
+
+  if (sameOrigin && isStaticAsset(reqUrl) && isImmutableAsset(reqUrl)) {
+    // Plik z wersją w adresie (?v=…) nigdy się nie zmienia — nowa wersja apki to nowy
+    // adres. Dawniej każdy start dopytywał sieć o ~25 takich plików; teraz z cache,
+    // a sieć tylko gdy pliku w cache brak.
     event.respondWith(
-      fetch(request)
-        .then((response) => {
+      caches.match(request).then((cached) => cached || fetch(request).then((response) => {
+        if (response && response.ok) {
           const copy = response.clone();
-          caches.open(RUNTIME_CACHE).then((c) => c.put(request, copy)).catch(() => {});
-          return response;
-        })
-        .catch(async () => (await caches.match(request)) || caches.match("./index.html"))
+          caches.open(cacheNameForUrl(reqUrl)).then((cache) => cache.put(request, copy)).catch(() => {});
+        }
+        return response;
+      }))
     );
     return;
   }
@@ -117,8 +185,7 @@ self.addEventListener("fetch", (event) => {
           .then((response) => {
             if (response && response.ok) {
               const copy = response.clone();
-              const bucket = isHeavyAsset(reqUrl) ? HEAVY_CACHE : cacheNameForUrl(reqUrl);
-              caches.open(bucket).then((c) => c.put(request, copy)).catch(() => {});
+              caches.open(cacheNameForUrl(reqUrl)).then((c) => c.put(request, copy)).catch(() => {});
             }
             return response;
           })

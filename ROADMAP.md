@@ -27,6 +27,10 @@ Stan na **v0.2** (lipiec 2026). Ostatnia wersja cache: `20260702-03`.
 | **Faza 3.4 — Inspektor z akcjami** (outline, filtr, skok, szybka edycja) | ✅ |
 | **Faza 3.5 — Metadane** (`docProps/core.xml`: tytuł, autor, słowa kluczowe) | ✅ |
 
+| **Paczka A — fundament z Sheet Workbench** (SW: limit nawigacji 3 s, `?v=` z cache, ciężkie zasoby po aktywacji; przycisk „Aktualizuj” czeka na nowy SW; `npm run release`; równoległy `npm test`; strażnik `test:pwa`) | ✅ 2026-09-28 |
+
+**Dalej (przenoszenie z Sheet Workbench):** B rama ekranu (nagłówek z nazwą pliku i „Zapisz”, menu ⋯, panel obok dokumentu ≥1024 px — dziś scrim zakrywa też nagłówek) → C dotyk/iOS → D Cofnij/Ponów → E klawiatura + cursor-hint → F wydajność dużych dokumentów.
+
 **Poza pierwotnym planem (ale wartościowe):** … edycja inline ze stylami runów + rozmiar czcionki, zoom 0.5–2.
 
 ---
