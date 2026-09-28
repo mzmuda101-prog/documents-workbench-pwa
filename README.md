@@ -15,6 +15,11 @@ Siostrzana aplikacja [Sheet Workbench PWA](../sheet-workbench-pwa/README.md).
 - Zapis: w miejscu (FSA) lub „Zapisz jako” / pobranie
 - PWA: service worker, tryb offline po pierwszym załadowaniu
 - PL / EN, jasny / ciemny motyw
+- **Rama ekranu jak w Sheet Workbench**: nazwa pliku i „Zapisz” z liczbą zmian w nagłówku
+  (Ctrl/⌘+S), menu ⋯ (język, motyw, odświeżenie, inne aplikacje), panel obok dokumentu
+  od 1024 px z „Znajdź ustawienie…”, pasek nad dokumentem (szukanie ↑↓, Czytanie/Edycja,
+  B/I/U, zoom), skróty sekcji z nagłówków Worda (też polskich stylów; da się schować),
+  zwijany nagłówek na telefonie, upuszczanie pliku w dowolnym miejscu okna
 
 ## Start lokalnie
 

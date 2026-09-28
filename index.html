@@ -16,7 +16,7 @@
     <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png" />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin.woff2" crossorigin />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin-ext.woff2" crossorigin />
-    <link rel="stylesheet" href="styles/app.css?v=20260928-01" />
+    <link rel="stylesheet" href="styles/app.css?v=20260928-07" />
   </head>
   <body>
     <div class="hero-overlay" id="heroSplash">
@@ -34,44 +34,80 @@
             </svg>
           </div>
           <div class="hero-info">
-            <div class="hero-title">Documents Workbench</div>
+            <!-- Przed wczytaniem: nazwa apki + opis. Po wczytaniu (klasa has-file na .hero):
+                 nazwa PLIKU i jedna linia o nim — od razu widać, co jest otwarte. -->
+            <div class="hero-title" id="heroTitle">Documents Workbench</div>
             <div class="hero-sub" data-i18n="description">Lokalne przeglądanie, edycja i analiza dokumentów Word</div>
+            <div class="hero-meta" id="heroMeta"></div>
           </div>
         </div>
         <div class="hero-right">
-          <button class="panel-toggle" id="panelToggle" type="button">Panel</button>
-          <div class="lang-switch" role="group" aria-label="Language" id="langSwitch">
-            <span class="lang-switch-indicator" aria-hidden="true"></span>
-            <button class="lang-button is-active" type="button" data-lang="pl" aria-pressed="true">PL</button>
-            <button class="lang-button" type="button" data-lang="en" aria-pressed="false">EN</button>
-          </div>
-          <div class="hero-badges">
-            <span class="hero-badge pwa-badge">PWA</span>
-            <span class="hero-badge network-badge" id="networkBadge">Online</span>
-          </div>
-          <button class="theme-toggle" id="themeToggle" type="button" aria-label="Theme"></button>
-          <button class="logo-badge" id="brandRefresh" type="button" aria-label="Refresh">
-            <svg class="refresh-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-              <path d="M21 3v5h-5" />
-              <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
-              <path d="M3 21v-5h5" />
-            </svg>
-          </button>
-          <button class="icon-btn doc-close-btn hidden" id="closeDocBtn" type="button" data-i18n-aria="closeDocAria" aria-label="Zamknij dokument">
-            <svg class="doc-close-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
-              <path d="M18 6L6 18" /><path d="M6 6l12 12" />
-            </svg>
-          </button>
           <button class="app-update-btn hidden" id="appUpdateBtn" type="button" data-i18n="updateApp">Aktualizuj</button>
+          <button class="hero-save" id="heroSaveBtn" type="button" hidden data-i18n-aria="heroSave" aria-label="Zapisz">
+            <span class="hero-save-label" data-i18n="save">Zapisz</span><span class="hero-save-count" id="heroSaveCount" hidden></span>
+          </button>
+          <button class="app-menu-btn" id="appMenuBtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="appMenu" data-i18n-aria="appMenuAria" aria-label="Menu aplikacji">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+          </button>
+          <!-- Menu ⋯ — rzadko używane rzeczy, które dotąd stały na wierzchu (7 kontrolek).
+               Elementy zachowują swoje id, więc ich dotychczasowa obsługa działa bez zmian.
+               app-frame.js przenosi menu do <body> (nagłówek ma backdrop-filter). -->
+          <div class="app-menu" id="appMenu" hidden>
+            <div class="app-menu-row">
+              <span data-i18n="menuLang">Język</span>
+              <div class="lang-switch" role="group" aria-label="Language" id="langSwitch">
+                <span class="lang-switch-indicator" aria-hidden="true"></span>
+                <button class="lang-button is-active" type="button" data-lang="pl" aria-pressed="true">PL</button>
+                <button class="lang-button" type="button" data-lang="en" aria-pressed="false">EN</button>
+              </div>
+            </div>
+            <div class="app-menu-row">
+              <span data-i18n="menuTheme">Motyw</span>
+              <button class="theme-toggle" id="themeToggle" type="button" data-i18n-aria="themeAria" aria-label="Zmień motyw"></button>
+            </div>
+            <button class="app-menu-item" id="brandRefresh" type="button">
+              <span class="app-menu-item-text" data-i18n="menuRefresh">Odśwież aplikację</span><span aria-hidden="true">↻</span>
+            </button>
+            <button class="app-menu-item hidden" id="closeDocBtn" type="button">
+              <span class="app-menu-item-text" data-i18n="closeDoc">Zamknij dokument</span><span aria-hidden="true">✕</span>
+            </button>
+            <div class="app-menu-sep" role="separator"></div>
+            <div class="app-menu-cap" data-i18n="menuOtherApps">Inne aplikacje</div>
+            <a class="app-menu-item" href="https://excel-workbench-pwa.vercel.app" target="_blank" rel="noopener">
+              <span class="app-menu-app-icon" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 4v16"/></svg></span>
+              <span class="app-menu-item-text">Sheet Workbench</span><span aria-hidden="true">↗</span>
+            </a>
+            <div class="app-menu-sep" role="separator"></div>
+            <div class="app-menu-state hero-badges">
+              <span class="hero-badge pwa-badge">PWA</span>
+              <span class="hero-badge network-badge" id="networkBadge">Online</span>
+              <span class="app-menu-build" id="appMenuBuild"></span>
+            </div>
+          </div>
         </div>
       </header>
+      <!-- Telefon: przewinięcie dokumentu zwija nagłówek do tego uchwytu; tap = rozwiń. -->
+      <button class="hero-grip" id="heroGrip" type="button" data-i18n-aria="heroGripAria" aria-label="Rozwiń nagłówek"><span class="hero-grip-bar" aria-hidden="true"></span></button>
 
       <div class="workspace">
-        <aside class="sidebar" aria-label="Tools panel">
-          <section class="sidebar-group" id="group-data">
+        <aside class="sidebar" id="toolsPanel" aria-label="Tools panel">
+          <!-- Pasek ze szukajką stoi w miejscu, przewija się tylko .sidebar-scroll (bez sticky —
+               sticky w przewijanym, wysuwanym panelu rozjeżdża trafianie dotykiem na iOS). -->
+          <div class="sidebar-top">
+            <label class="sidebar-finder">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input id="sidebarFinder" type="search" autocomplete="off" data-i18n-placeholder="finderPlaceholder" placeholder="Znajdź ustawienie…" data-i18n-aria="finderPlaceholder" aria-label="Znajdź ustawienie…" />
+              <button class="sidebar-finder-clear" id="sidebarFinderClear" type="button" hidden data-i18n-aria="finderClear" aria-label="Wyczyść">×</button>
+            </label>
+            <button class="sidebar-close" id="sidebarCloseBtn" type="button" data-i18n-aria="panelOpen" aria-label="Schowaj panel">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
+            </button>
+          </div>
+          <div class="sidebar-scroll">
+          <p class="sidebar-finder-empty" id="sidebarFinderEmpty" hidden data-i18n="finderEmpty">Nic nie pasuje — spróbuj innego słowa.</p>
+          <section class="sidebar-group" id="group-file">
             <div class="sidebar-group-head">
-              <span class="sidebar-group-title" id="group-data-title" data-i18n="groupData">Dane</span>
+              <span class="sidebar-group-title" data-i18n="groupFile">Plik</span>
             </div>
             <details class="panel" id="panel-file" open>
               <summary>
@@ -114,7 +150,6 @@
                 <button class="btn doc-close-panel-btn hidden" id="closeDocPanelBtn" type="button" data-i18n="closeDoc">Zamknij dokument</button>
               </div>
             </details>
-
             <details class="panel" id="panel-metadata">
               <summary>
                 <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -145,113 +180,11 @@
                 <div class="hint" id="metaStatus"></div>
               </div>
             </details>
-
-            <details class="panel" id="panel-view">
-              <summary>
-                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-                <span class="panel-title" data-i18n="viewPanel">Narzędzia i widok</span>
-                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
-              </summary>
-              <div class="panel-body stack">
-                <label class="field" id="zoomSliderField">
-                  <span data-i18n="zoomLabel">Powiększenie</span>
-                  <input id="zoomLevel" type="range" min="0.5" max="2" step="0.05" value="1" aria-describedby="zoomValue" />
-                  <span class="zoom-value" id="zoomValue">100%</span>
-                </label>
-                <p class="hint" id="zoomReflowHint" data-i18n="zoomReflowHint" hidden></p>
-                <div class="btn-row">
-                  <button type="button" id="zoomFitBtn" class="btn" data-i18n="zoomFit">Dopasuj do ekranu</button>
-                  <button type="button" id="zoomResetBtn" class="btn" data-i18n="zoomReset">Układ strony</button>
-                </div>
-                <label class="field checkbox">
-                  <input id="readMode" type="checkbox" checked />
-                  <span data-i18n="readModeOn">Tylko odczyt</span>
-                </label>
-                <p class="hint" id="inlineEditHint" data-i18n="inlineEditHint"></p>
-                <div class="format-toolbar hidden" id="formatToolbar">
-                  <div class="btn-row">
-                    <button type="button" class="btn format-btn" id="fmtBold" title="Ctrl+B"><b>B</b></button>
-                    <button type="button" class="btn format-btn" id="fmtItalic" title="Ctrl+I"><i>I</i></button>
-                    <button type="button" class="btn format-btn" id="fmtUnderline" title="Ctrl+U"><u>U</u></button>
-                  </div>
-                  <label class="field format-size-field">
-                    <span data-i18n="fmtFontSizeLabel">Rozmiar czcionki</span>
-                    <select id="fmtFontSize">
-                      <option value="" data-i18n="fmtFontSizeInherit">Jak w akapicie</option>
-                      <option value="9">9 pt</option>
-                      <option value="10">10 pt</option>
-                      <option value="11">11 pt</option>
-                      <option value="12">12 pt</option>
-                      <option value="14">14 pt</option>
-                      <option value="16">16 pt</option>
-                      <option value="18">18 pt</option>
-                      <option value="20">20 pt</option>
-                      <option value="24">24 pt</option>
-                      <option value="28">28 pt</option>
-                      <option value="36">36 pt</option>
-                    </select>
-                  </label>
-                </div>
-              </div>
-            </details>
-
-            <details class="panel" id="panel-help">
-              <summary>
-                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-                  <line x1="12" y1="17" x2="12.01" y2="17" />
-                </svg>
-                <span class="panel-title" data-i18n="helpPanel">Skróty i informacje</span>
-                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
-              </summary>
-              <div class="panel-body stack stack-tight help-panel">
-                <section class="help-section">
-                  <h4 class="help-heading" data-i18n="helpPhTitle">Placeholdery</h4>
-                  <p class="help-text" data-i18n="helpPhIntro">Szablony z polami do wypełnienia — bez ręcznego szukania w tekście.</p>
-                  <ul class="help-list">
-                    <li data-i18n="helpPhItem1">Składnia: {{nazwa}} — litery, cyfry, _, -, . (spacje w nawiasach są OK)</li>
-                    <li data-i18n="helpPhItem2">Skanuj pola → wpisz wartości → Wypełnij → Zapisz</li>
-                    <li data-i18n="helpPhItem3">Puste pola w formularzu są pomijane</li>
-                    <li data-i18n="helpPhItem4">Ten sam {{pole}} w wielu miejscach — jedna wartość wszędzie</li>
-                    <li data-i18n="helpPhItem5">Przykład: Umowa z {{imie}} {{nazwisko}}, data {{data}}.</li>
-                    <li data-i18n="helpPhItem6">Opcjonalnie po snippetach: najpierw Rozwiń !snippety, potem Wypełnij {{placeholdery}}</li>
-                    <li data-i18n="helpPhItem7">Panel Placeholdery → Wstaw {{pole}} wstawia token w kursorze</li>
-                  </ul>
-                </section>
-                <section class="help-section">
-                  <h4 class="help-heading" data-i18n="helpSnTitle">Snippety !nazwa</h4>
-                  <p class="help-text" data-i18n="helpSnIntro">Wstawiane bloki tekstu — bezpieczniejsze z prefiksem ! niż zwykłe słowo.</p>
-                  <ul class="help-list">
-                    <li data-i18n="helpSnItem1">W dokumencie wpisz !testowysnippet + spacja — przy trybie Auto rozwija się od razu</li>
-                    <li data-i18n="helpSnItem2">Snippet może zawierać {{placeholdery}} — rozwiń snippet, potem wypełnij pola</li>
-                    <li data-i18n="helpSnItem3">Zapisz własny snippet w panelu, użyj Wstaw !trigger lub wpisz ręcznie</li>
-                    <li data-i18n="helpSnItem4">Tryb ręczny: Skanuj → Rozwiń w dokumencie · Tryb auto: po !nazwa + spacja/interpunkcja</li>
-                    <li data-i18n="helpSnItem5">Dynamiczne tokeny w treści: {date} {time} {datetime} {day} (jak Raycast)</li>
-                  </ul>
-                </section>
-                <section class="help-section">
-                  <h4 class="help-heading" data-i18n="helpEditTitle">Edycja w podglądzie</h4>
-                  <p class="help-text" data-i18n="inlineEditHint">Enter — akapit · Shift+Enter — linia · Backspace — scal · Tab — lista · Ctrl+Tab — nagłówek · Ctrl+B/I/U — styl</p>
-                </section>
-                <section class="help-section">
-                  <h4 class="help-heading" data-i18n="helpFrTitle">Znajdź i zamień</h4>
-                  <p class="help-text" data-i18n="helpFrText">Skanuj trafienia przed zamianą; „Zamień bieżące” lub „Zamień wszystkie”.</p>
-                </section>
-                <section class="help-section">
-                  <h4 class="help-heading" data-i18n="helpGrammarTitle">Korekta</h4>
-                  <p class="help-text" data-i18n="helpGrammarText">Offline — podwójne spacje, interpunkcja, cudzysłowy PL i inne reguły typografii.</p>
-                </section>
-              </div>
-            </details>
           </section>
 
-          <section class="sidebar-group" id="group-tools">
+          <section class="sidebar-group" id="group-edit">
             <div class="sidebar-group-head">
-              <span class="sidebar-group-title" id="group-tools-title" data-i18n="groupTools">Analiza i edycja</span>
+              <span class="sidebar-group-title" data-i18n="groupEdit">Edycja</span>
             </div>
             <details class="panel" id="panel-search">
               <summary>
@@ -263,10 +196,7 @@
                 <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
               </summary>
               <div class="panel-body stack">
-                <label class="field">
-                  <span data-i18n="editFindLabel">Szukaj</span>
-                  <input id="searchQuery" type="search" autocomplete="off" />
-                </label>
+                <p class="hint" data-i18n="frSearchInToolbar">Szukaną frazę wpisujesz w polu nad dokumentem (Enter, ↑ ↓). Tu: zamiana i opcje.</p>
                 <label class="field">
                   <span data-i18n="editReplaceLabel">Zamień na</span>
                   <input id="frReplace" type="text" autocomplete="off" />
@@ -290,10 +220,6 @@
                   </select>
                 </label>
                 <div class="btn-row">
-                  <button class="btn" id="frPrevBtn" type="button" data-i18n="frPrev">Poprzednie</button>
-                  <button class="btn" id="frNextBtn" type="button" data-i18n="frNext">Następne</button>
-                </div>
-                <div class="btn-row">
                   <button class="btn primary" id="frScanBtn" type="button" data-i18n="frScan">Szukaj</button>
                   <button class="btn hidden" id="searchHighlightBtn" type="button" data-i18n="searchHighlight">Podświetl</button>
                 </div>
@@ -306,7 +232,6 @@
                 <div id="frPreview" class="fr-preview"></div>
               </div>
             </details>
-
             <details class="panel" id="panel-grammar">
               <summary>
                 <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -339,152 +264,6 @@
                 </div>
               </div>
             </details>
-
-            <details class="panel" id="panel-placeholders">
-              <summary>
-                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <rect x="3" y="5" width="18" height="14" rx="2" />
-                  <path d="M7 9h.01M7 13h10" />
-                </svg>
-                <span class="panel-title" data-i18n="placeholdersPanel">Placeholdery</span>
-                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
-              </summary>
-              <div class="panel-body stack">
-                <label class="field">
-                  <span data-i18n="editScopeLabel">Zakres</span>
-                  <select id="phScope">
-                    <option value="all" data-i18n="editScopeAll">Cały dokument</option>
-                    <option value="body" data-i18n="editScopeBody">Treść główna</option>
-                  </select>
-                </label>
-                <p class="hint" data-i18n="placeholdersHint">Samodzielne pola {{nazwa}} — wpisz w dokumencie lub użyj „Wstaw {{pole}}”, potem Skanuj → Wypełnij. Nie wymagają snippetów.</p>
-                <label class="field">
-                  <span data-i18n="placeholdersInsertLabel">Nazwa pola</span>
-                  <input id="phInsertName" type="text" autocomplete="off" placeholder="imie" />
-                </label>
-                <div class="btn-row">
-                  <button class="btn" id="phInsertBtn" type="button" data-i18n="placeholdersInsert">Wstaw {{pole}}</button>
-                </div>
-                <div class="btn-row stack-divider">
-                  <button class="btn primary" id="phScanBtn" type="button" data-i18n="placeholdersScan">Skanuj pola</button>
-                </div>
-                <div class="hint" id="phStatus"></div>
-                <div id="phForm" class="stack stack-tight ph-form"></div>
-                <div class="btn-row">
-                  <button class="btn" id="phFillBtn" type="button" data-i18n="placeholdersFill">Wypełnij</button>
-                  <button class="btn" id="phClearBtn" type="button" data-i18n="placeholdersClear">Wyczyść</button>
-                </div>
-              </div>
-            </details>
-
-            <details class="panel" id="panel-snippets">
-              <summary>
-                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z" />
-                  <polyline points="14 3 14 8 19 8" />
-                  <line x1="8" y1="13" x2="16" y2="13" />
-                  <line x1="8" y1="17" x2="13" y2="17" />
-                </svg>
-                <span class="panel-title" data-i18n="snippetsPanel">Snippety</span>
-                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
-              </summary>
-              <div class="panel-body stack">
-                <p class="hint" data-i18n="snippetsHint">Używaj prefiksu ! w dokumencie, np. !testowysnippet — unikasz przypadkowych dopasowań.</p>
-                <label class="field">
-                  <span data-i18n="snippetsNameLabel">Nazwa (w dokumencie: !nazwa)</span>
-                  <input id="snName" type="text" autocomplete="off" placeholder="testowysnippet" />
-                </label>
-                <label class="field">
-                  <span data-i18n="snippetsBodyLabel">Treść bloku</span>
-                  <textarea id="snBody" rows="4" placeholder="{{imie}} {{nazwisko}}"></textarea>
-                </label>
-                <p class="hint" data-i18n="snippetsDynamicHint">W treści snippetu: {date} {time} {datetime} {day} — data/czas przy rozwinięciu (inspiracja Raycast).</p>
-                <div class="btn-row">
-                  <button class="btn primary" id="snSaveBtn" type="button" data-i18n="snippetsSave">Zapisz snippet</button>
-                  <button class="btn" id="snInsertBtn" type="button" data-i18n="snippetsInsert">Wstaw treść</button>
-                  <button class="btn" id="snInsertTriggerBtn" type="button" data-i18n="snippetsInsertTrigger">Wstaw !trigger</button>
-                </div>
-                <label class="field stack-divider">
-                  <span data-i18n="snippetsExpandModeLabel">Rozwijanie w edycji</span>
-                  <select id="snExpandMode">
-                    <option value="manual" data-i18n="snippetsExpandManual">Ręcznie (przycisk Rozwiń)</option>
-                    <option value="auto" data-i18n="snippetsExpandAuto">Auto po !nazwa + spacja lub interpunkcja</option>
-                  </select>
-                </label>
-                <div id="snList" class="stack stack-tight snippet-list"></div>
-                <label class="field stack-divider">
-                  <span data-i18n="editScopeLabel">Zakres rozwinięcia</span>
-                  <select id="snScope">
-                    <option value="all" data-i18n="editScopeAll">Cały dokument</option>
-                    <option value="body" data-i18n="editScopeBody">Treść główna</option>
-                  </select>
-                </label>
-                <div class="btn-row">
-                  <button class="btn" id="snScanBtn" type="button" data-i18n="snippetsScan">Skanuj !triggery</button>
-                  <button class="btn" id="snExpandBtn" type="button" data-i18n="snippetsExpand">Rozwiń w dokumencie</button>
-                </div>
-                <div class="hint" id="snStatus"></div>
-              </div>
-            </details>
-
-            <details class="panel" id="panel-structure">
-              <summary>
-                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                  <line x1="8" y1="6" x2="21" y2="6" />
-                  <line x1="8" y1="12" x2="21" y2="12" />
-                  <line x1="8" y1="18" x2="21" y2="18" />
-                  <line x1="3" y1="6" x2="3.01" y2="6" />
-                  <line x1="3" y1="12" x2="3.01" y2="12" />
-                  <line x1="3" y1="18" x2="3.01" y2="18" />
-                </svg>
-                <span class="panel-title" data-i18n="structurePanel">Struktura</span>
-                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
-              </summary>
-              <div class="panel-body stack">
-                <div id="structureSummary"></div>
-                <label class="field">
-                  <span data-i18n="structureSearchLabel">Szukaj w strukturze</span>
-                  <input id="structureSearch" type="search" autocomplete="off" data-i18n-placeholder="structureSearchPlaceholder" placeholder="fraza w nagłówku lub akapicie…" />
-                </label>
-                <div class="structure-toolbar">
-                  <label class="field structure-toolbar-field">
-                    <span data-i18n="structureFilterLabel">Pokaż</span>
-                    <select id="structureFilter">
-                      <option value="all" data-i18n="structureFilterAll">Wszystko</option>
-                      <option value="headings" data-i18n="structureFilterHeadings">Nagłówki</option>
-                      <option value="paragraphs" data-i18n="structureFilterParagraphs">Akapity</option>
-                      <option value="tables" data-i18n="structureFilterTables">Tabele</option>
-                    </select>
-                  </label>
-                  <label class="field structure-toolbar-field">
-                    <span data-i18n="structurePageSizeLabel">Na stronie</span>
-                    <select id="structurePageSize">
-                      <option value="10">10</option>
-                      <option value="20" selected>20</option>
-                      <option value="30">30</option>
-                      <option value="40">40</option>
-                    </select>
-                  </label>
-                </div>
-                <div class="structure-pager btn-row">
-                  <button class="btn" id="structurePrevPage" type="button" data-i18n="structurePrevPage">Poprzednia</button>
-                  <span class="structure-page-info hint" id="structurePageInfo" aria-live="polite"></span>
-                  <button class="btn" id="structureNextPage" type="button" data-i18n="structureNextPage">Następna</button>
-                </div>
-                <div id="structureOutline" class="structure-outline" aria-live="polite"></div>
-                <div id="structureQuickEdit" class="structure-quick-edit hidden">
-                  <label class="field">
-                    <span data-i18n="structureQuickEditLabel">Szybka edycja akapitu</span>
-                    <textarea id="structureQuickEditText" rows="3" autocomplete="off"></textarea>
-                  </label>
-                  <div class="btn-row">
-                    <button class="btn primary" id="structureQuickApplyBtn" type="button" data-i18n="structureQuickApply">Zastosuj</button>
-                    <button class="btn" id="structureQuickFocusBtn" type="button" data-i18n="structureQuickFocus">Edytuj w podglądzie</button>
-                  </div>
-                </div>
-              </div>
-            </details>
-
             <details class="panel" id="panel-edit-tools">
               <summary>
                 <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -559,6 +338,248 @@
               </div>
             </details>
           </section>
+
+          <section class="sidebar-group" id="group-templates">
+            <div class="sidebar-group-head">
+              <span class="sidebar-group-title" data-i18n="groupTemplates">Szablony</span>
+            </div>
+            <details class="panel" id="panel-placeholders">
+              <summary>
+                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <rect x="3" y="5" width="18" height="14" rx="2" />
+                  <path d="M7 9h.01M7 13h10" />
+                </svg>
+                <span class="panel-title" data-i18n="placeholdersPanel">Placeholdery</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
+              </summary>
+              <div class="panel-body stack">
+                <label class="field">
+                  <span data-i18n="editScopeLabel">Zakres</span>
+                  <select id="phScope">
+                    <option value="all" data-i18n="editScopeAll">Cały dokument</option>
+                    <option value="body" data-i18n="editScopeBody">Treść główna</option>
+                  </select>
+                </label>
+                <p class="hint" data-i18n="placeholdersHint">Samodzielne pola {{nazwa}} — wpisz w dokumencie lub użyj „Wstaw {{pole}}”, potem Skanuj → Wypełnij. Nie wymagają snippetów.</p>
+                <label class="field">
+                  <span data-i18n="placeholdersInsertLabel">Nazwa pola</span>
+                  <input id="phInsertName" type="text" autocomplete="off" placeholder="imie" />
+                </label>
+                <div class="btn-row">
+                  <button class="btn" id="phInsertBtn" type="button" data-i18n="placeholdersInsert">Wstaw {{pole}}</button>
+                </div>
+                <div class="btn-row stack-divider">
+                  <button class="btn primary" id="phScanBtn" type="button" data-i18n="placeholdersScan">Skanuj pola</button>
+                </div>
+                <div class="hint" id="phStatus"></div>
+                <div id="phForm" class="stack stack-tight ph-form"></div>
+                <div class="btn-row">
+                  <button class="btn" id="phFillBtn" type="button" data-i18n="placeholdersFill">Wypełnij</button>
+                  <button class="btn" id="phClearBtn" type="button" data-i18n="placeholdersClear">Wyczyść</button>
+                </div>
+              </div>
+            </details>
+            <details class="panel" id="panel-snippets">
+              <summary>
+                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z" />
+                  <polyline points="14 3 14 8 19 8" />
+                  <line x1="8" y1="13" x2="16" y2="13" />
+                  <line x1="8" y1="17" x2="13" y2="17" />
+                </svg>
+                <span class="panel-title" data-i18n="snippetsPanel">Snippety</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
+              </summary>
+              <div class="panel-body stack">
+                <p class="hint" data-i18n="snippetsHint">Używaj prefiksu ! w dokumencie, np. !testowysnippet — unikasz przypadkowych dopasowań.</p>
+                <label class="field">
+                  <span data-i18n="snippetsNameLabel">Nazwa (w dokumencie: !nazwa)</span>
+                  <input id="snName" type="text" autocomplete="off" placeholder="testowysnippet" />
+                </label>
+                <label class="field">
+                  <span data-i18n="snippetsBodyLabel">Treść bloku</span>
+                  <textarea id="snBody" rows="4" placeholder="{{imie}} {{nazwisko}}"></textarea>
+                </label>
+                <p class="hint" data-i18n="snippetsDynamicHint">W treści snippetu: {date} {time} {datetime} {day} — data/czas przy rozwinięciu (inspiracja Raycast).</p>
+                <div class="btn-row">
+                  <button class="btn primary" id="snSaveBtn" type="button" data-i18n="snippetsSave">Zapisz snippet</button>
+                  <button class="btn" id="snInsertBtn" type="button" data-i18n="snippetsInsert">Wstaw treść</button>
+                  <button class="btn" id="snInsertTriggerBtn" type="button" data-i18n="snippetsInsertTrigger">Wstaw !trigger</button>
+                </div>
+                <label class="field stack-divider">
+                  <span data-i18n="snippetsExpandModeLabel">Rozwijanie w edycji</span>
+                  <select id="snExpandMode">
+                    <option value="manual" data-i18n="snippetsExpandManual">Ręcznie (przycisk Rozwiń)</option>
+                    <option value="auto" data-i18n="snippetsExpandAuto">Auto po !nazwa + spacja lub interpunkcja</option>
+                  </select>
+                </label>
+                <div id="snList" class="stack stack-tight snippet-list"></div>
+                <label class="field stack-divider">
+                  <span data-i18n="editScopeLabel">Zakres rozwinięcia</span>
+                  <select id="snScope">
+                    <option value="all" data-i18n="editScopeAll">Cały dokument</option>
+                    <option value="body" data-i18n="editScopeBody">Treść główna</option>
+                  </select>
+                </label>
+                <div class="btn-row">
+                  <button class="btn" id="snScanBtn" type="button" data-i18n="snippetsScan">Skanuj !triggery</button>
+                  <button class="btn" id="snExpandBtn" type="button" data-i18n="snippetsExpand">Rozwiń w dokumencie</button>
+                </div>
+                <div class="hint" id="snStatus"></div>
+              </div>
+            </details>
+          </section>
+
+          <section class="sidebar-group" id="group-nav">
+            <div class="sidebar-group-head">
+              <span class="sidebar-group-title" data-i18n="groupNav">Nawigacja</span>
+            </div>
+            <details class="panel" id="panel-structure">
+              <summary>
+                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <line x1="8" y1="6" x2="21" y2="6" />
+                  <line x1="8" y1="12" x2="21" y2="12" />
+                  <line x1="8" y1="18" x2="21" y2="18" />
+                  <line x1="3" y1="6" x2="3.01" y2="6" />
+                  <line x1="3" y1="12" x2="3.01" y2="12" />
+                  <line x1="3" y1="18" x2="3.01" y2="18" />
+                </svg>
+                <span class="panel-title" data-i18n="structurePanel">Struktura</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
+              </summary>
+              <div class="panel-body stack">
+                <div id="structureSummary"></div>
+                <label class="field">
+                  <span data-i18n="structureSearchLabel">Szukaj w strukturze</span>
+                  <input id="structureSearch" type="search" autocomplete="off" data-i18n-placeholder="structureSearchPlaceholder" placeholder="fraza w nagłówku lub akapicie…" />
+                </label>
+                <div class="structure-toolbar">
+                  <label class="field structure-toolbar-field">
+                    <span data-i18n="structureFilterLabel">Pokaż</span>
+                    <select id="structureFilter">
+                      <option value="all" data-i18n="structureFilterAll">Wszystko</option>
+                      <option value="headings" data-i18n="structureFilterHeadings">Nagłówki</option>
+                      <option value="paragraphs" data-i18n="structureFilterParagraphs">Akapity</option>
+                      <option value="tables" data-i18n="structureFilterTables">Tabele</option>
+                    </select>
+                  </label>
+                  <label class="field structure-toolbar-field">
+                    <span data-i18n="structurePageSizeLabel">Na stronie</span>
+                    <select id="structurePageSize">
+                      <option value="10">10</option>
+                      <option value="20" selected>20</option>
+                      <option value="30">30</option>
+                      <option value="40">40</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="structure-pager btn-row">
+                  <button class="btn" id="structurePrevPage" type="button" data-i18n="structurePrevPage">Poprzednia</button>
+                  <span class="structure-page-info hint" id="structurePageInfo" aria-live="polite"></span>
+                  <button class="btn" id="structureNextPage" type="button" data-i18n="structureNextPage">Następna</button>
+                </div>
+                <div id="structureOutline" class="structure-outline" aria-live="polite"></div>
+                <div id="structureQuickEdit" class="structure-quick-edit hidden">
+                  <label class="field">
+                    <span data-i18n="structureQuickEditLabel">Szybka edycja akapitu</span>
+                    <textarea id="structureQuickEditText" rows="3" autocomplete="off"></textarea>
+                  </label>
+                  <div class="btn-row">
+                    <button class="btn primary" id="structureQuickApplyBtn" type="button" data-i18n="structureQuickApply">Zastosuj</button>
+                    <button class="btn" id="structureQuickFocusBtn" type="button" data-i18n="structureQuickFocus">Edytuj w podglądzie</button>
+                  </div>
+                </div>
+              </div>
+            </details>
+          </section>
+
+          <section class="sidebar-group" id="group-view">
+            <div class="sidebar-group-head">
+              <span class="sidebar-group-title" data-i18n="groupView">Widok</span>
+            </div>
+            <details class="panel" id="panel-view">
+              <summary>
+                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+                <span class="panel-title" data-i18n="viewPanel">Widok</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
+              </summary>
+              <div class="panel-body stack">
+                <label class="field" id="zoomSliderField">
+                  <span data-i18n="zoomLabel">Powiększenie</span>
+                  <input id="zoomLevel" type="range" min="0.5" max="2" step="0.05" value="1" aria-describedby="zoomValue" />
+                  <span class="zoom-value" id="zoomValue">100%</span>
+                </label>
+                <p class="hint" id="zoomReflowHint" data-i18n="zoomReflowHint" hidden></p>
+                <div class="btn-row">
+                  <button type="button" id="zoomResetBtn" class="btn" data-i18n="zoomReset">Układ strony</button>
+                </div>
+                <p class="hint" id="inlineEditHint" data-i18n="inlineEditHint"></p>
+                <label class="field checkbox">
+                  <input id="showSectionChips" type="checkbox" checked />
+                  <span data-i18n="showSectionChips">Skróty sekcji nad dokumentem</span>
+                </label>
+              </div>
+            </details>
+          </section>
+
+          <section class="sidebar-group" id="group-help">
+            <div class="sidebar-group-head">
+              <span class="sidebar-group-title" data-i18n="groupHelp">Pomoc</span>
+            </div>
+            <details class="panel" id="panel-help">
+              <summary>
+                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                <span class="panel-title" data-i18n="helpPanel">Skróty i informacje</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
+              </summary>
+              <div class="panel-body stack stack-tight help-panel">
+                <section class="help-section">
+                  <h4 class="help-heading" data-i18n="helpPhTitle">Placeholdery</h4>
+                  <p class="help-text" data-i18n="helpPhIntro">Szablony z polami do wypełnienia — bez ręcznego szukania w tekście.</p>
+                  <ul class="help-list">
+                    <li data-i18n="helpPhItem1">Składnia: {{nazwa}} — litery, cyfry, _, -, . (spacje w nawiasach są OK)</li>
+                    <li data-i18n="helpPhItem2">Skanuj pola → wpisz wartości → Wypełnij → Zapisz</li>
+                    <li data-i18n="helpPhItem3">Puste pola w formularzu są pomijane</li>
+                    <li data-i18n="helpPhItem4">Ten sam {{pole}} w wielu miejscach — jedna wartość wszędzie</li>
+                    <li data-i18n="helpPhItem5">Przykład: Umowa z {{imie}} {{nazwisko}}, data {{data}}.</li>
+                    <li data-i18n="helpPhItem6">Opcjonalnie po snippetach: najpierw Rozwiń !snippety, potem Wypełnij {{placeholdery}}</li>
+                    <li data-i18n="helpPhItem7">Panel Placeholdery → Wstaw {{pole}} wstawia token w kursorze</li>
+                  </ul>
+                </section>
+                <section class="help-section">
+                  <h4 class="help-heading" data-i18n="helpSnTitle">Snippety !nazwa</h4>
+                  <p class="help-text" data-i18n="helpSnIntro">Wstawiane bloki tekstu — bezpieczniejsze z prefiksem ! niż zwykłe słowo.</p>
+                  <ul class="help-list">
+                    <li data-i18n="helpSnItem1">W dokumencie wpisz !testowysnippet + spacja — przy trybie Auto rozwija się od razu</li>
+                    <li data-i18n="helpSnItem2">Snippet może zawierać {{placeholdery}} — rozwiń snippet, potem wypełnij pola</li>
+                    <li data-i18n="helpSnItem3">Zapisz własny snippet w panelu, użyj Wstaw !trigger lub wpisz ręcznie</li>
+                    <li data-i18n="helpSnItem4">Tryb ręczny: Skanuj → Rozwiń w dokumencie · Tryb auto: po !nazwa + spacja/interpunkcja</li>
+                    <li data-i18n="helpSnItem5">Dynamiczne tokeny w treści: {date} {time} {datetime} {day} (jak Raycast)</li>
+                  </ul>
+                </section>
+                <section class="help-section">
+                  <h4 class="help-heading" data-i18n="helpEditTitle">Edycja w podglądzie</h4>
+                  <p class="help-text" data-i18n="inlineEditHint">Enter — akapit · Shift+Enter — linia · Backspace — scal · Tab — lista · Ctrl+Tab — nagłówek · Ctrl+B/I/U — styl</p>
+                </section>
+                <section class="help-section">
+                  <h4 class="help-heading" data-i18n="helpFrTitle">Znajdź i zamień</h4>
+                  <p class="help-text" data-i18n="helpFrText">Skanuj trafienia przed zamianą; „Zamień bieżące” lub „Zamień wszystkie”.</p>
+                </section>
+                <section class="help-section">
+                  <h4 class="help-heading" data-i18n="helpGrammarTitle">Korekta</h4>
+                  <p class="help-text" data-i18n="helpGrammarText">Offline — podwójne spacje, interpunkcja, cudzysłowy PL i inne reguły typografii.</p>
+                </section>
+              </div>
+            </details>
+          </section>
+          </div>
         </aside>
 
         <button class="sidebar-handle" id="panelHandle" type="button" aria-label="Panel"></button>
@@ -566,6 +587,70 @@
 
         <main class="main">
           <section class="doc-panel">
+            <!-- Pasek nad dokumentem (paczka B): szukanie zawsze pod ręką, Czytanie/Edycja,
+                 formatowanie tylko w Edycji, zoom. Id elementów bez zmian (moduły i testy). -->
+            <div class="doc-toolbar" id="docToolbar">
+              <div class="doc-toolbar-row">
+                <label class="doc-search">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <input id="searchQuery" type="search" autocomplete="off" enterkeyhint="search" data-i18n-placeholder="searchPlaceholder" placeholder="Szukaj w dokumencie…" data-i18n-aria="searchPlaceholder" aria-label="Szukaj w dokumencie…" />
+                  <span class="doc-search-pos" id="searchPos" aria-live="polite"></span>
+                </label>
+                <div class="doc-search-nav">
+                  <button class="tb-btn" id="frPrevBtn" type="button" data-i18n-aria="frPrev" aria-label="Poprzednie">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg>
+                  </button>
+                  <button class="tb-btn" id="frNextBtn" type="button" data-i18n-aria="frNext" aria-label="Następne">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
+                </div>
+                <button class="tb-btn panel-toggle" id="panelToggle" type="button" aria-controls="toolsPanel" aria-expanded="false" data-i18n-aria="toolsAria" aria-label="Narzędzia">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+                  <span class="panel-toggle-count" id="panelToggleCount" hidden></span>
+                </button>
+              </div>
+              <div class="doc-toolbar-row doc-toolbar-row-2">
+                <!-- Czytanie / Edycja: przycisk steruje ukrytym #readMode (jedno źródło prawdy). -->
+                <div class="mode-switch" role="group" data-i18n-aria="modeAria" aria-label="Tryb">
+                  <input id="readMode" type="checkbox" checked hidden />
+                  <button class="mode-btn is-active" type="button" data-mode="read" aria-pressed="true" data-i18n="modeRead">Czytanie</button>
+                  <button class="mode-btn" type="button" data-mode="edit" aria-pressed="false" data-i18n="modeEdit">Edycja</button>
+                </div>
+                <div class="format-toolbar hidden" id="formatToolbar">
+                  <button type="button" class="tb-btn format-btn" id="fmtBold" aria-label="Bold (Ctrl+B)"><b>B</b></button>
+                  <button type="button" class="tb-btn format-btn" id="fmtItalic" aria-label="Italic (Ctrl+I)"><i>I</i></button>
+                  <button type="button" class="tb-btn format-btn" id="fmtUnderline" aria-label="Underline (Ctrl+U)"><u>U</u></button>
+                  <select id="fmtFontSize" class="tb-select" data-i18n-aria="fmtFontSizeLabel" aria-label="Rozmiar czcionki">
+                    <option value="" data-i18n="fmtFontSizeInherit">Jak w akapicie</option>
+                    <option value="9">9 pt</option>
+                    <option value="10">10 pt</option>
+                    <option value="11">11 pt</option>
+                    <option value="12">12 pt</option>
+                    <option value="14">14 pt</option>
+                    <option value="16">16 pt</option>
+                    <option value="18">18 pt</option>
+                    <option value="20">20 pt</option>
+                    <option value="24">24 pt</option>
+                    <option value="28">28 pt</option>
+                    <option value="36">36 pt</option>
+                  </select>
+                </div>
+                <div class="zoom-group" role="group" data-i18n-aria="zoomLabel" aria-label="Powiększenie">
+                  <button class="tb-btn" id="zoomOutBtn" type="button" data-i18n-aria="zoomOut" aria-label="Pomniejsz">−</button>
+                  <span class="zoom-now" id="zoomNow">100%</span>
+                  <button class="tb-btn" id="zoomInBtn" type="button" data-i18n-aria="zoomIn" aria-label="Powiększ">+</button>
+                  <button class="tb-btn zoom-fit" id="zoomFitBtn" type="button" data-i18n-aria="zoomFit" aria-label="Dopasuj do ekranu">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                  </button>
+                </div>
+              </div>
+              <!-- Skróty sekcji (z nagłówków dokumentu): klik = skok. Jeden rząd, nadmiar
+                   przewija się w bok z wygaszeniem krawędzi. × chowa (opcja też w Widok). -->
+              <div class="section-strip" id="sectionStrip" hidden>
+                <div class="section-chips" id="sectionChips"></div>
+                <button class="section-strip-hide" id="sectionStripHide" type="button" data-i18n-aria="sectionStripHide" aria-label="Schowaj skróty sekcji">×</button>
+              </div>
+            </div>
             <div class="doc-viewport" id="docViewport">
               <div class="empty-state" id="emptyState">
                 <div class="empty-icon" aria-hidden="true">
@@ -576,8 +661,13 @@
                     <line x1="8" y1="17" x2="14" y2="17" />
                   </svg>
                 </div>
-                <h2 id="emptyTitle" data-i18n="emptyTitle">Wczytaj dokument .docx</h2>
+                <h2 id="emptyTitle" data-i18n="emptyTitle">Otwórz dokument .docx</h2>
                 <p id="emptySub" data-i18n="emptySub">Plik zostaje w przeglądarce — bez wysyłania na serwer.</p>
+                <div class="empty-actions" id="emptyActions">
+                  <button class="btn primary" id="emptyOpenBtn" type="button" data-i18n="emptyOpen">Wybierz plik z dysku</button>
+                  <button class="btn" id="emptySampleBtn" type="button" data-i18n="emptySample">Wypróbuj na przykładowym dokumencie</button>
+                </div>
+                <p class="empty-drop-hint" id="emptyDropHint" data-i18n="emptyDropHint">albo przeciągnij plik .docx w dowolne miejsce okna</p>
               </div>
               <div class="doc-zoom-shell" id="docZoomShell">
                 <div class="doc-canvas hidden" id="docCanvas"></div>
@@ -585,7 +675,9 @@
             </div>
           </section>
           <footer class="status-bar">
+            <span class="status-dirty" id="statusDirty" hidden></span>
             <span id="status">Brak pliku</span>
+            <span class="status-words" id="statusWords"></span>
             <details class="log-panel">
               <summary>Log</summary>
               <div id="log"></div>
@@ -603,25 +695,26 @@
     </div>
     <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-    <script defer src="app/core.js?v=20260928-01"></script>
-    <script defer src="app/language.js?v=20260928-01"></script>
-    <script defer src="app/docx-metadata.js?v=20260928-01"></script>
-    <script defer src="app/docx-patch.js?v=20260928-01"></script>
-    <script defer src="app/template-tokens.js?v=20260928-01"></script>
-    <script defer src="app/docx-run-styles.js?v=20260928-01"></script>
-    <script defer src="app/docx-inline-edit.js?v=20260928-01"></script>
-    <script defer src="app/document.js?v=20260928-01"></script>
-    <script defer src="app/docx-render-fixes.js?v=20260928-01"></script>
-    <script defer src="app/docx-viewer.js?v=20260928-01"></script>
-    <script defer src="app/analysis.js?v=20260928-01"></script>
-    <script defer src="app/structure-panel.js?v=20260928-01"></script>
-    <script defer src="app/grammar-style.js?v=20260928-01"></script>
-    <script defer src="app/placeholders.js?v=20260928-01"></script>
-    <script defer src="app/snippets.js?v=20260928-01"></script>
-    <script defer src="app/edit-tools.js?v=20260928-01"></script>
-    <script defer src="app/mobile-doc-zoom.js?v=20260928-01"></script>
-    <script defer src="app/ui-controls.js?v=20260928-01"></script>
-    <script defer src="app/lazy-features.js?v=20260928-01"></script>
-    <script defer src="app/bootstrap.js?v=20260928-01"></script>
+    <script defer src="app/core.js?v=20260928-07"></script>
+    <script defer src="app/language.js?v=20260928-07"></script>
+    <script defer src="app/docx-metadata.js?v=20260928-07"></script>
+    <script defer src="app/docx-patch.js?v=20260928-07"></script>
+    <script defer src="app/template-tokens.js?v=20260928-07"></script>
+    <script defer src="app/docx-run-styles.js?v=20260928-07"></script>
+    <script defer src="app/docx-inline-edit.js?v=20260928-07"></script>
+    <script defer src="app/document.js?v=20260928-07"></script>
+    <script defer src="app/docx-render-fixes.js?v=20260928-07"></script>
+    <script defer src="app/docx-viewer.js?v=20260928-07"></script>
+    <script defer src="app/analysis.js?v=20260928-07"></script>
+    <script defer src="app/structure-panel.js?v=20260928-07"></script>
+    <script defer src="app/grammar-style.js?v=20260928-07"></script>
+    <script defer src="app/placeholders.js?v=20260928-07"></script>
+    <script defer src="app/snippets.js?v=20260928-07"></script>
+    <script defer src="app/edit-tools.js?v=20260928-07"></script>
+    <script defer src="app/mobile-doc-zoom.js?v=20260928-07"></script>
+    <script defer src="app/ui-controls.js?v=20260928-07"></script>
+    <script defer src="app/lazy-features.js?v=20260928-07"></script>
+    <script defer src="app/app-frame.js?v=20260928-07"></script>
+    <script defer src="app/bootstrap.js?v=20260928-07"></script>
   </body>
 </html>

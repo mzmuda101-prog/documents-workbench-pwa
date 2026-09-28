@@ -169,7 +169,14 @@ function setZoomMode(mode, options = {}) {
 }
 
 function applyFitToWidth() {
-  setZoomMode("fit");
+  if (isMobileViewport()) {
+    setZoomMode("fit");
+    return;
+  }
+  // Szeroki ekran: strona dopasowana do szerokości obszaru dokumentu (układ strony zostaje).
+  setZoomMode("manual", { skipRerender: true });
+  if (zoomLevelEl) zoomLevelEl.value = String(computeFitZoom());
+  applyZoom();
 }
 
 function resetZoomTo100() {

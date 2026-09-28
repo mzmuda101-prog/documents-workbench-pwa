@@ -28,6 +28,7 @@ function ruleLabel(ruleId) {
 }
 
 function syncGrammarStatus() {
+  if (typeof appFrame !== "undefined") appFrame.syncPanelCounts();
   if (!grammarStatusEl) return;
   if (!grammarScan?.hits?.length) {
     grammarStatusEl.textContent = grammarScan ? t("grammarNoHits") : "";

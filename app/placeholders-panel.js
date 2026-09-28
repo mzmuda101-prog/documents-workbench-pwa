@@ -16,6 +16,7 @@ function escapePhHtml(s) {
 }
 
 function syncPlaceholderStatus() {
+  if (typeof appFrame !== "undefined") appFrame.syncPanelCounts();
   if (!phStatusEl) return;
   if (!placeholderScan?.fields?.length) {
     phStatusEl.textContent = placeholderScan ? t("placeholdersNoFields") : "";

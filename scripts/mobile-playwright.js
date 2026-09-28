@@ -39,12 +39,17 @@ async function run() {
   if (!layout.hasDocument) throw new Error("Brak klasy has-document po wczytaniu");
   console.log("  ✓ Tryb pełnej szerokości (has-document)");
 
+  // PL/EN mieszka w menu ⋯ (paczka B) — musi być osiągalne jednym tapnięciem
+  await page.locator("#appMenuBtn").click();
   const langVisible = await page.evaluate(() => {
+    const menu = document.getElementById("appMenu");
     const el = document.getElementById("langSwitch");
-    return !!el && getComputedStyle(el).display !== "none";
+    const r = el?.getBoundingClientRect();
+    return !!menu && !menu.hidden && menu.contains(el) && !!r && r.width > 0 && r.right <= window.innerWidth;
   });
-  if (!langVisible) throw new Error("Przełącznik PL/EN ukryty w trybie czytania");
-  console.log("  ✓ PL/EN dostępne podczas czytania");
+  if (!langVisible) throw new Error("Przełącznik PL/EN niedostępny w menu ⋯");
+  await page.keyboard.press("Escape");
+  console.log("  ✓ PL/EN dostępne w menu ⋯");
 
   if (layout.hasHorizontalOverflow) {
     throw new Error(`Poziomy overflow: scroll=${layout.viewportScrollW} client=${layout.viewportClientW}`);

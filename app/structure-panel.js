@@ -110,14 +110,9 @@ function jumpToStructureItem(item, options = {}) {
 
 function enableEditModeForStructure() {
   if (!readOnlyMode || !readModeEl) return;
+  // przez przełącznik Czytanie/Edycja na pasku (app-frame.js) — jedno źródło prawdy
   readModeEl.checked = false;
-  readOnlyMode = false;
-  const label = readModeEl.closest("label")?.querySelector("span");
-  if (label) {
-    label.dataset.i18n = "readModeOff";
-    label.textContent = t("readModeOff");
-  }
-  syncInlineEditMode();
+  readModeEl.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 function focusStructureItemInPreview(item) {

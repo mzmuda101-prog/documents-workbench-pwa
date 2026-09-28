@@ -94,11 +94,6 @@ function syncSidebarHandle() {
   } else {
     panelHandle.style.left = "";
   }
-  if (panelToggle) {
-    const handleVisible = getComputedStyle(panelHandle).display !== "none";
-    panelToggle.hidden = handleVisible;
-    panelToggle.setAttribute("aria-hidden", handleVisible ? "true" : "false");
-  }
 }
 
 async function downloadBytes(bytes, name) {
@@ -394,9 +389,6 @@ if (zoomLevelEl) zoomLevelEl.addEventListener("input", typeof onZoomSliderInput 
 if (readModeEl) {
   readModeEl.addEventListener("change", () => {
     readOnlyMode = readModeEl.checked;
-    const label = readModeEl.closest(".field")?.querySelector("span[data-i18n]");
-    if (label) label.dataset.i18n = readOnlyMode ? "readModeOn" : "readModeOff";
-    applyLanguage();
     syncInlineEditMode();
   });
   docCanvasEl?.classList.add("read-only");

@@ -1,6 +1,6 @@
 // Core runtime: DOM refs, shared state, and base UI helpers.
 
-const APP_BUILD_VERSION = "20260928-01";
+const APP_BUILD_VERSION = "20260928-07";
 
 const IS_LOW_POWER = (() => {
   try {
@@ -149,7 +149,6 @@ function isSidebarOpen() {
 function setSidebarOpen(open) {
   rootEl.classList.toggle("sidebar-open", !!open);
   if (sidebarScrim) sidebarScrim.classList.toggle("hidden", !open);
-  if (panelToggle) panelToggle.textContent = open ? t("panelOpen") : t("panelClosed");
   const mobile = window.matchMedia("(max-width: 768px)").matches;
   document.body.style.overflow = open && mobile ? "hidden" : "";
   if (typeof syncSidebarHandle === "function") syncSidebarHandle();
@@ -182,9 +181,13 @@ function syncDocViewportHeight() {
   requestAnimationFrame(() => {
     const rect = docPanelEl.getBoundingClientRect();
     const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 720;
-    const safeBottom = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--safe-bottom")) || 0;
-    const bottomGap = window.matchMedia("(max-width: 768px)").matches ? 8 + safeBottom : 24;
-    const available = Math.floor(viewportHeight - rect.top - bottomGap);
+    const mobile = window.matchMedia("(max-width: 768px)").matches;
+    // Pod dokumentem stoi pasek stanu — obszar dokumentu kończy się nad nim, żeby
+    // całość mieściła się w oknie bez przewijania strony.
+    const statusBar = document.querySelector(".status-bar");
+    const statusH = statusBar ? statusBar.getBoundingClientRect().height + (mobile ? 0 : 12) : 0;
+    const bottomGap = mobile ? 0 : 16;
+    const available = Math.floor(viewportHeight - rect.top - statusH - bottomGap);
     const minHeight = window.matchMedia("(max-width: 768px)").matches ? 280 : 420;
     docPanelEl.style.setProperty("--doc-panel-height", `${Math.max(minHeight, available)}px`);
   });

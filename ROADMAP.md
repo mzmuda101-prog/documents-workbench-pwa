@@ -29,7 +29,9 @@ Stan na **v0.2** (lipiec 2026). Ostatnia wersja cache: `20260702-03`.
 
 | **Paczka A — fundament z Sheet Workbench** (SW: limit nawigacji 3 s, `?v=` z cache, ciężkie zasoby po aktywacji; przycisk „Aktualizuj” czeka na nowy SW; `npm run release`; równoległy `npm test`; strażnik `test:pwa`) | ✅ 2026-09-28 |
 
-**Dalej (przenoszenie z Sheet Workbench):** B rama ekranu (nagłówek z nazwą pliku i „Zapisz”, menu ⋯, panel obok dokumentu ≥1024 px — dziś scrim zakrywa też nagłówek) → C dotyk/iOS → D Cofnij/Ponów → E klawiatura + cursor-hint → F wydajność dużych dokumentów.
+| **Paczka B — rama ekranu z Sheet Workbench** (`app/app-frame.js`: nagłówek z plikiem i „Zapisz” + licznik, menu ⋯, panel obok ≥1024 px, „Znajdź ustawienie…”, pasek nad dokumentem, Czytanie/Edycja, skróty sekcji ze stylów nagłówków, zwijany nagłówek na telefonie; strażnik `test:frame` Chromium + WebKit) | ✅ 2026-09-28 |
+
+**Dalej (przenoszenie z Sheet Workbench):** C dotyk/iOS → D Cofnij/Ponów → E klawiatura + cursor-hint (dziś brak podpowiedzi na najechanie przy ikonkach paska) → F wydajność dużych dokumentów. Później: „Ostatnio otwierane” (tylko Chrome/Edge, uchwyty plików w IndexedDB — lokalnie).
 
 **Poza pierwotnym planem (ale wartościowe):** … edycja inline ze stylami runów + rozmiar czcionki, zoom 0.5–2.
 

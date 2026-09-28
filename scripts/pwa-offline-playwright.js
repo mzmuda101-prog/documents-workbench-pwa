@@ -105,9 +105,9 @@ async function run() {
   const btnShown = await page.waitForFunction(() => !document.getElementById("appUpdateBtn")?.classList.contains("hidden"), null, { timeout: 10000 }).then(() => true).catch(() => false);
   check("nowa wersja: przycisk „Aktualizuj” widoczny", btnShown);
   if (btnShown) {
-    // Otwarty panel = scrim nad CAŁYM ekranem, łącznie z nagłówkiem — przycisk byłby
-    // niedostępny (znany błąd ramy UI, do naprawy w paczce B). Tu testujemy sam SW.
-    await page.evaluate(() => { window.__beforeUpdate = true; setSidebarOpen(false); });
+    // Panel zostaje OTWARTY (od 1024 px stoi obok dokumentu) — przycisk w nagłówku
+    // musi być klikalny bez zamykania czegokolwiek (dawniej zasłaniał go scrim).
+    await page.evaluate(() => { window.__beforeUpdate = true; });
     const nav = page.waitForNavigation({ waitUntil: "load", timeout: 10000 }).then(() => true).catch(() => false);
     await page.click("#appUpdateBtn");
     const reloaded = await nav;

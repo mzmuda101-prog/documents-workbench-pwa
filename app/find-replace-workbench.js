@@ -35,9 +35,12 @@ function collectFrDomMatches(find, scope, regex) {
   if (!find || !docCanvasEl) return [];
   const root = getDocContentRoot(docCanvasEl);
   if (!root) return [];
+  // Tylko akapity: tekst komórek tabel i list też siedzi w <p>. Dawniej szło
+  // „p, span, td, th, li” — ten sam tekst liczył się 2–3 razy (akapit + jego span).
+  const paras = Array.from(root.querySelectorAll("p"));
   const nodes = scope === "headings"
-    ? root.querySelectorAll("h1, h2, h3, h4, h5, h6, p")
-    : root.querySelectorAll("p, span, td, th, li");
+    ? paras.filter((el) => (typeof styleHeadingLevel === "function" && styleHeadingLevel(el)) || /heading|title/i.test(el.className))
+    : paras;
   const matches = [];
   nodes.forEach((el) => {
     const text = el.textContent || "";
@@ -95,6 +98,7 @@ function escapeHtml(s) {
 }
 
 function syncFrStatus() {
+  if (typeof appFrame !== "undefined") appFrame.syncPanelCounts(); // licznik na pasku i przy sekcji
   if (!frStatusEl) return;
   if (!frMatches.length) {
     frStatusEl.textContent = frPreview?.hits

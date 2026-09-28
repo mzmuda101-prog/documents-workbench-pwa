@@ -343,14 +343,8 @@ body.splashing {
   z-index: 30; transform: translateX(calc(-100% - 24px)); opacity: 0; pointer-events: none;
   transition: transform var(--t-slow), opacity var(--t);
 }
-/* [EN] Skip paint for collapsed sidebar panels while scrolling */
-.sidebar .panel {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 52px;
-}
-html.low-power .sidebar .panel {
-  content-visibility: visible;
-}
+/* Bez content-visibility w panelu: w wysuwanym panelu iOS malował sekcje na biało
+   (ta sama lekcja co w Sheet Workbench, 2026-09-24). */
 .sidebar-group { display: flex; flex-direction: column; gap: 10px; }
 .sidebar-group + .sidebar-group { margin-top: 2px; padding-top: 6px; border-top: 1px solid var(--border-subtle); }
 .sidebar-group-head {
@@ -364,7 +358,8 @@ html.low-power .sidebar .panel {
   letter-spacing: .08em; color: var(--ink-3); white-space: nowrap;
 }
 .sidebar-open .sidebar { transform: translateX(0); opacity: 1; pointer-events: auto; }
-.sidebar-scrim { position: fixed; inset: 0; border: 0; background: rgba(12, 20, 36, 0.22); backdrop-filter: blur(8px); z-index: 25; cursor: pointer; }
+/* Lekkie rozmycie (jak w Sheet): ma się dać cokolwiek przeczytać pod spodem. */
+.sidebar-scrim { position: fixed; inset: 0; border: 0; background: rgba(12, 20, 36, 0.12); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); z-index: 25; cursor: pointer; }
 .sidebar-scrim.hidden { display: none; }
 
 .sidebar-handle {
@@ -762,59 +757,6 @@ html.is-mobile body.has-document .doc-panel {
       max(16px, var(--safe-bottom))
       max(10px, var(--safe-right));
   }
-  .hero {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto auto;
-    grid-template-areas:
-      "brand brand theme refresh"
-      "panel panel panel panel"
-      "lang . badges badges";
-    gap: 8px;
-    align-items: center;
-    padding: max(10px, var(--safe-top)) 12px 12px;
-    margin-bottom: 10px;
-  }
-  .hero-left {
-    grid-area: brand;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-  }
-  .hero-right { display: contents; }
-  .hero-logo { width: 34px; height: 34px; }
-  .hero-logo svg { width: 34px; height: 34px; }
-  .hero-title {
-    font-size: 15px;
-    line-height: 1.2;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .hero-sub { display: none; }
-  html.is-mobile:not(.sidebar-open) .panel-toggle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .panel-toggle { grid-area: panel; width: 100%; }
-  .lang-switch {
-    grid-area: lang;
-    justify-self: start;
-    padding: 3px;
-  }
-  .lang-button { min-width: 36px; padding: 6px 7px; }
-  .hero-badges {
-    grid-area: badges;
-    justify-self: end;
-    width: auto;
-    min-width: 68px;
-  }
-  .hero-badges .hero-badge { font-size: 10px; padding: 3px 8px; }
-  .theme-toggle { grid-area: theme; }
-  #brandRefresh { grid-area: refresh; }
-  #closeDocBtn { grid-area: close; }
-  .app-update-btn { grid-column: 1 / -1; width: 100%; }
 
   /* Pełna szerokość podglądu — bez szarych pasów po bokach */
   body.has-document .app {
@@ -823,46 +765,6 @@ html.is-mobile body.has-document .doc-panel {
     padding-bottom: 0;
     padding-top: max(4px, var(--safe-top));
   }
-  /* Kompaktowy hero w trybie czytania — PL/EN zawsze dostępne */
-  body.has-document .hero {
-    margin: 0;
-    padding: max(6px, var(--safe-top)) 8px 8px;
-    border-radius: 0;
-    border-left: 0;
-    border-right: 0;
-    border-bottom: 1px solid var(--border-subtle);
-    grid-template-columns: minmax(0, 1fr) auto auto auto auto auto;
-    grid-template-areas: "brand lang theme refresh close panel";
-    gap: 5px;
-  }
-  body.has-document .lang-switch {
-    display: inline-flex;
-    grid-area: lang;
-    padding: 3px;
-  }
-  body.has-document .lang-button {
-    min-width: 30px;
-    padding: 5px 6px;
-    font-size: 10px;
-  }
-  body.has-document .hero-badges,
-  body.has-document .app-update-btn { display: none; }
-  body.has-document .theme-toggle,
-  body.has-document .icon-btn,
-  body.has-document .logo-badge {
-    width: 34px;
-    height: 34px;
-  }
-  body.has-document .panel-toggle {
-    grid-area: panel;
-    width: auto;
-    min-height: 34px;
-    padding: 6px 10px;
-    font-size: 11px;
-  }
-  body.has-document .hero-logo { width: 30px; height: 30px; }
-  body.has-document .hero-logo svg { width: 30px; height: 30px; }
-  body.has-document .hero-title { font-size: 14px; }
   body.has-document .main { gap: 0; }
   body.has-document .doc-panel {
     border-radius: 0;
@@ -945,4 +847,321 @@ html.is-mobile body.has-document .doc-panel {
   }
   html[lang="en"].is-mobile.sidebar-open .sidebar-handle::after,
   html.is-mobile[lang="en"].sidebar-open .sidebar-handle::after { content: "Hide panel"; }
+}
+
+/* =====================================================================
+   RAMA EKRANU (paczka B, 2026-09-28) — app/app-frame.js
+   Wzór: Sheet Workbench (nagłówek z plikiem i „Zapisz”, menu ⋯, panel obok,
+   „Znajdź ustawienie…”, pasek nad dokumentem, bezpiecznik przepełnienia).
+   ===================================================================== */
+
+/* ── nagłówek ── */
+.hero { flex-wrap: nowrap; }
+.hero-left { flex: 1 1 auto; min-width: 0; }
+.hero-right { flex: 0 0 auto; flex-wrap: nowrap; }
+.hero-title { font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hero-meta { display: none; align-items: center; gap: 8px; min-width: 0; font-size: 12.5px; color: var(--muted-strong); white-space: nowrap; overflow: hidden; }
+.hero-meta > span { overflow: hidden; text-overflow: ellipsis; }
+.hero-meta > .hero-meta-sep { border-left: 1px solid var(--border); padding-left: 8px; }
+.hero.has-file .hero-meta { display: flex; }
+.hero.has-file .hero-sub { display: none; }
+
+.hero-save {
+  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px;
+  border-radius: var(--r-full); border: 1px solid var(--border); background: var(--panel);
+  color: var(--muted-strong); font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer;
+  box-shadow: var(--shadow-xs); flex-shrink: 0;
+  transition: background var(--t), border-color var(--t), color var(--t);
+}
+.hero-save[hidden] { display: none; }
+.hero-save:hover { border-color: var(--accent-border); color: var(--accent); }
+.hero-save.is-dirty { background: var(--accent); border-color: var(--accent); color: #fff; }
+.hero-save.is-dirty:hover { background: var(--accent-h); color: #fff; }
+.hero-save-count {
+  display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: var(--r-full); background: #fff; color: var(--accent);
+  font-size: 10.5px; font-variant-numeric: tabular-nums;
+}
+.hero-save-count[hidden] { display: none; }
+.hero-save:focus-visible,
+.app-menu-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+
+.app-menu-btn {
+  width: 36px; height: 36px; border-radius: var(--r-full); border: 1px solid var(--border);
+  background: var(--panel); color: var(--ink-2); display: grid; place-items: center;
+  cursor: pointer; box-shadow: var(--shadow-xs); flex-shrink: 0;
+}
+.app-menu-btn:hover,
+.app-menu-btn[aria-expanded="true"] { color: var(--accent); border-color: var(--accent-border); background: var(--accent-light); }
+.app-update-btn { height: 36px; padding: 0 12px; border-radius: var(--r-full); font-size: 12.5px; }
+.app-update-btn.is-busy { opacity: .7; cursor: progress; }
+
+/* Menu ⋯ (przeniesione do <body>, pozycja z przycisku). Pełne tło bez backdrop-filter —
+   to popover nad dokumentem, rozmycie nic tu nie wnosi. */
+.app-menu {
+  position: fixed; z-index: 60; display: grid; gap: 2px; padding: 6px;
+  border-radius: 16px; border: 1px solid var(--border); background: var(--surface);
+  box-shadow: 0 18px 40px rgba(16, 32, 64, 0.22); overflow-y: auto; overscroll-behavior: contain;
+}
+.app-menu[hidden] { display: none; }
+.app-menu-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px; font-size: 13px; color: var(--ink-2); }
+.app-menu-row .theme-toggle { width: 32px; height: 32px; }
+.app-menu-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 38px; padding: 6px 8px;
+  border: 0; border-radius: 10px; background: none; color: var(--ink); font: inherit; font-size: 13px;
+  text-align: left; text-decoration: none; cursor: pointer;
+}
+.app-menu-item-text { flex: 1; min-width: 0; }
+.app-menu-item > span[aria-hidden="true"] { color: var(--muted); }
+.app-menu-item:hover,
+.app-menu-item:focus-visible { background: var(--accent-light); color: var(--accent); outline: none; }
+.app-menu-app-icon { width: 18px; height: 18px; border-radius: 5px; background: #1f8a5b; display: grid; place-items: center; flex: none; }
+.app-menu-sep { height: 1px; margin: 4px 6px; background: var(--border-subtle); }
+.app-menu-cap { padding: 6px 8px 2px; font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.app-menu-state.hero-badges { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px 4px; }
+.app-menu-build { margin-left: auto; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+@media (pointer: coarse) { .app-menu-item { min-height: 44px; } }
+
+/* uchwyt zwiniętego nagłówka — tylko telefon */
+.hero-grip { display: none; }
+
+/* ── panel: pasek ze szukajką stoi, przewija się tylko środek ──
+   Bez position:sticky: sticky w przewijanym, wysuwanym panelu rozjeżdżał na iOS
+   trafianie dotykiem (~35 pt obok, lekcja z Sheet 2026-09-28). */
+.sidebar { overflow: hidden; gap: 8px; }
+.sidebar-top { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; padding: 2px 2px 0 0; }
+.sidebar > .sidebar-scroll {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; gap: 14px; padding: 0 2px 12px 0;
+}
+.sidebar-scroll > * { flex-shrink: 0; }
+.sidebar-finder {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 38px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--muted);
+}
+.sidebar-finder:focus-within { border-color: var(--border-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.sidebar-finder input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 13px; outline: none; }
+.sidebar-finder input::-webkit-search-cancel-button { display: none; }
+.sidebar-finder-clear { border: 0; background: none; color: var(--muted); font-size: 18px; line-height: 1; padding: 0 2px; cursor: pointer; }
+.sidebar-finder-clear[hidden] { display: none; }
+.sidebar-finder-empty { margin: 4px 6px; font-size: 12.5px; color: var(--muted); }
+.sidebar-finder-empty[hidden], .sidebar-group[hidden], .sidebar details.panel[hidden] { display: none; }
+.sidebar .finder-hit {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 8px;
+}
+.sidebar-close {
+  display: none; width: 38px; height: 38px; flex: none; place-items: center;
+  border: 1px solid var(--border); border-radius: 12px; background: var(--surface); color: var(--ink-2); cursor: pointer;
+}
+.sidebar-close:hover { color: var(--accent); border-color: var(--accent-border); background: var(--accent-light); }
+.sidebar-close:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+
+/* liczniki przy nazwach sekcji (trafienia, sugestie, pola) */
+.panel-count {
+  flex: none; min-width: 20px; padding: 1px 7px; border-radius: var(--r-full);
+  background: var(--accent-light); color: var(--accent); font-size: 11px; font-weight: 700;
+  text-align: center; font-variant-numeric: tabular-nums;
+}
+details.panel > summary .panel-count + .chevron { margin-left: 6px; }
+details.panel > summary .panel-title { flex: 1; }
+
+/* ── ≥1024 px: panel obok dokumentu ── */
+:root.sidebar-docked .sidebar {
+  top: var(--dock-top, 96px);
+  left: max(16px, calc((100vw - 1380px - var(--sidebar-w, 320px) - 14px) / 2 + 16px));
+  height: calc(100dvh - var(--dock-top, 96px) - 16px);
+  max-height: calc(100dvh - var(--dock-top, 96px) - 16px);
+  width: clamp(288px, 22vw, 340px);
+  padding: 10px; border-radius: var(--r-xl);
+  background: var(--glass-sheen), var(--glass-bg);
+  border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow);
+}
+:root.sidebar-docked .sidebar-close { display: grid; }
+:root.sidebar-docked .sidebar-scrim { display: none; }
+/* otwarty panel zamyka « w panelu albo ⚙ — wystający uchwyt leżałby na dokumencie */
+:root.sidebar-docked.sidebar-open .sidebar-handle { display: none; }
+:root.sidebar-docked.frame-ready .main { transition: margin-left var(--t-slow); }
+:root.sidebar-docked.sidebar-open .main { margin-left: calc(var(--sidebar-w, 320px) + 14px); }
+/* limit szerokości rośnie o panel — dokument nie traci miejsca na dużych ekranach */
+/* .frame-ready: animujemy tylko świadome otwarcie/zamknięcie, nie start aplikacji
+   (dawniej dokument „odjeżdżał” spod panelu przy każdym wejściu) */
+:root.sidebar-docked.frame-ready .app { transition: max-width var(--t-slow); }
+:root.sidebar-docked.sidebar-open .app { max-width: calc(1380px + var(--sidebar-w, 320px) + 14px); }
+@media (prefers-reduced-motion: reduce) {
+  :root.sidebar-docked .main, :root.sidebar-docked .app { transition: none; }
+}
+/* < 1024 px (nakładka): prawie pełne tło panelu, żeby dokument nie prześwitywał między kartami */
+:root:not(.sidebar-docked):not(.is-mobile) .sidebar {
+  background: color-mix(in srgb, var(--bg) 96%, transparent);
+  border-radius: 20px; padding: 8px; box-shadow: 0 18px 44px rgba(16, 32, 64, 0.18);
+}
+
+/* ── obszar dokumentu: pasek + podgląd w jednej karcie ── */
+.doc-panel { display: flex; flex-direction: column; height: var(--doc-panel-height, 520px); min-height: 0; }
+.doc-viewport { flex: 1 1 auto; height: auto; min-height: 0; }
+.doc-toolbar {
+  flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface) 94%, white);
+}
+[data-theme="dark"] .doc-toolbar { background: color-mix(in srgb, var(--surface) 96%, black); }
+.doc-toolbar-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+/* szeroko: wszystko w jednym rzędzie (drugi rząd dokleja się do pierwszego) */
+@media (min-width: 900px) {
+  .doc-toolbar { flex-direction: row; flex-wrap: wrap; align-items: center; }
+  .doc-toolbar-row { flex: 0 1 auto; }
+  .doc-toolbar-row:first-child { flex: 1 1 360px; }
+  .section-strip { flex: 1 1 100%; }
+}
+.doc-search {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: 11px; background: var(--field); color: var(--muted);
+}
+.doc-search:focus-within { border-color: var(--border-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.doc-search input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 13.5px; outline: none; }
+.doc-search-pos { flex: none; font-size: 12px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.doc-search-pos.is-empty { color: var(--warning); }
+.doc-search-nav { display: flex; gap: 4px; flex: none; }
+.tb-btn {
+  position: relative; display: inline-grid; place-items: center; flex: none;
+  min-width: 34px; height: 34px; padding: 0 8px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--panel); color: var(--ink-2);
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: background var(--t), border-color var(--t), color var(--t);
+}
+.tb-btn:hover { border-color: var(--accent-border); color: var(--accent); background: var(--accent-light); }
+.tb-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent); }
+.tb-btn.primary, .tb-btn.is-on { border-color: var(--accent-border); color: var(--accent); background: var(--accent-light); }
+/* ⚙ jest zawsze na pasku (dawniej przycisk „Panel” chował się, gdy był uchwyt) */
+.panel-toggle.tb-btn { display: inline-grid; background: var(--panel); color: var(--ink-2); padding: 0 8px; }
+.panel-toggle.tb-btn.is-on { color: var(--accent); background: var(--accent-light); }
+.panel-toggle-count {
+  position: absolute; top: -6px; right: -6px; min-width: 17px; height: 17px; padding: 0 4px;
+  border-radius: var(--r-full); background: var(--accent); color: #fff; font-size: 10px; font-weight: 700;
+  display: grid; place-items: center; box-shadow: 0 0 0 2px var(--surface);
+}
+.panel-toggle-count[hidden] { display: none; }
+
+.mode-switch { display: inline-flex; flex: none; padding: 3px; gap: 2px; border: 1px solid var(--border); border-radius: 11px; background: var(--field); }
+.mode-btn {
+  border: 0; background: none; color: var(--muted-strong); font: inherit; font-size: 12.5px; font-weight: 600;
+  padding: 5px 11px; border-radius: 8px; cursor: pointer; transition: background var(--t), color var(--t);
+}
+.mode-btn.is-active { background: var(--accent); color: #fff; }
+.mode-btn:not(.is-active):hover { color: var(--accent); }
+.mode-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent); }
+
+.format-toolbar { display: inline-flex; flex-direction: row; align-items: center; gap: 4px; margin: 0; padding-left: 8px; border-left: 1px solid var(--border-subtle); flex: none; }
+.format-toolbar.hidden { display: none !important; }
+.format-btn { min-width: 32px; height: 32px; padding: 0 6px; }
+.tb-select {
+  height: 32px; padding: 0 8px; border-radius: 9px; border: 1px solid var(--border);
+  background: var(--field); color: var(--ink); font: inherit; font-size: 12px; max-width: 132px;
+}
+
+.zoom-group { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; flex: none; padding: 2px; border: 1px solid var(--border); border-radius: 11px; background: var(--field); }
+.zoom-group .tb-btn { min-width: 30px; height: 30px; border-color: transparent; background: none; font-size: 15px; }
+.zoom-group .tb-btn:hover { background: var(--accent-light); }
+.zoom-now { min-width: 52px; text-align: center; font-size: 12px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+/* skróty sekcji: jeden rząd, nadmiar przewija się w bok (bezpiecznik przepełnienia) */
+.section-strip { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.section-strip[hidden] { display: none; }
+.section-chips { flex: 1 1 auto; min-width: 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.section-chips::-webkit-scrollbar { display: none; }
+.section-chip {
+  flex: none; max-width: 280px; padding: 4px 11px; border-radius: var(--r-full);
+  border: 1px solid var(--border); background: var(--panel); color: var(--ink-2);
+  font: inherit; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+  transition: background var(--t), border-color var(--t), color var(--t);
+}
+.section-chip:hover, .section-chip:focus-visible { border-color: var(--accent-border); color: var(--accent); outline: none; }
+.section-chip.is-current { border-color: var(--accent); color: var(--accent); background: var(--accent-light); font-weight: 600; }
+.section-strip-hide {
+  flex: none; width: 26px; height: 26px; border-radius: var(--r-full); border: 0; background: none;
+  color: var(--muted); font-size: 17px; line-height: 1; cursor: pointer;
+}
+.section-strip-hide:hover { color: var(--ink); background: var(--accent-light); }
+
+/* Bezpiecznik przepełnienia: krawędź wygasa tylko wtedy, gdy w tę stronę jest co przewinąć. */
+.overflow-fade.more-r { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 36px), transparent); }
+.overflow-fade.more-l { -webkit-mask-image: linear-gradient(90deg, transparent, #000 36px); mask-image: linear-gradient(90deg, transparent, #000 36px); }
+.overflow-fade.more-l.more-r { -webkit-mask-image: linear-gradient(90deg, transparent, #000 36px, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(90deg, transparent, #000 36px, #000 calc(100% - 36px), transparent); }
+
+/* bez dokumentu pasek nie ma czego szukać ani powiększać */
+body:not(.has-document) .doc-toolbar { display: none; }
+
+/* ── pusty start ── */
+.empty-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 6px; }
+.empty-actions .btn { flex: none; padding: 10px 16px; border-radius: 12px; }
+.empty-drop-hint { font-size: 12px !important; color: var(--muted); margin: 0; }
+body.drag-active .doc-panel { outline: 2px dashed var(--accent); outline-offset: -6px; }
+
+/* ── pasek stanu ── */
+.status-bar { justify-content: flex-start; }
+.status-words { color: var(--muted); font-variant-numeric: tabular-nums; }
+.status-words:empty { display: none; }
+.status-bar .log-panel { margin-left: auto; }
+/* niezapisane zmiany: osobna pigułka (bursztyn), #status zostaje na komunikaty */
+#status.unsaved { color: inherit; font-weight: inherit; }
+.status-dirty { color: var(--warning); background: var(--warning-bg); padding: 2px 9px; border-radius: var(--r-full); font-weight: 600; white-space: nowrap; }
+.status-dirty[hidden] { display: none; }
+
+/* ── telefon ── */
+@media (max-width: 768px) {
+  .hero { padding: max(8px, var(--safe-top)) 10px 8px; gap: 8px; margin-bottom: 8px; }
+  .hero-left { gap: 10px; }
+  .hero-logo svg { width: 32px; height: 32px; }
+  .hero-title { font-size: 14.5px; }
+  .hero-sub { font-size: 11.5px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hero.has-file .hero-sub { display: none; }
+  .hero-meta { font-size: 11.5px; }
+  /* na wąsko zostają słowa; akapity i sposób zapisu są w panelu Plik */
+  .hero-meta > .hero-meta-sep { display: none; }
+  .hero-right { gap: 6px; }
+  .hero-save { height: 34px; padding: 0 11px; }
+  .app-menu-btn { width: 34px; height: 34px; }
+  .app-update-btn { height: 34px; padding: 0 10px; }
+
+  body.has-document .hero { margin: 0; border-radius: 0; border-left: 0; border-right: 0; border-top: 0; }
+  /* zwinięty nagłówek: zostaje tylko uchwyt, dokument dostaje miejsce */
+  body.hero-collapsed .hero { display: none; }
+  body.has-document .hero-grip {
+    display: flex; justify-content: center; align-items: center; width: 100%; height: 14px;
+    border: 0; padding: 0; background: var(--surface); cursor: pointer;
+  }
+  body.hero-collapsed .hero-grip { height: calc(16px + var(--safe-top)); padding-top: var(--safe-top); }
+  .hero-grip-bar { width: 40px; height: 4px; border-radius: 4px; background: var(--border); transition: width var(--t), background var(--t); }
+  body.hero-collapsed .hero-grip-bar { width: 52px; background: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+
+  .doc-toolbar { padding: 8px; gap: 8px; }
+  .doc-toolbar-row-2 { flex-wrap: wrap; }
+  .format-toolbar { order: 5; flex: 1 1 100%; padding-left: 0; border-left: 0; }
+  .zoom-now { min-width: 58px; }
+}
+
+/* ── strony dokumentu jak w Wordzie: białe kartki z cieniem na tle obszaru ──
+   docx-preview domyślnie kładzie SZARE tło (.docx-wrapper) wewnątrz naszej białej ramki —
+   wyglądało to jak szary prostokąt z małą kartką w środku. */
+.doc-canvas:not(.doc-reflow-mode) .docx-preview-host {
+  max-width: none; background: transparent; box-shadow: none; border: 0; border-radius: 0;
+}
+.docx-preview-host .docx-wrapper { background: transparent !important; padding: 8px 0 28px !important; }
+.doc-canvas:not(.doc-reflow-mode) .docx-wrapper > section.docx {
+  box-shadow: 0 1px 2px rgba(16, 32, 64, 0.08), 0 8px 28px rgba(16, 32, 64, 0.14) !important;
+  margin-bottom: 22px !important;
+}
+[data-theme="dark"] .doc-canvas:not(.doc-reflow-mode) .docx-wrapper > section.docx {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 32px rgba(0, 0, 0, 0.55) !important;
+}
+/* Plik bez rozmiaru strony (pusty w:sectPr — generatory, konwertery): docx-preview nie
+   daje wtedy szerokości ani marginesów i tekst rozlewał się na cały ekran. Kartka A4. */
+.doc-canvas:not(.doc-reflow-mode) .docx-wrapper > section.docx:not([style*="width"]) {
+  width: min(794px, 100%); box-sizing: border-box; padding: 64px 72px; margin-inline: auto;
+}
+/* Telefon: panel od dołu z prawie pełnym tłem — między kartami prześwitywał tekst dokumentu. */
+@media (max-width: 768px) {
+  html.is-mobile .sidebar { background: color-mix(in srgb, var(--bg) 97%, transparent); }
 }

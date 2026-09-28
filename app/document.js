@@ -117,7 +117,11 @@ async function renderCurrentDocument() {
   setLoading(true, t("renderingDoc"));
   try {
     hideEmptyState();
-    await renderDocxPreview(originalFileBytes, docCanvasEl);
+    const [, headingStyles] = await Promise.all([
+      renderDocxPreview(originalFileBytes, docCanvasEl),
+      typeof readHeadingStyleClasses === "function" ? readHeadingStyleClasses(originalFileBytes) : new Map(),
+    ]);
+    docHeadingStyleClasses = headingStyles;
     documentStructure = analyzeDocumentDom(docCanvasEl);
     renderStructurePanel(documentStructure);
     if (searchQueryEl?.value.trim()) runDocumentSearch();
