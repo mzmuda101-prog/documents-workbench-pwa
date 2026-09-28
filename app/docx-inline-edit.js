@@ -87,9 +87,12 @@ function onFormatSelectionChange() {
 }
 
 function resolveParaIndex(p) {
-  let idx = Number(p?.dataset?.paraIndex);
-  if (Number.isFinite(idx) && idx >= 0) return idx;
-  return collectPreviewParagraphElements(p?.closest(".docx-preview-host")).indexOf(p);
+  // Kolejność w DOM, nie data-para-index: po Enterze/Backspace (kolejka niżej) indeksy
+  // w atrybutach są nieaktualne aż do następnego syncInlineEditMode.
+  const idx = collectPreviewParagraphElements(p?.closest(".docx-preview-host")).indexOf(p);
+  if (idx >= 0) return idx;
+  const stored = Number(p?.dataset?.paraIndex);
+  return Number.isFinite(stored) && stored >= 0 ? stored : -1;
 }
 
 function isListParagraph(p) {
@@ -208,6 +211,31 @@ function mergeParagraphDom(prev, curr) {
   curr.remove();
 }
 
+function placeCaret(el, offset) {
+  if (!el) return;
+  el.focus({ preventScroll: true });
+  const sel = window.getSelection();
+  const range = document.createRange();
+  let remaining = Math.max(0, offset);
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node) {
+    if (remaining <= node.length) {
+      range.setStart(node, remaining);
+      range.collapse(true);
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+      return;
+    }
+    remaining -= node.length;
+    node = walker.nextNode();
+  }
+  range.selectNodeContents(el);
+  range.collapse(offset <= 0);
+  sel?.removeAllRanges();
+  sel?.addRange(range);
+}
+
 async function handleInlineEnter(p, paraIndex, e) {
   if (e.shiftKey) {
     e.preventDefault();
@@ -220,12 +248,14 @@ async function handleInlineEnter(p, paraIndex, e) {
     return;
   }
   e.preventDefault();
-  splitParagraphDomAtCaret(p);
-  pendingInlineCursor = { paraIndex: paraIndex + 1, offset: 0 };
-  const host = docCanvasEl?.querySelector(".docx-preview-host");
-  const paras = collectPreviewParagraphElements(host);
-  const beforeRuns = extractRunsFromPreviewParagraph(paras[paraIndex]);
-  const afterRuns = extractRunsFromPreviewParagraph(paras[paraIndex + 1]);
+  const newP = splitParagraphDomAtCaret(p);
+  if (!newP) return;
+  // Kursor w nowym akapicie OD RAZU — dawniej przeskakiwał dopiero po przebudowie pliku,
+  // a wszystko wpisane w tym czasie trafiało do starego akapitu.
+  placeCaret(newP, 0);
+  const beforeRuns = extractRunsFromPreviewParagraph(p);
+  const afterRuns = extractRunsFromPreviewParagraph(newP);
+  mirrorBaseline(paraIndex, 1, beforeRuns, afterRuns);
   await applyInlineStructuralEdit({
     op: "splitParagraph",
     index: paraIndex,
@@ -244,8 +274,9 @@ async function handleInlineBackspace(p, paraIndex, e) {
   const prev = paras[paraIndex - 1];
   const joinAt = previewRunsToPlainText(extractRunsFromPreviewParagraph(prev)).length;
   mergeParagraphDom(prev, p);
+  placeCaret(prev, joinAt);
   const mergedRuns = extractRunsFromPreviewParagraph(prev);
-  pendingInlineCursor = { paraIndex: paraIndex - 1, offset: joinAt };
+  mirrorBaseline(paraIndex - 1, 2, mergedRuns);
   await applyInlineStructuralEdit({ op: "mergeParagraph", index: paraIndex, mergedRuns });
 }
 
@@ -253,15 +284,13 @@ async function handleInlineTab(p, paraIndex, e) {
   if (e.shiftKey) {
     if (!isListParagraph(p)) return;
     e.preventDefault();
-    const at = getCaretOffset(p);
-    pendingInlineCursor = { paraIndex, offset: at };
+    applyDomListLevel({ index: paraIndex, delta: -1 });
     await applyInlineStructuralEdit({ op: "listLevel", index: paraIndex, delta: -1 });
     return;
   }
   if (isListParagraph(p)) {
     e.preventDefault();
-    const at = getCaretOffset(p);
-    pendingInlineCursor = { paraIndex, offset: at };
+    applyDomListLevel({ index: paraIndex, delta: 1 });
     await applyInlineStructuralEdit({ op: "listLevel", index: paraIndex, delta: 1 });
     return;
   }
@@ -295,21 +324,65 @@ function applyDomListLevel(edit) {
   setListLevelOnDom(p, next);
 }
 
-async function applyInlineStructuralEdit(edit) {
-  if (!originalFileBytes) return 0;
-  await mergeInlineEditsIntoBytes();
-  const { bytes, changeCount } = await buildPatchedDocx(originalFileBytes, [edit]);
-  if (!changeCount) return 0;
-  originalFileBytes = bytes;
-  await refreshInlineEditBaseline(bytes);
-  if (edit.op === "listLevel") applyDomListLevel(edit);
-  syncInlineEditMode();
-  if (docCanvasEl) {
-    documentStructure = analyzeDocumentDom(docCanvasEl);
-    renderStructurePanel(documentStructure);
-  }
+// ── Enter / Backspace / Tab: kolejka operacji na pliku ──────────────────────
+// Podgląd i kursor zmieniają się OD RAZU (synchronicznie w keydown), a przebudowa
+// pliku (buildPatchedDocx — rozpakowanie i spakowanie całego .docx) idzie w tle,
+// JEDNA PO DRUGIEJ. Dwa warunki poprawności:
+//  1) baza porównań (baselineParagraphRuns = „co będzie w pliku”) zmienia się w tej
+//     samej chwili co podgląd (mirrorBaseline), więc akapity podglądu i bazy zawsze
+//     stoją na tych samych indeksach — collectInlineParagraphEdits nie może wpisać
+//     treści akapitu w sąsiedni;
+//  2) operacje trafiają do pliku w kolejności wciśnięć, a indeks każdej liczony był
+//     po wszystkich poprzednich — więc zgadza się z plikiem w chwili wykonania.
+// Dawniej (2026-09-28, odtworzone): szybkie pisanie po Enterze → tekst w złym akapicie,
+// a zapisany plik różnił się od podglądu (34 akapity na ekranie, 33 w pliku).
+let inlineStructuralChain = Promise.resolve();
+let inlineStructuralPending = 0;
+
+function mirrorBaseline(index, removeCount, ...runsList) {
+  if (!baselineParagraphRuns.length) return;
+  baselineParagraphRuns.splice(index, removeCount, ...runsList);
+  baselineParagraphTexts.splice(index, removeCount, ...runsList.map((r) => previewRunsToPlainText(r)));
+}
+
+function waitInlineStructuralIdle() {
+  return inlineStructuralChain;
+}
+
+function applyInlineStructuralEdit(edit) {
+  if (!originalFileBytes) return Promise.resolve(0);
+  inlineStructuralPending++;
   setDirtyState(true);
-  return changeCount;
+  syncInlineEditMode(); // nowy akapit: edytowalny, podpięty, indeksy odświeżone
+  const job = inlineStructuralChain.then(async () => {
+    try {
+      const { bytes, changeCount } = await buildPatchedDocx(originalFileBytes, [edit]);
+      if (changeCount) originalFileBytes = bytes;
+      return changeCount;
+    } catch (err) {
+      log(`Enter/Backspace: ${err.message || err}`, "error");
+      return 0;
+    } finally {
+      inlineStructuralPending--;
+      if (!inlineStructuralPending) {
+        // kolejka pusta — baza z pliku (kontrola spójności) i odświeżona struktura.
+        // Przypisujemy tylko, gdy w trakcie odczytu nie padł kolejny Enter/Backspace —
+        // inaczej nadpisalibyśmy lustro bazy sprzed tej operacji.
+        const snapshot = originalFileBytes;
+        const [texts, runs] = await Promise.all([extractParagraphTextsFromDocx(snapshot), extractParagraphRunsFromDocx(snapshot)]);
+        if (!inlineStructuralPending && originalFileBytes === snapshot) {
+          baselineParagraphTexts = texts;
+          baselineParagraphRuns = runs;
+        }
+        if (docCanvasEl && !inlineStructuralPending) {
+          documentStructure = analyzeDocumentDom(docCanvasEl);
+          renderStructurePanel(documentStructure);
+        }
+      }
+    }
+  });
+  inlineStructuralChain = job.then(() => {}, () => {});
+  return job;
 }
 
 function execInlineFormat(command) {
@@ -429,6 +502,7 @@ function setupInlineEditingAfterRender() {
 }
 
 async function mergeInlineEditsIntoBytes() {
+  await waitInlineStructuralIdle();
   const inlineEdits = collectInlineParagraphEdits();
   if (!inlineEdits.length) return 0;
   const { bytes, changeCount } = await buildPatchedDocx(originalFileBytes, [{ op: "paragraphBatch", items: inlineEdits }]);

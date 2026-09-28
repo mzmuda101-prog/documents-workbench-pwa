@@ -19,6 +19,13 @@ syncDocumentShellClass();
 setDirtyState(false);
 setStatus(t("noFile"));
 
+// ?sample=nazwa — otwiera docs/samples/nazwa.docx od razu (symulator iOS, testy, pokaz).
+// Na telefonie nie ma jak wskazać pliku z dysku Maca, a przykład z nagłówkami jest potrzebny.
+{
+  const sampleParam = new URLSearchParams(location.search).get("sample");
+  if (sampleParam) loadSampleDocument(sampleParam);
+}
+
 window.addEventListener("beforeunload", (e) => {
   if (!hasUnsavedChanges) return;
   e.preventDefault();

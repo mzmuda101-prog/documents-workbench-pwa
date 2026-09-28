@@ -623,5 +623,5 @@ const appFrame = (() => {
   syncZoomNow();
   syncFile();
 
-  return { syncFile, syncSave, syncPanelCounts, setMenuOpen, syncDock, isDocked, dockedInitialOpen, runFinder, renderSectionChips, setReadOnly, onLanguageChange };
+  return { syncFile, syncSave, syncPanelCounts, setMenuOpen, syncDock, isDocked, dockedInitialOpen, runFinder, renderSectionChips, setReadOnly, onLanguageChange, setHeroCollapsed, isHeroCollapsed: () => heroCollapsed };
 })();

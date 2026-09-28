@@ -31,7 +31,9 @@ Stan na **v0.2** (lipiec 2026). Ostatnia wersja cache: `20260702-03`.
 
 | **Paczka B — rama ekranu z Sheet Workbench** (`app/app-frame.js`: nagłówek z plikiem i „Zapisz” + licznik, menu ⋯, panel obok ≥1024 px, „Znajdź ustawienie…”, pasek nad dokumentem, Czytanie/Edycja, skróty sekcji ze stylów nagłówków, zwijany nagłówek na telefonie; strażnik `test:frame` Chromium + WebKit) | ✅ 2026-09-28 |
 
-**Dalej (przenoszenie z Sheet Workbench):** C dotyk/iOS → D Cofnij/Ponów → E klawiatura + cursor-hint (dziś brak podpowiedzi na najechanie przy ikonkach paska) → F wydajność dużych dokumentów. Później: „Ostatnio otwierane” (tylko Chrome/Edge, uchwyty plików w IndexedDB — lokalnie).
+| **Paczka C — dotyk / iOS** (symulator iPhone 18 Pro: pola 16 px bez przybliżania, strona wraca po zamknięciu klawiatury, pisanie z klawiaturą — pasek zostaje, Enter chowa klawiaturę w szukaniu, „Zapisz” bez FSA = zapis kopii, pełne tła i bez blurów na dotyku, toasty u góry, hover tylko dla myszy; **fix utraty tekstu przy szybkim pisaniu po Enterze** — kolejka przebudowy pliku; strażnicy `test:touch`, `test:enter`) | ✅ 2026-09-28 |
+
+**Dalej (przenoszenie z Sheet Workbench):** D Cofnij/Ponów → E klawiatura + cursor-hint (dziś brak podpowiedzi na najechanie przy ikonkach paska) → F wydajność dużych dokumentów. Później: „Ostatnio otwierane” (tylko Chrome/Edge, uchwyty plików w IndexedDB — lokalnie).
 
 **Poza pierwotnym planem (ale wartościowe):** … edycja inline ze stylami runów + rozmiar czcionki, zoom 0.5–2.
 

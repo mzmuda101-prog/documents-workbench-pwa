@@ -1,6 +1,6 @@
 // Core runtime: DOM refs, shared state, and base UI helpers.
 
-const APP_BUILD_VERSION = "20260928-07";
+const APP_BUILD_VERSION = "20260928-12";
 
 const IS_LOW_POWER = (() => {
   try {
@@ -180,15 +180,19 @@ function syncDocViewportHeight() {
   if (!docPanelEl) return;
   requestAnimationFrame(() => {
     const rect = docPanelEl.getBoundingClientRect();
-    const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 720;
+    const kbOpen = document.body.classList.contains("kb-open");
+    // Klawiatura ekranowa (touch.js): liczymy do WIDOCZNEGO obszaru, nie do okna — inaczej
+    // dół dokumentu leży pod klawiaturą, a iOS przesuwa całą stronę (i pasek ucieka).
+    const viewportHeight = (kbOpen && window.visualViewport ? window.visualViewport.height : window.innerHeight)
+      || document.documentElement.clientHeight || 720;
     const mobile = window.matchMedia("(max-width: 768px)").matches;
     // Pod dokumentem stoi pasek stanu — obszar dokumentu kończy się nad nim, żeby
     // całość mieściła się w oknie bez przewijania strony.
     const statusBar = document.querySelector(".status-bar");
-    const statusH = statusBar ? statusBar.getBoundingClientRect().height + (mobile ? 0 : 12) : 0;
+    const statusH = statusBar && !kbOpen ? statusBar.getBoundingClientRect().height + (mobile ? 0 : 12) : 0;
     const bottomGap = mobile ? 0 : 16;
     const available = Math.floor(viewportHeight - rect.top - statusH - bottomGap);
-    const minHeight = window.matchMedia("(max-width: 768px)").matches ? 280 : 420;
+    const minHeight = kbOpen ? 120 : mobile ? 280 : 420;
     docPanelEl.style.setProperty("--doc-panel-height", `${Math.max(minHeight, available)}px`);
   });
 }

@@ -146,6 +146,13 @@ async function saveDocument() {
     toast(t("noFileToSave"), "warning");
     return;
   }
+  // Safari/iPhone/Firefox nie umieją nadpisać pliku w miejscu (brak File System Access).
+  // Dawniej „Zapisz” kończyło się tam komunikatem „anulowano” — nic się nie zapisywało.
+  // Jedyna uczciwa droga to zapis kopii (pobranie), więc od razu „Zapisz jako”.
+  if (!fileHandle && !window.showOpenFilePicker) {
+    await saveDocumentAs();
+    return;
+  }
   setLoading(true, t("savingFile"));
   try {
     const bytes = await buildDocumentForSave();
@@ -366,7 +373,7 @@ if (closeDocBtn) closeDocBtn.addEventListener("click", requestCloseDocument);
 const closeDocPanelBtn = document.getElementById("closeDocPanelBtn");
 if (closeDocPanelBtn) closeDocPanelBtn.addEventListener("click", requestCloseDocument);
 if (loadBtn) loadBtn.addEventListener("click", openFilePicker);
-if (loadSampleBtn) loadSampleBtn.addEventListener("click", loadSampleDocument);
+if (loadSampleBtn) loadSampleBtn.addEventListener("click", () => loadSampleDocument());
 if (saveBtn) saveBtn.addEventListener("click", saveDocument);
 if (saveAsBtn) saveAsBtn.addEventListener("click", saveDocumentAs);
 if (fileInput) {

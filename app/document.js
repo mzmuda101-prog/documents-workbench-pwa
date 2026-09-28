@@ -88,13 +88,16 @@ async function ingestFile(file, options = {}) {
   }
 }
 
-async function loadSampleDocument() {
+// name: plik z docs/samples/ (bez rozszerzenia). Tylko [a-z0-9-] — adres ?sample=… nie może
+// wskazać niczego poza tym katalogiem.
+async function loadSampleDocument(name = "sample") {
+  const safe = /^[a-z0-9-]{1,40}$/.test(String(name)) ? name : "sample";
   setLoading(true, t("loadingFile"));
   try {
-    const res = await fetch("docs/samples/sample.docx");
+    const res = await fetch(`docs/samples/${safe}.docx`);
     if (!res.ok) throw new Error("sample missing");
     const buf = await res.arrayBuffer();
-    const file = new File([buf], "sample.docx", {
+    const file = new File([buf], `${safe}.docx`, {
       type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     });
     await ingestFile(file, { silent: true });
@@ -135,6 +138,8 @@ async function renderCurrentDocument() {
 
 async function buildDocumentForSave() {
   if (!originalFileBytes) return null;
+  // Enter/Backspace w podglądzie mogą jeszcze przebudowywać plik w tle
+  if (typeof waitInlineStructuralIdle === "function") await waitInlineStructuralIdle();
   const inlineEdits = collectInlineParagraphEdits();
   const edits = [...pendingDocEdits];
   if (inlineEdits.length) edits.push({ op: "paragraphBatch", items: inlineEdits });

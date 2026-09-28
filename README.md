@@ -20,6 +20,9 @@ Siostrzana aplikacja [Sheet Workbench PWA](../sheet-workbench-pwa/README.md).
   od 1024 px z „Znajdź ustawienie…”, pasek nad dokumentem (szukanie ↑↓, Czytanie/Edycja,
   B/I/U, zoom), skróty sekcji z nagłówków Worda (też polskich stylów; da się schować),
   zwijany nagłówek na telefonie, upuszczanie pliku w dowolnym miejscu okna
+- **Dotyk / iPhone** (sprawdzone na symulatorze iOS): pisanie z klawiaturą ekranową bez
+  uciekania paska, brak przybliżania strony przy polach, „Zapisz” w Safari = zapis kopii,
+  lżejsze efekty na dotyku; `?sample=nazwa` otwiera `docs/samples/nazwa.docx`
 
 ## Start lokalnie
 
@@ -46,6 +49,9 @@ npm run test:fast     # 5 naraz — szybciej, komputer mocniej pracuje
 npm test -- pwa find  # tylko kroki, których komenda zawiera któreś słowo
 npm run test:serial   # po kolei, jak dawniej
 npm run test:pwa      # service worker: offline, zawieszona sieć, aktualizacja
+npm run test:frame    # rama ekranu (Chromium + WebKit)
+npm run test:touch    # lekcje z iPhone'a (dotyk)
+npm run test:enter    # szybkie pisanie wokół Enter/Backspace: zapis = podgląd
 npm run test:stress   # pełny przebieg na dużym .docx (wymaga npm run serve)
 ```
 

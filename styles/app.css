@@ -338,7 +338,7 @@ body.splashing {
   position: fixed; top: 86px; left: clamp(10px, 1.2vw + 6px, 18px);
   display: flex; flex-direction: column; gap: 14px;
   width: min(clamp(288px, 5.5vw + 255px, 368px), calc(100vw - 24px));
-  max-height: calc(100vh - 95px); overflow-y: auto; overscroll-behavior: contain;
+  max-height: calc(100dvh - 95px); overflow-y: auto; overscroll-behavior: contain;
   padding: 2px 4px 12px 2px; scroll-padding-bottom: 12px;
   z-index: 30; transform: translateX(calc(-100% - 24px)); opacity: 0; pointer-events: none;
   transition: transform var(--t-slow), opacity var(--t);
@@ -555,9 +555,13 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
   outline: none; border-radius: 3px;
   transition: box-shadow var(--t), background var(--t);
 }
-.doc-canvas.edit-mode .docx-editable-p:hover {
-  box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 42%, transparent);
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
+/* Hover tylko dla myszy: na iPhonie pierwszy tap w akapit „zjadał” się na stan hover
+   (podświetlenie bez fokusu i bez klawiatury) — dopiero drugi stawiał kursor. */
+@media (hover: hover) {
+  .doc-canvas.edit-mode .docx-editable-p:hover {
+    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 42%, transparent);
+    background: color-mix(in srgb, var(--accent) 5%, transparent);
+  }
 }
 .doc-canvas.edit-mode .docx-editable-p:focus,
 .doc-canvas.edit-mode .docx-editable-p:focus-within {
@@ -1163,5 +1167,70 @@ body.drag-active .doc-panel { outline: 2px dashed var(--accent); outline-offset:
 }
 /* Telefon: panel od dołu z prawie pełnym tłem — między kartami prześwitywał tekst dokumentu. */
 @media (max-width: 768px) {
-  html.is-mobile .sidebar { background: color-mix(in srgb, var(--bg) 97%, transparent); }
+  html.is-mobile .sidebar { background: var(--bg); }
+  /* pływający „Schowaj panel” nie może leżeć na ostatniej sekcji */
+  html.is-mobile .sidebar > .sidebar-scroll { padding-bottom: 84px; }
 }
+
+/* =====================================================================
+   DOTYK / iOS (paczka C, 2026-09-28) — lekcje z Sheet Workbench + symulator iPhone 18 Pro
+   Bramka (pointer: coarse): mysz i gładzik bez zmian.
+   ===================================================================== */
+@media (pointer: coarse) {
+  /* iOS przybliża CAŁĄ stronę przy fokusie w polu z czcionką < 16 px — i zostaje
+     przybliżona po zamknięciu klawiatury (odtworzone: „Zapisz” i ⋯ wyjeżdżały za ekran). */
+  input, select, textarea { font-size: 16px !important; }
+
+  /* Szybkie tapnięcia (np. zoom + + +) nie mogą być brane za dwutap-przybliżenie strony. */
+  button, .btn, .tb-btn, .mode-btn, .section-chip, summary, .app-menu-item, .hero-grip { touch-action: manipulation; }
+
+  /* Cele dotykowe: przyciski paska 40 px (44 rozpychały pasek na dwa rzędy), reszta 44 px. */
+  .tb-btn { min-width: 40px; height: 40px; }
+  .zoom-group .tb-btn { min-width: 36px; height: 36px; }
+  .format-btn { min-width: 40px; height: 40px; }
+  .tb-select { height: 40px; }
+  .mode-btn { padding: 8px 13px; min-height: 36px; }
+  .doc-search { height: 40px; }
+  .section-chip { padding: 7px 12px; }
+  .section-strip-hide { width: 36px; height: 36px; }
+  .btn { min-height: 44px; }
+  .sidebar-close { width: 44px; height: 44px; }
+  .sidebar-finder { height: 44px; }
+  details.panel > summary { min-height: 50px; }
+
+  /* Na dotyku nie ma „przeciągnij plik w dowolne miejsce okna”. */
+  .empty-drop-hint { display: none; }
+
+  /* Rozmycia tła (backdrop-filter) i rozmyte cienie są drogie na iPhonie, a koszt rośnie
+     z liczbą elementów (w Sheet: cień na przełączniku × wiersze = lag przewijania; blur na
+     komórkach = 2,5× dłuższa klatka). NIE gasimy po wykryciu Safari — PWA z ekranu
+     głównego nie ma „Safari” w UA — tylko dla całego dotyku. */
+  .hero, .panel, .status-bar, .sidebar-handle, .loading-overlay, .sidebar-scrim, .lang-switch {
+    -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+  }
+  /* Szkło bez rozmycia = zwykła przezroczystość (na iPhonie przez karty panelu było widać
+     tekst dokumentu). Na dotyku tła pełne. */
+  .hero, .status-bar { background: var(--glass-sheen), var(--surface); }
+  .panel { background: var(--surface); }
+  .btn.primary, .empty-icon, .lang-switch-indicator { box-shadow: none; }
+  /* strony dokumentu: jedna twarda linia zamiast rozmytego cienia na każdej stronie */
+  .doc-canvas:not(.doc-reflow-mode) .docx-wrapper > section.docx { box-shadow: 0 0 0 1px rgba(16, 32, 64, 0.14) !important; }
+}
+
+/* Telefon: toasty u GÓRY — na dole są pasek stanu, pasek Safari i „Schowaj panel”,
+   więc potwierdzenia nie było widać (ta sama poprawka co w Sheet). */
+@media (max-width: 768px) and (pointer: coarse) {
+  .toast-container {
+    top: calc(max(8px, var(--safe-top)) + 4px); bottom: auto;
+    left: max(10px, var(--safe-left)); right: max(10px, var(--safe-right));
+  }
+  .toast { max-width: none; }
+}
+/* telefon: długi tytuł nie może zająć całego rzędu skrótów */
+@media (max-width: 768px) { .section-chip { max-width: 62vw; } }
+/* pisanie z klawiaturą ekranową (touch.js): liczy się każdy piksel nad klawiaturą */
+body.kb-open .section-strip, body.kb-open .status-bar { display: none !important; }
+/* pasek stanu: jeden wiersz; na telefonie przy niezapisanych zmianach komunikat ustępuje pigułce */
+.status-bar { flex-wrap: nowrap; white-space: nowrap; min-width: 0; }
+#status { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+@media (max-width: 768px) { .status-dirty:not([hidden]) + #status { display: none; } }
