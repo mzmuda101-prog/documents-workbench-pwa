@@ -7,6 +7,7 @@ const LAZY_FEATURE_SCRIPTS = {
   "find-replace": ["app/find-replace-workbench.js"],
   export: ["app/export-panel.js"],
   stats: ["app/stats-panel.js"],
+  review: ["app/review-panel.js"],
 };
 
 const PANEL_LAZY_FEATURE = {
@@ -17,6 +18,7 @@ const PANEL_LAZY_FEATURE = {
   "panel-search": "find-replace",
   "panel-export": "export",
   "panel-stats": "stats",
+  "panel-review": "review",
 };
 
 const lazyFeatureLoaded = new Set();
@@ -69,6 +71,7 @@ function initLazyFeaturePanels() {
           loadMetadataFromDocument().catch(() => {});
         }
         if (panel.id === "panel-stats" && typeof renderDocumentStats === "function") renderDocumentStats();
+        if (panel.id === "panel-review" && typeof runReviewScan === "function") runReviewScan().catch(() => {});
       }).catch(() => {});
     });
   });

@@ -440,6 +440,12 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
       }
       continue;
     }
+    if (normalized.op === "revisions") { // docx-revisions.js — dotyka też nagłówków, stopek, przypisów, komentarzy
+      const res = await applyRevisionsInZip(zip, xml, normalized);
+      xml = res.xml;
+      total += res.count;
+      continue;
+    }
     const opts = i === list.length - 1 ? lastEditOpts : {};
     const res = applyEditToXml(xml, normalized, opts);
     xml = res.xml;

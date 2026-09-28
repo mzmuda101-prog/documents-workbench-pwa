@@ -28,6 +28,7 @@ const UNDO_OP_LABEL = {
   affix: "undoOpAffix",
   paragraphBatch: "undoOpParagraphs",
   coreMetadata: "undoOpMetadata",
+  revisions: "undoOpReview",
   placeholderFill: "undoOpPlaceholders",
   snippetExpand: "undoOpSnippets",
 };

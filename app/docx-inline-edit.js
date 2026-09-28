@@ -14,10 +14,41 @@ function collapseSpacesKeepNewlines(s) {
   return normalizePreviewText(s).replace(/[^\S\n]+/g, " ").trim();
 }
 
+// Akapity TREŚCI w kolejności pliku (= collectParagraphElements w XML). docx-preview rysuje
+// każdą stronę/sekcję jako <section class="docx"> z <header>, <article> (treść), <footer> i
+// <ol> przypisów. Dawniej brane było każde <p> z PIERWSZEJ sekcji — z nagłówkiem i
+// przypisami, bez dalszych sekcji — więc numery akapitów przesuwały się względem pliku
+// i zapis edycji trafiał w cudze akapity (np. nagłówek „Poufne” wpisany w treść).
 function collectPreviewParagraphElements(host) {
   if (!host) return [];
+  const body = host.querySelectorAll("section.docx > article p");
+  if (body.length) return Array.from(body);
   const docxRoot = host.querySelector(".docx") || host;
   return Array.from(docxRoot.querySelectorAll("p"));
+}
+
+// Akapity, których edycja w podglądzie zgubiłaby coś z pliku: zapis akapitu przepisuje jego
+// fragmenty tekstu od nowa (applyRunsToParagraphXml), więc przypis, obraz, pole, link czy
+// śledzona zmiana w środku by przepadły. Takie akapity są tylko do odczytu, z wyjaśnieniem.
+const INLINE_LOCK_TAGS = [
+  ["ins", "lockTracked"], ["del", "lockTracked"], ["moveFrom", "lockTracked"], ["moveTo", "lockTracked"], ["rPrChange", "lockTracked"],
+  ["footnoteReference", "lockNote"], ["endnoteReference", "lockNote"],
+  ["drawing", "lockObject"], ["pict", "lockObject"], ["object", "lockObject"],
+  ["fldChar", "lockField"], ["fldSimple", "lockField"], ["hyperlink", "lockLink"],
+];
+async function markLockedParagraphs(bytes) {
+  const host = docCanvasEl?.querySelector(".docx-preview-host");
+  if (!host || !bytes) return;
+  const doc = await getDocumentXmlDom(bytes);
+  if (!doc || bytes !== originalFileBytes) return; // w międzyczasie inny plik/wersja
+  const previews = collectPreviewParagraphElements(host);
+  collectParagraphElements(doc.documentElement, "all").forEach((xp, i) => {
+    const el = previews[i];
+    if (!el) return;
+    const hit = INLINE_LOCK_TAGS.find(([tag]) => xp.getElementsByTagNameNS(W_NS, tag).length);
+    if (hit) el.dataset.lock = hit[1];
+    else delete el.dataset.lock;
+  });
 }
 
 async function refreshInlineEditBaseline(bytes) {
@@ -562,6 +593,21 @@ function syncInlineEditMode() {
   const paragraphs = collectPreviewParagraphElements(host);
   paragraphs.forEach((p, i) => {
     p.dataset.paraIndex = String(i);
+    const locked = editable && !!p.dataset.lock;
+    p.classList.toggle("docx-locked-p", locked);
+    if (locked) {
+      p.contentEditable = "false";
+      p.classList.remove("docx-editable-p", "docx-editable-list");
+      p.dataset.hint = "";
+      p.dataset.hintPl = I18N.pl[p.dataset.lock];
+      p.dataset.hintEn = I18N.en[p.dataset.lock];
+      p.dataset.hintTouch = "on";
+      p.dataset.lockHint = "1";
+      return;
+    }
+    if (p.dataset.lockHint) { // blokada zdjęta (np. zmiany zaakceptowane) albo tryb Czytanie
+      ["hint", "hintPl", "hintEn", "hintTouch", "lockHint"].forEach((k) => delete p.dataset[k]);
+    }
     p.contentEditable = editable ? "true" : "false";
     p.classList.toggle("docx-editable-p", editable);
     p.classList.toggle("docx-editable-list", editable && isListParagraph(p));
@@ -590,7 +636,8 @@ function syncInlineEditMode() {
 
 function setupInlineEditingAfterRender() {
   if (!originalFileBytes) return;
-  refreshInlineEditBaseline(originalFileBytes).then(() => syncInlineEditMode());
+  const bytes = originalFileBytes;
+  refreshInlineEditBaseline(bytes).then(() => markLockedParagraphs(bytes)).then(() => syncInlineEditMode());
 }
 
 async function mergeInlineEditsIntoBytes() {

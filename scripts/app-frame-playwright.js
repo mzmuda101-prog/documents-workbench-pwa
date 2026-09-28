@@ -142,11 +142,11 @@ async function desktop(browser) {
   check("menu ⋯: język, motyw, zamknij dokument; Esc zamyka", menu.open && menu.lang && menu.theme && menu.close && menu.inBody && menuClosed, JSON.stringify(menu));
 
   // Znajdź ustawienie…
-  await page.fill("#sidebarFinder", "autor");
+  await page.fill("#sidebarFinder", "kluczowe"); // „autor” jest też w Recenzji („Autor zmian”)
   const finder = await page.evaluate(() => [...document.querySelectorAll(".sidebar details.panel")].filter((d) => !d.hidden).map((d) => d.id));
   await page.fill("#sidebarFinder", "");
   const finderReset = await page.evaluate(() => [...document.querySelectorAll(".sidebar details.panel")].every((d) => !d.hidden));
-  check("„Znajdź ustawienie…”: „autor” → tylko Metadane, po wyczyszczeniu wszystko", finder.length === 1 && finder[0] === "panel-metadata" && finderReset, finder.join(","));
+  check("„Znajdź ustawienie…”: „kluczowe” → tylko Metadane, po wyczyszczeniu wszystko", finder.length === 1 && finder[0] === "panel-metadata" && finderReset, finder.join(","));
 
   // × chowa skróty sekcji — na stałe (opcja w Widok)
   await page.click("#sectionStripHide");

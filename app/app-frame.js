@@ -337,6 +337,8 @@ const appFrame = (() => {
     setSummaryCount("panel-search", hits);
     setSummaryCount("panel-grammar", grammar);
     setSummaryCount("panel-placeholders", fields);
+    const review = typeof docReviewCounts !== "undefined" && originalFileBytes ? docReviewCounts.changes + docReviewCounts.comments : 0;
+    setSummaryCount("panel-review", review);
     if (searchPosEl) {
       const q = searchQueryEl?.value.trim();
       searchPosEl.textContent = !q ? "" : hits ? `${pos + 1} / ${hits}` : "0";
@@ -542,6 +544,7 @@ const appFrame = (() => {
     const r = origRenderStructure.apply(this, args);
     renderSectionChips();
     syncFile();
+    if (typeof refreshReviewCounts === "function") refreshReviewCounts();
     return r;
   };
   const origClear = window.clearDocumentState;

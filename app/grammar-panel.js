@@ -103,10 +103,7 @@ function renderGrammarSuggestions() {
 
 function scrollToGrammarParagraph(paraIndex) {
   if (!docCanvasEl) return;
-  const root = getDocContentRoot(docCanvasEl);
-  if (!root) return;
-  const paras = root.querySelectorAll("p");
-  const el = paras[paraIndex];
+  const el = docBodyParagraphs(docCanvasEl)[paraIndex]; // numer akapitu z pliku = akapit treści
   if (!el) return;
   docCanvasEl.querySelectorAll(".search-hit-active").forEach((n) => n.classList.remove("search-hit-active"));
   el.classList.add("search-hit", "search-hit-active");

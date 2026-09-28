@@ -40,11 +40,19 @@ Siostrzana aplikacja [Sheet Workbench PWA](../sheet-workbench-pwa/README.md).
   `{{…}}` (ten sam szablon wypełniany wiele razy); **„Usuń dane osobowe”** w Metadanych
   (autor, ostatnio zmieniający, opis, temat — przed wysłaniem pliku dalej)
 
+- **Recenzja**: śledzone zmiany (wstawienia, usunięcia, przeniesienia, formatowanie, akapity,
+  wiersze — też w nagłówkach, stopkach i przypisach), komentarze z odpowiedziami i zakomentowanym
+  tekstem, przypisy; skok do miejsca, filtr autora, ✓ / ✗ przy każdej zmianie, „Akceptuj / Odrzuć
+  wszystkie” (lub tylko wybranego autora), „Usuń wszystkie komentarze”; komunikat i licznik po
+  otwarciu pliku. Akapity z przypisem, obrazem, polem, linkiem lub śledzoną zmianą są w trybie
+  Edycja tylko do odczytu (edycja tutaj by je zgubiła) — z wyjaśnieniem po najechaniu
+
 ## Start lokalnie
 
 ```bash
 npm install
 node scripts/gen-sample-docx.mjs
+node scripts/gen-review-docx.mjs   # próbka recenzji (?sample=review-sample)
 npm run serve
 ```
 
@@ -70,6 +78,7 @@ npm run test:touch    # lekcje z iPhone'a (dotyk)
 npm run test:enter    # szybkie pisanie wokół Enter/Backspace: zapis = podgląd
 npm run test:undo     # Cofnij / Ponów (Chromium + WebKit)
 npm run test:pinch    # przybliżanie dwoma palcami (Chromium + WebKit)
+npm run test:review   # recenzja: skan, Akceptuj/Odrzuć, komentarze, blokady akapitów, mapowanie akapitów
 npm run test:export   # eksport, statystyki, import/eksport JSON, usuwanie danych osobowych
 npm run test:keys     # klawiatura, tryb skupienia, podpowiedzi
 npm run bench         # pomiar wydajności na dużych dokumentach (~100 i ~300 stron, CPU ×4)

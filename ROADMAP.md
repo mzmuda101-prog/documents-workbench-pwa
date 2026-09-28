@@ -41,6 +41,8 @@ Stan na **v0.2** (lipiec 2026). Ostatnia wersja cache: `20260702-03`.
 
 | **Paczka G — pinch-zoom** (`app/pinch-zoom.js`: dwa palce przybliżają/oddalają dokument także przy „Dopasuj” — tekst skaluje się i dalej zawija; transform w trakcie gestu + zatwierdzenie zoomu po puszczeniu; miejsce w TEKŚCIE pod palcami zostaje pod palcami; zakres 35–300%; sprawdzone gestem na symulatorze iPhone'a. GOTCHA: `zoom: 1 !important` w trybie Dopasuj po cichu zerował gest — strażnik `test:pinch` mierzy wielkość tekstu na ekranie, nie zmienną) | ✅ 2026-09-28 |
 
+| **Paczka I — Recenzja** (`app/docx-revisions.js` + `app/review-panel.js`: śledzone zmiany we wszystkich częściach pliku, komentarze z odpowiedziami, przypisy; Akceptuj/Odrzuć pojedynczo, wszystkie lub autora — z łączeniem akapitów i przywracaniem właściwości jak w Wordzie; usuwanie komentarzy; licznik + komunikat po otwarciu. **Naprawione przy okazji (starsze błędy):** podgląd liczył akapity nagłówka/przypisów i tylko PIERWSZĄ sekcję → edycje w plikach z nagłówkiem lub podziałem strony trafiały w cudze akapity; akapity z przypisem/obrazem/polem/linkiem/śledzoną zmianą są teraz tylko do odczytu w Edycji. Strażnik `test:review`) | ✅ 2026-09-28 |
+
 | **Paczka H — eksport i statystyki** (`app/export-panel.js`: TXT/MD/HTML + druk/PDF; `app/stats-panel.js`: liczby, czas czytania, najczęstsze słowa, najdłuższe zdania ze skokiem, zaznaczenie; eksport/import JSON snippetów i wartości pól; „Usuń dane osobowe” w metadanych; strażnik `test:export`) | ✅ 2026-09-28 |
 
 **Plan przenoszenia z Sheet Workbench (A–F) zakończony.** Otwarte tematy: cofnięcie kroku z Enterem nadal rysuje dokument od nowa (~4 s przy 300 stronach); pierwszy układ bardzo długiego dokumentu jest kosztem docx-preview (content-visibility odrzucone — psuje numerację list przez izolację stylów). Później: „Ostatnio otwierane” (tylko Chrome/Edge, uchwyty plików w IndexedDB — lokalnie).
@@ -169,7 +171,7 @@ Lokalny, **offline-first** moduł — bez wysyłania tekstu na serwer.
 
 ## Rekomendowany następny krok
 
-**Recenzja: komentarze, śledzone zmiany, przypisy** (odczyt + skok, potem Akceptuj/Odrzuć wszystkie). Dalej: Znajdź i zamień v2, „Ostatnio otwierane”, tabele, porównanie dwóch wersji.
+**Znajdź i zamień v2** (całe słowa, wielkość liter, nagłówki/stopki, historia). Dalej: edycja akapitów z linkami/przypisami bez gubienia ich (zamiast blokady), „Ostatnio otwierane”, tabele, porównanie dwóch wersji.
 
 ---
 

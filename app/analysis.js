@@ -2,9 +2,22 @@
 
 const STRUCTURE_OUTLINE_LIMIT = 150;
 
+// Cały obszar dokumentu (wszystkie sekcje/strony). Akapity treści bierz przez
+// docBodyParagraphs — bez nagłówków, stopek i listy przypisów.
 function getDocContentRoot(root) {
   const host = root?.querySelector(".docx-preview-host") || root;
-  return host?.querySelector("section.docx") || host?.querySelector(".docx") || host;
+  return host?.querySelector(".docx-wrapper") || host?.querySelector("section.docx") || host;
+}
+
+function docBodyParagraphs(root) {
+  const host = root?.querySelector?.(".docx-preview-host") || root;
+  return typeof collectPreviewParagraphElements === "function" ? collectPreviewParagraphElements(host) : Array.from(host?.querySelectorAll("p") || []);
+}
+
+function isOutsideDocBody(node) {
+  const tag = node.tagName;
+  if (tag === "HEADER" || tag === "FOOTER") return true;
+  return tag === "OL" && node.parentElement?.matches?.("section.docx");
 }
 
 function truncateOutlineText(text, max = 72) {
@@ -124,6 +137,7 @@ function buildDocumentOutline(content, headings) {
   let tableIndex = 0;
   const walker = document.createTreeWalker(content, NodeFilter.SHOW_ELEMENT, {
     acceptNode(node) {
+      if (isOutsideDocBody(node)) return NodeFilter.FILTER_REJECT; // nagłówki, stopki, przypisy
       const tag = node.tagName;
       if (tag === "P" || tag === "TABLE") return NodeFilter.FILTER_ACCEPT;
       return NodeFilter.FILTER_SKIP;
@@ -177,12 +191,13 @@ function buildDocumentOutline(content, headings) {
 
 function analyzeDocumentDom(root) {
   const content = getDocContentRoot(root);
-  const text = content?.textContent || "";
+  const allParas = docBodyParagraphs(root);
+  const articles = content?.querySelectorAll?.("section.docx > article");
+  const text = articles?.length ? Array.from(articles).map((a) => a.textContent || "").join("\n") : content?.textContent || "";
   const words = text.trim() ? text.trim().split(/\s+/).filter(Boolean).length : 0;
-  const allParas = Array.from(content?.querySelectorAll("p") || []);
   const headings = collectDomHeadings(content, allParas);
   const outline = buildDocumentOutline(content, headings);
   const paragraphs = allParas.length;
-  const tables = content?.querySelectorAll("table")?.length || 0;
+  const tables = (articles?.length ? Array.from(articles).reduce((n, a) => n + a.querySelectorAll("table").length, 0) : content?.querySelectorAll("table")?.length) || 0;
   return { words, chars: text.length, headings, paragraphs, tables, text, outline };
 }

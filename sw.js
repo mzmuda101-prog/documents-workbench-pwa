@@ -1,4 +1,4 @@
-const CACHE_VERSION = "20260928-23";
+const CACHE_VERSION = "20260928-24";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
@@ -18,6 +18,7 @@ const SHELL_ASSETS = [
   `./app/core.js?v=${ASSET_V}`,
   `./app/language.js?v=${ASSET_V}`,
   `./app/docx-metadata.js?v=${ASSET_V}`,
+  `./app/docx-revisions.js?v=${ASSET_V}`,
   `./app/docx-patch.js?v=${ASSET_V}`,
   `./app/template-tokens.js?v=${ASSET_V}`,
   `./app/docx-run-styles.js?v=${ASSET_V}`,
@@ -50,6 +51,7 @@ const SHELL_ASSETS = [
   // [EN] Lazy panel UI — cached for offline after first open
   `./app/export-panel.js?v=${ASSET_V}`,
   `./app/stats-panel.js?v=${ASSET_V}`,
+  `./app/review-panel.js?v=${ASSET_V}`,
   `./app/grammar-panel.js?v=${ASSET_V}`,
   `./app/placeholders-panel.js?v=${ASSET_V}`,
   `./app/snippets-panel.js?v=${ASSET_V}`,

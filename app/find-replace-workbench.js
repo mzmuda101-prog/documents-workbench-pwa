@@ -33,11 +33,11 @@ function validateFrFind(edit) {
 
 function collectFrDomMatches(find, scope, regex) {
   if (!find || !docCanvasEl) return [];
-  const root = getDocContentRoot(docCanvasEl);
-  if (!root) return [];
-  // Tylko akapity: tekst komórek tabel i list też siedzi w <p>. Dawniej szło
-  // „p, span, td, th, li” — ten sam tekst liczył się 2–3 razy (akapit + jego span).
-  const paras = Array.from(root.querySelectorAll("p"));
+  // Tylko akapity treści (bez nagłówka/stopki powtarzanych na każdej stronie i przypisów):
+  // tekst komórek tabel i list też siedzi w <p>. Dawniej szło „p, span, td, th, li” —
+  // ten sam tekst liczył się 2–3 razy (akapit + jego span).
+  const paras = docBodyParagraphs(docCanvasEl);
+  if (!paras.length) return [];
   const nodes = scope === "headings"
     ? paras.filter((el) => (typeof styleHeadingLevel === "function" && styleHeadingLevel(el)) || /heading|title/i.test(el.className))
     : paras;

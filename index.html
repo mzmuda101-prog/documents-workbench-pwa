@@ -16,7 +16,7 @@
     <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png" />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin.woff2" crossorigin />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin-ext.woff2" crossorigin />
-    <link rel="stylesheet" href="styles/app.css?v=20260928-23" />
+    <link rel="stylesheet" href="styles/app.css?v=20260928-24" />
   </head>
   <body>
     <!-- Pierwszy przystanek Tab: skok prosto do dokumentu (panel to kilkadziesiąt kontrolek). -->
@@ -312,6 +312,32 @@
                   <button class="btn" id="grammarApplyAllBtn" type="button" data-i18n="grammarApplyAll">Zastosuj wszystkie</button>
                   <button class="btn" id="grammarClearBtn" type="button" data-i18n="grammarClear">Wyczyść</button>
                 </div>
+              </div>
+            </details>
+            <details class="panel" id="panel-review">
+              <summary>
+                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><path d="m9 10 2 2 4-4" /></svg>
+                <span class="panel-title" data-i18n="reviewPanel">Recenzja</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
+              </summary>
+              <div class="panel-body stack">
+                <p class="hint" id="rvSummary"></p>
+                <label class="field hidden">
+                  <span data-i18n="reviewAuthorLabel">Autor zmian</span>
+                  <select id="rvAuthor"></select>
+                </label>
+                <div class="btn-row">
+                  <button class="btn primary" id="rvAcceptAllBtn" type="button" data-i18n="reviewAcceptAllBtn">Akceptuj wszystkie</button>
+                  <button class="btn" id="rvRejectAllBtn" type="button" data-i18n="reviewRejectAllBtn">Odrzuć wszystkie</button>
+                </div>
+                <span class="stat-head" data-i18n="reviewChangesHead">Śledzone zmiany</span>
+                <div class="stack stack-tight" id="rvChanges"></div>
+                <span class="stat-head" data-i18n="reviewCommentsHead">Komentarze</span>
+                <div class="stack stack-tight" id="rvComments"></div>
+                <button class="btn" id="rvRemoveCommentsBtn" type="button" data-i18n="reviewRemoveComments">Usuń wszystkie komentarze</button>
+                <span class="stat-head" data-i18n="reviewNotesHead">Przypisy</span>
+                <div class="stack stack-tight" id="rvNotes"></div>
+                <p class="hint" data-i18n="reviewPreviewHint">Podgląd pokazuje tekst tak, jakby zmiany były już zaakceptowane (usunięć w nim nie widać). Lista obok pokazuje wszystko.</p>
               </div>
             </details>
             <details class="panel" id="panel-edit-tools">
@@ -781,31 +807,32 @@
       <div class="cursor-hint-scaler"><span id="cursorHintText"></span></div>
     </div>
 
-    <script defer src="app/core.js?v=20260928-23"></script>
-    <script defer src="app/language.js?v=20260928-23"></script>
-    <script defer src="app/docx-metadata.js?v=20260928-23"></script>
-    <script defer src="app/docx-patch.js?v=20260928-23"></script>
-    <script defer src="app/template-tokens.js?v=20260928-23"></script>
-    <script defer src="app/docx-run-styles.js?v=20260928-23"></script>
-    <script defer src="app/docx-inline-edit.js?v=20260928-23"></script>
-    <script defer src="app/document.js?v=20260928-23"></script>
-    <script defer src="app/docx-render-fixes.js?v=20260928-23"></script>
-    <script defer src="app/docx-viewer.js?v=20260928-23"></script>
-    <script defer src="app/analysis.js?v=20260928-23"></script>
-    <script defer src="app/structure-panel.js?v=20260928-23"></script>
-    <script defer src="app/grammar-style.js?v=20260928-23"></script>
-    <script defer src="app/placeholders.js?v=20260928-23"></script>
-    <script defer src="app/snippets.js?v=20260928-23"></script>
-    <script defer src="app/edit-tools.js?v=20260928-23"></script>
-    <script defer src="app/mobile-doc-zoom.js?v=20260928-23"></script>
-    <script defer src="app/ui-controls.js?v=20260928-23"></script>
-    <script defer src="app/lazy-features.js?v=20260928-23"></script>
-    <script defer src="app/app-frame.js?v=20260928-23"></script>
-    <script defer src="app/touch.js?v=20260928-23"></script>
-    <script defer src="app/pinch-zoom.js?v=20260928-23"></script>
-    <script defer src="app/undo.js?v=20260928-23"></script>
-    <script defer src="app/view-mode.js?v=20260928-23"></script>
-    <script defer src="app/keyboard.js?v=20260928-23"></script>
-    <script defer src="app/bootstrap.js?v=20260928-23"></script>
+    <script defer src="app/core.js?v=20260928-24"></script>
+    <script defer src="app/language.js?v=20260928-24"></script>
+    <script defer src="app/docx-metadata.js?v=20260928-24"></script>
+    <script defer src="app/docx-revisions.js?v=20260928-24"></script>
+    <script defer src="app/docx-patch.js?v=20260928-24"></script>
+    <script defer src="app/template-tokens.js?v=20260928-24"></script>
+    <script defer src="app/docx-run-styles.js?v=20260928-24"></script>
+    <script defer src="app/docx-inline-edit.js?v=20260928-24"></script>
+    <script defer src="app/document.js?v=20260928-24"></script>
+    <script defer src="app/docx-render-fixes.js?v=20260928-24"></script>
+    <script defer src="app/docx-viewer.js?v=20260928-24"></script>
+    <script defer src="app/analysis.js?v=20260928-24"></script>
+    <script defer src="app/structure-panel.js?v=20260928-24"></script>
+    <script defer src="app/grammar-style.js?v=20260928-24"></script>
+    <script defer src="app/placeholders.js?v=20260928-24"></script>
+    <script defer src="app/snippets.js?v=20260928-24"></script>
+    <script defer src="app/edit-tools.js?v=20260928-24"></script>
+    <script defer src="app/mobile-doc-zoom.js?v=20260928-24"></script>
+    <script defer src="app/ui-controls.js?v=20260928-24"></script>
+    <script defer src="app/lazy-features.js?v=20260928-24"></script>
+    <script defer src="app/app-frame.js?v=20260928-24"></script>
+    <script defer src="app/touch.js?v=20260928-24"></script>
+    <script defer src="app/pinch-zoom.js?v=20260928-24"></script>
+    <script defer src="app/undo.js?v=20260928-24"></script>
+    <script defer src="app/view-mode.js?v=20260928-24"></script>
+    <script defer src="app/keyboard.js?v=20260928-24"></script>
+    <script defer src="app/bootstrap.js?v=20260928-24"></script>
   </body>
 </html>
