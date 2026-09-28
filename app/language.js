@@ -139,6 +139,32 @@ const I18N = {
     loadSample: "Przykład",
     save: "Zapisz",
     saveAs: "Zapisz jako",
+    // ── Cofnij / Ponów (undo.js) ──
+    undoGroupAria: "Cofnij i ponów",
+    helpUndoTitle: "Cofnij / Ponów",
+    helpUndoText: "Ctrl/⌘+Z — cofnij · Ctrl/⌘+Shift+Z lub Ctrl+Y — ponów · przyciski ↶ ↷ na pasku. Cofa operacje z panelu, formatowanie i pisanie (ciągłe pisanie = jeden krok, przerwa lub kliknięcie zaczyna nowy).",
+    undoLabel: "Cofnij (Ctrl/⌘+Z)",
+    redoLabel: "Ponów (Ctrl/⌘+Shift+Z)",
+    undoWhat: "Cofnij: {what} (Ctrl/⌘+Z)",
+    redoWhat: "Ponów: {what} (Ctrl/⌘+Shift+Z)",
+    undoDone: "Cofnięto: {what}",
+    redoDone: "Przywrócono: {what}",
+    undoNothing: "Nie ma czego cofnąć",
+    redoNothing: "Nie ma czego ponowić",
+    undoWorking: "Cofam…",
+    redoWorking: "Ponawiam…",
+    undoFailed: "Nie udało się cofnąć — szczegóły w Logu",
+    undoOpTyping: "pisanie",
+    undoOpFormat: "formatowanie",
+    undoOpReplace: "zamiana tekstu",
+    undoOpCase: "wielkość liter",
+    undoOpTrim: "spacje",
+    undoOpAffix: "prefiks / sufiks",
+    undoOpParagraphs: "zmiana akapitów",
+    undoOpMetadata: "metadane",
+    undoOpPlaceholders: "wypełnienie pól",
+    undoOpSnippets: "rozwinięcie snippetów",
+    undoOpEdit: "zmiana",
     // ── rama ekranu (paczka B, app-frame.js) ──
     heroSave: "Zapisz zmiany w pliku (Ctrl/⌘+S)",
     heroSaveDirty: "Zapisz — {changes}",
@@ -420,6 +446,32 @@ const I18N = {
     loadSample: "Sample",
     save: "Save",
     saveAs: "Save as",
+    // ── Undo / Redo (undo.js) ──
+    undoGroupAria: "Undo and redo",
+    helpUndoTitle: "Undo / Redo",
+    helpUndoText: "Ctrl/⌘+Z — undo · Ctrl/⌘+Shift+Z or Ctrl+Y — redo · ↶ ↷ buttons in the toolbar. Undoes panel operations, formatting and typing (continuous typing = one step; a pause or a click starts a new one).",
+    undoLabel: "Undo (Ctrl/⌘+Z)",
+    redoLabel: "Redo (Ctrl/⌘+Shift+Z)",
+    undoWhat: "Undo: {what} (Ctrl/⌘+Z)",
+    redoWhat: "Redo: {what} (Ctrl/⌘+Shift+Z)",
+    undoDone: "Undone: {what}",
+    redoDone: "Redone: {what}",
+    undoNothing: "Nothing to undo",
+    redoNothing: "Nothing to redo",
+    undoWorking: "Undoing…",
+    redoWorking: "Redoing…",
+    undoFailed: "Undo failed — details in the Log",
+    undoOpTyping: "typing",
+    undoOpFormat: "formatting",
+    undoOpReplace: "text replace",
+    undoOpCase: "letter case",
+    undoOpTrim: "spaces",
+    undoOpAffix: "prefix / suffix",
+    undoOpParagraphs: "paragraph changes",
+    undoOpMetadata: "metadata",
+    undoOpPlaceholders: "field fill",
+    undoOpSnippets: "snippet expansion",
+    undoOpEdit: "change",
     // ── screen frame (package B, app-frame.js) ──
     heroSave: "Save changes to the file (Ctrl/⌘+S)",
     heroSaveDirty: "Save — {changes}",
@@ -603,6 +655,7 @@ function applyLanguage() {
   if (typeof syncLangSwitchPill === "function") syncLangSwitchPill();
   if (documentStructure && typeof renderStructurePanel === "function") renderStructurePanel(documentStructure);
   if (typeof appFrame !== "undefined") appFrame.onLanguageChange();
+  if (typeof dwbUndo !== "undefined") dwbUndo.sync();
 }
 
 function setLanguage(lang) {

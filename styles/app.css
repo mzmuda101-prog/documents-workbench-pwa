@@ -1234,3 +1234,15 @@ body.kb-open .section-strip, body.kb-open .status-bar { display: none !important
 .status-bar { flex-wrap: nowrap; white-space: nowrap; min-width: 0; }
 #status { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 @media (max-width: 768px) { .status-dirty:not([hidden]) + #status { display: none; } }
+
+/* ── Cofnij / Ponów (paczka D) ── */
+.undo-group { display: inline-flex; gap: 4px; flex: none; }
+.undo-group .tb-btn:disabled { opacity: .38; cursor: default; background: var(--panel); color: var(--ink-2); border-color: var(--border); }
+/* Wąski telefon: Czytanie/Edycja + ↶ ↷ + zoom muszą zmieścić się w JEDNYM rzędzie (rząd
+   więcej = ~48 px mniej dokumentu). − i + znikają — na telefonie przybliża się palcami,
+   a dokładny zoom jest w panelu Widok. Zostaje etykieta i „Dopasuj”. */
+@media (max-width: 480px) {
+  .zoom-group #zoomOutBtn, .zoom-group #zoomInBtn { display: none; }
+  .zoom-now { min-width: 0; padding: 0 4px 0 8px; }
+  .doc-toolbar-row-2 { gap: 6px; }
+}

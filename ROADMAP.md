@@ -33,7 +33,9 @@ Stan na **v0.2** (lipiec 2026). Ostatnia wersja cache: `20260702-03`.
 
 | **Paczka C — dotyk / iOS** (symulator iPhone 18 Pro: pola 16 px bez przybliżania, strona wraca po zamknięciu klawiatury, pisanie z klawiaturą — pasek zostaje, Enter chowa klawiaturę w szukaniu, „Zapisz” bez FSA = zapis kopii, pełne tła i bez blurów na dotyku, toasty u góry, hover tylko dla myszy; **fix utraty tekstu przy szybkim pisaniu po Enterze** — kolejka przebudowy pliku; strażnicy `test:touch`, `test:enter`) | ✅ 2026-09-28 |
 
-**Dalej (przenoszenie z Sheet Workbench):** D Cofnij/Ponów → E klawiatura + cursor-hint (dziś brak podpowiedzi na najechanie przy ikonkach paska) → F wydajność dużych dokumentów. Później: „Ostatnio otwierane” (tylko Chrome/Edge, uchwyty plików w IndexedDB — lokalnie).
+| **Paczka D — Cofnij / Ponów** (`app/undo.js`: migawki bajtów + zmienionych akapitów, kroki z nazwą dla operacji z panelu, formatowanie osobno, pisanie grupowane jak w Wordzie; ↶ ↷ na pasku, Ctrl/⌘+Z / Shift+Z / Ctrl+Y, historyUndo z menu/iOS; licznik „Zapisz” = kroki od zapisu; strażnik `test:undo`) | ✅ 2026-09-28 |
+
+**Dalej (przenoszenie z Sheet Workbench):** E klawiatura + cursor-hint (dziś brak podpowiedzi na najechanie przy ikonkach paska) → F wydajność dużych dokumentów. Później: „Ostatnio otwierane” (tylko Chrome/Edge, uchwyty plików w IndexedDB — lokalnie).
 
 **Poza pierwotnym planem (ale wartościowe):** … edycja inline ze stylami runów + rozmiar czcionki, zoom 0.5–2.
 

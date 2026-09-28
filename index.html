@@ -16,7 +16,7 @@
     <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png" />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin.woff2" crossorigin />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin-ext.woff2" crossorigin />
-    <link rel="stylesheet" href="styles/app.css?v=20260928-12" />
+    <link rel="stylesheet" href="styles/app.css?v=20260928-15" />
   </head>
   <body>
     <div class="hero-overlay" id="heroSplash">
@@ -569,6 +569,10 @@
                   <p class="help-text" data-i18n="inlineEditHint">Enter — akapit · Shift+Enter — linia · Backspace — scal · Tab — lista · Ctrl+Tab — nagłówek · Ctrl+B/I/U — styl</p>
                 </section>
                 <section class="help-section">
+                  <h4 class="help-heading" data-i18n="helpUndoTitle">Cofnij / Ponów</h4>
+                  <p class="help-text" data-i18n="helpUndoText">Ctrl/⌘+Z — cofnij · Ctrl/⌘+Shift+Z lub Ctrl+Y — ponów · przyciski ↶ ↷ na pasku. Cofa operacje z panelu, formatowanie i pisanie (ciągłe pisanie = jeden krok, przerwa lub kliknięcie zaczyna nowy).</p>
+                </section>
+                <section class="help-section">
                   <h4 class="help-heading" data-i18n="helpFrTitle">Znajdź i zamień</h4>
                   <p class="help-text" data-i18n="helpFrText">Skanuj trafienia przed zamianą; „Zamień bieżące” lub „Zamień wszystkie”.</p>
                 </section>
@@ -615,6 +619,15 @@
                   <input id="readMode" type="checkbox" checked hidden />
                   <button class="mode-btn is-active" type="button" data-mode="read" aria-pressed="true" data-i18n="modeRead">Czytanie</button>
                   <button class="mode-btn" type="button" data-mode="edit" aria-pressed="false" data-i18n="modeEdit">Edycja</button>
+                </div>
+                <!-- Cofnij / Ponów (undo.js): operacje z panelu, formatowanie i pisanie w podglądzie -->
+                <div class="undo-group" role="group" data-i18n-aria="undoGroupAria" aria-label="Cofnij i ponów">
+                  <button class="tb-btn" id="undoBtn" type="button" disabled data-i18n-aria="undoLabel" aria-label="Cofnij">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
+                  </button>
+                  <button class="tb-btn" id="redoBtn" type="button" disabled data-i18n-aria="redoLabel" aria-label="Ponów">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
+                  </button>
                 </div>
                 <div class="format-toolbar hidden" id="formatToolbar">
                   <button type="button" class="tb-btn format-btn" id="fmtBold" aria-label="Bold (Ctrl+B)"><b>B</b></button>
@@ -695,27 +708,28 @@
     </div>
     <div class="toast-container" id="toastContainer" aria-live="polite"></div>
 
-    <script defer src="app/core.js?v=20260928-12"></script>
-    <script defer src="app/language.js?v=20260928-12"></script>
-    <script defer src="app/docx-metadata.js?v=20260928-12"></script>
-    <script defer src="app/docx-patch.js?v=20260928-12"></script>
-    <script defer src="app/template-tokens.js?v=20260928-12"></script>
-    <script defer src="app/docx-run-styles.js?v=20260928-12"></script>
-    <script defer src="app/docx-inline-edit.js?v=20260928-12"></script>
-    <script defer src="app/document.js?v=20260928-12"></script>
-    <script defer src="app/docx-render-fixes.js?v=20260928-12"></script>
-    <script defer src="app/docx-viewer.js?v=20260928-12"></script>
-    <script defer src="app/analysis.js?v=20260928-12"></script>
-    <script defer src="app/structure-panel.js?v=20260928-12"></script>
-    <script defer src="app/grammar-style.js?v=20260928-12"></script>
-    <script defer src="app/placeholders.js?v=20260928-12"></script>
-    <script defer src="app/snippets.js?v=20260928-12"></script>
-    <script defer src="app/edit-tools.js?v=20260928-12"></script>
-    <script defer src="app/mobile-doc-zoom.js?v=20260928-12"></script>
-    <script defer src="app/ui-controls.js?v=20260928-12"></script>
-    <script defer src="app/lazy-features.js?v=20260928-12"></script>
-    <script defer src="app/app-frame.js?v=20260928-12"></script>
-    <script defer src="app/touch.js?v=20260928-12"></script>
-    <script defer src="app/bootstrap.js?v=20260928-12"></script>
+    <script defer src="app/core.js?v=20260928-15"></script>
+    <script defer src="app/language.js?v=20260928-15"></script>
+    <script defer src="app/docx-metadata.js?v=20260928-15"></script>
+    <script defer src="app/docx-patch.js?v=20260928-15"></script>
+    <script defer src="app/template-tokens.js?v=20260928-15"></script>
+    <script defer src="app/docx-run-styles.js?v=20260928-15"></script>
+    <script defer src="app/docx-inline-edit.js?v=20260928-15"></script>
+    <script defer src="app/document.js?v=20260928-15"></script>
+    <script defer src="app/docx-render-fixes.js?v=20260928-15"></script>
+    <script defer src="app/docx-viewer.js?v=20260928-15"></script>
+    <script defer src="app/analysis.js?v=20260928-15"></script>
+    <script defer src="app/structure-panel.js?v=20260928-15"></script>
+    <script defer src="app/grammar-style.js?v=20260928-15"></script>
+    <script defer src="app/placeholders.js?v=20260928-15"></script>
+    <script defer src="app/snippets.js?v=20260928-15"></script>
+    <script defer src="app/edit-tools.js?v=20260928-15"></script>
+    <script defer src="app/mobile-doc-zoom.js?v=20260928-15"></script>
+    <script defer src="app/ui-controls.js?v=20260928-15"></script>
+    <script defer src="app/lazy-features.js?v=20260928-15"></script>
+    <script defer src="app/app-frame.js?v=20260928-15"></script>
+    <script defer src="app/touch.js?v=20260928-15"></script>
+    <script defer src="app/undo.js?v=20260928-15"></script>
+    <script defer src="app/bootstrap.js?v=20260928-15"></script>
   </body>
 </html>

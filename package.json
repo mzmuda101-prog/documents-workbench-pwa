@@ -14,7 +14,7 @@
     "release": "node scripts/bump-version.js",
     "test": "node scripts/run-tests.mjs",
     "test:fast": "JOBS=5 node scripts/run-tests.mjs",
-    "test:serial": "node scripts/smoke-playwright.js && node scripts/pwa-offline-playwright.js && node scripts/save-roundtrip-playwright.js && node scripts/load-fixture-playwright.js && node scripts/edit-tools-playwright.js && node scripts/find-replace-playwright.js && node scripts/grammar-playwright.js && node scripts/placeholders-playwright.js && node scripts/snippets-playwright.js && node scripts/run-styles-playwright.js && node scripts/structure-playwright.js && node scripts/metadata-playwright.js && node scripts/mobile-playwright.js && node scripts/app-frame-playwright.js && ENGINE=webkit node scripts/app-frame-playwright.js && node scripts/touch-playwright.js && ENGINE=webkit node scripts/touch-playwright.js && node scripts/inline-enter-playwright.js && ENGINE=webkit node scripts/inline-enter-playwright.js && node scripts/visual-audit-playwright.js",
+    "test:serial": "node scripts/smoke-playwright.js && node scripts/pwa-offline-playwright.js && node scripts/save-roundtrip-playwright.js && node scripts/load-fixture-playwright.js && node scripts/edit-tools-playwright.js && node scripts/find-replace-playwright.js && node scripts/grammar-playwright.js && node scripts/placeholders-playwright.js && node scripts/snippets-playwright.js && node scripts/run-styles-playwright.js && node scripts/structure-playwright.js && node scripts/metadata-playwright.js && node scripts/mobile-playwright.js && node scripts/app-frame-playwright.js && ENGINE=webkit node scripts/app-frame-playwright.js && node scripts/touch-playwright.js && ENGINE=webkit node scripts/touch-playwright.js && node scripts/inline-enter-playwright.js && ENGINE=webkit node scripts/inline-enter-playwright.js && node scripts/undo-playwright.js && ENGINE=webkit node scripts/undo-playwright.js && node scripts/visual-audit-playwright.js",
     "test:pwa": "node scripts/pwa-offline-playwright.js",
     "test:roundtrip": "node scripts/save-roundtrip-playwright.js",
     "test:fixture": "node scripts/load-fixture-playwright.js",
@@ -30,6 +30,7 @@
     "test:frame": "node scripts/app-frame-playwright.js && ENGINE=webkit node scripts/app-frame-playwright.js",
     "test:touch": "node scripts/touch-playwright.js && ENGINE=webkit node scripts/touch-playwright.js",
     "test:enter": "node scripts/inline-enter-playwright.js && ENGINE=webkit node scripts/inline-enter-playwright.js",
+    "test:undo": "node scripts/undo-playwright.js && ENGINE=webkit node scripts/undo-playwright.js",
     "test:visual": "node scripts/visual-audit-playwright.js",
     "test:stress": "node scripts/test-runner.js",
     "test:all": "npm test && npm run test:stress"

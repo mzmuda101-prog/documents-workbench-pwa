@@ -110,6 +110,9 @@ const appFrame = (() => {
   let opCount = 0;
   const touchedParas = new Set();
   function pendingCount() {
+    // Z historią cofania (undo.js) liczymy DOKŁADNIE kroki od ostatniego zapisu — po
+    // Cofnij licznik maleje, a powrót do zapisanego stanu gasi „Zapisz”.
+    if (typeof dwbUndo !== "undefined") return dwbUndo.changesSinceSave();
     return opCount + touchedParas.size;
   }
   let saveSyncQueued = false;
