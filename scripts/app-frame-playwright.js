@@ -178,6 +178,11 @@ async function tablet(browser) {
 
 async function phone(browser) {
   const { context, page, errors } = await newPage(browser, { width: 390, height: 844 });
+  await page.goto(APP_URL, { waitUntil: "load" }).catch(() => {});
+  await page.evaluate(() => document.getElementById("heroSplash")?.remove());
+  await page.waitForTimeout(500);
+  const emptyOver = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+  check("telefon, pusty start: strona mieści się w oknie (bez paska przewijania)", emptyOver <= 0, `wystaje o ${emptyOver}px`);
   await loadHeadingsDoc(page);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   check("telefon: nic nie wychodzi poza ekran w bok", !overflow);
@@ -186,8 +191,28 @@ async function phone(browser) {
   const collapsed = await page.evaluate(() => document.body.classList.contains("hero-collapsed"));
   await page.evaluate(() => { document.getElementById("docViewport").scrollTop = 0; });
   await page.waitForTimeout(300);
-  const expanded = await page.evaluate(() => !document.body.classList.contains("hero-collapsed"));
-  check("telefon: nagłówek zwija się przy przewijaniu i wraca na górze", collapsed && expanded, JSON.stringify({ collapsed, expanded }));
+  const stillCollapsed = await page.evaluate(() => document.body.classList.contains("hero-collapsed"));
+  check("telefon: nagłówek zwija się przy przewijaniu, samo dojechanie do góry go NIE rozwija", collapsed && stillCollapsed, JSON.stringify({ collapsed, stillCollapsed }));
+
+  // pociągnięcie palcem na samej górze: 40 px za mało, 100 px rozwija (jak Sheet)
+  const pull = (dy) => page.evaluate((dy) => {
+    const vp = document.getElementById("docViewport");
+    const ev = (type, y) => { const e = new Event(type, { bubbles: true }); Object.defineProperty(e, "touches", { value: y == null ? [] : [{ clientX: 200, clientY: y }] }); vp.dispatchEvent(e); };
+    ev("touchstart", 300);
+    for (let i = 1; i <= 5; i++) ev("touchmove", 300 + (dy * i) / 5);
+    const pulling = document.getElementById("heroGrip").classList.contains("pulling") || !document.body.classList.contains("hero-collapsed");
+    ev("touchend", null);
+    return { pulling, collapsed: document.body.classList.contains("hero-collapsed") };
+  }, dy);
+  const small = await pull(40);
+  check("telefon: krótkie pociągnięcie (40 px) — uchwyt reaguje, nagłówek dalej schowany", small.pulling && small.collapsed, JSON.stringify(small));
+  const big = await pull(100);
+  await page.waitForTimeout(300);
+  check("telefon: pociągnięcie „na siłę” (100 px) na górze rozwija nagłówek", !big.collapsed, JSON.stringify(big));
+  const fits = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+  check("telefon: strona mieści się w oknie (brak przewijania całej strony)", fits <= 0, `wystaje o ${fits}px`);
+  const css = await page.evaluate(() => ({ ob: getComputedStyle(document.getElementById("docViewport")).overscrollBehaviorY }));
+  check("telefon: pociągnięcie dokumentu nie przechodzi na stronę (overscroll-behavior: contain — bez odświeżenia strony w Safari)", css.ob === "contain", JSON.stringify(css));
   await page.evaluate(() => { document.getElementById("docViewport").scrollTop = 500; });
   await page.waitForTimeout(300);
   await page.click("#heroGrip");

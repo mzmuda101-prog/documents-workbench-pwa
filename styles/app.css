@@ -156,7 +156,10 @@ body {
     radial-gradient(ellipse 50% 60% at 50% 100%, rgba(24,90,189,.07) 0%, transparent 50%),
     var(--bg);
   color: var(--ink);
+  /* dvh, nie vh: na iPhonie 100vh = NAJWIĘKSZA wysokość (jak bez pasków Safari), więc strona
+     była wyższa od widocznego obszaru — pasek przewijania i ucięty pasek stanu (jak w Sheet). */
   min-height: 100vh;
+  min-height: 100dvh;
   transition: background var(--t-slow), color var(--t);
 }
 
@@ -497,6 +500,9 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
 }
 .doc-viewport {
   height: var(--doc-panel-height, 520px); overflow: auto;
+  /* przewijanie dokumentu nie przechodzi na stronę: bez tego pociągnięcie na samej górze
+     ciągnęło całą stronę (sprężynowanie z paskiem, w Safari odświeżenie = utrata zmian) */
+  overscroll-behavior: contain;
   overflow-x: auto; /* [EN] allow horizontal pan when zoomed in */
   background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 92%, white) 0%, color-mix(in srgb, var(--bg) 85%, white) 100%);
 }
@@ -1141,6 +1147,11 @@ body.drag-active .doc-panel { outline: 2px dashed var(--accent); outline-offset:
   body.hero-collapsed .hero-grip { height: calc(16px + var(--safe-top)); padding-top: var(--safe-top); }
   .hero-grip-bar { width: 40px; height: 4px; border-radius: 4px; background: var(--border); transition: width var(--t), background var(--t); }
   body.hero-collapsed .hero-grip-bar { width: 52px; background: color-mix(in srgb, var(--accent) 55%, var(--border)); }
+  /* „Pociągnij, żeby rozwinąć”: pasek rośnie razem z pociągnięciem (--pull 0…1 z app-frame.js) */
+  .hero-grip.pulling .hero-grip-bar {
+    transform: scaleX(calc(1 + var(--pull, 0) * 0.7)) scaleY(calc(1 + var(--pull, 0) * 0.5));
+    background: var(--accent);
+  }
 
   .doc-toolbar { padding: 8px; gap: 8px; }
   .doc-toolbar-row-2 { flex-wrap: wrap; }

@@ -557,8 +557,10 @@ const appFrame = (() => {
   };
 
   // ── telefon: nagłówek zwija się przy przewijaniu dokumentu ─────────────────
-  // Rozwija się TYLKO na samej górze (scrollTop ≤ 6) albo po tapnięciu uchwytu — bez
-  // tego progu zmiana wysokości nagłówka oscylowała z przewijaniem (lekcja z Sheet).
+  // Zwija się po zjechaniu w dół. Rozwija się TYLKO świadomie (jak w Sheet Workbench,
+  // decyzja Mateusza 2026-09-24 / tu 2026-09-28): tapnięcie uchwytu albo pociągnięcie
+  // palcem DALEJ w dół na samej górze dokumentu („na siłę”, jak pull-to-refresh).
+  // Samo dojechanie do góry nie rozwija — dawniej rozwijało się przy każdym powrocie.
   let heroCollapsed = false;
   let manualExpandAt = null; // scrollTop, przy którym ktoś rozwinął ręcznie
   function setHeroCollapsed(on) {
@@ -582,9 +584,57 @@ const appFrame = (() => {
         manualExpandAt = null;
       }
       if (!heroCollapsed && y > 48) setHeroCollapsed(true);
-      else if (heroCollapsed && y <= 6) setHeroCollapsed(false);
     });
   }, { passive: true });
+
+  // „Pociągnij, żeby rozwinąć” (port z Sheet): punkt odniesienia = gdzie był palec, gdy
+  // dokument dotarł do góry — więc jeden ruch „z dołu do góry i jeszcze trochę” też działa,
+  // ale samo dojechanie (ani rozpęd po puszczeniu) nie. Nasłuchy pasywne, bez
+  // preventDefault: ingerencja w przewijanie w trakcie gestu zrywa go na iOS.
+  // Uchwyt rośnie razem z pociągnięciem, żeby było widać, że gest „łapie”.
+  const HERO_AT_TOP = 6;
+  const HERO_PULL_TO_EXPAND = 72;   // px palcem PONAD górę dokumentu
+  const HERO_WHEEL_TO_EXPAND = 160; // to samo kółkiem/gładzikiem (wąskie okno na komputerze)
+  function setHeroPull(p) {
+    if (!heroGrip) return;
+    heroGrip.classList.toggle("pulling", p > 0);
+    heroGrip.style.setProperty("--pull", p > 0 ? p.toFixed(3) : "0");
+  }
+  function expandByGesture() {
+    setHeroPull(0);
+    setHeroCollapsed(false);
+    manualExpandAt = docViewportEl?.scrollTop || 0; // nie zwijaj od razu przy drobnym ruchu
+  }
+  if (docViewportEl) {
+    let anchorY = null;
+    let fired = false;
+    const reset = () => { anchorY = null; fired = false; setHeroPull(0); };
+    docViewportEl.addEventListener("touchstart", (e) => {
+      reset();
+      if (e.touches.length === 1 && docViewportEl.scrollTop <= HERO_AT_TOP) anchorY = e.touches[0].clientY;
+    }, { passive: true });
+    docViewportEl.addEventListener("touchmove", (e) => {
+      if (fired || e.touches.length !== 1 || !heroCollapsed || !narrowMq.matches) return; // 2 palce = pinch
+      const y = e.touches[0].clientY;
+      if (docViewportEl.scrollTop > HERO_AT_TOP) { anchorY = null; setHeroPull(0); return; }
+      if (anchorY == null || y < anchorY) anchorY = y; // palec w górę = nowy punkt odniesienia
+      const pull = y - anchorY;
+      setHeroPull(Math.min(1, pull / HERO_PULL_TO_EXPAND));
+      if (pull >= HERO_PULL_TO_EXPAND) { fired = true; expandByGesture(); }
+    }, { passive: true });
+    docViewportEl.addEventListener("touchend", reset, { passive: true });
+    docViewportEl.addEventListener("touchcancel", reset, { passive: true });
+    let wheelPull = 0;
+    let wheelTimer = null;
+    docViewportEl.addEventListener("wheel", (e) => {
+      if (!heroCollapsed || !narrowMq.matches) return;
+      if (docViewportEl.scrollTop > HERO_AT_TOP || e.deltaY >= 0) { wheelPull = 0; return; }
+      wheelPull += -e.deltaY * (e.deltaMode === 1 ? 16 : 1);
+      clearTimeout(wheelTimer);
+      wheelTimer = setTimeout(() => { wheelPull = 0; }, 300);
+      if (wheelPull >= HERO_WHEEL_TO_EXPAND) { wheelPull = 0; expandByGesture(); }
+    }, { passive: true });
+  }
   heroGrip?.addEventListener("click", () => {
     const expand = heroCollapsed;
     setHeroCollapsed(!expand);

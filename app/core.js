@@ -1,6 +1,6 @@
 // Core runtime: DOM refs, shared state, and base UI helpers.
 
-const APP_BUILD_VERSION = "20260928-24";
+const APP_BUILD_VERSION = "20260928-26";
 
 const IS_LOW_POWER = (() => {
   try {
@@ -193,7 +193,18 @@ function syncDocViewportHeight() {
     const bottomGap = mobile ? 0 : 16;
     const available = Math.floor(viewportHeight - rect.top - statusH - bottomGap);
     const minHeight = kbOpen ? 120 : mobile ? 280 : 420;
-    docPanelEl.style.setProperty("--doc-panel-height", `${Math.max(minHeight, available)}px`);
+    const height = Math.max(minHeight, available);
+    docPanelEl.style.setProperty("--doc-panel-height", `${height}px`);
+    if (kbOpen) return;
+    // Korekta po pomiarze: wyliczenie wyżej nie zna odstępów między panelem a paskiem stanu,
+    // marginesu strony ani miejsca na pasek Home (safe-area) — na telefonie strona wystawała
+    // o kilkadziesiąt px i dało się ją przewinąć (pasek przewijania, ucięty pasek stanu).
+    // Mierzymy, o ile strona jest wyższa od okna, i tyle odejmujemy.
+    const over = document.documentElement.scrollHeight - window.innerHeight;
+    if (over > 0 && over < 400 && height - over >= minHeight) {
+      docPanelEl.style.setProperty("--doc-panel-height", `${height - over}px`);
+      if (window.scrollY) window.scrollTo(0, 0);
+    }
   });
 }
 
