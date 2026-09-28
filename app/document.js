@@ -125,6 +125,8 @@ async function renderCurrentDocument() {
       typeof readHeadingStyleClasses === "function" ? readHeadingStyleClasses(originalFileBytes) : new Map(),
     ]);
     docHeadingStyleClasses = headingStyles;
+    // podgląd = plik: od teraz śledzimy tylko akapity, które coś zmieni (paczka F)
+    if (typeof resetInlineDirtyAfterRender === "function") resetInlineDirtyAfterRender();
     documentStructure = analyzeDocumentDom(docCanvasEl);
     renderStructurePanel(documentStructure);
     if (searchQueryEl?.value.trim()) runDocumentSearch();

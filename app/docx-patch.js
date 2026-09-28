@@ -167,14 +167,39 @@ function changeListLevelInXml(xml, index, delta) {
   return { xml: new XMLSerializer().serializeToString(doc), count: 1 };
 }
 
+// ── wspólna pamięć rozpakowanego pliku (paczka F) ────────────────────────────
+// Przy otwarciu ten sam .docx był rozpakowywany 3× (style nagłówków, teksty akapitów,
+// formatowanie akapitów), a document.xml parsowany 2× — przy ~300 stronach to ~0,6 s
+// (CPU ×4). Bajty są niezmienne (każda edycja daje NOWE), więc wynik trzymamy przy nich.
+// Pamiętamy tylko OSTATNI plik (po jednym wpisie na rodzaj): historia cofania trzyma
+// stare wersje bajtów, a WeakMap trzymałby przy każdej sparsowany XML (dziesiątki MB).
+// Tylko do ODCZYTU: buildPatchedDocx zmienia zip, więc ładuje własny, a wynikowy
+// document.xml podaje dalej (seedDocumentXml) — kolejny odczyt nie rozpakowuje.
+const docxCache = { zip: [null, null], xml: [null, null], dom: [null, null] }; // [bytes, Promise]
+
+function docxCached(kind, bytes, make) {
+  const slot = docxCache[kind];
+  if (slot[0] !== bytes) { slot[0] = bytes; slot[1] = make(); }
+  return slot[1];
+}
+function loadDocxZipCached(bytes) {
+  return docxCached("zip", bytes, () => window.JSZip.loadAsync(bytes));
+}
+function getDocumentXmlString(bytes) {
+  return docxCached("xml", bytes, () => loadDocxZipCached(bytes).then((zip) => zip.file("word/document.xml")?.async("string") ?? null));
+}
+function getDocumentXmlDom(bytes) {
+  return docxCached("dom", bytes, () => getDocumentXmlString(bytes).then((xml) => (xml ? new DOMParser().parseFromString(xml, "application/xml") : null)));
+}
+function seedDocumentXml(bytes, xml) {
+  if (!bytes || typeof xml !== "string") return;
+  docxCache.xml = [bytes, Promise.resolve(xml)];
+}
+
 async function extractParagraphTextsFromDocx(bytes) {
-  if (!window.JSZip) return [];
-  const zip = await window.JSZip.loadAsync(bytes);
-  const docFile = zip.file("word/document.xml");
-  if (!docFile) return [];
-  const xml = await docFile.async("string");
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(xml, "application/xml");
+  if (!window.JSZip || !bytes) return [];
+  const doc = await getDocumentXmlDom(bytes);
+  if (!doc) return [];
   return collectParagraphElements(doc.documentElement, "all").map(getParagraphText);
 }
 
@@ -427,5 +452,6 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
     compression: "DEFLATE",
     compressionOptions: { level: 6 },
   });
+  seedDocumentXml(out, xml); // następny odczyt tych bajtów nie musi ich rozpakowywać
   return { bytes: out, changeCount: total };
 }

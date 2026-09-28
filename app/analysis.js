@@ -42,7 +42,7 @@ async function readHeadingStyleClasses(bytes) {
   const map = new Map();
   if (!bytes || !window.JSZip) return map;
   try {
-    const zip = await JSZip.loadAsync(bytes);
+    const zip = await loadDocxZipCached(bytes);
     const xml = await zip.file("word/styles.xml")?.async("string");
     if (!xml) return map;
     const doc = new DOMParser().parseFromString(xml, "application/xml");

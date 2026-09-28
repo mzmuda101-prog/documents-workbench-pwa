@@ -132,6 +132,40 @@ async function run() {
   const backToSaved = await saveState(page);
   check("po zapisie: licznik 0 → Cofnij = 1 zmiana → Ponów = znów zapisane", !saved.dirty && afterUndoSaved.dirty && afterUndoSaved.count === "1" && !backToSaved.dirty, JSON.stringify({ saved, afterUndoSaved, backToSaved }));
 
+  // 5c) szybka ścieżka (paczka F): samo pisanie bez Entera cofa się BEZ przerysowania
+  await page.waitForTimeout(1600);
+  await placeCaretEnd(page, "Dane Wynajmującego");
+  await page.keyboard.type(" AAA", { delay: 15 });
+  await placeCaretEnd(page, "§5 Obowiązki stron");
+  await page.keyboard.type(" BBB", { delay: 15 });
+  await page.waitForTimeout(200);
+  const fast = await page.evaluate(async () => {
+    let rerendered = false;
+    const orig = window.renderDocxPreview;
+    window.renderDocxPreview = function (...a) { rerendered = true; return orig.apply(this, a); };
+    const txt = (n) => [...document.querySelectorAll(".docx-preview-host p")].map((p) => p.textContent).find((x) => x.startsWith(n));
+    const t0 = performance.now();
+    await dwbUndo.undo(); // klik w drugi akapit zamknął krok → najpierw znika tylko „ BBB”
+    const afterFirst = { a: txt("Dane Wynajmującego"), b: txt("§5 Obowiązki") };
+    await dwbUndo.undo();
+    const ms = performance.now() - t0;
+    window.renderDocxPreview = orig;
+    return { rerendered, ms: Math.round(ms), afterFirst, a: txt("Dane Wynajmującego"), b: txt("§5 Obowiązki") };
+  });
+  check("cofnięcie samego pisania bez przerysowania (2 kroki: „ BBB”, potem „ AAA”)", !fast.rerendered && fast.afterFirst.a === "Dane Wynajmującego AAA" && fast.afterFirst.b === "§5 Obowiązki stron" && fast.a === "Dane Wynajmującego" && fast.b === "§5 Obowiązki stron", JSON.stringify(fast));
+  check("szybkie cofnięcie: zapis = podgląd", (await viewEqualsFile(page)) === "ok", await viewEqualsFile(page));
+  await page.evaluate(() => dwbUndo.redo());
+  await idle(page);
+  check("ponowienie pisania: tekst wraca, zapis = podgląd", (await paraText(page, "Dane Wynajmującego")) === "Dane Wynajmującego AAA" && (await viewEqualsFile(page)) === "ok");
+
+  // 5d) wstawienie {{pola}} z panelu (inna ścieżka zmiany DOM) — trafia do zapisu
+  await page.evaluate(() => ensureLazyFeature("placeholders"));
+  await placeCaretEnd(page, "§6 Wypowiedzenie");
+  await page.evaluate(() => { document.getElementById("phInsertName").value = "termin"; insertPlaceholderAtCaret(); });
+  await page.waitForTimeout(200);
+  const phSaved = await page.evaluate(async () => (await extractParagraphTextsFromDocx(await buildDocumentForSave())).some((t) => /§6 Wypowiedzenie.*\{\{termin\}\}/.test(t)));
+  check("wstawione {{pole}} trafia do zapisanego pliku", phSaved && (await viewEqualsFile(page)) === "ok");
+
   // 6) Ctrl+Z w polu szukania nie rusza dokumentu
   const before = await page.evaluate(() => dwbUndo._debug().undo.length);
   await page.fill("#searchQuery", "");

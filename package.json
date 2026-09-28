@@ -34,7 +34,8 @@
     "test:keys": "node scripts/keyboard-playwright.js && ENGINE=webkit node scripts/keyboard-playwright.js",
     "test:visual": "node scripts/visual-audit-playwright.js",
     "test:stress": "node scripts/test-runner.js",
-    "test:all": "npm test && npm run test:stress"
+    "test:all": "npm test && npm run test:stress",
+    "bench": "node scripts/perf-bench.js"
   },
   "license": "MIT",
   "type": "commonjs",

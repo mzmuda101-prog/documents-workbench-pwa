@@ -255,13 +255,9 @@ function applyRunsToParagraphXml(pEl, runs) {
 }
 
 async function extractParagraphRunsFromDocx(bytes) {
-  if (!window.JSZip) return [];
-  const zip = await window.JSZip.loadAsync(bytes);
-  const docFile = zip.file("word/document.xml");
-  if (!docFile) return [];
-  const xml = await docFile.async("string");
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(xml, "application/xml");
+  if (!window.JSZip || !bytes) return [];
+  const doc = await getDocumentXmlDom(bytes); // wspólny parse z extractParagraphTextsFromDocx
+  if (!doc) return [];
   return collectParagraphElements(doc.documentElement, "all").map(extractRunsFromParagraphXml);
 }
 

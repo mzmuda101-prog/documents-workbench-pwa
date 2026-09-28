@@ -61,6 +61,7 @@ npm run test:touch    # lekcje z iPhone'a (dotyk)
 npm run test:enter    # szybkie pisanie wokół Enter/Backspace: zapis = podgląd
 npm run test:undo     # Cofnij / Ponów (Chromium + WebKit)
 npm run test:keys     # klawiatura, tryb skupienia, podpowiedzi
+npm run bench         # pomiar wydajności na dużych dokumentach (~100 i ~300 stron, CPU ×4)
 npm run test:stress   # pełny przebieg na dużym .docx (wymaga npm run serve)
 ```
 

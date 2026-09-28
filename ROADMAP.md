@@ -37,7 +37,9 @@ Stan na **v0.2** (lipiec 2026). Ostatnia wersja cache: `20260702-03`.
 
 | **Paczka E — klawiatura, podpowiedzi, miejsce na dokument** (`app/keyboard.js`, `app/view-mode.js`, cursor-hint z Sheet; skróty Ctrl/⌘+F, Enter/F3, Ctrl/⌘+Alt+1/2/3/E/F, F6, stopniowe Esc, skip-link, inert schowanego panelu; tryb skupienia + pełny ekran: dokument 85–87% ekranu; ciaśniejsze odstępy; strażnik `test:keys`) | ✅ 2026-09-28 |
 
-**Dalej (przenoszenie z Sheet Workbench):** F wydajność dużych dokumentów. Później: „Ostatnio otwierane” (tylko Chrome/Edge, uchwyty plików w IndexedDB — lokalnie).
+| **Paczka F — wydajność dużych dokumentów** (`npm run bench`; ~300 stron, CPU ×4: cofnięcie pisania 5,1 s → 0,06 s, szukanie 322 → 135 ms, 1. klawisz 88 → 46 ms, Enter widoczny 243 → 88 ms, otwarcie 5,0 → 4,1 s; wspólna pamięć rozpakowanego pliku, śledzenie zmienionych akapitów (MutationObserver), szybka ścieżka Cofnij, biblioteki dociągane po starcie) | ✅ 2026-09-28 |
+
+**Plan przenoszenia z Sheet Workbench (A–F) zakończony.** Otwarte tematy: cofnięcie kroku z Enterem nadal rysuje dokument od nowa (~4 s przy 300 stronach); pierwszy układ bardzo długiego dokumentu jest kosztem docx-preview (content-visibility odrzucone — psuje numerację list przez izolację stylów). Później: „Ostatnio otwierane” (tylko Chrome/Edge, uchwyty plików w IndexedDB — lokalnie).
 
 **Poza pierwotnym planem (ale wartościowe):** … edycja inline ze stylami runów + rozmiar czcionki, zoom 0.5–2.
 

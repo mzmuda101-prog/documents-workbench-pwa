@@ -103,6 +103,13 @@ const dwbUndo = (() => {
   async function restore(state) {
     if (typeof waitInlineStructuralIdle === "function") await waitInlineStructuralIdle();
     const bytes = await state.bytesP;
+    // Szybka ścieżka (paczka F): plik ten sam, zmieniło się tylko pisanie → podmieniamy
+    // treść akapitów zamiast rysować cały dokument (przy ~300 stronach 5 s → ułamek).
+    if (bytes === originalFileBytes && typeof restoreInlineParagraphs === "function" && restoreInlineParagraphs(state.inline)) {
+      if (state.caret && !readOnlyMode) focusParagraphAtOffset(state.caret.paraIndex, state.caret.offset);
+      if (docViewportEl) docViewportEl.scrollTop = state.scrollTop;
+      return;
+    }
     let target = bytes;
     if (state.inline.length) {
       target = (await buildPatchedDocx(bytes, [{ op: "paragraphBatch", items: state.inline }])).bytes;
@@ -133,8 +140,9 @@ const dwbUndo = (() => {
     applying = true;
     busy = (async () => {
       try {
-        setLoading(true, t(direction === "undo" ? "undoWorking" : "redoWorking"));
-        await restore(entry.state);
+        // nakładka „Cofam…” tylko gdy trwa dłużej (szybka ścieżka nie powinna mrugać)
+        const slowTimer = setTimeout(() => setLoading(true, t(direction === "undo" ? "undoWorking" : "redoWorking")), 150);
+        try { await restore(entry.state); } finally { clearTimeout(slowTimer); }
         const dirty = changesSinceSave() > 0;
         origSetDirty(dirty);
         toast(t(direction === "undo" ? "undoDone" : "redoDone", { what: t(entry.label) }), "info");

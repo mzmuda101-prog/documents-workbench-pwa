@@ -30,17 +30,91 @@ async function refreshInlineEditBaseline(bytes) {
   baselineParagraphRuns = await extractParagraphRunsFromDocx(bytes);
 }
 
+// ── które akapity mogły się zmienić (paczka F) ─────────────────────────────────
+// Dawniej każde „co się zmieniło?” (początek pisania = migawka cofania, zapis, operacje
+// z panelu) porównywało WSZYSTKIE akapity z bazą — przy ~6000 akapitach dziesiątki ms
+// przy klawiszu. Teraz obserwator zmian DOM zapisuje akapity, których cokolwiek dotknęło
+// (tekst, węzły, atrybut style — dokładnie to, z czego czytamy formatowanie), bez względu
+// na to, która ścieżka to zrobiła: pisanie, wklejanie, B/I/U, snippety, placeholdery.
+// Zbiór jest ZACHOWAWCZY: nadmiar tylko kosztuje porównanie, nigdy nie gubi zmiany.
+// Zerujemy go wyłącznie wtedy, gdy wiemy, że podgląd = plik (świeży render).
+const inlineDirtyParas = new Set();
+let inlineDirtyValid = false; // false = nie wiemy → pełne porównanie
+let pristineParas = new WeakMap(); // akapit → kopia dzieci z renderu (dokładne cofnięcie)
+
+function inlineDirtyAdd(node) {
+  const el = node?.nodeType === 1 ? node : node?.parentElement;
+  const p = el?.closest?.("p");
+  if (p && docCanvasEl?.contains(p)) inlineDirtyAdd._set.add(p);
+}
+inlineDirtyAdd._set = inlineDirtyParas;
+const inlineDirtyObserver = typeof MutationObserver === "function"
+  ? new MutationObserver((records) => records.forEach((r) => inlineDirtyAdd(r.target)))
+  : null;
+function flushInlineDirty() {
+  if (inlineDirtyObserver) inlineDirtyObserver.takeRecords().forEach((r) => inlineDirtyAdd(r.target));
+}
+// Wołane zaraz po renderze (podgląd dokładnie = plik) — przed jakimkolwiek pisaniem.
+function resetInlineDirtyAfterRender() {
+  if (!inlineDirtyObserver || !docCanvasEl) { inlineDirtyValid = false; return; }
+  inlineDirtyObserver.disconnect();
+  inlineDirtyParas.clear();
+  pristineParas = new WeakMap();
+  const host = docCanvasEl.querySelector(".docx-preview-host");
+  collectPreviewParagraphElements(host).forEach((p) => {
+    const frag = document.createDocumentFragment();
+    p.childNodes.forEach((n) => frag.appendChild(n.cloneNode(true)));
+    pristineParas.set(p, frag);
+  });
+  inlineDirtyObserver.observe(docCanvasEl, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["style"] });
+  inlineDirtyValid = true;
+}
+
 function collectInlineParagraphEdits() {
   const host = docCanvasEl?.querySelector(".docx-preview-host");
   if (!host || !baselineParagraphRuns.length) return [];
   const previews = collectPreviewParagraphElements(host);
   const edits = [];
+  if (inlineDirtyValid && previews.length === baselineParagraphRuns.length) {
+    flushInlineDirty();
+    const indexOf = new Map(previews.map((p, i) => [p, i]));
+    inlineDirtyParas.forEach((p) => {
+      const i = indexOf.get(p);
+      if (i === undefined) { inlineDirtyParas.delete(p); return; } // odłączony (np. scalony)
+      const domRuns = extractRunsFromPreviewParagraph(p);
+      if (runsEqual(domRuns, baselineParagraphRuns[i])) inlineDirtyParas.delete(p); // wrócił do stanu z pliku
+      else edits.push({ index: i, runs: domRuns });
+    });
+    return edits.sort((a, b) => a.index - b.index);
+  }
   const len = Math.min(previews.length, baselineParagraphRuns.length);
   for (let i = 0; i < len; i++) {
     const domRuns = extractRunsFromPreviewParagraph(previews[i]);
     if (!runsEqual(domRuns, baselineParagraphRuns[i])) edits.push({ index: i, runs: domRuns });
   }
   return edits;
+}
+
+// Cofnięcie samego pisania BEZ przerysowania dokumentu (undo.js): gdy plik się nie
+// zmienił, wystarczy podmienić treść akapitów. Akapit z migawki → jej formatowanie;
+// akapit, który w migawce był jak w pliku → dokładna kopia z renderu (albo baza).
+// Zwraca false, gdy szybka ścieżka nie ma sensu (wtedy undo rysuje od nowa).
+function restoreInlineParagraphs(snapshotEdits) {
+  const host = docCanvasEl?.querySelector(".docx-preview-host");
+  if (!host || !inlineDirtyValid || inlineStructuralPending) return false;
+  const previews = collectPreviewParagraphElements(host);
+  if (previews.length !== baselineParagraphRuns.length) return false;
+  const want = new Map((snapshotEdits || []).map((e) => [e.index, e.runs]));
+  const touch = new Set([...collectInlineParagraphEdits().map((e) => e.index), ...want.keys()]);
+  touch.forEach((i) => {
+    const p = previews[i];
+    if (!p) return;
+    if (want.has(i)) { applyRunsToPreviewParagraph(p, want.get(i)); return; }
+    const pristine = pristineParas.get(p);
+    if (pristine) p.replaceChildren(...[...pristine.childNodes].map((n) => n.cloneNode(true)));
+    else applyRunsToPreviewParagraph(p, baselineParagraphRuns[i]);
+  });
+  return true;
 }
 
 function onInlineParagraphInput() {
@@ -250,11 +324,13 @@ async function handleInlineEnter(p, paraIndex, e) {
   e.preventDefault();
   const newP = splitParagraphDomAtCaret(p);
   if (!newP) return;
+  prepareEditableParagraph(newP);
   // Kursor w nowym akapicie OD RAZU — dawniej przeskakiwał dopiero po przebudowie pliku,
   // a wszystko wpisane w tym czasie trafiało do starego akapitu.
   placeCaret(newP, 0);
   const beforeRuns = extractRunsFromPreviewParagraph(p);
   const afterRuns = extractRunsFromPreviewParagraph(newP);
+  pristineParas.delete(p); // w pliku ten akapit będzie już inny niż przy renderze
   mirrorBaseline(paraIndex, 1, beforeRuns, afterRuns);
   await applyInlineStructuralEdit({
     op: "splitParagraph",
@@ -276,6 +352,7 @@ async function handleInlineBackspace(p, paraIndex, e) {
   mergeParagraphDom(prev, p);
   placeCaret(prev, joinAt);
   const mergedRuns = extractRunsFromPreviewParagraph(prev);
+  pristineParas.delete(prev);
   mirrorBaseline(paraIndex - 1, 2, mergedRuns);
   await applyInlineStructuralEdit({ op: "mergeParagraph", index: paraIndex, mergedRuns });
 }
@@ -353,7 +430,7 @@ function applyInlineStructuralEdit(edit) {
   if (!originalFileBytes) return Promise.resolve(0);
   inlineStructuralPending++;
   setDirtyState(true);
-  syncInlineEditMode(); // nowy akapit: edytowalny, podpięty, indeksy odświeżone
+  // (nowy akapit przygotowuje handleInlineEnter; indeksy liczymy z kolejności w DOM)
   const job = inlineStructuralChain.then(async () => {
     try {
       const { bytes, changeCount } = await buildPatchedDocx(originalFileBytes, [edit]);
@@ -463,6 +540,21 @@ function bindInlineEditKeyboard() {
   docCanvasEl.addEventListener("keydown", onDocCanvasKeydown);
 }
 
+// Jeden akapit (nowy po Enterze) — zamiast syncInlineEditMode() na WSZYSTKICH akapitach
+// (przy ~6000 akapitach to ~150 ms opóźnienia widocznego Entera, paczka F).
+function prepareEditableParagraph(p) {
+  if (!p) return;
+  p.contentEditable = "true";
+  p.classList.add("docx-editable-p");
+  p.classList.toggle("docx-editable-list", isListParagraph(p));
+  p.spellcheck = true;
+  if (!p.dataset.inlineBound) {
+    p.dataset.inlineBound = "1";
+    p.addEventListener("input", onInlineParagraphInput);
+    p.addEventListener("beforeinput", onParagraphBeforeInput);
+  }
+}
+
 function syncInlineEditMode() {
   const host = docCanvasEl?.querySelector(".docx-preview-host");
   if (!host) return;
@@ -504,6 +596,11 @@ function setupInlineEditingAfterRender() {
 async function mergeInlineEditsIntoBytes() {
   await waitInlineStructuralIdle();
   const inlineEdits = collectInlineParagraphEdits();
+  // te akapity trafią do pliku — ich kopia „z renderu” przestaje być stanem pliku
+  {
+    const previews = collectPreviewParagraphElements(docCanvasEl?.querySelector(".docx-preview-host"));
+    inlineEdits.forEach((e) => { if (previews[e.index]) pristineParas.delete(previews[e.index]); });
+  }
   if (!inlineEdits.length) return 0;
   const { bytes, changeCount } = await buildPatchedDocx(originalFileBytes, [{ op: "paragraphBatch", items: inlineEdits }]);
   originalFileBytes = bytes;

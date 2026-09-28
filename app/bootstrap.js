@@ -19,6 +19,15 @@ syncDocumentShellClass();
 setDirtyState(false);
 setStatus(t("noFile"));
 
+// Biblioteki DOCX (docx-preview + JSZip) dociągamy w wolnej chwili po starcie — pierwsze
+// otwarcie pliku nie czeka wtedy na ich pobranie i parsowanie (paczka F). Z oszczędzaniem
+// danych (Save-Data) zostaje ładowanie przy pierwszym użyciu.
+if (!navigator.connection?.saveData) {
+  (window.requestIdleCallback ? (fn) => requestIdleCallback(fn, { timeout: 4000 }) : (fn) => setTimeout(fn, 2000))(() => {
+    if (!originalFileBytes) ensureDocLibs(false).catch(() => {});
+  });
+}
+
 // ?sample=nazwa — otwiera docs/samples/nazwa.docx od razu (symulator iOS, testy, pokaz).
 // Na telefonie nie ma jak wskazać pliku z dysku Maca, a przykład z nagłówkami jest potrzebny.
 {
