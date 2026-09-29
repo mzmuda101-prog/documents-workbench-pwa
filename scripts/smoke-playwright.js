@@ -21,7 +21,7 @@ async function run() {
   await page.click("#loadSampleBtn");
   await page.waitForTimeout(2500);
 
-  const hasDocText = await page.locator(".docx-preview-host").evaluate((el) => (el?.textContent || "").includes("Documents Workbench"));
+  const hasDocText = await page.locator(".docx-preview-host").evaluate((el) => (el?.textContent || "").includes("Przewodnik po Documents Workbench"));
   if (!hasDocText) throw new Error("Sample document did not render");
 
   const words = await page.locator(".structure-stat strong").first().textContent();

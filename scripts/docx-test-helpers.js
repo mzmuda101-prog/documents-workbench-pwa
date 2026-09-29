@@ -49,7 +49,8 @@ async function loadDocxFile(page, filePath, timeout = 60000) {
 }
 
 async function loadBuiltinSample(page) {
-  await page.evaluate(() => document.getElementById("loadSampleBtn")?.click());
+  // Testy potrzebują małego, stałego pliku (sample.docx); przycisk „Przykład” otwiera przewodnik.
+  await page.evaluate(() => loadSampleDocument("sample"));
   await page.waitForSelector(".docx-preview-host p", { timeout: 15000 });
   await page.waitForTimeout(300);
 }

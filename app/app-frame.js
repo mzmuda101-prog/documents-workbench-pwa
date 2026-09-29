@@ -668,7 +668,7 @@ const appFrame = (() => {
 
   // ── pusty start ────────────────────────────────────────────────────────────
   document.getElementById("emptyOpenBtn")?.addEventListener("click", () => openFilePicker());
-  document.getElementById("emptySampleBtn")?.addEventListener("click", () => loadSampleDocument());
+  document.getElementById("emptySampleBtn")?.addEventListener("click", () => loadSampleDocument("przewodnik"));
 
   function onLanguageChange() {
     sidebarNode?.querySelectorAll("details.panel").forEach((d) => { d._dwbFindText = null; });

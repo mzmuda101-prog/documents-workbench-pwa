@@ -565,13 +565,16 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
    (podświetlenie bez fokusu i bez klawiatury) — dopiero drugi stawiał kursor. */
 @media (hover: hover) {
   .doc-canvas.edit-mode .docx-editable-p:hover {
-    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 42%, transparent);
+    box-shadow: -6px 0 0 -3px color-mix(in srgb, var(--accent) 42%, transparent);
     background: color-mix(in srgb, var(--accent) 5%, transparent);
   }
 }
 .doc-canvas.edit-mode .docx-editable-p:focus,
 .doc-canvas.edit-mode .docx-editable-p:focus-within {
-  box-shadow: inset 3px 0 0 var(--accent);
+  /* Znacznik bieżącego akapitu PRZED tekstem, nie na nim: dawniej `inset` rysował pasek na
+     pierwszych 3 px akapitu — zasłaniał początkowe znaki i kursor na początku wiersza.
+     Zewnętrzny cień jest rysowany tylko poza ramką elementu: pasek 3 px tuż z lewej. */
+  box-shadow: -6px 0 0 -3px var(--accent);
   background: color-mix(in srgb, var(--accent) 9%, transparent);
 }
 /* list markers stay outside the text highlight band */

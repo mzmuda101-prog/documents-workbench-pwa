@@ -1,4 +1,4 @@
-const CACHE_VERSION = "20260929-04";
+const CACHE_VERSION = "20260929-06";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
@@ -32,6 +32,7 @@ const SHELL_ASSETS = [
   `./app/placeholders.js?v=${ASSET_V}`,
   `./app/snippets.js?v=${ASSET_V}`,
   `./app/snippet-suggest.js?v=${ASSET_V}`,
+  `./app/doc-caret-nav.js?v=${ASSET_V}`,
   `./app/edit-tools.js?v=${ASSET_V}`,
   `./app/mobile-doc-zoom.js?v=${ASSET_V}`,
   `./app/ui-controls.js?v=${ASSET_V}`,
@@ -49,6 +50,7 @@ const SHELL_ASSETS = [
   "./assets/images/icon-192.png",
   "./assets/images/icon-512.png",
   "./docs/samples/sample.docx",
+  "./docs/samples/przewodnik.docx", // „Przykład” — przewodnik po aplikacji, działa też offline
   // [EN] Lazy panel UI — cached for offline after first open
   `./app/export-panel.js?v=${ASSET_V}`,
   `./app/stats-panel.js?v=${ASSET_V}`,

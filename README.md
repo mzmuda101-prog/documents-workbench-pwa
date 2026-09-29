@@ -54,6 +54,12 @@ Siostrzana aplikacja [Sheet Workbench PWA](../sheet-workbench-pwa/README.md).
 - **Pinch-zoom z procentem na żywo** (jak Word) i przyciąganiem do 100%
 - **Wklejanie** jako czysty tekst w formacie miejsca kursora (wiersze = łamania wiersza)
 
+- **Przewodnik po aplikacji** (przycisk „Przykład” / „Wypróbuj”): dokument-samouczek, w którym każda
+  sekcja pokazuje jedną funkcję z gotowym materiałem do wypróbowania (`node scripts/gen-guide-docx.mjs`)
+- **Poruszanie się jak w Wordzie** w trybie Edycja: strzałki między akapitami, Delete na końcu akapitu
+  dołącza następny, Ctrl+Home/End (⌘↑/⌘↓), klik obok tekstu stawia kursor; znacznik bieżącego akapitu
+  stoi przed tekstem (nie zasłania pierwszych znaków)
+
 ## Start lokalnie
 
 ```bash
@@ -86,6 +92,8 @@ npm run test:enter    # szybkie pisanie wokół Enter/Backspace: zapis = podglą
 npm run test:undo     # Cofnij / Ponów (Chromium + WebKit)
 npm run test:pinch    # przybliżanie dwoma palcami (Chromium + WebKit)
 npm run test:review   # recenzja: skan, Akceptuj/Odrzuć, komentarze, blokady akapitów, mapowanie akapitów
+npm run test:guide    # przewodnik: każda wskazówka „Spróbuj” działa jak opisano
+npm run test:caret    # poruszanie się kursorem między akapitami (Chromium + WebKit)
 npm run test:flows    # funkcje klikane jak użytkownik (Chromium + WebKit)
 npm run test:export   # eksport, statystyki, import/eksport JSON, usuwanie danych osobowych
 npm run test:keys     # klawiatura, tryb skupienia, podpowiedzi

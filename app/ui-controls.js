@@ -391,7 +391,7 @@ if (closeDocBtn) closeDocBtn.addEventListener("click", requestCloseDocument);
 const closeDocPanelBtn = document.getElementById("closeDocPanelBtn");
 if (closeDocPanelBtn) closeDocPanelBtn.addEventListener("click", requestCloseDocument);
 if (loadBtn) loadBtn.addEventListener("click", openFilePicker);
-if (loadSampleBtn) loadSampleBtn.addEventListener("click", () => loadSampleDocument());
+if (loadSampleBtn) loadSampleBtn.addEventListener("click", () => loadSampleDocument("przewodnik"));
 if (saveBtn) saveBtn.addEventListener("click", saveDocument);
 if (saveAsBtn) saveAsBtn.addEventListener("click", saveDocumentAs);
 if (fileInput) {
