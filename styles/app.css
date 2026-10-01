@@ -1109,6 +1109,23 @@ details.panel > summary .panel-title { flex: 1; }
 body:not(.has-document) .doc-toolbar { display: none; }
 
 /* ── pusty start ── */
+/* Odzyskiwanie niezapisanej pracy (drafts.js) — karta na ekranie startowym */
+.draft-recovery { display: flex; flex-direction: column; gap: 8px; width: min(420px, 100%); margin: 4px 0 2px; }
+.draft-recovery[hidden] { display: none; }
+.draft-card {
+  display: grid; gap: 3px; padding: 12px 14px; text-align: left; border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--border)); background: color-mix(in srgb, var(--warning) 9%, var(--surface)); color: var(--ink);
+}
+[data-theme="dark"] .draft-card { background: color-mix(in srgb, var(--warning) 16%, var(--surface)); }
+[data-theme="dark"] .draft-head { color: #f2b867; }
+.draft-head { font-size: 11px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--warning); }
+.draft-head::before { content: "⚠ "; }
+.draft-name { font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+.draft-meta { font-size: 12px; color: var(--muted-strong); }
+.draft-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.draft-actions .btn { flex: none; padding: 8px 14px; border-radius: 10px; }
+@media (pointer: coarse) { .draft-actions .btn { min-height: 42px; } }
+.empty-state p.draft-note { font-size: 11.5px; color: var(--muted); margin: 0; max-width: none; text-align: center; }
 .empty-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 6px; }
 .empty-actions .btn { flex: none; padding: 10px 16px; border-radius: 12px; }
 .empty-drop-hint { font-size: 12px !important; color: var(--muted); margin: 0; }

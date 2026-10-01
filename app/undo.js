@@ -156,7 +156,9 @@ const dwbUndo = (() => {
         const slowTimer = setTimeout(() => setLoading(true, t(direction === "undo" ? "undoWorking" : "redoWorking")), 150);
         try { await restore(entry.state); } finally { clearTimeout(slowTimer); }
         const dirty = changesSinceSave() > 0;
-        origSetDirty(dirty);
+        // przez window.setDirtyState: inne moduły (szkic w drafts.js) też muszą wiedzieć, że
+        // cofnięcie wróciło do stanu z pliku; własna obsługa tu pomija zapis (applying=true)
+        window.setDirtyState(dirty);
         toast(t(direction === "undo" ? "undoDone" : "redoDone", { what: t(entry.label) }), "info");
         return true;
       } catch (err) {
