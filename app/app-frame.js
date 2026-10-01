@@ -663,8 +663,9 @@ const appFrame = (() => {
     e.preventDefault();
     const file = e.dataTransfer.files?.[0];
     if (!file) return;
+    const handle = droppedFileHandle(e); // synchronicznie, zanim zdarzenie się skończy
     if (hasUnsavedChanges && !window.confirm(t("closeDocWarn"))) return;
-    ingestFile(file);
+    ingestDroppedFile(file, handle);
   });
 
   // ── pusty start ────────────────────────────────────────────────────────────

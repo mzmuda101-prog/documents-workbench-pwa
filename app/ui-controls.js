@@ -110,60 +110,42 @@ async function downloadBytes(bytes, name) {
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
+// Prawo zapisu do otwartego pliku. Tylko gdy mamy jego uchwyt (Chrome/Edge: „Otwórz” albo
+// przeciągnięcie pliku) — inaczej null i „Zapisz” idzie w „Zapisz jako” (okno ZAPISU).
+// Dawniej bez uchwytu otwierało się okno OTWIERANIA („wskaż plik do nadpisania”) — mylące:
+// wyglądało jak otwieranie od nowa (zgłoszenie Mateusza, Windows, 2026-10-01).
 async function ensureWriteAccess() {
-  if (fileHandle && typeof fileHandle.createWritable === "function") {
+  if (!fileHandle || typeof fileHandle.createWritable !== "function") return null;
+  try {
     let perm = await fileHandle.queryPermission({ mode: "readwrite" });
     if (perm !== "granted") perm = await fileHandle.requestPermission({ mode: "readwrite" });
-    if (perm === "granted") return fileHandle;
-  }
-  if (!window.showOpenFilePicker) return null;
-  toast(t("savePickFileHint"), "info");
-  try {
-    const [handle] = await window.showOpenFilePicker({
-      mode: "readwrite",
-      types: [{
-        description: "Word Document",
-        accept: { "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"] },
-      }],
-      multiple: false,
-    });
-    const file = await handle.getFile();
-    if (currentFileName && file.name && file.name !== currentFileName) {
-      if (!window.confirm(t("saveDifferentFileWarn", { name: file.name }))) return null;
-    }
-    fileHandle = handle;
-    if (file.name) {
-      currentFileName = file.name;
-      setFileUi(currentFileName, originalFileBytes?.byteLength || file.size);
-    }
-    return handle;
-  } catch (e) {
-    if (e && e.name === "AbortError") return null;
-    throw e;
+    return perm === "granted" ? fileHandle : null;
+  } catch (_) {
+    return null; // np. wygasła aktywacja użytkownika — wtedy zapis kopii
   }
 }
+
+let overwriteConfirmedFor = null; // „Nadpisać oryginalny plik?” — raz na plik, nie przy każdym zapisie
 
 async function saveDocument() {
   if (!originalFileBytes) {
     toast(t("noFileToSave"), "warning");
     return;
   }
-  // Safari/iPhone/Firefox nie umieją nadpisać pliku w miejscu (brak File System Access).
-  // Dawniej „Zapisz” kończyło się tam komunikatem „anulowano” — nic się nie zapisywało.
-  // Jedyna uczciwa droga to zapis kopii (pobranie), więc od razu „Zapisz jako”.
-  if (!fileHandle && !window.showOpenFilePicker) {
+  // Uprawnienie PRZED budowaniem pliku: requestPermission wymaga świeżego kliknięcia,
+  // a przy dużym dokumencie budowanie trwa — przeglądarka odrzuciłaby pytanie.
+  const handle = await ensureWriteAccess();
+  if (!handle) {
     await saveDocumentAs();
     return;
+  }
+  if (overwriteConfirmedFor !== handle) {
+    if (!window.confirm(t("saveInPlaceWarn", { name: handle.name || currentFileName || "" }))) return;
+    overwriteConfirmedFor = handle;
   }
   setLoading(true, t("savingFile"));
   try {
     const bytes = await buildDocumentForSave();
-    const handle = await ensureWriteAccess();
-    if (!handle) {
-      toast(t("saveCancelled"), "info");
-      return;
-    }
-    if (!window.confirm(t("saveInPlaceWarn"))) return;
     const writable = await handle.createWritable();
     await writable.write(bytes);
     await writable.close();
@@ -203,6 +185,7 @@ async function saveDocumentAs() {
       await writable.write(bytes);
       await writable.close();
       fileHandle = handle;
+      overwriteConfirmedFor = handle; // sam wybrał ten plik w oknie zapisu — kolejne „Zapisz” bez pytania
       currentFileName = handle.name || suggested;
       setFileUi(currentFileName, bytes.byteLength);
       originalFileBytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
@@ -226,7 +209,8 @@ async function saveDocumentAs() {
   pendingDocEdits = [];
   await refreshInlineEditBaseline(originalFileBytes);
   setDirtyState(false);
-  toast(t("saveDone"), "success");
+  // pobranie: przeglądarka (Safari/iPhone) jeszcze pyta „Pobrać?” — nie mówimy „zapisano”
+  toast(t("saveDownloaded", { name }), "success");
   if (typeof closeMobileSidebarIfOpen === "function") closeMobileSidebarIfOpen();
 }
 
@@ -287,8 +271,19 @@ function wireFileDrop() {
   });
   dropZone.addEventListener("drop", (e) => {
     const file = e.dataTransfer?.files?.[0];
-    if (file) ingestFile(file);
+    if (file) ingestDroppedFile(file, droppedFileHandle(e));
   });
+}
+
+// Upuszczony plik: w Chrome/Edge da się z niego wziąć uchwyt (jak z „Otwórz”), więc późniejsze
+// „Zapisz” nadpisze ten plik. Wołać SYNCHRONICZNIE w zdarzeniu drop (potem dane znikają).
+function droppedFileHandle(e) {
+  const item = Array.from(e.dataTransfer?.items || []).find((i) => i.kind === "file");
+  return item && typeof item.getAsFileSystemHandle === "function" ? item.getAsFileSystemHandle().catch(() => null) : Promise.resolve(null);
+}
+async function ingestDroppedFile(file, handlePromise) {
+  const handle = await handlePromise;
+  return ingestFile(file, handle?.kind === "file" ? { handle } : {});
 }
 
 async function hardRefreshApp() {
