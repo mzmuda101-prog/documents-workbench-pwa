@@ -48,10 +48,13 @@ async function run() {
     out.tables = documentStructure.tables;
     const host = document.querySelector(".docx-preview-host");
     out.lists = host.querySelectorAll("[class*='docx-num-']").length;
-    out.locked = collectPreviewParagraphElements(host).filter((p) => p.dataset.lock).map((p) => `${p.dataset.lock}:${p.textContent.slice(0, 20)}`);
+    out.locked = collectPreviewParagraphElements(host).filter((p) => p.dataset.lock).reduce((m, p) => { m[p.dataset.lock] = (m[p.dataset.lock] || 0) + 1; return m; }, {});
+    out.forms = formScan.fields.map((f) => f.kind).join(",");
+    out.toc = host.querySelectorAll('a[href^="#_Guide"]:not(.doc-xref)').length;
+    out.xref = host.querySelector("a.doc-xref")?.getAttribute("href");
     return out;
   });
-  check("skróty sekcji: tytuł + 10 rozdziałów", r.chips === 11, String(r.chips));
+  check("skróty sekcji: tytuł + 12 rozdziałów", r.chips === 13, String(r.chips));
   const [all, ww, mc] = r.find;
   check("szukanie „najemca” znajduje też „Najemcami”", all.some((t) => /^Najemcami/.test(t)), all.join("|"));
   check("„Tylko całe słowa” wyklucza „Najemcami”", ww.length === all.length - all.filter((t) => /^Najemcami/i.test(t)).length && !ww.some((t) => /^najemcami/i.test(t)), ww.join("|"));
@@ -64,7 +67,31 @@ async function run() {
   check("statystyki: najdłuższe zdanie to celowo długie", /celowo bardzo długie/.test(r.longest), r.longest);
   check("metadane: autor „Jan Przykładowy”", r.author === "Jan Przykładowy", r.author);
   check("tabela i listy są", r.tables === 1 && r.lists >= 4, `${r.tables} tab, ${r.lists} list`);
-  check("zablokowane tylko akapity ze zmianą i przypisem", r.locked.length === 2, r.locked.join(" | "));
+  check("zablokowane: zmiana, przypis, 12 wpisów spisu (linki), 4 pola formularza, odsyłacz",
+    r.locked.lockLink === 12 && r.locked.lockForm === 4 && r.locked.lockField === 1 && r.locked.lockTracked === 1 && r.locked.lockNote === 1 && Object.keys(r.locked).length === 5, JSON.stringify(r.locked));
+  check("formularz: tekst, lista, data, pole wyboru", r.forms === "text,dropdown,date,checkbox", r.forms);
+  check("spis treści: 12 linków do rozdziałów + odsyłacz do „Zapisu”", r.toc === 12 && r.xref === "#_Guide12", `${r.toc} ${r.xref}`);
+
+  // ── „Spróbuj:” z nowych rozdziałów robi to, co obiecuje ────────────────────
+  const clickIn = async (sel) => {
+    await page.evaluate((s) => document.querySelector(s).scrollIntoView({ block: "center" }), sel);
+    await page.waitForTimeout(150);
+    await page.click(sel);
+    await page.waitForTimeout(900);
+  };
+  const headingInView = (n) => page.evaluate((n) => {
+    const h = document.querySelector(`.docx-preview-host [id="_Guide${n}"]`)?.closest("p");
+    const vp = docViewportEl.getBoundingClientRect(); const r = h.getBoundingClientRect();
+    return r.top >= vp.top - 2 && r.bottom <= vp.bottom + 2;
+  }, n);
+  await clickIn('.docx-preview-host a[href="#_Guide4"]:not(.doc-xref)');
+  check("spis treści: klik w „4. Formularz Worda” przewija do rozdziału, jest „↩ Wróć”", await headingInView(4) && await page.evaluate(() => !document.querySelector(".link-back")?.hidden));
+  await clickIn('.docx-preview-host a.doc-xref');
+  check("odsyłacz z rozdziału 10 przewija do „12. Zapis…”", await headingInView(12));
+  const ck = await page.evaluate(() => formScan.fields.find((f) => f.kind === "checkbox").key);
+  await clickIn(`.ff-field[data-ff="${ck}"]`);
+  await page.waitForFunction(() => formScan?.bytes === originalFileBytes, null, { timeout: 10000 });
+  check("formularz: klik w ☐ zaznacza pole", await page.evaluate((k) => formScan.fields.find((f) => f.key === k).value === true, ck));
   assertNoErrors(errors, "guide");
   await browser.close();
   let failed = 0;

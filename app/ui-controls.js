@@ -43,8 +43,21 @@ function initIntroSplash() {
 
   document.body.classList.add("splashing");
 
+  // Intro znika dopiero, gdy OBA warunki są spełnione: film się skończył i aplikacja pod spodem
+  // jest gotowa (load + czcionki + 2 klatki). Pomiar 2026-10-01: gotowość ≤ 0,05 s po starcie
+  // filmu nawet przy CPU ×6 i wolnym 4G — więc film leci szybciej: tempo liczone tak, żeby
+  // trwał INTRO_MS (prośba Mateusza: 2 s, nie krócej; dawniej 1,5× ≈ 3,7 s). Gdyby ładowanie
+  // trwało dłużej, zostaje ostatnia klatka aż do gotowości.
+  const INTRO_MS = 2000;
+  const introRate = () => (vid?.duration > 0 && Number.isFinite(vid.duration) ? Math.min(4, Math.max(1, (vid.duration * 1000) / INTRO_MS)) : 2.8);
+  const INTRO_MAX_MS = 15000; // bezpiecznik: nigdy nie wisi na intro
+  let videoDone = !vid;
+  let appReady = false;
+  let maxTimer = 0;
+
   const hideSplash = () => {
     if (!splash || splash.classList.contains("hide")) return;
+    clearTimeout(maxTimer);
     splash.classList.add("hide");
     sessionStorage.setItem(INTRO_PLAYED_KEY, "true");
     setTimeout(() => {
@@ -52,21 +65,33 @@ function initIntroSplash() {
       document.body.classList.remove("splashing");
     }, 700);
   };
+  const maybeHide = () => { if (videoDone && appReady) hideSplash(); };
+  const finishVideo = () => { videoDone = true; maybeHide(); };
+
+  const markReady = () => {
+    const fonts = document.fonts?.ready || Promise.resolve();
+    fonts.catch(() => {}).then(() => requestAnimationFrame(() => requestAnimationFrame(() => { appReady = true; maybeHide(); })));
+  };
+  if (document.readyState === "complete") markReady();
+  else window.addEventListener("load", markReady, { once: true });
+  maxTimer = setTimeout(hideSplash, INTRO_MAX_MS);
 
   if (vid) {
+    vid.addEventListener("ended", finishVideo, { once: true });
     try {
       vid.currentTime = 0;
       vid.muted = true;
-      vid.playbackRate = 1.5;
+      vid.defaultPlaybackRate = introRate();
+      vid.playbackRate = introRate();
+      // długość filmu znana dopiero z metadanych — wtedy tempo dokładnie na INTRO_MS
+      vid.addEventListener("loadedmetadata", () => { vid.playbackRate = introRate(); }, { once: true });
       const playPromise = vid.play();
-      if (playPromise && typeof playPromise.catch === "function") playPromise.catch(() => hideSplash());
+      // autoodtwarzanie zablokowane (np. tryb oszczędzania energii) — bez filmu, ale dalej
+      // zakrywamy ładowanie aż do gotowości aplikacji
+      if (playPromise && typeof playPromise.catch === "function") playPromise.catch(finishVideo);
     } catch {
-      hideSplash();
+      finishVideo();
     }
-    const fallback = setTimeout(hideSplash, 10000);
-    vid.addEventListener("ended", () => { clearTimeout(fallback); hideSplash(); }, { once: true });
-  } else {
-    setTimeout(hideSplash, 6000);
   }
 }
 

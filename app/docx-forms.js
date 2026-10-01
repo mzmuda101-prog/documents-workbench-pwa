@@ -901,7 +901,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const origIngest = window.ingestFile;
   if (typeof origIngest === "function") {
     window.ingestFile = async function ingestFileForms(...args) {
-      formNoticePending = true;
+      formNoticePending = !args[1]?.silent; // przykład / przewodnik sam opisuje pola — bez komunikatu
       closeFormPop();
       return origIngest.apply(this, args);
     };

@@ -6,7 +6,9 @@
  * celowo materiał dla paneli — nagłówki (skróty sekcji, Struktura), pola {{…}}, trigger
  * !podpis, błędy typograficzne (Korekta), powtórzone słowa (Znajdź i zamień, całe słowa,
  * wielkość liter), śledzone zmiany + komentarz (Recenzja), przypis, tabelę, listy,
- * długie zdanie (Statystyki) i metadane z autorem („Usuń dane osobowe”).
+ * długie zdanie (Statystyki) i metadane z autorem („Usuń dane osobowe”), klikalny spis treści
+ * (linki do zakładek przy nagłówkach) i odsyłacz REF \h (Linki), pola formularza Worda —
+ * tekst z tekstem zastępczym, lista, data, pole wyboru (Formularz).
  *
  *   node scripts/gen-guide-docx.mjs
  */
@@ -34,7 +36,21 @@ const p = (runs, style, extraPPr = "") => {
   const pPr = style || extraPPr ? `<w:pPr>${style ? `<w:pStyle w:val="${style}"/>` : ""}${extraPPr}</w:pPr>` : "";
   return `<w:p>${pPr}${list.map(run).join("")}</w:p>`;
 };
-const h1 = (t) => p(t, "Heading1");
+// Rozdziały mają zakładki _GuideN — do nich prowadzi spis treści i odsyłacz (jak w Wordzie).
+const chapters = [];
+const h1 = (t) => {
+  const n = chapters.push(t);
+  return `<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:bookmarkStart w:id="${100 + n}" w:name="_Guide${n}"/>${run(t)}<w:bookmarkEnd w:id="${100 + n}"/></w:p>`;
+};
+const tocEntry = (n) => `<w:p><w:pPr><w:pStyle w:val="TOC1"/></w:pPr><w:hyperlink w:anchor="_Guide${n}" w:history="1"><w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t xml:space="preserve">${esc(chapters[n - 1])}</w:t></w:r></w:hyperlink></w:p>`;
+// odsyłacz Worda (Wstaw → Odsyłacz, „Wstaw jako hiperłącze”) = pole REF z \h
+const xref = (bookmark, text) => ({ raw: `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> REF ${bookmark} \\h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t xml:space="preserve">${esc(text)}</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>` });
+// kontrolki zawartości Worda (Deweloper → Formanty)
+let sdtId = 500;
+const sdtText = (alias) => ({ raw: `<w:sdt><w:sdtPr><w:alias w:val="${alias}"/><w:id w:val="${++sdtId}"/><w:showingPlcHdr/><w:text/></w:sdtPr><w:sdtContent><w:r><w:rPr><w:rStyle w:val="PlaceholderText"/></w:rPr><w:t>Kliknij tutaj, aby wpisać.</w:t></w:r></w:sdtContent></w:sdt>` });
+const sdtList = (alias, items, current) => ({ raw: `<w:sdt><w:sdtPr><w:alias w:val="${alias}"/><w:id w:val="${++sdtId}"/><w:dropDownList w:lastValue="${esc(current)}">${items.map((i) => `<w:listItem w:displayText="${esc(i)}" w:value="${esc(i)}"/>`).join("")}</w:dropDownList></w:sdtPr><w:sdtContent><w:r><w:t>${esc(current)}</w:t></w:r></w:sdtContent></w:sdt>` });
+const sdtDate = (alias) => ({ raw: `<w:sdt><w:sdtPr><w:alias w:val="${alias}"/><w:id w:val="${++sdtId}"/><w:showingPlcHdr/><w:date><w:dateFormat w:val="d MMMM yyyy"/><w:lid w:val="pl-PL"/><w:storeMappedDataAs w:val="dateTime"/><w:calendar w:val="gregorian"/></w:date></w:sdtPr><w:sdtContent><w:r><w:rPr><w:rStyle w:val="PlaceholderText"/></w:rPr><w:t>Wybierz datę.</w:t></w:r></w:sdtContent></w:sdt>` });
+const sdtCheck = (alias) => ({ raw: `<w:sdt><w:sdtPr><w:alias w:val="${alias}"/><w:id w:val="${++sdtId}"/><w14:checkbox><w14:checked w14:val="0"/><w14:checkedState w14:val="2612" w14:font="MS Gothic"/><w14:uncheckedState w14:val="2610" w14:font="MS Gothic"/></w14:checkbox></w:sdtPr><w:sdtContent><w:r><w:rPr><w:rFonts w:ascii="MS Gothic" w:eastAsia="MS Gothic" w:hAnsi="MS Gothic" w:hint="eastAsia"/></w:rPr><w:t>☐</w:t></w:r></w:sdtContent></w:sdt>` });
 const h2 = (t) => p(t, "Heading2");
 const tip = (t) => p([{ t: "Spróbuj: ", b: true, color: "1F5FBF" }, t], "Tip");
 const bullet = (runs) => p(runs, "ListParagraph", '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>');
@@ -47,6 +63,7 @@ const body = [
   p("Przewodnik po Documents Workbench", "Title"),
   p([{ t: "Ten plik to jednocześnie instrukcja i poligon. ", b: true }, "Wszystko, co tu zmienisz, zostaje w Twojej przeglądarce — dokument nie jest nigdzie wysyłany. Możesz śmiało psuć: przycisk ↶ cofa każdą zmianę, a oryginalny przykład wczytasz ponownie z panelu Plik."]),
   tip("przewiń w dół albo użyj skrótów sekcji nad dokumentem (to nagłówki tego pliku). Panel narzędzi otwiera przycisk z kluczem obok pola szukania."),
+  "@@TOC@@",
 
   h1("1. Czytanie i edycja"),
   p("Aplikacja startuje w trybie Czytanie — nic przypadkiem się nie zmieni. Przełącz na Edycja na pasku nad dokumentem i kliknij w dowolny akapit, żeby pisać jak w Wordzie."),
@@ -62,17 +79,25 @@ const body = [
   p("Umowę zawarto dnia {{data_podpisania}} w {{miasto}} pomiędzy {{wynajmujacy}} a {{najemca}}. Czynsz wynosi {{kwota}} zł miesięcznie."),
   tip("otwórz panel Placeholdery i kliknij „Skanuj pola” — pojawi się formularz z pięcioma polami. Wpisz wartości i „Wypełnij”. Wartości zapiszesz do pliku JSON, żeby użyć ich przy kolejnej umowie."),
 
-  h1("4. Snippety — gotowe kawałki tekstu"),
+  h1("4. Formularz Worda — pola do klikania"),
+  p("Word ma gotowe pola formularza: listę do wyboru, datę z kalendarza, pole wyboru i pole tekstowe z szarą podpowiedzią. Tutaj działają tak samo — i po zapisie dalej działają w Wordzie."),
+  p(["Imię i nazwisko: ", sdtText("Imię i nazwisko")]),
+  p(["Dział: ", sdtList("Dział", ["Sprzedaż", "Marketing", "IT"], "Sprzedaż")]),
+  p(["Data rozpoczęcia: ", sdtDate("Data rozpoczęcia")]),
+  p([sdtCheck("Zgoda"), " Akceptuję warunki"]),
+  tip("kliknij „Sprzedaż” i wybierz inny dział, kliknij datę i wybierz dzień z kalendarza, kliknij ☐ — zaznaczy się od razu. Wszystkie pola widać też w panelu Formularz (plakietka pokazuje ich liczbę)."),
+
+  h1("5. Snippety — gotowe kawałki tekstu"),
   p("Snippet to zapisany fragment, który wstawiasz wpisując wykrzyknik i nazwę. Mogą zawierać dzisiejszą datę, pola do uzupełnienia i miejsce na kursor."),
   tip("w panelu Snippety kliknij „Dodaj przykładowe snippety”. Potem w trybie Edycja wpisz tutaj „!” — pojawi się lista; wybierz np. !dzis albo !pozdrawiam (zapyta o imię i nazwisko)."),
   p("Podpis na końcu pisma: !podpis"),
   p("Ten trigger jeszcze nie ma definicji — zapisz w panelu snippet o nazwie „podpis” i kliknij „Rozwiń w dokumencie”."),
 
-  h1("5. Korekta typografii"),
+  h1("6. Korekta typografii"),
   p("W tym akapicie są błędy  do poprawienia : podwójne spacje, spacja przed dwukropkiem, trzy kropki zamiast wielokropka... oraz \"proste cudzysłowy\" zamiast polskich. nowe zdanie od małej litery też się znajdzie, ale skrót „sp. z o.o.” zostanie w spokoju."),
   tip("otwórz panel Korekta i kliknij Skanuj. Każdą sugestię poprawisz osobno albo wszystkie naraz — formatowanie akapitu zostaje."),
 
-  h1("6. Recenzja: zmiany i komentarze"),
+  h1("7. Recenzja: zmiany i komentarze"),
   p([
     "Termin płatności wynosi ",
     { raw: `<w:del w:id="1" ${REV}><w:r><w:delText>14</w:delText></w:r></w:del>` },
@@ -86,7 +111,7 @@ const body = [
   ]),
   tip("otwórz panel Recenzja — zobaczysz zmianę recenzentki (14 → 30) i komentarz do kary umownej. Kliknij ✓ albo ✗ przy zmianie, albo „Akceptuj wszystkie”. Akapit ze śledzoną zmianą da się edytować dopiero po jej rozstrzygnięciu."),
 
-  h1("7. Przypisy, tabele i listy"),
+  h1("8. Przypisy, tabele i listy"),
   p([
     "Aplikacja pokazuje przypisy tak jak Word",
     { raw: '<w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:footnoteReference w:id="1"/></w:r>' },
@@ -104,22 +129,34 @@ const body = [
   num("Lista numerowana — numeracja przelicza się sama."),
   num("Drugi punkt listy numerowanej."),
 
-  h1("8. Statystyki, eksport i metadane"),
+  h1("9. Statystyki, eksport i metadane"),
   p("To zdanie jest celowo bardzo długie, bo panel Statystyki pokazuje najdłuższe zdania w dokumencie, a długie zdania, choć czasem potrzebne w umowach i pismach urzędowych, zwykle czyta się trudniej, więc warto je od czasu do czasu podzielić na krótsze i sprawdzić, czy wciąż mówią to samo."),
   tip("panel Statystyki pokaże liczbę słów, czas czytania i to długie zdanie (kliknij je, żeby do niego przejść). Eksport zapisze tekst jako TXT, Markdown, HTML albo PDF. W Metadanych jest autor „Jan Przykładowy” — przycisk „Usuń dane osobowe” wyczyści go przed wysłaniem pliku."),
 
-  h1("9. Na telefonie i tablecie"),
+  h1("10. Linki i odsyłacze"),
+  p(["Spis treści na początku tego pliku to linki do rozdziałów — jak w Wordzie. Ten akapit ma też odsyłacz: szczegóły zapisu są w rozdziale ", xref("_Guide12", "12. Zapis i otwieranie plików"), "."]),
+  tip("kliknij odsyłacz w zdaniu wyżej — dokument przeskoczy do rozdziału o zapisie. Na dole pojawi się „↩ Wróć” (albo Alt+←): wróci dokładnie tutaj. Link do strony WWW otworzy się w nowej karcie, a aplikacja zostanie otwarta."),
+
+  h1("11. Na telefonie i tablecie"),
   bullet("Dwa palce przybliżają i oddalają tekst — procent widać na żywo."),
   bullet("Nagłówek aplikacji chowa się przy przewijaniu; pociągnij w dół na samej górze, żeby go wysunąć."),
   bullet("„Zapisz” w Safari zapisuje kopię pliku (Pliki → Pobrane)."),
 
-  h1("10. Zapis"),
-  p("„Zapisz” nadpisuje otwarty plik (w Chrome i Edge na komputerze), a „Zapisz jako” tworzy kopię. Licznik przy „Zapisz” pokazuje, ile zmian czeka na zapis. Plik zostaje zwykłym .docx — otworzysz go w Wordzie, Pages i LibreOffice."),
+  h1("12. Zapis i otwieranie plików"),
+  p("„Zapisz” zapisuje zmiany w oryginalnym pliku, jeśli otworzyłeś go przyciskiem „Otwórz”, przeciągnięciem do okna albo przez „Otwórz za pomocą” (Chrome i Edge na komputerze) — o zgodę zapyta raz. W innym wypadku zapyta, gdzie zapisać kopię. „Zapisz jako” zawsze tworzy kopię. Licznik przy „Zapisz” pokazuje, ile zmian czeka na zapis. Plik zostaje zwykłym .docx — otworzysz go w Wordzie, Pages i LibreOffice."),
+  p("Zainstalowana aplikacja (Chrome / Edge → „Zainstaluj”) pojawia się w menu „Otwórz za pomocą” przy plikach .docx na Windowsie i Macu, a na Androidzie w „Udostępnij”. Na iPhonie i iPadzie pliki otwierasz z wnętrza aplikacji."),
   tip("zmień coś, zobacz licznik przy „Zapisz”, a potem użyj „Zapisz jako”, żeby mieć własną kopię tego przewodnika."),
 ];
 
+const tocBlock = [
+  `<w:p><w:pPr><w:pStyle w:val="TOCHeading"/></w:pPr>${run("Spis treści")}</w:p>`,
+  ...chapters.map((_, i) => tocEntry(i + 1)),
+  tip("kliknij dowolny rozdział — przeskoczysz do niego. „↩ Wróć” na dole (albo Alt+←) przywróci to miejsce."),
+].join("\n");
+const bodyXml = body.map((x) => (x === "@@TOC@@" ? tocBlock : x));
+
 const DOCUMENT = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document ${NS}><w:body>${body.join("\n")}
+<w:document ${NS}><w:body>${bodyXml.join("\n")}
 <w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr>
 </w:body></w:document>`;
 
@@ -136,6 +173,10 @@ const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
   <w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/><w:tblPr><w:tblBorders>
     <w:top w:val="single" w:sz="4" w:color="B8C4D6"/><w:left w:val="single" w:sz="4" w:color="B8C4D6"/><w:bottom w:val="single" w:sz="4" w:color="B8C4D6"/><w:right w:val="single" w:sz="4" w:color="B8C4D6"/><w:insideH w:val="single" w:sz="4" w:color="B8C4D6"/><w:insideV w:val="single" w:sz="4" w:color="B8C4D6"/>
   </w:tblBorders><w:tblCellMar><w:left w:w="100" w:type="dxa"/><w:right w:w="100" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>
+  <w:style w:type="paragraph" w:customStyle="1" w:styleId="TOCHeading"><w:name w:val="TOC Heading"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="80"/></w:pPr><w:rPr><w:b/><w:color w:val="1F3B63"/><w:sz w:val="24"/></w:rPr></w:style>
+  <w:style w:type="paragraph" w:styleId="TOC1"><w:name w:val="toc 1"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="20"/><w:ind w:left="240"/></w:pPr></w:style>
+  <w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:rPr><w:color w:val="1F5FBF"/><w:u w:val="single"/></w:rPr></w:style>
+  <w:style w:type="character" w:styleId="PlaceholderText"><w:name w:val="Placeholder Text"/><w:rPr><w:color w:val="808080"/></w:rPr></w:style>
   <w:style w:type="character" w:styleId="FootnoteReference"><w:name w:val="footnote reference"/><w:rPr><w:vertAlign w:val="superscript"/></w:rPr></w:style>
 </w:styles>`;
 
