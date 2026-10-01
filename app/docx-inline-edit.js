@@ -46,7 +46,8 @@ async function markLockedParagraphs(bytes) {
     const el = previews[i];
     if (!el) return;
     const hit = INLINE_LOCK_TAGS.find(([tag]) => xp.getElementsByTagNameNS(W_NS, tag).length);
-    if (hit) el.dataset.lock = hit[1];
+    const lock = formParagraphLock(xp) || hit?.[1]; // pole formularza Worda: docx-forms.js
+    if (lock) el.dataset.lock = lock;
     else delete el.dataset.lock;
   });
 }
@@ -112,6 +113,7 @@ function collectInlineParagraphEdits() {
     inlineDirtyParas.forEach((p) => {
       const i = indexOf.get(p);
       if (i === undefined) { inlineDirtyParas.delete(p); return; } // odłączony (np. scalony)
+      if (p.dataset.lock) { inlineDirtyParas.delete(p); return; } // tylko do odczytu (znaczek pola itp.)
       const domRuns = extractRunsFromPreviewParagraph(p);
       if (runsEqual(domRuns, baselineParagraphRuns[i])) inlineDirtyParas.delete(p); // wrócił do stanu z pliku
       else edits.push({ index: i, runs: domRuns });
@@ -120,6 +122,9 @@ function collectInlineParagraphEdits() {
   }
   const len = Math.min(previews.length, baselineParagraphRuns.length);
   for (let i = 0; i < len; i++) {
+    // Akapit tylko do odczytu: podgląd nie ma w nim pełnej treści pliku (np. tekst kontrolki
+    // formularza), więc porównanie z bazą zawsze wyszłoby „zmieniony” — i zapis by go rozbił.
+    if (previews[i].dataset.lock) continue;
     const domRuns = extractRunsFromPreviewParagraph(previews[i]);
     if (!runsEqual(domRuns, baselineParagraphRuns[i])) edits.push({ index: i, runs: domRuns });
   }
@@ -432,6 +437,11 @@ async function handleInlineBackspace(p, paraIndex, e) {
   const host = docCanvasEl?.querySelector(".docx-preview-host");
   const paras = collectPreviewParagraphElements(host);
   const prev = paras[paraIndex - 1];
+  // poprzedni akapit tylko do odczytu (pole, link, przypis…) — sklejenie przepisałoby go i zgubiło zawartość
+  if (!prev || prev.dataset.lock) {
+    if (prev) toast(t(prev.dataset.lock), "info");
+    return;
+  }
   const joinAt = previewRunsToPlainText(extractRunsFromPreviewParagraph(prev)).length;
   mergeParagraphDom(prev, p);
   placeCaret(prev, joinAt);
@@ -656,7 +666,7 @@ function syncInlineEditMode() {
       p.dataset.hint = "";
       p.dataset.hintPl = I18N.pl[p.dataset.lock];
       p.dataset.hintEn = I18N.en[p.dataset.lock];
-      p.dataset.hintTouch = "on";
+      p.dataset.hintTouch = p.dataset.lock === "lockForm" ? "off" : "on";
       p.dataset.lockHint = "1";
       return;
     }

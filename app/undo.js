@@ -29,6 +29,7 @@ const UNDO_OP_LABEL = {
   paragraphBatch: "undoOpParagraphs",
   coreMetadata: "undoOpMetadata",
   revisions: "undoOpReview",
+  formFill: "undoOpForm",
   placeholderFill: "undoOpPlaceholders",
   snippetExpand: "undoOpSnippets",
 };

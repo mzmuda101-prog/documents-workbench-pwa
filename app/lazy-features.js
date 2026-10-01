@@ -8,6 +8,7 @@ const LAZY_FEATURE_SCRIPTS = {
   export: ["app/export-panel.js"],
   stats: ["app/stats-panel.js"],
   review: ["app/review-panel.js"],
+  forms: ["app/forms-panel.js"],
 };
 
 const PANEL_LAZY_FEATURE = {
@@ -19,6 +20,7 @@ const PANEL_LAZY_FEATURE = {
   "panel-export": "export",
   "panel-stats": "stats",
   "panel-review": "review",
+  "panel-forms": "forms",
 };
 
 const lazyFeatureLoaded = new Set();
@@ -72,6 +74,7 @@ function initLazyFeaturePanels() {
         }
         if (panel.id === "panel-stats" && typeof renderDocumentStats === "function") renderDocumentStats();
         if (panel.id === "panel-review" && typeof runReviewScan === "function") runReviewScan().catch(() => {});
+        if (panel.id === "panel-forms" && typeof renderFormsPanel === "function") renderFormsPanel();
       }).catch(() => {});
     });
   });

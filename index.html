@@ -16,7 +16,7 @@
     <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png" />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin.woff2" crossorigin />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin-ext.woff2" crossorigin />
-    <link rel="stylesheet" href="styles/app.css?v=20260929-06" />
+    <link rel="stylesheet" href="styles/app.css?v=20261001-01" />
   </head>
   <body>
     <!-- Pierwszy przystanek Tab: skok prosto do dokumentu (panel to kilkadziesiąt kontrolek). -->
@@ -427,6 +427,27 @@
             <div class="sidebar-group-head">
               <span class="sidebar-group-title" data-i18n="groupTemplates">Szablony</span>
             </div>
+            <details class="panel" id="panel-forms">
+              <summary>
+                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="16" rx="2" />
+                  <path d="m7 10 2 2 3-3" />
+                  <path d="M14 11h4M7 16h11" />
+                </svg>
+                <span class="panel-title" data-i18n="formsPanel">Formularz</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
+              </summary>
+              <div class="panel-body stack">
+                <p class="hint" id="ffSummary"></p>
+                <p class="hint ff-protection hidden" id="ffProtection" data-i18n="formsProtected">Autor chronił ten dokument w Wordzie: można w nim tylko wypełniać pola.</p>
+                <div class="stack stack-tight" id="ffList"></div>
+                <label class="field checkbox">
+                  <input id="ffShade" type="checkbox" checked />
+                  <span data-i18n="formsShade">Wyróżniaj pola w dokumencie</span>
+                </label>
+                <p class="hint" data-i18n="formsHint">Listy, daty, pola wyboru i pola tekstowe z Worda. Kliknij pole w dokumencie albo zmień je tutaj — w Wordzie formularz dalej działa.</p>
+              </div>
+            </details>
             <details class="panel" id="panel-placeholders">
               <summary>
                 <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -815,34 +836,35 @@
       <div class="cursor-hint-scaler"><span id="cursorHintText"></span></div>
     </div>
 
-    <script defer src="app/core.js?v=20260929-06"></script>
-    <script defer src="app/language.js?v=20260929-06"></script>
-    <script defer src="app/docx-metadata.js?v=20260929-06"></script>
-    <script defer src="app/docx-revisions.js?v=20260929-06"></script>
-    <script defer src="app/docx-patch.js?v=20260929-06"></script>
-    <script defer src="app/template-tokens.js?v=20260929-06"></script>
-    <script defer src="app/docx-run-styles.js?v=20260929-06"></script>
-    <script defer src="app/docx-inline-edit.js?v=20260929-06"></script>
-    <script defer src="app/document.js?v=20260929-06"></script>
-    <script defer src="app/docx-render-fixes.js?v=20260929-06"></script>
-    <script defer src="app/docx-viewer.js?v=20260929-06"></script>
-    <script defer src="app/analysis.js?v=20260929-06"></script>
-    <script defer src="app/structure-panel.js?v=20260929-06"></script>
-    <script defer src="app/grammar-style.js?v=20260929-06"></script>
-    <script defer src="app/placeholders.js?v=20260929-06"></script>
-    <script defer src="app/snippets.js?v=20260929-06"></script>
-    <script defer src="app/snippet-suggest.js?v=20260929-06"></script>
-    <script defer src="app/doc-caret-nav.js?v=20260929-06"></script>
-    <script defer src="app/edit-tools.js?v=20260929-06"></script>
-    <script defer src="app/mobile-doc-zoom.js?v=20260929-06"></script>
-    <script defer src="app/ui-controls.js?v=20260929-06"></script>
-    <script defer src="app/lazy-features.js?v=20260929-06"></script>
-    <script defer src="app/app-frame.js?v=20260929-06"></script>
-    <script defer src="app/touch.js?v=20260929-06"></script>
-    <script defer src="app/pinch-zoom.js?v=20260929-06"></script>
-    <script defer src="app/undo.js?v=20260929-06"></script>
-    <script defer src="app/view-mode.js?v=20260929-06"></script>
-    <script defer src="app/keyboard.js?v=20260929-06"></script>
-    <script defer src="app/bootstrap.js?v=20260929-06"></script>
+    <script defer src="app/core.js?v=20261001-01"></script>
+    <script defer src="app/language.js?v=20261001-01"></script>
+    <script defer src="app/docx-metadata.js?v=20261001-01"></script>
+    <script defer src="app/docx-revisions.js?v=20261001-01"></script>
+    <script defer src="app/docx-forms.js?v=20261001-01"></script>
+    <script defer src="app/docx-patch.js?v=20261001-01"></script>
+    <script defer src="app/template-tokens.js?v=20261001-01"></script>
+    <script defer src="app/docx-run-styles.js?v=20261001-01"></script>
+    <script defer src="app/docx-inline-edit.js?v=20261001-01"></script>
+    <script defer src="app/document.js?v=20261001-01"></script>
+    <script defer src="app/docx-render-fixes.js?v=20261001-01"></script>
+    <script defer src="app/docx-viewer.js?v=20261001-01"></script>
+    <script defer src="app/analysis.js?v=20261001-01"></script>
+    <script defer src="app/structure-panel.js?v=20261001-01"></script>
+    <script defer src="app/grammar-style.js?v=20261001-01"></script>
+    <script defer src="app/placeholders.js?v=20261001-01"></script>
+    <script defer src="app/snippets.js?v=20261001-01"></script>
+    <script defer src="app/snippet-suggest.js?v=20261001-01"></script>
+    <script defer src="app/doc-caret-nav.js?v=20261001-01"></script>
+    <script defer src="app/edit-tools.js?v=20261001-01"></script>
+    <script defer src="app/mobile-doc-zoom.js?v=20261001-01"></script>
+    <script defer src="app/ui-controls.js?v=20261001-01"></script>
+    <script defer src="app/lazy-features.js?v=20261001-01"></script>
+    <script defer src="app/app-frame.js?v=20261001-01"></script>
+    <script defer src="app/touch.js?v=20261001-01"></script>
+    <script defer src="app/pinch-zoom.js?v=20261001-01"></script>
+    <script defer src="app/undo.js?v=20261001-01"></script>
+    <script defer src="app/view-mode.js?v=20261001-01"></script>
+    <script defer src="app/keyboard.js?v=20261001-01"></script>
+    <script defer src="app/bootstrap.js?v=20261001-01"></script>
   </body>
 </html>

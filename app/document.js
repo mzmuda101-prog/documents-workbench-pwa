@@ -117,9 +117,16 @@ async function reloadFromBytes(bytes) {
   await renderCurrentDocument();
 }
 
+// Ciche przerysowanie (np. po kliknięciu pola formularza): nakładka „Renderowanie…” tylko,
+// gdy trwa to dłużej — przy małym dokumencie to ~10 ms i rozmyty ekran byłby samym mignięciem.
+let quietRenderOnce = false;
+
 async function renderCurrentDocument() {
   if (!originalFileBytes || currentFileType !== "docx") return;
-  setLoading(true, t("renderingDoc"));
+  const quiet = quietRenderOnce;
+  quietRenderOnce = false;
+  const overlayTimer = quiet ? setTimeout(() => setLoading(true, t("renderingDoc")), 400) : null;
+  if (!quiet) setLoading(true, t("renderingDoc"));
   try {
     hideEmptyState();
     const [, headingStyles] = await Promise.all([
@@ -135,6 +142,7 @@ async function renderCurrentDocument() {
     setupInlineEditingAfterRender();
     if (typeof syncMobileDocZoomAfterRender === "function") syncMobileDocZoomAfterRender();
   } finally {
+    clearTimeout(overlayTimer);
     setLoading(false);
     syncDocViewportHeight();
   }

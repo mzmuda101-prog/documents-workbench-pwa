@@ -539,6 +539,7 @@ function applyParagraphBatchInXml(xml, items) {
       const current = extractRunsFromParagraphXml(p);
       if (runsEqual(current, runs)) return;
       applyRunsToParagraphXml(p, runs);
+      clearSdtPlaceholderAround(p);
       count++;
       return;
     }
@@ -546,6 +547,7 @@ function applyParagraphBatchInXml(xml, items) {
     const next = sanitizeXmlText(text);
     if (next === raw) return;
     if (!setParagraphTextPreservingRuns(p, next)) setParagraphText(p, next);
+    clearSdtPlaceholderAround(p);
     count++;
   });
   if (!count) return { xml, count: 0 };
@@ -574,6 +576,14 @@ function buildParagraphTransformFn(edit) {
   return (s) => s;
 }
 
+// setParagraphText przepisuje cały akapit jednym fragmentem — pole formularza, pole Worda, link,
+// przypis, obraz czy śledzona zmiana w środku by przepadły. Takie akapity przekształcenia pomijają
+// (te same, które w podglądzie są tylko do odczytu).
+const TRANSFORM_SKIP_TAGS = ["sdt", "fldChar", "fldSimple", "hyperlink", "footnoteReference", "endnoteReference", "drawing", "pict", "object", "ins", "del", "moveFrom", "moveTo"];
+function paragraphHasProtectedContent(p) {
+  return TRANSFORM_SKIP_TAGS.some((tag) => p.getElementsByTagNameNS(W_NS, tag).length);
+}
+
 function applyParagraphTransformInXml(xml, edit, scope) {
   const fn = buildParagraphTransformFn(edit);
   const parser = new DOMParser();
@@ -582,7 +592,7 @@ function applyParagraphTransformInXml(xml, edit, scope) {
   let count = 0;
   paragraphs.forEach((p) => {
     const raw = getParagraphText(p);
-    if (!raw) return;
+    if (!raw || paragraphHasProtectedContent(p)) return;
     let next;
     try { next = fn(raw); } catch { return; }
     if (typeof next !== "string" || next === raw) return;
@@ -677,6 +687,12 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
         coreXml = res.xml;
         total += res.count;
       }
+      continue;
+    }
+    if (normalized.op === "formFill") { // docx-forms.js — pola powiązane zmieniają też customXml / docProps
+      const res = await applyFormFillInZip(zip, xml, normalized);
+      xml = res.xml;
+      total += res.count;
       continue;
     }
     if (normalized.op === "revisions") { // docx-revisions.js — dotyka też nagłówków, stopek, przypisów, komentarzy

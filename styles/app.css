@@ -1367,6 +1367,37 @@ button.stat-row { cursor: pointer; }
 /* Znajdź i zamień v2: podświetlenie SAMEGO trafienia (CSS Custom Highlight API) */
 ::highlight(dwb-find) { background-color: color-mix(in srgb, var(--warning) 38%, transparent); }
 ::highlight(dwb-find-active) { background-color: color-mix(in srgb, var(--accent) 42%, transparent); color: inherit; }
+/* Formularz Worda (docx-forms.js): pola jak szare cieniowanie pól w Wordzie, tylko w kolorze akcentu */
+::highlight(dwb-form) { background-color: color-mix(in srgb, var(--accent) 13%, transparent); }
+::highlight(dwb-form-active) { background-color: color-mix(in srgb, var(--accent) 38%, transparent); }
+.doc-canvas.ff-hover, .doc-canvas.ff-hover .docx-locked-p { cursor: pointer; }
+.ff-glyph { display: inline-block; min-width: 1em; text-align: center; cursor: pointer; }
+.ff-glyph.is-empty { min-width: 2.5em; border-bottom: 1px solid currentColor; opacity: .55; }
+.ff-pop {
+  position: fixed; z-index: 75; display: flex; flex-direction: column; gap: 6px;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: var(--r-sm);
+  box-shadow: 0 10px 28px rgba(8, 14, 28, 0.18); padding: 8px; font-size: 13px;
+}
+.ff-pop-title { font-size: 11.5px; font-weight: 700; color: var(--muted-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ff-pop-list { display: flex; flex-direction: column; gap: 2px; max-height: min(50vh, 320px); overflow-y: auto; overscroll-behavior: contain; }
+.ff-pop-opt { text-align: left; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.ff-pop-opt:hover, .ff-pop-opt:focus-visible { background: color-mix(in srgb, var(--accent) 12%, transparent); outline: none; }
+.ff-pop-opt.is-current { font-weight: 700; }
+.ff-pop-opt.is-current::before { content: "✓ "; color: var(--accent); }
+.ff-pop-row { display: flex; gap: 6px; align-items: stretch; }
+.ff-pop-input { flex: 1; min-width: 0; font: inherit; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--field); color: var(--ink); }
+textarea.ff-pop-input { min-height: 4.5em; resize: vertical; }
+.ff-pop-row .btn { min-height: 0; padding: 4px 10px; }
+@media (pointer: coarse) {
+  .ff-pop-opt { padding: 11px 10px; }
+  .ff-pop-input { font-size: 16px; } /* iOS: bez przybliżania strony przy fokusie */
+  .ff-pop-row .btn { min-height: 40px; }
+}
+.ff-field > span { overflow-wrap: anywhere; }
+.ff-row.is-empty { border-color: color-mix(in srgb, var(--warning) 45%, var(--border-subtle)); }
+.ff-check { margin: 0; }
+.ff-row :is(input, select, textarea):disabled { opacity: .55; cursor: not-allowed; }
+.ff-protection { color: var(--warning); }
 .fr-options { display: flex; flex-direction: column; gap: 2px; }
 .fr-regex-hint { display: none; }
 .panel-body:has(#frRegex:checked) .fr-regex-hint { display: block; }

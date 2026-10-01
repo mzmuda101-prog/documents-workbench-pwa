@@ -339,6 +339,7 @@ const appFrame = (() => {
     setSummaryCount("panel-placeholders", fields);
     const review = typeof docReviewCounts !== "undefined" && originalFileBytes ? docReviewCounts.changes + docReviewCounts.comments : 0;
     setSummaryCount("panel-review", review);
+    setSummaryCount("panel-forms", typeof docFormCounts !== "undefined" && originalFileBytes ? docFormCounts.fields : 0);
     if (searchPosEl) {
       const q = searchQueryEl?.value.trim();
       searchPosEl.textContent = !q ? "" : hits ? `${pos + 1} / ${hits}` : "0";
