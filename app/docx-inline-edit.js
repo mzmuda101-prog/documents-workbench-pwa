@@ -629,11 +629,34 @@ async function onDocCanvasKeydown(e) {
   }
 }
 
+// Akapit z wysuniętym pierwszym wierszem (wcięcie wiszące — np. spis treści): ramka akapitu
+// zaczyna się tam, gdzie KOLEJNE wiersze, a pierwszy wystaje w lewo. Podświetlenie edytowanego
+// akapitu, pasek i obrys wyniku szukania zaczynały się więc w środku pierwszego słowa
+// („N|agłe zdarzenia”). Ramkę wydłużamy w lewo o wysunięcie (margines −x, odstęp +x) — tekst
+// zostaje co do piksela na miejscu. Leniwie (pierwsze najechanie / fokus / skok), bez list.
+function fixHangingBox(p) {
+  if (!p || p.tagName !== "P" || p.dataset.hang) return;
+  p.dataset.hang = "0";
+  if (isListParagraph(p)) return; // listy mają znacznik w wysunięciu — osobny styl
+  const cs = getComputedStyle(p);
+  const hang = -(parseFloat(cs.textIndent) || 0);
+  if (!(hang > 1)) return;
+  p.style.marginLeft = `${(parseFloat(cs.marginLeft) || 0) - hang}px`;
+  p.style.paddingLeft = `${(parseFloat(cs.paddingLeft) || 0) + hang}px`;
+  p.dataset.hang = "1";
+}
+function onHangingProbe(e) {
+  const p = e.target.closest?.("p");
+  if (p && docCanvasEl.contains(p)) fixHangingBox(p);
+}
+
 function bindInlineEditKeyboard() {
   if (!docCanvasEl || inlineKeyboardBound) return;
   inlineKeyboardBound = true;
   docCanvasEl.addEventListener("keydown", onDocCanvasKeydown);
   docCanvasEl.addEventListener("paste", onDocPaste);
+  docCanvasEl.addEventListener("pointerover", onHangingProbe, { passive: true });
+  docCanvasEl.addEventListener("focusin", onHangingProbe);
 }
 
 // Jeden akapit (nowy po Enterze) — zamiast syncInlineEditMode() na WSZYSTKICH akapitach

@@ -100,6 +100,7 @@ function jumpToStructureItem(item, options = {}) {
   if (!item?.el) return;
   clearStructureHighlights();
   structureSelectionId = item.id;
+  if (typeof fixHangingBox === "function") fixHangingBox(item.el); // obrys obejmuje też wysunięty 1. wiersz
   item.el.classList.add("search-hit", "search-hit-active");
   item.el.scrollIntoView({ behavior: "smooth", block: "center" });
   if (!options.silentSelect) {

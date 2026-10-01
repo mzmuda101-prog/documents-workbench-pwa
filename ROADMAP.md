@@ -53,6 +53,8 @@ Stan na **v0.2** (lipiec 2026). Ostatnia wersja cache: `20260702-03`.
 
 | **„Otwórz za pomocą” / „Udostępnij”** (`app/launch-files.js`, manifest `file_handlers` + `launch_handler: navigate-new` + `share_target`, odbiór POST w `sw.js`): zainstalowana aplikacja w Chrome/Edge na Windows/macOS pojawia się w „Otwórz za pomocą” dla .docx (plik z uchwytem → „Zapisz” do oryginału, każdy plik we własnym oknie); Android — „Udostępnij → Documents Workbench” (kopia). iPhone/iPad/Safari — nie obsługują, bez zmian. Strażnik `test:launch` Chromium + WebKit | ✅ 2026-10-01 |
 
+| **Linki w dokumencie** (`app/doc-links.js`): spis treści / zakładki → płynny skok w dokumencie + „↩ Wróć” (Alt+←), adres strony bez #…; adres WWW → nowa karta (dawniej ZASTĘPOWAŁ aplikację); javascript:/plik na dysku → zablokowane z komunikatem; odsyłacze Worda (REF/PAGEREF/NOTEREF \h, HYPERLINK) klikalne; podpowiedź dokąd prowadzi link. **Fix:** podświetlenie edytowanego akapitu / wyniku szukania przy wysuniętym 1. wierszu zaczynało się w środku słowa (`fixHangingBox`). Strażnik `test:links` Chromium + WebKit | ✅ 2026-10-01 |
+
 **Plan przenoszenia z Sheet Workbench (A–F) zakończony.** Otwarte tematy: cofnięcie kroku z Enterem nadal rysuje dokument od nowa (~4 s przy 300 stronach); pierwszy układ bardzo długiego dokumentu jest kosztem docx-preview (content-visibility odrzucone — psuje numerację list przez izolację stylów). Później: „Ostatnio otwierane” (tylko Chrome/Edge, uchwyty plików w IndexedDB — lokalnie).
 
 **Poza pierwotnym planem (ale wartościowe):** … edycja inline ze stylami runów + rozmiar czcionki, zoom 0.5–2.

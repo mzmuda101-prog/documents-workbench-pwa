@@ -1406,6 +1406,18 @@ button.stat-row { cursor: pointer; }
   .ff-field { background: none !important; box-shadow: none !important; outline: none !important; padding: 0 !important; font-style: inherit !important; }
   .ff-field::after { display: none !important; }
 }
+/* Linki w dokumencie (doc-links.js): klikalne także w akapicie tylko do odczytu */
+.doc-canvas .docx-preview-host a[href] { cursor: pointer; }
+.doc-canvas .docx-preview-host a.doc-xref { color: inherit; text-decoration: underline dotted color-mix(in srgb, var(--accent) 70%, transparent); text-underline-offset: 2px; }
+.doc-canvas .docx-preview-host a[href]:hover { text-decoration-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); border-radius: 2px; }
+.link-back {
+  position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 72;
+  padding: 8px 16px; border: 1px solid var(--border); border-radius: var(--r-full, 999px); background: var(--surface); color: var(--ink);
+  font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 8px 24px rgba(8, 14, 28, 0.18);
+}
+.link-back:hover { border-color: var(--accent); color: var(--accent); }
+@media (pointer: coarse) { .link-back { padding: 11px 20px; } }
+@media print { .link-back { display: none !important; } }
 .ff-pop {
   position: fixed; z-index: 75; display: flex; flex-direction: column; gap: 6px;
   background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: var(--r-sm);

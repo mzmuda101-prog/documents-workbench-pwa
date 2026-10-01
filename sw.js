@@ -1,4 +1,4 @@
-const CACHE_VERSION = "20261001-04";
+const CACHE_VERSION = "20261001-05";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
@@ -20,6 +20,7 @@ const SHELL_ASSETS = [
   `./app/docx-metadata.js?v=${ASSET_V}`,
   `./app/docx-revisions.js?v=${ASSET_V}`,
   `./app/docx-forms.js?v=${ASSET_V}`,
+  `./app/doc-links.js?v=${ASSET_V}`,
   `./app/docx-patch.js?v=${ASSET_V}`,
   `./app/template-tokens.js?v=${ASSET_V}`,
   `./app/docx-run-styles.js?v=${ASSET_V}`,
