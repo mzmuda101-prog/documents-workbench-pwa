@@ -57,6 +57,8 @@ Stan na **v0.2** (lipiec 2026). Ostatnia wersja cache: `20260702-03`.
 
 | **Przewodnik + intro** (przewodnik.docx: klikalny spis treści, rozdział „Formularz Worda” z 4 polami, „Linki i odsyłacze” z odsyłaczem REF, zapis / „Otwórz za pomocą” / „Udostępnij”; strażnik `test:guide` klika nowe „Spróbuj:”. Intro: film 2 s (tempo z długości filmu), znika dopiero gdy film się skończy I aplikacja jest gotowa; blokada autoodtwarzania nie odsłania ładowania. Komunikat „to formularz Worda” nie dla wbudowanych przykładów) | ✅ 2026-10-01 |
 
+| **Niezapisane zmiany nie giną** (zgłoszenie: okno przeciągnięte na inny monitor → dokument narysował się od nowa, wpisany tekst zniknął z ekranu, „Zapisz” świeciło, a zapis byłby BEZ niego). Przerysowanie przy zmianie układu (telefon ⇄ komputer, obrót iPada, „Dopasuj”) najpierw przenosi wpisane zmiany do pliku (`rerenderKeepingEdits`). „Aktualizuj” / „Odśwież aplikację” pytają przy niezapisanych zmianach (iOS nie pokazuje „Opuścić stronę?”); aktualizacja z innego okna nie przeładowuje okna z niezapisanymi zmianami. Strażnik `test:survival` (25 czynności, Chromium + WebKit) | ✅ 2026-10-01 |
+
 **Plan przenoszenia z Sheet Workbench (A–F) zakończony.** Otwarte tematy: cofnięcie kroku z Enterem nadal rysuje dokument od nowa (~4 s przy 300 stronach); pierwszy układ bardzo długiego dokumentu jest kosztem docx-preview (content-visibility odrzucone — psuje numerację list przez izolację stylów). Później: „Ostatnio otwierane” (tylko Chrome/Edge, uchwyty plików w IndexedDB — lokalnie).
 
 **Poza pierwotnym planem (ale wartościowe):** … edycja inline ze stylami runów + rozmiar czcionki, zoom 0.5–2.

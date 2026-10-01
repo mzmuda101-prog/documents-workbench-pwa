@@ -311,7 +311,19 @@ async function ingestDroppedFile(file, handlePromise) {
   return ingestFile(file, handle?.kind === "file" ? { handle } : {});
 }
 
+// Przeładowanie (Aktualizuj / Odśwież aplikację) przy niezapisanych zmianach: najpierw pytamy.
+// Na iPhonie/iPadzie Safari NIE pokazuje „Opuścić stronę?” — praca przepadała bez słowa.
+// Po „OK” przeglądarka nie pyta drugi raz (beforeunload w bootstrap.js patrzy na tę flagę).
+let reloadConfirmed = false;
+function confirmReloadWithUnsaved() {
+  if (!hasUnsavedChanges || reloadConfirmed) return true;
+  if (!window.confirm(t("reloadUnsavedWarn"))) return false;
+  reloadConfirmed = true;
+  return true;
+}
+
 async function hardRefreshApp() {
+  if (!confirmReloadWithUnsaved()) return;
   // Sygnał NATYCHMIAST po kliknięciu — czyszczenie cache i update() potrafią na
   // telefonie trwać sekundę i dłużej, a bez toastu klik wyglądał na niezłapany.
   toast(t("cacheRefresh"), "info");
@@ -354,6 +366,7 @@ function registerServiceWorker() {
   if (appUpdateBtn) {
     appUpdateBtn.addEventListener("click", () => {
       if (appUpdateBtn.classList.contains("is-busy")) return;
+      if (!confirmReloadWithUnsaved()) return;
       // Najpierw WIDOCZNA zmiana stanu, dopiero potem robota — aktywacja nowego workera
       // i przeładowanie trwają od kilkuset ms do paru sekund.
       appUpdateBtn.classList.add("is-busy");
@@ -381,6 +394,19 @@ function registerServiceWorker() {
   const hadControllerAtStart = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (refreshingForUpdate || !hadControllerAtStart) return;
+    // Aktualizację kliknięto w INNYM oknie aplikacji (np. drugi plik z „Otwórz za pomocą”),
+    // a tu są niezapisane zmiany — nie przeładowuj sam; „Aktualizuj” zostaje na później.
+    if (hasUnsavedChanges && !reloadConfirmed) {
+      waitingServiceWorker = null; // nowa wersja już działa — „Aktualizuj” = zwykłe przeładowanie
+      if (appUpdateBtn) {
+        appUpdateBtn.classList.remove("hidden", "is-busy");
+        appUpdateBtn.disabled = false;
+        appUpdateBtn.removeAttribute("aria-busy");
+        appUpdateBtn.textContent = t("updateApp");
+      }
+      toast(t("updateWaitsForSave"), "info");
+      return;
+    }
     refreshingForUpdate = true;
     window.location.reload();
   });

@@ -36,7 +36,7 @@ if (!navigator.connection?.saveData) {
 }
 
 window.addEventListener("beforeunload", (e) => {
-  if (!hasUnsavedChanges) return;
+  if (!hasUnsavedChanges || reloadConfirmed) return; // przy „Aktualizuj” już zapytaliśmy
   e.preventDefault();
   e.returnValue = "";
 });

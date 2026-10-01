@@ -159,7 +159,7 @@ function setZoomMode(mode, options = {}) {
   syncViewportClass();
   syncMobileZoomUi();
   if (prev !== zoomMode && originalFileBytes && isMobileViewport() && !options.skipRerender) {
-    renderCurrentDocument();
+    rerenderKeepingEdits(); // nie gub tekstu wpisanego w podglądzie
     return;
   }
   if (shouldUseMobileReflow()) {
@@ -227,7 +227,7 @@ function onViewportChange() {
     syncZoomSliderLimits();
     syncMobileZoomUi();
     syncDocViewportHeight();
-    renderCurrentDocument();
+    rerenderKeepingEdits(); // nie gub tekstu wpisanego w podglądzie
     return;
   }
   syncZoomSliderLimits();

@@ -148,6 +148,25 @@ async function renderCurrentDocument() {
   }
 }
 
+// Przerysowanie TEGO SAMEGO pliku, bo zmienił się układ (telefon ⇄ komputer przy przeciąganiu
+// okna na inny monitor, obrót iPada, „Dopasuj” na telefonie). Tekst wpisany w podglądzie żyje
+// tylko w podglądzie, dopóki nie trafi do pliku — zwykłe renderCurrentDocument() rysowało plik
+// bez niego: zmiany znikały z ekranu, „Zapisz” dalej świeciło, a zapis byłby BEZ nich
+// (zgłoszenie Mateusza, Windows, 2026-10-01). Najpierw wpisane zmiany do pliku, potem rysowanie;
+// kolejne wywołania czekają na poprzednie (szybkie zmiany rozmiaru okna).
+let relayoutJob = Promise.resolve();
+function rerenderKeepingEdits() {
+  relayoutJob = relayoutJob.then(async () => {
+    if (!originalFileBytes || currentFileType !== "docx") return;
+    if (typeof mergeInlineEditsIntoBytes === "function") await mergeInlineEditsIntoBytes();
+    const vp = docViewportEl;
+    const ratio = vp && vp.scrollHeight > vp.clientHeight ? vp.scrollTop / (vp.scrollHeight - vp.clientHeight) : 0;
+    await renderCurrentDocument();
+    if (vp && ratio) vp.scrollTop = ratio * Math.max(0, vp.scrollHeight - vp.clientHeight); // to samo miejsce w dokumencie
+  }).catch((e) => log(String(e?.message || e), "error"));
+  return relayoutJob;
+}
+
 async function buildDocumentForSave() {
   if (!originalFileBytes) return null;
   // Enter/Backspace w podglądzie mogą jeszcze przebudowywać plik w tle
