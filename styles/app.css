@@ -1503,3 +1503,113 @@ textarea.ff-pop-input { min-height: 4.5em; resize: vertical; }
 .sn-dialog::backdrop { background: rgba(8, 14, 28, 0.35); }
 .sn-dialog form { display: flex; flex-direction: column; gap: 10px; }
 .sn-dialog h3 { margin: 0; font-size: 15px; }
+
+/* =====================================================================
+   TWORZENIE DOKUMENTU (Etap 1 — compose-ui.js)
+   Pasek Edycji = jeden rząd; nadmiar przewija się w bok (wygaszenie krawędzi z app-frame.js).
+   ===================================================================== */
+.format-toolbar {
+  flex: 0 1 auto; min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+  padding-block: 3px; /* obwódka fokusu nie jest przycinana przez przewijanie */
+}
+.format-toolbar::-webkit-scrollbar { display: none; }
+.format-toolbar > * { flex: none; }
+.tb-sep { width: 1px; height: 20px; margin: 0 3px; background: var(--border-subtle); }
+.insert-btn { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px 0 8px; color: var(--accent); }
+.insert-btn span { font-size: 12.5px; }
+.tb-select-style { max-width: 124px; }
+.align-btn svg { display: block; }
+@media (max-width: 768px) {
+  .format-toolbar { flex-wrap: nowrap; }
+}
+
+/* okienko „Wstaw” / wyrównanie — nad dokumentem, kotwiczone pod przyciskiem */
+.compose-pop {
+  position: fixed; z-index: 9000; min-width: 236px; max-width: min(320px, calc(100vw - 16px));
+  overflow-y: auto; overscroll-behavior: contain; padding: 6px;
+  border: 1px solid var(--border); border-radius: 14px; background: var(--surface); color: var(--ink);
+  box-shadow: 0 14px 40px rgba(8, 14, 28, 0.22);
+  animation: compose-pop-in 120ms ease-out;
+}
+@keyframes compose-pop-in { from { opacity: 0; transform: translateY(-4px); } }
+@media (prefers-reduced-motion: reduce) { .compose-pop { animation: none; } }
+.compose-cap { padding: 8px 10px 4px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.compose-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: 0; border-radius: 10px;
+  background: none; color: var(--ink); font: inherit; text-align: left; cursor: pointer;
+}
+.compose-item:hover, .compose-item:focus-visible { background: var(--accent-light); outline: none; }
+.compose-item-icon { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: var(--field); color: var(--accent); }
+.compose-item-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.compose-item-label { font-size: 13.5px; font-weight: 600; }
+.compose-item-desc { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.compose-chars { display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 4px; padding: 2px 4px 6px; }
+.compose-char {
+  height: 36px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); color: var(--ink);
+  font: inherit; font-size: 16px; cursor: pointer;
+}
+.compose-char:hover, .compose-char:focus-visible { border-color: var(--accent-border); color: var(--accent); background: var(--accent-light); outline: none; }
+.compose-pop-align { min-width: 0; display: flex; gap: 4px; }
+.compose-pop-align .tb-btn { min-width: 38px; height: 38px; }
+@media (pointer: coarse) {
+  .compose-item { min-height: 46px; }
+  .compose-item .app-menu-kbd { display: none; } /* skrót klawiszowy to szum na dotyku */
+  .compose-char { height: 42px; }
+}
+
+/* okno „Nowy dokument” */
+.newdoc-dialog {
+  position: fixed; inset: 0; margin: auto; height: fit-content;
+  border: 1px solid var(--border); border-radius: 18px; padding: 0; width: min(640px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px); background: var(--surface); color: var(--ink);
+  box-shadow: 0 18px 48px rgba(8, 14, 28, 0.25);
+}
+.newdoc-dialog::backdrop { background: rgba(8, 14, 28, 0.38); }
+.newdoc-inner { display: flex; flex-direction: column; gap: 14px; padding: 18px; }
+.newdoc-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.newdoc-head h2 { margin: 0; font-size: 17px; }
+.newdoc-close { width: 34px; height: 34px; border: 0; border-radius: var(--r-full); background: none; color: var(--muted); font-size: 22px; line-height: 1; cursor: pointer; }
+.newdoc-close:hover { background: var(--accent-light); color: var(--ink); }
+.newdoc-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.newdoc-card {
+  display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 10px; text-align: left;
+  border: 1px solid var(--border); border-radius: 14px; background: var(--panel); color: var(--ink); font: inherit; cursor: pointer;
+  transition: border-color var(--t), box-shadow var(--t), transform var(--t);
+}
+.newdoc-card:hover, .newdoc-card:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); outline: none; }
+.newdoc-thumb {
+  display: flex; flex-direction: column; gap: 5px; aspect-ratio: 210 / 297; max-height: 170px; padding: 14% 13%;
+  border-radius: 6px; background: #fff; box-shadow: 0 1px 2px rgba(16, 32, 64, 0.1), 0 4px 14px rgba(16, 32, 64, 0.12);
+}
+.newdoc-thumb i { display: block; height: 4px; width: 100%; border-radius: 2px; background: #d5dbe5; }
+.newdoc-thumb:not(.thumb-letter):not(.thumb-note) i { opacity: 0; }
+.thumb-letter i:nth-child(1), .thumb-letter i:nth-child(2) { width: 45%; }
+.thumb-letter i.r { width: 45%; margin-left: auto; }
+.thumb-letter i.b { width: 55%; background: #8fa2bd; margin-top: 6px; }
+.thumb-note i.t { height: 8px; width: 70%; background: #2a3b55; }
+.thumb-note i.s { width: 40%; }
+.thumb-note i.h { width: 50%; height: 5px; background: #2f5496; margin-top: 4px; }
+.newdoc-name { font-size: 14px; font-weight: 700; }
+.newdoc-desc { font-size: 12px; color: var(--muted); line-height: 1.35; }
+.newdoc-foot { margin: 0; font-size: 12px; color: var(--muted); }
+@media (max-width: 560px) {
+  .newdoc-inner { padding: 14px; gap: 10px; }
+  .newdoc-grid { grid-template-columns: 1fr; gap: 8px; }
+  .newdoc-card { flex-direction: row; align-items: center; gap: 12px; }
+  .newdoc-card .newdoc-thumb { width: 48px; flex: none; padding: 8px 6px; gap: 3px; }
+  .newdoc-card .newdoc-thumb i { height: 3px; }
+  .newdoc-card { display: grid; grid-template-columns: 48px 1fr; grid-template-rows: 1fr 1fr; column-gap: 12px; row-gap: 2px; }
+  .newdoc-card .newdoc-name { align-self: end; }
+  .newdoc-card .newdoc-desc { align-self: start; }
+  .newdoc-card .newdoc-thumb { grid-row: 1 / span 2; }
+}
+
+/* Czcionki Office poza Windowsem: Calibri/Cambria/Aptos są tylko z Office, więc na Macu,
+   iPhonie i Androidzie podgląd spadał na Times (szeryfowy). Ta sama nazwa rodziny, źródła
+   lokalne po kolei — gdzie oryginał jest zainstalowany, zostaje oryginał. */
+@font-face { font-family: "Calibri"; src: local("Calibri"), local("Carlito"), local("Carlito Regular"), local("Carlito-Regular"), local("Arial"), local("ArialMT"), local("Roboto"); }
+@font-face { font-family: "Calibri"; font-weight: bold; src: local("Calibri Bold"), local("Calibri-Bold"), local("Carlito Bold"), local("Arial Bold"), local("Arial-BoldMT"), local("Roboto Bold"), local("Roboto-Bold"); }
+@font-face { font-family: "Calibri Light"; src: local("Calibri Light"), local("Arial"), local("ArialMT"), local("Roboto Light"); }
+@font-face { font-family: "Aptos"; src: local("Aptos"), local("Arial"), local("ArialMT"), local("Roboto"); }
+@font-face { font-family: "Aptos"; font-weight: bold; src: local("Aptos Bold"), local("Aptos-Bold"), local("Arial Bold"), local("Arial-BoldMT"), local("Roboto Bold"), local("Roboto-Bold"); }
+@font-face { font-family: "Cambria"; src: local("Cambria"), local("Caladea"), local("Georgia"), local("Noto Serif"); }

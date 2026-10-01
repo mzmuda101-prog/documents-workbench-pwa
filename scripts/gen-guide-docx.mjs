@@ -146,6 +146,11 @@ const body = [
   p("„Zapisz” zapisuje zmiany w oryginalnym pliku, jeśli otworzyłeś go przyciskiem „Otwórz”, przeciągnięciem do okna albo przez „Otwórz za pomocą” (Chrome i Edge na komputerze) — o zgodę zapyta raz. W innym wypadku zapyta, gdzie zapisać kopię. „Zapisz jako” zawsze tworzy kopię. Licznik przy „Zapisz” pokazuje, ile zmian czeka na zapis. Plik zostaje zwykłym .docx — otworzysz go w Wordzie, Pages i LibreOffice."),
   p("Zainstalowana aplikacja (Chrome / Edge → „Zainstaluj”) pojawia się w menu „Otwórz za pomocą” przy plikach .docx na Windowsie i Macu, a na Androidzie w „Udostępnij”. Na iPhonie i iPadzie pliki otwierasz z wnętrza aplikacji."),
   tip("zmień coś, zobacz licznik przy „Zapisz”, a potem użyj „Zapisz jako”, żeby mieć własną kopię tego przewodnika."),
+
+  h1("13. Tworzenie dokumentu od zera"),
+  p("„Nowy dokument” (ekran startowy, menu ⋯, panel Plik albo Ctrl/⌘+Alt+N) tworzy plik od razu w przeglądarce: pusta kartka A4, pismo z polami {{…}} albo notatka z tytułem i nagłówkami. Pierwsze „Zapisz” zapyta o nazwę i miejsce."),
+  p("W trybie Edycja na pasku są: „＋ Wstaw” (podział strony, linia pozioma, dzisiejsza data, znaki specjalne), lista stylu akapitu (Normalny, Tytuł, Podtytuł, Nagłówek 1–3, Cytat) i wyrównanie. Nagłówki od razu trafiają do skrótów sekcji, Struktury i spisu treści w Wordzie. Enter na końcu nagłówka zaczyna zwykły tekst, a Ctrl/⌘+Enter przenosi dalszy tekst na nową stronę."),
+  tip("kliknij na końcu tego akapitu i wybierz z listy stylu „Nagłówek 2” — pojawi się w skrótach sekcji. Potem „＋ Wstaw” → „Dzisiejsza data”, a na koniec ↶ cofnie jedno i drugie."),
 ];
 
 const tocBlock = [

@@ -54,7 +54,7 @@ async function run() {
     out.xref = host.querySelector("a.doc-xref")?.getAttribute("href");
     return out;
   });
-  check("skróty sekcji: tytuł + 12 rozdziałów", r.chips === 13, String(r.chips));
+  check("skróty sekcji: tytuł + 13 rozdziałów", r.chips === 14, String(r.chips));
   const [all, ww, mc] = r.find;
   check("szukanie „najemca” znajduje też „Najemcami”", all.some((t) => /^Najemcami/.test(t)), all.join("|"));
   check("„Tylko całe słowa” wyklucza „Najemcami”", ww.length === all.length - all.filter((t) => /^Najemcami/i.test(t)).length && !ww.some((t) => /^najemcami/i.test(t)), ww.join("|"));
@@ -67,10 +67,10 @@ async function run() {
   check("statystyki: najdłuższe zdanie to celowo długie", /celowo bardzo długie/.test(r.longest), r.longest);
   check("metadane: autor „Jan Przykładowy”", r.author === "Jan Przykładowy", r.author);
   check("tabela i listy są", r.tables === 1 && r.lists >= 4, `${r.tables} tab, ${r.lists} list`);
-  check("zablokowane: zmiana, przypis, 12 wpisów spisu (linki), 4 pola formularza, odsyłacz",
-    r.locked.lockLink === 12 && r.locked.lockForm === 4 && r.locked.lockField === 1 && r.locked.lockTracked === 1 && r.locked.lockNote === 1 && Object.keys(r.locked).length === 5, JSON.stringify(r.locked));
+  check("zablokowane: zmiana, przypis, 13 wpisów spisu (linki), 4 pola formularza, odsyłacz",
+    r.locked.lockLink === 13 && r.locked.lockForm === 4 && r.locked.lockField === 1 && r.locked.lockTracked === 1 && r.locked.lockNote === 1 && Object.keys(r.locked).length === 5, JSON.stringify(r.locked));
   check("formularz: tekst, lista, data, pole wyboru", r.forms === "text,dropdown,date,checkbox", r.forms);
-  check("spis treści: 12 linków do rozdziałów + odsyłacz do „Zapisu”", r.toc === 12 && r.xref === "#_Guide12", `${r.toc} ${r.xref}`);
+  check("spis treści: 13 linków do rozdziałów + odsyłacz do „Zapisu”", r.toc === 13 && r.xref === "#_Guide12", `${r.toc} ${r.xref}`);
 
   // ── „Spróbuj:” z nowych rozdziałów robi to, co obiecuje ────────────────────
   const clickIn = async (sel) => {

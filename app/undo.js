@@ -32,6 +32,9 @@ const UNDO_OP_LABEL = {
   formFill: "undoOpForm",
   placeholderFill: "undoOpPlaceholders",
   snippetExpand: "undoOpSnippets",
+  paraFormat: "undoOpParaFormat",
+  pageBreak: "undoOpPageBreak",
+  hrule: "undoOpHrule",
 };
 
 const dwbUndo = (() => {

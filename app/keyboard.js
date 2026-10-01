@@ -12,6 +12,8 @@
 //   Ctrl/⌘+Alt+1 / 2 / 3 panel / pasek / dokument   (F6 / Shift+F6 — po kolei)
 //   Ctrl/⌘+Alt+E        Czytanie ⇄ Edycja
 //   Ctrl/⌘+Alt+F        tryb skupienia
+//   Ctrl/⌘+Alt+N        nowy dokument (okno szablonów)
+//   Ctrl/⌘+Enter        podział strony (w tekście, compose-ui.js)
 //   Esc (stopniowo)     wyjście z pisania → panel-nakładka → podświetlenia szukania → tryb skupienia
 //   (Ctrl/⌘+S — app-frame.js, Ctrl/⌘+Z / Shift+Z / Y — undo.js)
 
@@ -122,6 +124,7 @@
         Digit3: focusDocument, Numpad3: focusDocument,
         KeyE: () => originalFileBytes && appFrame.setReadOnly(!readOnlyMode),
         KeyF: () => originalFileBytes && dwbView.toggle(),
+        KeyN: () => typeof composeUi !== "undefined" && composeUi.openNewDialog(),
       };
       const fn = map[e.code];
       if (fn) { e.preventDefault(); fn(); }

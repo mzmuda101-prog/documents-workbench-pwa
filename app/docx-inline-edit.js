@@ -419,6 +419,8 @@ async function handleInlineEnter(p, paraIndex, e) {
   placeCaret(newP, 0);
   const beforeRuns = extractRunsFromPreviewParagraph(p);
   const afterRuns = extractRunsFromPreviewParagraph(newP);
+  // Enter na końcu nagłówka → dalej zwykły tekst (docx-compose.js)
+  const nextNormal = !previewRunsToPlainText(afterRuns) && typeof composeStripNextStyle === "function" && composeStripNextStyle(newP);
   pristineParas.delete(p); // w pliku ten akapit będzie już inny niż przy renderze
   mirrorBaseline(paraIndex, 1, beforeRuns, afterRuns);
   await applyInlineStructuralEdit({
@@ -428,6 +430,7 @@ async function handleInlineEnter(p, paraIndex, e) {
     after: previewRunsToPlainText(afterRuns),
     beforeRuns,
     afterRuns,
+    nextNormal,
   });
 }
 

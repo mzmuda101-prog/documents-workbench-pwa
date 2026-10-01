@@ -25,8 +25,22 @@ async function main() {
     legalComments: "none",
     target: "es2020",
   });
+  patchBundle();
   const kb = (fs.statSync(OUT).size / 1024).toFixed(1);
   console.log(`✅  lib/docx-preview.bundle.js (${kb} KB)`);
+}
+
+// Łatki na zbudowanej bibliotece (nazwy po minifikacji się zmieniają — szukamy wzorcem).
+// 1) „Od nowej strony” (w:pageBreakBefore) docx-preview bierze tylko ze STYLU akapitu;
+//    bezpośrednie ustawienie akapitu (Ctrl+Enter w Documents Workbench, Word „Podział
+//    wiersza i strony → Podział strony przed”) nie łamało strony w podglądzie.
+function patchBundle() {
+  let src = fs.readFileSync(OUT, "utf8");
+  const re = /(\w+)\.type==(\w+)\.Paragraph&&this\.findStyle\(\1\.styleName\)\?\.paragraphProps\?\.pageBreakBefore/;
+  if (!re.test(src)) throw new Error("łatka pageBreakBefore: wzorzec nie pasuje (nowa wersja docx-preview?)");
+  src = src.replace(re, (_, p, T) => `${p}.type==${T}.Paragraph&&(${p}.pageBreakBefore||this.findStyle(${p}.styleName)?.paragraphProps?.pageBreakBefore)`);
+  fs.writeFileSync(OUT, src);
+  console.log("  ✅  łatka: pageBreakBefore akapitu");
 }
 
 main().catch((err) => {

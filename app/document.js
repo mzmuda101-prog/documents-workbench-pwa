@@ -129,11 +129,13 @@ async function renderCurrentDocument() {
   if (!quiet) setLoading(true, t("renderingDoc"));
   try {
     hideEmptyState();
-    const [, headingStyles] = await Promise.all([
+    const [, headingStyles, composeStyles] = await Promise.all([
       renderDocxPreview(originalFileBytes, docCanvasEl),
       typeof readHeadingStyleClasses === "function" ? readHeadingStyleClasses(originalFileBytes) : new Map(),
+      typeof readComposeStyleClasses === "function" ? readComposeStyleClasses(originalFileBytes) : new Map(),
     ]);
     docHeadingStyleClasses = headingStyles;
+    if (typeof docComposeStyleClasses !== "undefined") docComposeStyleClasses = composeStyles;
     // podgląd = plik: od teraz śledzimy tylko akapity, które coś zmieni (paczka F)
     if (typeof resetInlineDirtyAfterRender === "function") resetInlineDirtyAfterRender();
     documentStructure = analyzeDocumentDom(docCanvasEl);

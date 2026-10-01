@@ -16,7 +16,7 @@
     <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png" />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin.woff2" crossorigin />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin-ext.woff2" crossorigin />
-    <link rel="stylesheet" href="styles/app.css?v=20261001-09" />
+    <link rel="stylesheet" href="styles/app.css?v=20261001-10" />
   </head>
   <body>
     <!-- Pierwszy przystanek Tab: skok prosto do dokumentu (panel to kilkadziesiąt kontrolek). -->
@@ -68,6 +68,9 @@
               <span data-i18n="menuTheme">Motyw</span>
               <button class="theme-toggle" id="themeToggle" type="button" data-i18n-aria="themeAria" aria-label="Zmień motyw"></button>
             </div>
+            <button class="app-menu-item" id="newDocMenuItem" type="button">
+              <span class="app-menu-item-text" data-i18n="newDocMenu">Nowy dokument…</span><span class="app-menu-kbd">Ctrl/⌘+Alt+N</span>
+            </button>
             <button class="app-menu-item" id="brandRefresh" type="button">
               <span class="app-menu-item-text" data-i18n="menuRefresh">Odśwież aplikację</span><span aria-hidden="true">↻</span>
             </button>
@@ -152,6 +155,7 @@
                   <button class="btn" id="loadBtn" type="button" data-i18n="openFile">Otwórz plik</button>
                   <button class="btn" id="loadSampleBtn" type="button" data-i18n="loadSample">Przykład</button>
                 </div>
+                <button class="btn" id="newDocBtn" type="button" data-i18n="newDocMenu">Nowy dokument…</button>
                 <div class="btn-row stack-divider">
                   <button class="btn" id="saveBtn" type="button" data-i18n="save" disabled>Zapisz</button>
                   <button class="btn" id="saveAsBtn" type="button" data-i18n="saveAs" disabled>Zapisz jako</button>
@@ -685,7 +689,7 @@
                 </section>
                 <section class="help-section">
                   <h4 class="help-heading" data-i18n="helpKeysTitle">Klawiatura</h4>
-                  <p class="help-text" data-i18n="helpKeysText">Ctrl/⌘+F — szukaj · Enter / Shift+Enter (albo F3) — następne / poprzednie · Ctrl/⌘+S — zapisz · Ctrl/⌘+Alt+E — Czytanie ⇄ Edycja · Ctrl/⌘+Alt+F — tryb skupienia · Ctrl/⌘+Alt+1 / 2 / 3 — panel / pasek / dokument (F6 — po kolei) · Esc — krok wstecz</p>
+                  <p class="help-text" data-i18n="helpKeysText">Ctrl/⌘+F — szukaj · Enter / Shift+Enter (albo F3) — następne / poprzednie · Ctrl/⌘+S — zapisz · Ctrl/⌘+Enter — podział strony · Ctrl/⌘+Alt+N — nowy dokument · Ctrl/⌘+Alt+E — Czytanie ⇄ Edycja · Ctrl/⌘+Alt+F — tryb skupienia · Ctrl/⌘+Alt+1 / 2 / 3 — panel / pasek / dokument (F6 — po kolei) · Esc — krok wstecz</p>
                 </section>
                 <section class="help-section">
                   <h4 class="help-heading" data-i18n="helpUndoTitle">Cofnij / Ponów</h4>
@@ -754,7 +758,25 @@
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
                   </button>
                 </div>
+                <!-- Edycja: jeden rząd; gdy się nie mieści — przewija się w bok z wygaszeniem krawędzi.
+                     „＋ Wstaw” i wyrównanie otwierają okienka POZA rzędem (compose-ui.js). -->
                 <div class="format-toolbar hidden" id="formatToolbar">
+                  <button type="button" class="tb-btn insert-btn" id="insertMenuBtn" aria-haspopup="menu" aria-expanded="false" data-hint data-hint-pl="Wstaw: podział strony, linia, data, znaki specjalne" data-hint-en="Insert: page break, line, date, special characters" data-hint-delay="0.7">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    <span data-i18n="insertMenu">Wstaw</span>
+                  </button>
+                  <span class="tb-sep" aria-hidden="true"></span>
+                  <select id="fmtParaStyle" class="tb-select tb-select-style" data-i18n-aria="paraStyleLabel" aria-label="Styl akapitu" data-hint data-hint-pl="Styl akapitu — nagłówki trafiają do spisu treści i skrótów sekcji" data-hint-en="Paragraph style — headings go into the table of contents and section shortcuts" data-hint-delay="0.9">
+                    <option value="normal" data-i18n="styleNormal">Normalny</option>
+                    <option value="title" data-i18n="styleTitle">Tytuł</option>
+                    <option value="subtitle" data-i18n="styleSubtitle">Podtytuł</option>
+                    <option value="h1" data-i18n="styleH1">Nagłówek 1</option>
+                    <option value="h2" data-i18n="styleH2">Nagłówek 2</option>
+                    <option value="h3" data-i18n="styleH3">Nagłówek 3</option>
+                    <option value="quote" data-i18n="styleQuote">Cytat</option>
+                  </select>
+                  <button type="button" class="tb-btn format-btn align-btn" id="fmtAlignBtn" aria-haspopup="menu" aria-expanded="false" data-i18n-aria="alignLabel" aria-label="Wyrównanie" data-hint data-hint-pl="Wyrównanie akapitu" data-hint-en="Paragraph alignment" data-hint-delay="0.7"></button>
+                  <span class="tb-sep" aria-hidden="true"></span>
                   <button type="button" class="tb-btn format-btn" id="fmtBold" data-hint data-hint-pl="Pogrubienie (Ctrl/⌘+B)" data-hint-en="Bold (Ctrl/⌘+B)" data-hint-delay="0.7" aria-label="Bold (Ctrl+B)"><b>B</b></button>
                   <button type="button" class="tb-btn format-btn" id="fmtItalic" data-hint data-hint-pl="Kursywa (Ctrl/⌘+I)" data-hint-en="Italic (Ctrl/⌘+I)" data-hint-delay="0.7" aria-label="Italic (Ctrl+I)"><i>I</i></button>
                   <button type="button" class="tb-btn format-btn" id="fmtUnderline" data-hint data-hint-pl="Podkreślenie (Ctrl/⌘+U)" data-hint-en="Underline (Ctrl/⌘+U)" data-hint-delay="0.7" aria-label="Underline (Ctrl+U)"><u>U</u></button>
@@ -804,6 +826,7 @@
                 <div class="draft-recovery" id="draftRecovery" hidden aria-live="polite"></div>
                 <div class="empty-actions" id="emptyActions">
                   <button class="btn primary" id="emptyOpenBtn" type="button" data-i18n="emptyOpen">Wybierz plik z dysku</button>
+                  <button class="btn" id="emptyNewBtn" type="button" data-i18n="emptyNew">Nowy dokument</button>
                   <button class="btn" id="emptySampleBtn" type="button" data-i18n="emptySample">Wypróbuj na przykładowym dokumencie</button>
                 </div>
                 <p class="empty-drop-hint" id="emptyDropHint" data-i18n="emptyDropHint">albo przeciągnij plik .docx w dowolne miejsce okna</p>
@@ -837,38 +860,67 @@
       <div class="cursor-hint-scaler"><span id="cursorHintText"></span></div>
     </div>
 
-    <script defer src="app/core.js?v=20261001-09"></script>
-    <script defer src="app/language.js?v=20261001-09"></script>
-    <script defer src="app/docx-metadata.js?v=20261001-09"></script>
-    <script defer src="app/docx-revisions.js?v=20261001-09"></script>
-    <script defer src="app/docx-forms.js?v=20261001-09"></script>
-    <script defer src="app/doc-links.js?v=20261001-09"></script>
-    <script defer src="app/docx-patch.js?v=20261001-09"></script>
-    <script defer src="app/template-tokens.js?v=20261001-09"></script>
-    <script defer src="app/docx-run-styles.js?v=20261001-09"></script>
-    <script defer src="app/docx-inline-edit.js?v=20261001-09"></script>
-    <script defer src="app/document.js?v=20261001-09"></script>
-    <script defer src="app/docx-render-fixes.js?v=20261001-09"></script>
-    <script defer src="app/docx-viewer.js?v=20261001-09"></script>
-    <script defer src="app/analysis.js?v=20261001-09"></script>
-    <script defer src="app/structure-panel.js?v=20261001-09"></script>
-    <script defer src="app/grammar-style.js?v=20261001-09"></script>
-    <script defer src="app/placeholders.js?v=20261001-09"></script>
-    <script defer src="app/snippets.js?v=20261001-09"></script>
-    <script defer src="app/snippet-suggest.js?v=20261001-09"></script>
-    <script defer src="app/doc-caret-nav.js?v=20261001-09"></script>
-    <script defer src="app/edit-tools.js?v=20261001-09"></script>
-    <script defer src="app/mobile-doc-zoom.js?v=20261001-09"></script>
-    <script defer src="app/ui-controls.js?v=20261001-09"></script>
-    <script defer src="app/lazy-features.js?v=20261001-09"></script>
-    <script defer src="app/app-frame.js?v=20261001-09"></script>
-    <script defer src="app/touch.js?v=20261001-09"></script>
-    <script defer src="app/pinch-zoom.js?v=20261001-09"></script>
-    <script defer src="app/undo.js?v=20261001-09"></script>
-    <script defer src="app/drafts.js?v=20261001-09"></script>
-    <script defer src="app/view-mode.js?v=20261001-09"></script>
-    <script defer src="app/keyboard.js?v=20261001-09"></script>
-    <script defer src="app/launch-files.js?v=20261001-09"></script>
-    <script defer src="app/bootstrap.js?v=20261001-09"></script>
+    <!-- Nowy dokument (compose-ui.js): szablon → plik powstaje w przeglądarce, „Zapisz” pyta o miejsce. -->
+    <dialog class="newdoc-dialog" id="newDocDialog" aria-labelledby="newDocTitle">
+      <form method="dialog" class="newdoc-inner">
+        <div class="newdoc-head">
+          <h2 id="newDocTitle" data-i18n="newDocTitle">Nowy dokument</h2>
+          <button class="newdoc-close" value="cancel" type="submit" data-i18n-aria="newDocClose" aria-label="Zamknij">×</button>
+        </div>
+        <div class="newdoc-grid">
+          <button class="newdoc-card" type="button" data-template="blank">
+            <span class="newdoc-thumb" aria-hidden="true"><i></i></span>
+            <span class="newdoc-name" data-i18n="newDocBlank">Pusty dokument</span>
+            <span class="newdoc-desc" data-i18n="newDocBlankDesc">Kartka A4, od zera</span>
+          </button>
+          <button class="newdoc-card" type="button" data-template="letter">
+            <span class="newdoc-thumb thumb-letter" aria-hidden="true"><i></i><i></i><i class="r"></i><i class="r"></i><i class="b"></i><i></i><i></i></span>
+            <span class="newdoc-name" data-i18n="newDocLetter">Pismo</span>
+            <span class="newdoc-desc" data-i18n="newDocLetterDesc">Nadawca, odbiorca, data, podpis — pola {{…}} do wypełnienia</span>
+          </button>
+          <button class="newdoc-card" type="button" data-template="note">
+            <span class="newdoc-thumb thumb-note" aria-hidden="true"><i class="t"></i><i class="s"></i><i class="h"></i><i></i><i class="h"></i><i></i><i></i></span>
+            <span class="newdoc-name" data-i18n="newDocNote">Notatka / raport</span>
+            <span class="newdoc-desc" data-i18n="newDocNoteDesc">Tytuł i nagłówki — gotowy spis sekcji</span>
+          </button>
+        </div>
+        <p class="newdoc-foot" data-i18n="newDocFoot">Plik powstaje na tym urządzeniu. „Zapisz” zapyta, gdzie go zapisać.</p>
+      </form>
+    </dialog>
+    <script defer src="app/core.js?v=20261001-10"></script>
+    <script defer src="app/language.js?v=20261001-10"></script>
+    <script defer src="app/docx-metadata.js?v=20261001-10"></script>
+    <script defer src="app/docx-revisions.js?v=20261001-10"></script>
+    <script defer src="app/docx-forms.js?v=20261001-10"></script>
+    <script defer src="app/doc-links.js?v=20261001-10"></script>
+    <script defer src="app/docx-patch.js?v=20261001-10"></script>
+    <script defer src="app/docx-compose.js?v=20261001-10"></script>
+    <script defer src="app/template-tokens.js?v=20261001-10"></script>
+    <script defer src="app/docx-run-styles.js?v=20261001-10"></script>
+    <script defer src="app/docx-inline-edit.js?v=20261001-10"></script>
+    <script defer src="app/document.js?v=20261001-10"></script>
+    <script defer src="app/docx-render-fixes.js?v=20261001-10"></script>
+    <script defer src="app/docx-viewer.js?v=20261001-10"></script>
+    <script defer src="app/analysis.js?v=20261001-10"></script>
+    <script defer src="app/structure-panel.js?v=20261001-10"></script>
+    <script defer src="app/grammar-style.js?v=20261001-10"></script>
+    <script defer src="app/placeholders.js?v=20261001-10"></script>
+    <script defer src="app/snippets.js?v=20261001-10"></script>
+    <script defer src="app/snippet-suggest.js?v=20261001-10"></script>
+    <script defer src="app/doc-caret-nav.js?v=20261001-10"></script>
+    <script defer src="app/edit-tools.js?v=20261001-10"></script>
+    <script defer src="app/mobile-doc-zoom.js?v=20261001-10"></script>
+    <script defer src="app/ui-controls.js?v=20261001-10"></script>
+    <script defer src="app/lazy-features.js?v=20261001-10"></script>
+    <script defer src="app/app-frame.js?v=20261001-10"></script>
+    <script defer src="app/touch.js?v=20261001-10"></script>
+    <script defer src="app/pinch-zoom.js?v=20261001-10"></script>
+    <script defer src="app/undo.js?v=20261001-10"></script>
+    <script defer src="app/compose-ui.js?v=20261001-10"></script>
+    <script defer src="app/drafts.js?v=20261001-10"></script>
+    <script defer src="app/view-mode.js?v=20261001-10"></script>
+    <script defer src="app/keyboard.js?v=20261001-10"></script>
+    <script defer src="app/launch-files.js?v=20261001-10"></script>
+    <script defer src="app/bootstrap.js?v=20261001-10"></script>
   </body>
 </html>

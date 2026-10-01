@@ -90,7 +90,7 @@ function setParagraphText(pEl, text) {
   });
 }
 
-function splitParagraphInXml(xml, index, beforeText, afterText, beforeRuns, afterRuns) {
+function splitParagraphInXml(xml, index, beforeText, afterText, beforeRuns, afterRuns, nextNormal) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xml, "application/xml");
   const paragraphs = collectParagraphElements(doc.documentElement, "all");
@@ -104,6 +104,20 @@ function splitParagraphInXml(xml, index, beforeText, afterText, beforeRuns, afte
   else setParagraphText(newP, afterText);
   if (p.nextSibling) p.parentNode.insertBefore(newP, p.nextSibling);
   else p.parentNode.appendChild(newP);
+  // Znacznik końca sekcji zostaje tylko na drugim (ostatnim) akapicie — dawniej klon
+  // dostawał kopię i sekcja (marginesy, orientacja) kończyła się o akapit za wcześnie.
+  const pPr = p.getElementsByTagNameNS(W_NS, "pPr")[0];
+  const sect = pPr && Array.from(pPr.childNodes).find((n) => n.localName === "sectPr");
+  if (sect) pPr.removeChild(sect);
+  // Enter na końcu nagłówka/tytułu — dalej pisze się zwykłym tekstem (jak „styl następnego
+  // akapitu” w Wordzie), bez stylu, podziału strony i poziomu konspektu poprzedniego.
+  // Podział strony „przed” należy do pierwszej części — druga nie zaczyna kolejnej strony.
+  const nPr = newP.getElementsByTagNameNS(W_NS, "pPr")[0];
+  if (nPr) {
+    const drop = nextNormal ? ["pStyle", "pageBreakBefore", "outlineLvl", "keepNext"] : ["pageBreakBefore"];
+    Array.from(nPr.childNodes).filter((n) => drop.includes(n.localName)).forEach((n) => nPr.removeChild(n));
+    if (!nPr.firstChild) newP.removeChild(nPr);
+  }
   return { xml: new XMLSerializer().serializeToString(doc), count: 1 };
 }
 
@@ -653,7 +667,9 @@ function applyEditToXml(xml, edit, opts = {}) {
   if (edit.op === "paragraphBatch") return applyParagraphBatchInXml(xml, edit.items);
   if (edit.op === "placeholderFill") return applyPlaceholderFillInXml(xml, edit.values, scope);
   if (edit.op === "snippetExpand") return applySnippetExpandInXml(xml, edit.snippets, scope);
-  if (edit.op === "splitParagraph") return splitParagraphInXml(xml, edit.index, edit.before, edit.after, edit.beforeRuns, edit.afterRuns);
+  if (edit.op === "splitParagraph") return splitParagraphInXml(xml, edit.index, edit.before, edit.after, edit.beforeRuns, edit.afterRuns, edit.nextNormal);
+  if (edit.op === "pageBreak") return applyPageBreakInXml(xml, edit); // docx-compose.js
+  if (edit.op === "hrule") return applyHruleInXml(xml, edit);
   if (edit.op === "mergeParagraph") return mergeParagraphInXml(xml, edit.index, edit.mergedRuns);
   if (edit.op === "listLevel") return changeListLevelInXml(xml, edit.index, edit.delta);
   if (edit.op === "case" || edit.op === "trim" || edit.op === "affix") return applyParagraphTransformInXml(xml, edit, scope);
@@ -691,6 +707,12 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
     }
     if (normalized.op === "formFill") { // docx-forms.js — pola powiązane zmieniają też customXml / docProps
       const res = await applyFormFillInZip(zip, xml, normalized);
+      xml = res.xml;
+      total += res.count;
+      continue;
+    }
+    if (normalized.op === "paraFormat") { // docx-compose.js — styl może wymagać dopisania do styles.xml
+      const res = await applyParaFormatInZip(zip, xml, normalized);
       xml = res.xml;
       total += res.count;
       continue;
