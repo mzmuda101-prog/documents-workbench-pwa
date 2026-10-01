@@ -59,9 +59,10 @@ function runsStyleEqual(a, b) {
   return !!a.bold === !!b.bold
     && !!a.italic === !!b.italic
     && !!a.underline === !!b.underline
-    && (a.color || "") === (b.color || "")
+    && (parseCssColorToWordHex(a.color) || "") === (parseCssColorToWordHex(b.color) || "") // „rgb(5, 99, 193)” z podglądu = „#0563C1” z pliku
     && (a.fontFamily || "") === (b.fontFamily || "")
-    && (a.fontSize || "") === (b.fontSize || "");
+    && (a.fontSize || "") === (b.fontSize || "")
+    && (a.link || "") === (b.link || "");
 }
 
 function mergeAdjacentRuns(runs) {
@@ -71,8 +72,9 @@ function mergeAdjacentRuns(runs) {
       out.push({ break: true });
       return;
     }
+    if (run.island) { out.push({ ...run }); return; } // pole formularza — nienaruszalna „wyspa”
     const prev = out[out.length - 1];
-    if (prev && !prev.break && runsStyleEqual(prev, run)) {
+    if (prev && !prev.break && !prev.island && runsStyleEqual(prev, run)) {
       prev.text += run.text;
       return;
     }
@@ -98,6 +100,11 @@ function extractRunsFromPreviewParagraph(pEl) {
       return;
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return;
+    // pole formularza w zdaniu (docx-forms.js): cała kontrolka z pliku, bez zmian
+    if (node.dataset?.ff && docIslandXml.has(node.dataset.ff)) {
+      runs.push({ island: docIslandXml.get(node.dataset.ff), text: node.textContent || "" });
+      return;
+    }
     const tag = node.localName.toLowerCase();
     if (tag === "br") {
       runs.push({ break: true });
@@ -108,6 +115,9 @@ function extractRunsFromPreviewParagraph(pEl) {
     if (tag === "b" || tag === "strong") style.bold = true;
     if (tag === "i" || tag === "em") style.italic = true;
     if (tag === "u") style.underline = true;
+    // link (w:hyperlink): podgląd rysuje <a>. data-dwb-link = odwołanie z pliku („#zakładka”
+    // albo „rel:rIdN”, nadane przy oznaczaniu akapitów), nowy link ma sam adres.
+    if (tag === "a" && !node.classList.contains("doc-xref")) style.link = node.dataset.dwbLink || node.getAttribute("href") || "";
     node.childNodes.forEach((child) => walk(child, style));
   }
 
@@ -127,8 +137,19 @@ function runsEqual(a, b) {
     const other = bb[i];
     if (!!run.break !== !!other.break) return false;
     if (run.break) return true;
+    if (run.island || other.island) return run.island === other.island;
     return run.text === other.text && runsStyleEqual(run, other);
   });
+}
+
+const R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+
+// Odwołanie linku z <w:hyperlink>: „#zakładka” (w dokumencie) albo „rel:rIdN” (adres w powiązaniach).
+function hyperlinkRef(h) {
+  const anchor = h.getAttributeNS(W_NS, "anchor") || h.getAttribute("w:anchor");
+  if (anchor) return `#${anchor}`;
+  const rid = h.getAttributeNS(R_NS, "id") || h.getAttribute("r:id");
+  return rid ? `rel:${rid}` : "";
 }
 
 function getParagraphRunElements(pEl) {
@@ -147,10 +168,37 @@ function getParagraphRunElements(pEl) {
   return runs;
 }
 
+// Proste pole formularza w zdaniu (w:sdt bezpośrednio w akapicie) = „wyspa”: zapis akapitu
+// wstawia je z powrotem dokładnie takie, jak w pliku (docx-forms.js formIslandSdt decyduje, które).
+const docIslandXml = new Map(); // klucz pola („s<N>”) → XML kontrolki — dla podglądu
+function paragraphXmlParts(pEl) {
+  const parts = [];
+  for (let i = 0; i < pEl.childNodes.length; i++) {
+    const child = pEl.childNodes[i];
+    if (child.nodeType !== 1 || child.namespaceURI !== W_NS) continue;
+    if (child.localName === "r") parts.push(child);
+    else if (child.localName === "hyperlink") {
+      for (let j = 0; j < child.childNodes.length; j++) {
+        const sub = child.childNodes[j];
+        if (sub.nodeType === 1 && sub.localName === "r" && sub.namespaceURI === W_NS) parts.push(sub);
+      }
+    } else if (child.localName === "sdt" && typeof formIslandSdt === "function" && formIslandSdt(child)) parts.push(child);
+  }
+  return parts;
+}
+
 function extractRunsFromParagraphXml(pEl) {
   const runs = [];
-  getParagraphRunElements(pEl).forEach((r) => {
+  paragraphXmlParts(pEl).forEach((r) => {
+    if (r.localName === "sdt") {
+      runs.push({ island: new XMLSerializer().serializeToString(r), text: ffText(ffKid(r, "sdtContent")) });
+      return;
+    }
     const style = {};
+    if (r.parentNode?.localName === "hyperlink") {
+      const ref = hyperlinkRef(r.parentNode);
+      if (ref) style.link = ref;
+    }
     const rPr = Array.from(r.childNodes).find((n) => n.localName === "rPr" && n.namespaceURI === W_NS);
     if (rPr) {
       if (Array.from(rPr.childNodes).some((n) => n.localName === "b")) style.bold = true;
@@ -184,6 +232,12 @@ function createRunElement(doc, run) {
   const r = doc.createElementNS(W_NS, "r");
   const rPr = doc.createElementNS(W_NS, "rPr");
   let hasPr = false;
+  if (run.link) { // styl znakowy „Hiperłącze” — prawdziwe id podstawia finalizeComposeParts (docx-compose.js)
+    const rs = doc.createElementNS(W_NS, "rStyle");
+    setWVal(rs, "__DWB_HL__");
+    rPr.appendChild(rs);
+    hasPr = true;
+  }
   if (run.bold) {
     const b = doc.createElementNS(W_NS, "b");
     setWVal(b, "1");
@@ -241,18 +295,46 @@ function createRunElement(doc, run) {
   return r;
 }
 
+// Kolejne fragmenty z tym samym linkiem trafiają do jednego <w:hyperlink>.
+function createHyperlinkElement(doc, link) {
+  const h = doc.createElementNS(W_NS, "w:hyperlink");
+  if (link.startsWith("#")) h.setAttributeNS(W_NS, "w:anchor", link.slice(1));
+  else if (link.startsWith("rel:")) h.setAttributeNS(R_NS, "r:id", link.slice(4));
+  else h.setAttribute("dwb-href", link); // nowy adres — powiązanie dopisze finalizeComposeParts
+  h.setAttributeNS(W_NS, "w:history", "1");
+  return h;
+}
+
 function applyRunsToParagraphXml(pEl, runs) {
+  // pola-wyspy wracają z listy fragmentów (w swoich miejscach) — stare kontrolki precz
+  Array.from(pEl.childNodes).forEach((n) => {
+    if (n.localName === "sdt" && n.namespaceURI === W_NS && typeof formIslandSdt === "function" && formIslandSdt(n)) pEl.removeChild(n);
+  });
   clearParagraphRuns(pEl);
   const doc = pEl.ownerDocument;
+  let hl = null;
   (runs || []).forEach((run) => {
+    if (run.island) {
+      hl = null;
+      const frag = new DOMParser().parseFromString(run.island, "application/xml").documentElement;
+      if (frag && frag.localName === "sdt") pEl.appendChild(doc.importNode(frag, true));
+      return;
+    }
     if (run.break) {
+      hl = null;
       const brRun = doc.createElementNS(W_NS, "r");
       brRun.appendChild(doc.createElementNS(W_NS, "br"));
       pEl.appendChild(brRun);
       return;
     }
     if (!run.text) return;
-    pEl.appendChild(createRunElement(doc, run));
+    if (!run.link) { hl = null; pEl.appendChild(createRunElement(doc, run)); return; }
+    if (!hl || hl._dwbLink !== run.link) {
+      hl = createHyperlinkElement(doc, run.link);
+      hl._dwbLink = run.link;
+      pEl.appendChild(hl);
+    }
+    hl.appendChild(createRunElement(doc, run));
   });
 }
 
@@ -273,16 +355,28 @@ function applyRunsToPreviewParagraph(pEl, runs) {
     }
     if (!run.text) return;
     const css = runStyleToCss(run);
+    let node;
     if (css) {
-      const span = document.createElement("span");
-      span.setAttribute("style", css);
-      span.textContent = run.text;
-      pEl.appendChild(span);
+      node = document.createElement("span");
+      node.setAttribute("style", css);
+      node.textContent = run.text;
     } else {
-      pEl.appendChild(document.createTextNode(run.text));
+      node = document.createTextNode(run.text);
     }
+    if (run.link) {
+      const a = document.createElement("a");
+      a.dataset.dwbLink = run.link;
+      a.setAttribute("href", run.link.startsWith("rel:") ? (docLinkHrefs.get(run.link) || "#") : run.link);
+      a.className = "dwb-link";
+      a.appendChild(node);
+      node = a;
+    }
+    pEl.appendChild(node);
   });
 }
+
+// „rel:rIdN” → adres (z oznaczania akapitów) — do odbudowy <a> w podglądzie.
+const docLinkHrefs = new Map();
 
 function runStyleHasProps(style) {
   return !!(style?.bold || style?.italic || style?.underline || style?.color || style?.fontFamily || style?.fontSize);

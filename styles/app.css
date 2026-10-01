@@ -1613,3 +1613,44 @@ textarea.ff-pop-input { min-height: 4.5em; resize: vertical; }
 @font-face { font-family: "Aptos"; src: local("Aptos"), local("Arial"), local("ArialMT"), local("Roboto"); }
 @font-face { font-family: "Aptos"; font-weight: bold; src: local("Aptos Bold"), local("Aptos-Bold"), local("Arial Bold"), local("Arial-BoldMT"), local("Roboto Bold"), local("Roboto-Bold"); }
 @font-face { font-family: "Cambria"; src: local("Cambria"), local("Caladea"), local("Georgia"), local("Noto Serif"); }
+
+/* ── Etap 2: formularze w okienku (link…), karta linku ── */
+.compose-pop-form { width: min(340px, calc(100vw - 16px)); padding: 8px 12px 12px; display: flex; flex-direction: column; gap: 10px; }
+.compose-pop-form .compose-cap { padding: 4px 0 0; }
+.compose-pop-form [hidden] { display: none !important; }
+.compose-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted-strong); }
+.compose-field input, .compose-field select {
+  height: 36px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--field); color: var(--ink);
+  font: inherit; font-size: 14px; font-weight: 400; min-width: 0;
+}
+.compose-field input:focus, .compose-field select:focus { outline: none; border-color: var(--border-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+@media (pointer: coarse) { .compose-field input, .compose-field select { font-size: 16px; height: 42px; } } /* iOS: bez przybliżania */
+.seg { display: flex; padding: 3px; gap: 2px; border: 1px solid var(--border); border-radius: 11px; background: var(--field); }
+.seg button { flex: 1; border: 0; background: none; color: var(--muted-strong); font: inherit; font-size: 12.5px; font-weight: 600; padding: 6px 8px; border-radius: 8px; cursor: pointer; }
+.seg button.is-on { background: var(--accent); color: #fff; }
+.compose-note { margin: 0; font-size: 12.5px; color: var(--muted); }
+.compose-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.compose-actions-gap { flex: 1; }
+.compose-actions .btn { padding: 7px 12px; border-radius: 10px; min-height: 0; }
+.link-card {
+  position: fixed; z-index: 8900; display: flex; align-items: center; gap: 4px; max-width: min(360px, calc(100vw - 16px));
+  padding: 4px 4px 4px 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+  box-shadow: 0 8px 24px rgba(8, 14, 28, 0.18); animation: compose-pop-in 120ms ease-out;
+}
+.link-card-target { flex: 1; min-width: 0; font-size: 12.5px; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.link-card .tb-btn { min-width: 32px; height: 32px; border-color: transparent; background: none; }
+.link-card .tb-btn:hover { background: var(--accent-light); }
+@media print { .link-card, .compose-pop { display: none !important; } }
+.compose-row { display: flex; gap: 6px; padding: 2px 4px 6px; }
+.compose-row-btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 10px; border-radius: 10px; min-height: 0; font-size: 13px; }
+@media (pointer: coarse) { .compose-row-btn { min-height: 44px; } }
+.compose-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+.compose-item-sm { padding: 6px 8px; gap: 8px; }
+.compose-item-sm .compose-item-icon { width: 26px; height: 26px; }
+.compose-item-sm .compose-item-label { font-size: 13px; }
+.compose-field textarea {
+  padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--field); color: var(--ink);
+  font: inherit; font-size: 14px; font-weight: 400; resize: vertical; min-height: 96px;
+}
+.compose-field textarea:focus { outline: none; border-color: var(--border-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+@media (pointer: coarse) { .compose-field textarea { font-size: 16px; } }

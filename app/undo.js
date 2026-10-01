@@ -35,6 +35,10 @@ const UNDO_OP_LABEL = {
   paraFormat: "undoOpParaFormat",
   pageBreak: "undoOpPageBreak",
   hrule: "undoOpHrule",
+  link: "undoOpLink",
+  list: "undoOpList",
+  toc: "undoOpToc",
+  formInsert: "undoOpFormInsert",
 };
 
 const dwbUndo = (() => {

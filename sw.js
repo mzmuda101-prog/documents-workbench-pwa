@@ -1,4 +1,4 @@
-const CACHE_VERSION = "20261001-10";
+const CACHE_VERSION = "20261001-11";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
@@ -73,7 +73,7 @@ const SHELL_ASSETS = [
 const HEAVY_ASSETS = [
   "./lib/jszip.min.js",
   "./lib/docx-preview.bundle.js",
-  "./assets/media/mateusz-intro.mp4",
+  "./assets/media/mateusz-intro-2s.mp4",
 ];
 
 function isStaticAsset(url) {
@@ -82,7 +82,7 @@ function isStaticAsset(url) {
 
 function isHeavyAsset(url) {
   return /\/lib\/(?:jszip\.min|docx-preview\.bundle)\.js$/i.test(url.pathname)
-    || /\/assets\/media\/mateusz-intro\.mp4$/i.test(url.pathname);
+    || /\/assets\/media\/mateusz-intro(?:-2s)?\.mp4$/i.test(url.pathname);
 }
 
 // Lokalnie (npm run dev) pliki zmieniają się bez podbicia ?v=, więc tam zostaje

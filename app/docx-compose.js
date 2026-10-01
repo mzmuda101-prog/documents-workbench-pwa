@@ -52,7 +52,18 @@ const COMPOSE_STYLE_DEFS = {
     body: `<w:basedOn w:val="{NORMAL}"/><w:next w:val="{NORMAL}"/><w:uiPriority w:val="29"/><w:qFormat/><w:pPr><w:spacing w:before="200" w:after="160"/><w:ind w:left="864" w:right="864"/></w:pPr><w:rPr><w:i/><w:iCs/><w:color w:val="404040"/></w:rPr>`,
   },
 };
+// spis treści (nie ma ich na liście stylów — dopisywane przy wstawianiu spisu)
+Object.assign(COMPOSE_STYLE_DEFS, {
+  tocHeading: {
+    name: "toc heading", id: "TOCHeading",
+    body: `<w:basedOn w:val="{NORMAL}"/><w:next w:val="{NORMAL}"/><w:uiPriority w:val="39"/><w:unhideWhenUsed/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="120"/><w:outlineLvl w:val="9"/></w:pPr><w:rPr><w:b/><w:bCs/><w:color w:val="1F3864"/><w:sz w:val="32"/><w:szCs w:val="32"/></w:rPr>`,
+  },
+  toc1: { name: "toc 1", id: "TOC1", body: `<w:basedOn w:val="{NORMAL}"/><w:next w:val="{NORMAL}"/><w:uiPriority w:val="39"/><w:unhideWhenUsed/><w:pPr><w:spacing w:after="100"/></w:pPr>` },
+  toc2: { name: "toc 2", id: "TOC2", body: `<w:basedOn w:val="{NORMAL}"/><w:next w:val="{NORMAL}"/><w:uiPriority w:val="39"/><w:unhideWhenUsed/><w:pPr><w:spacing w:after="100"/><w:ind w:left="220"/></w:pPr>` },
+  toc3: { name: "toc 3", id: "TOC3", body: `<w:basedOn w:val="{NORMAL}"/><w:next w:val="{NORMAL}"/><w:uiPriority w:val="39"/><w:unhideWhenUsed/><w:pPr><w:spacing w:after="100"/><w:ind w:left="440"/></w:pPr>` },
+});
 const COMPOSE_STYLE_KEYS = ["normal", "title", "subtitle", "h1", "h2", "h3", "quote"];
+const COMPOSE_TOC_KEYS = ["toc1", "toc2", "toc3"];
 
 const COMPOSE_DOC_DEFAULTS = `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="Calibri" w:cs="Calibri"/><w:sz w:val="22"/><w:szCs w:val="22"/><w:lang w:val="pl-PL" w:eastAsia="en-US" w:bidi="ar-SA"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="259" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>`;
 const COMPOSE_NORMAL_STYLE = `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>`;
@@ -129,9 +140,9 @@ async function readComposeStyleClasses(bytes) {
     const xml = await zip.file("word/styles.xml")?.async("string");
     if (!xml) return map;
     const idx = composeStylesIndex(composeParse(xml));
-    COMPOSE_STYLE_KEYS.forEach((key) => {
+    [...COMPOSE_STYLE_KEYS, ...COMPOSE_TOC_KEYS].forEach((key) => {
       const id = key === "normal" ? idx.defaultId : idx.byName.get(COMPOSE_STYLE_DEFS[key].name);
-      if (id) map.set(docxStyleClassName(id), key);
+      if (id && !map.has(docxStyleClassName(id))) map.set(docxStyleClassName(id), key);
     });
   } catch (_) { /* uszkodzony styles.xml — lista pokaże „Normalny” */ }
   return map;
@@ -396,7 +407,7 @@ function composeStyleKeyOf(p) {
   if (!p) return "normal";
   for (const cls of p.classList) {
     const key = docComposeStyleClasses.get(cls);
-    if (key) return key;
+    if (key && COMPOSE_STYLE_KEYS.includes(key)) return key;
   }
   for (const cls of p.classList) { // nagłówek w stylu własnym pliku (np. „Rozdział” z outlineLvl)
     const level = docHeadingStyleClasses?.get?.(cls);
@@ -417,4 +428,489 @@ function composeStripNextStyle(newP) {
     }
   });
   return had;
+}
+
+// ── domknięcie zapisu: nowe linki ────────────────────────────────────────────
+// applyRunsToParagraphXml nie ma dostępu do paczki, więc nowy adres zostawia jako
+// atrybut dwb-href, a styl znakowy linku jako „__DWB_HL__”. Tu: powiązanie (rels) + styl.
+const COMPOSE_REL_HYPERLINK = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
+
+async function composeReadRels(zip) {
+  const path = "word/_rels/document.xml.rels";
+  const xml = zip.file(path) ? await zip.file(path).async("string")
+    : `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`;
+  return { path, doc: composeParse(xml) };
+}
+
+function composeAddRel(relsDoc, type, target, external) {
+  const root = relsDoc.documentElement;
+  const rels = Array.from(root.getElementsByTagName("Relationship"));
+  const hit = rels.find((r) => r.getAttribute("Type") === type && r.getAttribute("Target") === target);
+  if (hit) return hit.getAttribute("Id");
+  const ids = new Set(rels.map((r) => r.getAttribute("Id")));
+  let n = rels.length + 1;
+  while (ids.has(`rId${n}`)) n++;
+  const el = relsDoc.createElementNS(root.namespaceURI, "Relationship");
+  el.setAttribute("Id", `rId${n}`);
+  el.setAttribute("Type", type);
+  el.setAttribute("Target", target);
+  if (external) el.setAttribute("TargetMode", "External");
+  root.appendChild(el);
+  return `rId${n}`;
+}
+
+async function composeEnsureCharStyle(zip, name, id, body) {
+  const xml = await composeEnsureStylesPart(zip);
+  const doc = composeParse(xml);
+  const found = Array.from(doc.getElementsByTagNameNS(W_NS, "style")).find((st) => st.getAttributeNS(W_NS, "type") === "character"
+    && (composeDirectChild(st, "name")?.getAttributeNS(W_NS, "val") || "").trim().toLowerCase() === name.toLowerCase());
+  if (found) { zip.file("word/styles.xml", xml); return found.getAttributeNS(W_NS, "styleId"); }
+  const frag = composeParse(`<w:styles xmlns:w="${W_NS}"><w:style w:type="character" w:styleId="${id}"><w:name w:val="${name}"/>${body}</w:style></w:styles>`);
+  doc.documentElement.appendChild(doc.importNode(frag.documentElement.firstChild, true));
+  zip.file("word/styles.xml", composeSerialize(doc));
+  return id;
+}
+
+async function finalizeComposeParts(zip, xml) {
+  if (!xml.includes("dwb-href") && !xml.includes("__DWB_HL__")) return xml;
+  if (xml.includes("__DWB_HL__")) {
+    const id = await composeEnsureCharStyle(zip, "Hyperlink", "Hyperlink",
+      `<w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:rPr><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr>`);
+    xml = xml.replaceAll('"__DWB_HL__"', `"${id}"`);
+  }
+  if (xml.includes("dwb-href")) {
+    const doc = composeParse(xml);
+    const rels = await composeReadRels(zip);
+    Array.from(doc.getElementsByTagNameNS(W_NS, "hyperlink")).forEach((h) => {
+      const href = h.getAttribute("dwb-href");
+      if (href == null) return;
+      h.removeAttribute("dwb-href");
+      h.setAttributeNS(R_NS, "r:id", composeAddRel(rels.doc, COMPOSE_REL_HYPERLINK, href, true));
+    });
+    zip.file(rels.path, composeSerialize(rels.doc));
+    xml = composeSerialize(doc);
+  }
+  return xml;
+}
+
+// ── op "link": wstaw / zmień / usuń link w akapicie ──────────────────────────
+// { index, start, end, href? | targetIndex?, text?, remove? } — przesunięcia w tekście akapitu
+// (łamanie wiersza = 1 znak, jak previewRunsToPlainText). targetIndex = akapit-cel w dokumencie
+// (nagłówek): dostaje zakładkę (istniejąca zostaje użyta), link prowadzi do „#zakładka”.
+function composeEnsureBookmark(doc, p) {
+  const own = Array.from(p.childNodes).find((n) => n.localName === "bookmarkStart" && n.namespaceURI === W_NS
+    && !/^_GoBack$/.test(n.getAttributeNS(W_NS, "name")));
+  if (own) return own.getAttributeNS(W_NS, "name");
+  const all = Array.from(doc.getElementsByTagNameNS(W_NS, "bookmarkStart"));
+  const names = new Set(all.map((b) => b.getAttributeNS(W_NS, "name")));
+  const maxId = all.reduce((m, b) => Math.max(m, parseInt(b.getAttributeNS(W_NS, "id"), 10) || 0), 0);
+  let name;
+  do { name = `_Ref${String(Math.floor(1e8 + Math.random() * 9e8))}`; } while (names.has(name));
+  const id = String(maxId + 1);
+  const start = composeEl(doc, "bookmarkStart", { id, name });
+  const end = composeEl(doc, "bookmarkEnd", { id });
+  const pPr = composeDirectChild(p, "pPr");
+  p.insertBefore(start, pPr ? pPr.nextSibling : p.firstChild);
+  p.appendChild(end);
+  return name;
+}
+
+// Rozcina fragmenty tak, żeby [start, end) było osobno; zwraca { before, mid, after }.
+function composeSliceRuns(runs, start, end) {
+  const before = []; const mid = []; const after = [];
+  let pos = 0;
+  (runs || []).forEach((run) => {
+    const len = run.break ? 1 : (run.text || "").length;
+    const a = pos; const b = pos + len;
+    pos = b;
+    if (run.break) { (b <= start ? before : a >= end ? after : mid).push(run); return; }
+    if (run.island) { // pole formularza — niepodzielne
+      if (b <= start || (start === end && a < start)) before.push(run);
+      else if (a >= end || start === end) after.push(run);
+      else mid.push(run);
+      return;
+    }
+    const cut = (from, to) => ({ ...run, text: run.text.slice(from - a, to - a) });
+    if (b <= start) before.push(run);
+    else if (a >= end) after.push(run);
+    else {
+      if (a < start) before.push(cut(a, start));
+      mid.push(cut(Math.max(a, start), Math.min(b, end)));
+      if (b > end) after.push(cut(end, b));
+    }
+  });
+  return { before, mid, after };
+}
+
+function applyLinkInXml(xml, edit) {
+  const doc = composeParse(xml);
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  const p = paragraphs[edit.index];
+  if (!p) return { xml, count: 0 };
+  let link = null;
+  if (!edit.remove) {
+    if (Number.isInteger(edit.targetIndex)) {
+      const target = paragraphs[edit.targetIndex];
+      if (!target) return { xml, count: 0 };
+      link = `#${composeEnsureBookmark(doc, target)}`;
+    } else {
+      link = String(edit.href || "").trim();
+    }
+    if (!link) return { xml, count: 0 };
+  }
+  const runs = extractRunsFromParagraphXml(p);
+  const total = previewRunsToPlainText(runs).length;
+  const start = Math.max(0, Math.min(total, edit.start | 0));
+  const end = Math.max(start, Math.min(total, edit.end | 0));
+  const { before, mid, after } = composeSliceRuns(runs, start, end);
+  let middle = mid;
+  const curText = previewRunsToPlainText(mid);
+  if (edit.text != null && edit.text !== curText) {
+    // nowy tekst linku w formatowaniu miejsca (bez dawnego linku)
+    const base = { ...(mid.find((r) => !r.break) || before.filter((r) => !r.break).pop() || {}) };
+    delete base.break;
+    middle = edit.text ? [{ ...base, text: String(edit.text) }] : [];
+  }
+  middle = middle.map((r) => {
+    if (r.break) return r;
+    const out = { ...r };
+    if (link) out.link = link; else delete out.link;
+    return out;
+  });
+  applyRunsToParagraphXml(p, [...before, ...middle, ...after]);
+  return { xml: composeSerialize(doc), count: 1 };
+}
+
+// ── op "list": lista punktowana / numerowana / bez listy ─────────────────────
+// Definicje list (numbering.xml) dopisujemy własne, rozpoznawane po w:name „DWB …” —
+// kolejne listy używają ich ponownie. Numerowana lista zaczyna od 1 (startOverride), chyba że
+// akapit tuż wyżej jest w tej samej numeracji — wtedy ją kontynuuje (jak w Wordzie).
+const COMPOSE_LIST_NAMES = { bullet: "DWB Bullets", number: "DWB Numbering" };
+const COMPOSE_BULLETS = ["•", "◦", "▪"];
+const COMPOSE_NUMFMT = [["decimal", "%L."], ["lowerLetter", "%L."], ["lowerRoman", "%L."]];
+
+function composeAbstractNumXml(kind, id) {
+  const nsid = Math.floor(Math.random() * 0xffffffff).toString(16).toUpperCase().padStart(8, "0");
+  let lvls = "";
+  for (let i = 0; i < 9; i++) {
+    const ind = `<w:pPr><w:ind w:left="${720 * (i + 1)}" w:hanging="360"/></w:pPr>`;
+    if (kind === "bullet") {
+      lvls += `<w:lvl w:ilvl="${i}"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="${COMPOSE_BULLETS[i % 3]}"/><w:lvlJc w:val="left"/>${ind}<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:hint="default"/></w:rPr></w:lvl>`;
+    } else {
+      const [fmt, text] = COMPOSE_NUMFMT[i % 3];
+      lvls += `<w:lvl w:ilvl="${i}"><w:start w:val="1"/><w:numFmt w:val="${fmt}"/><w:lvlText w:val="${text.replace("L", i + 1)}"/><w:lvlJc w:val="left"/>${ind}</w:lvl>`;
+    }
+  }
+  return `<w:abstractNum w:abstractNumId="${id}"><w:nsid w:val="${nsid}"/><w:multiLevelType w:val="hybridMultilevel"/><w:name w:val="${COMPOSE_LIST_NAMES[kind]}"/>${lvls}</w:abstractNum>`;
+}
+
+async function composeEnsurePart(zip, path, rootXml, contentType, relType) {
+  const file = zip.file(path);
+  if (file) return file.async("string");
+  const ctFile = zip.file("[Content_Types].xml");
+  if (ctFile) {
+    let ct = await ctFile.async("string");
+    if (!ct.includes(`PartName="/${path}"`)) {
+      ct = ct.replace("</Types>", `<Override PartName="/${path}" ContentType="${contentType}"/></Types>`);
+      zip.file("[Content_Types].xml", ct);
+    }
+  }
+  const rels = await composeReadRels(zip);
+  composeAddRel(rels.doc, relType, path.replace(/^word\//, ""), false);
+  zip.file(rels.path, composeSerialize(rels.doc));
+  return rootXml;
+}
+
+function composeNumberingIndex(numDoc) {
+  const abstracts = new Map(); // abstractNumId → { el, name }
+  Array.from(numDoc.getElementsByTagNameNS(W_NS, "abstractNum")).forEach((a) => {
+    abstracts.set(a.getAttributeNS(W_NS, "abstractNumId"), { el: a, name: composeDirectChild(a, "name")?.getAttributeNS(W_NS, "val") || "" });
+  });
+  const nums = new Map(); // numId → abstractNumId
+  Array.from(numDoc.getElementsByTagNameNS(W_NS, "num")).forEach((n) => {
+    nums.set(n.getAttributeNS(W_NS, "numId"), composeDirectChild(n, "abstractNumId")?.getAttributeNS(W_NS, "val"));
+  });
+  return { abstracts, nums };
+}
+
+// Rodzaj listy akapitu: "bullet" / "number" / null.
+function composeParagraphListKind(p, idx) {
+  const numPr = composeDirectChild(composeDirectChild(p, "pPr") || p, "numPr");
+  if (!numPr) return null;
+  const numId = composeDirectChild(numPr, "numId")?.getAttributeNS(W_NS, "val");
+  if (!numId || numId === "0") return null;
+  const ilvl = composeDirectChild(numPr, "ilvl")?.getAttributeNS(W_NS, "val") || "0";
+  const abs = idx.abstracts.get(idx.nums.get(numId));
+  const lvl = abs && Array.from(abs.el.getElementsByTagNameNS(W_NS, "lvl")).find((l) => l.getAttributeNS(W_NS, "ilvl") === ilvl);
+  const fmt = lvl && composeDirectChild(lvl, "numFmt")?.getAttributeNS(W_NS, "val");
+  return fmt === "bullet" ? "bullet" : fmt && fmt !== "none" ? "number" : "number";
+}
+
+async function applyListInZip(zip, xml, edit) {
+  const doc = composeParse(xml);
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  const targets = (edit.indices || []).map((i) => paragraphs[i]).filter(Boolean);
+  if (!targets.length) return { xml, count: 0 };
+  const numPath = "word/numbering.xml";
+  let numXml = zip.file(numPath) ? await zip.file(numPath).async("string") : null;
+  const numDoc = composeParse(numXml || `<w:numbering xmlns:w="${W_NS}"/>`);
+  const idx = composeNumberingIndex(numDoc);
+  let kind = edit.kind;
+  // przełącznik: wszystkie zaznaczone już są taką listą → zdejmij listę
+  if (edit.toggle && kind !== "none" && targets.every((p) => composeParagraphListKind(p, idx) === kind)) kind = "none";
+  if (kind === "none") {
+    let n = 0;
+    targets.forEach((p) => {
+      const pPr = composeDirectChild(p, "pPr");
+      if (pPr && composeDirectChild(pPr, "numPr")) { composeSetPPrChild(pPr, "numPr", null); n++; }
+      // styl „Akapit z listą” bez listy to tylko wcięcie — zostaje (jak w Wordzie)
+    });
+    return { xml: n ? composeSerialize(doc) : xml, count: n, kind };
+  }
+  // definicja (abstractNum) tego rodzaju
+  let absId = Array.from(idx.abstracts.entries()).find(([, a]) => a.name === COMPOSE_LIST_NAMES[kind])?.[0];
+  const root = numDoc.documentElement;
+  const firstNum = composeDirectChild(root, "num");
+  if (absId == null) {
+    absId = String(Array.from(idx.abstracts.keys()).reduce((m, k) => Math.max(m, parseInt(k, 10) || 0), -1) + 1);
+    const frag = composeParse(`<w:numbering xmlns:w="${W_NS}">${composeAbstractNumXml(kind, absId)}</w:numbering>`);
+    root.insertBefore(numDoc.importNode(frag.documentElement.firstChild, true), firstNum); // abstractNum przed num (schemat)
+  }
+  const newNum = (restart) => {
+    const id = String(Array.from(idx.nums.keys()).reduce((m, k) => Math.max(m, parseInt(k, 10) || 0), 0) + 1);
+    const num = composeEl(numDoc, "num", { numId: id });
+    num.appendChild(composeEl(numDoc, "abstractNumId", { val: absId }));
+    if (restart) {
+      const ov = composeEl(numDoc, "lvlOverride", { ilvl: 0 });
+      ov.appendChild(composeEl(numDoc, "startOverride", { val: 1 }));
+      num.appendChild(ov);
+    }
+    root.appendChild(num);
+    idx.nums.set(id, absId);
+    return id;
+  };
+  // numer listy: kontynuacja akapitu wyżej (ta sama definicja) albo nowy
+  const first = paragraphs.indexOf(targets[0]);
+  const prev = first > 0 ? paragraphs[first - 1] : null;
+  const prevNumId = prev && composeDirectChild(composeDirectChild(composeDirectChild(prev, "pPr") || prev, "numPr") || prev, "numId")?.getAttributeNS(W_NS, "val");
+  let numId = prevNumId && idx.nums.get(prevNumId) === absId ? prevNumId : null;
+  if (!numId && kind === "bullet") numId = Array.from(idx.nums.entries()).find(([, a]) => a === absId)?.[0] || null;
+  if (!numId) numId = newNum(kind === "number");
+  targets.forEach((p) => {
+    const pPr = composeEnsurePPr(p);
+    const old = composeDirectChild(pPr, "numPr");
+    const ilvl = old && composeDirectChild(old, "ilvl")?.getAttributeNS(W_NS, "val");
+    const numPr = composeEl(doc, "numPr");
+    numPr.appendChild(composeEl(doc, "ilvl", { val: ilvl || 0 }));
+    numPr.appendChild(composeEl(doc, "numId", { val: numId }));
+    composeSetPPrChild(pPr, "numPr", numPr);
+  });
+  numXml = await composeEnsurePart(zip, numPath, composeSerialize(numDoc),
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml",
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering");
+  zip.file(numPath, composeSerialize(numDoc));
+  return { xml: composeSerialize(doc), count: targets.length, kind };
+}
+
+// Czy w podglądzie jest spis treści (akapity w stylach „toc 1–3”).
+function composeHasToc() {
+  const host = docCanvasEl?.querySelector(".docx-preview-host");
+  if (!host) return false;
+  return collectPreviewParagraphElements(host).some((p) => Array.from(p.classList).some((c) => COMPOSE_TOC_KEYS.includes(docComposeStyleClasses.get(c))));
+}
+
+// ── op "toc": spis treści — wstaw albo zaktualizuj ───────────────────────────
+// Prawdziwe pole Worda TOC \o "1-3" \h \z \u: wpisy z linkami do zakładek przy nagłówkach i
+// numerami stron z podglądu (pages: { indeksAkapitu: strona }). Word i tak przelicza je przy
+// „Aktualizuj pole”. Istniejący spis (pole TOC) jest podmieniany w miejscu — także ten z Worda.
+function composeHeadingLevels(stylesDoc) {
+  const styles = new Map();
+  if (stylesDoc) Array.from(stylesDoc.getElementsByTagNameNS(W_NS, "style")).forEach((st) => {
+    if (st.getAttributeNS(W_NS, "type") !== "paragraph") return;
+    const id = st.getAttributeNS(W_NS, "styleId");
+    const pPr = composeDirectChild(st, "pPr");
+    const ol = pPr && composeDirectChild(pPr, "outlineLvl")?.getAttributeNS(W_NS, "val");
+    styles.set(id, {
+      name: (composeDirectChild(st, "name")?.getAttributeNS(W_NS, "val") || "").toLowerCase(),
+      basedOn: composeDirectChild(st, "basedOn")?.getAttributeNS(W_NS, "val"),
+      outline: ol == null ? null : Number(ol),
+    });
+  });
+  const levelOf = (id, depth = 0) => {
+    const st = styles.get(id);
+    if (!st || depth > 12) return 0;
+    if (Number.isFinite(st.outline)) return st.outline < 9 ? st.outline + 1 : 0;
+    const m = st.name.match(/^heading\s*(\d)$/);
+    if (m) return Number(m[1]);
+    return st.basedOn ? levelOf(st.basedOn, depth + 1) : 0;
+  };
+  return (p) => {
+    const pPr = composeDirectChild(p, "pPr");
+    const direct = pPr && composeDirectChild(pPr, "outlineLvl")?.getAttributeNS(W_NS, "val");
+    if (direct != null) { const n = Number(direct); return n < 9 ? n + 1 : 0; }
+    const sid = pPr && composeDirectChild(pPr, "pStyle")?.getAttributeNS(W_NS, "val");
+    return sid ? levelOf(sid) : 0;
+  };
+}
+
+function composeFieldInstr(beginRun) {
+  let instr = "";
+  for (let n = beginRun.nextSibling; n; n = n.nextSibling) {
+    if (n.nodeType !== 1) continue;
+    if (composeDirectChild(n, "fldChar")) break;
+    Array.from(n.getElementsByTagNameNS(W_NS, "instrText")).forEach((it) => { instr += it.textContent || ""; });
+  }
+  return instr.trim();
+}
+
+// [akapit z początkiem pola TOC, akapit z jego końcem] albo null.
+function composeFindToc(paragraphs) {
+  for (let i = 0; i < paragraphs.length; i++) {
+    const begin = Array.from(paragraphs[i].getElementsByTagNameNS(W_NS, "fldChar")).find((fc) => fc.getAttributeNS(W_NS, "fldCharType") === "begin");
+    if (!begin || !/^TOC\b/i.test(composeFieldInstr(begin.parentNode))) continue;
+    let depth = 0;
+    let started = false;
+    for (let j = i; j < paragraphs.length; j++) {
+      for (const fc of Array.from(paragraphs[j].getElementsByTagNameNS(W_NS, "fldChar"))) {
+        if (!started) { if (fc === begin) started = true; else continue; }
+        const type = fc.getAttributeNS(W_NS, "fldCharType");
+        if (type === "begin") depth++;
+        else if (type === "end" && --depth === 0) return [i, j];
+      }
+    }
+    return null;
+  }
+  return null;
+}
+
+async function applyTocInZip(zip, xml, edit) {
+  const doc = composeParse(xml);
+  const body = doc.getElementsByTagNameNS(W_NS, "body")[0];
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  const cache = new Map();
+  const ids = {};
+  for (const k of ["tocHeading", ...COMPOSE_TOC_KEYS]) ids[k] = await composeEnsureStyle(zip, k, cache);
+  const stylesDoc = composeParse(cache.stylesXml);
+  const levelOf = composeHeadingLevels(stylesDoc);
+  const existing = composeFindToc(paragraphs);
+  const inToc = (i) => existing && i >= existing[0] && i <= existing[1];
+  const pages = edit.pages || {};
+  const heads = [];
+  paragraphs.forEach((p, i) => {
+    if (inToc(i) || p.parentNode !== body) return; // nagłówki w tabelach pomijamy (jak domyślnie Word)
+    const level = levelOf(p);
+    const text = getParagraphText(p).replace(/\s+/g, " ").trim();
+    if (level >= 1 && level <= 3 && text) heads.push({ p, i, level, text });
+  });
+  // tabulator do prawego marginesu z kropkami
+  const sect = composeDirectChild(body, "sectPr");
+  const pgW = parseInt(sect && composeDirectChild(sect, "pgSz")?.getAttributeNS(W_NS, "w"), 10) || 11906;
+  const mar = sect && composeDirectChild(sect, "pgMar");
+  const tabPos = Math.max(2000, pgW - (parseInt(mar?.getAttributeNS(W_NS, "left"), 10) || 1418) - (parseInt(mar?.getAttributeNS(W_NS, "right"), 10) || 1418));
+  const run = (inner) => { const r = composeEl(doc, "r"); inner.forEach((c) => r.appendChild(c)); return r; };
+  const text = (s) => { const t = composeEl(doc, "t"); t.setAttribute("xml:space", "preserve"); t.textContent = s; return t; };
+  const fld = (type) => run([composeEl(doc, "fldChar", { fldCharType: type })]);
+  const entries = heads.map((h) => {
+    const bm = composeEnsureBookmark(doc, h.p);
+    const p = composeEl(doc, "p");
+    const pPr = composeEnsurePPr(p);
+    composeSetPPrChild(pPr, "pStyle", { val: ids[`toc${h.level}`] });
+    const tabs = composeEl(doc, "tabs");
+    tabs.appendChild(composeEl(doc, "tab", { val: "right", leader: "dot", pos: tabPos }));
+    composeSetPPrChild(pPr, "tabs", tabs);
+    const hl = composeEl(doc, "hyperlink", { anchor: bm, history: 1 });
+    hl.appendChild(run([text(h.text)]));
+    hl.appendChild(run([composeEl(doc, "tab")]));
+    hl.appendChild(run([text(pages[h.i] ? String(pages[h.i]) : "")]));
+    p.appendChild(hl);
+    return p;
+  });
+  if (!entries.length) {
+    const p = composeEl(doc, "p");
+    composeSetPPrChild(composeEnsurePPr(p), "pStyle", { val: ids.toc1 });
+    p.appendChild(run([text(edit.emptyText || "—")]));
+    entries.push(p);
+  }
+  // pole: początek w pierwszym wpisie, koniec w ostatnim
+  const instr = composeEl(doc, "instrText");
+  instr.setAttribute("xml:space", "preserve");
+  instr.textContent = ' TOC \\o "1-3" \\h \\z \\u ';
+  const first = entries[0];
+  const afterPPr = composeDirectChild(first, "pPr")?.nextSibling || null;
+  [fld("begin"), run([instr]), fld("separate")].forEach((r) => first.insertBefore(r, afterPPr));
+  entries[entries.length - 1].appendChild(fld("end"));
+  if (existing) {
+    const [a, b] = existing;
+    const anchor = paragraphs[a];
+    entries.forEach((p) => anchor.parentNode.insertBefore(p, anchor));
+    for (let i = a; i <= b; i++) {
+      const old = paragraphs[i];
+      composeMoveSectPr(old, entries[entries.length - 1]);
+      old.parentNode.removeChild(old);
+    }
+  } else {
+    const at = paragraphs[edit.index] || null;
+    const parent = at ? at.parentNode : body;
+    const before = at || sect;
+    const title = composeEl(doc, "p");
+    composeSetPPrChild(composeEnsurePPr(title), "pStyle", { val: ids.tocHeading });
+    title.appendChild(run([text(edit.title || "Spis treści")]));
+    [title, ...entries].forEach((p) => parent.insertBefore(p, before));
+  }
+  if (cache.stylesDirty) zip.file("word/styles.xml", cache.stylesXml);
+  return { xml: composeSerialize(doc), count: 1, updated: !!existing };
+}
+
+// ── op "formInsert": nowe pole formularza w miejscu kursora ──────────────────
+// Kontrolka zawartości jak z Worda (Deweloper → Formanty): tekst / lista / data / pole wyboru,
+// z tekstem zastępczym w stylu „Tekst zastępczy”. Do akapitu trafia jako pole-wyspa.
+const COMPOSE_W14 = "http://schemas.microsoft.com/office/word/2010/wordml";
+const COMPOSE_PH = {
+  pl: { text: "Kliknij lub naciśnij tutaj, aby wprowadzić tekst.", date: "Kliknij lub naciśnij, aby wprowadzić datę.", dropdown: "Wybierz element." },
+  en: { text: "Click or tap here to enter text.", date: "Click or tap to enter a date.", dropdown: "Choose an item." },
+};
+
+function composeSdtXml(edit, phStyleId) {
+  const ph = COMPOSE_PH[edit.lang === "en" ? "en" : "pl"];
+  const id = String(Math.floor(1e8 + Math.random() * 9e8));
+  const esc = (v) => composeXmlText(v).replace(/"/g, "&quot;");
+  const label = edit.label ? `<w:alias w:val="${esc(edit.label)}"/><w:tag w:val="${esc(edit.label)}"/>` : "";
+  const phRun = (text) => `<w:r><w:rPr><w:rStyle w:val="${phStyleId}"/></w:rPr><w:t xml:space="preserve">${composeXmlText(text)}</w:t></w:r>`;
+  let pr = "";
+  let content = "";
+  if (edit.kind === "checkbox") {
+    pr = `<w14:checkbox><w14:checked w14:val="0"/><w14:checkedState w14:val="2612" w14:font="MS Gothic"/><w14:uncheckedState w14:val="2610" w14:font="MS Gothic"/></w14:checkbox>`;
+    content = `<w:r><w:rPr><w:rFonts w:ascii="MS Gothic" w:eastAsia="MS Gothic" w:hAnsi="MS Gothic" w:hint="eastAsia"/></w:rPr><w:t>☐</w:t></w:r>`;
+    return `<w:sdt xmlns:w="${W_NS}" xmlns:w14="${COMPOSE_W14}"><w:sdtPr>${label}<w:id w:val="${id}"/>${pr}</w:sdtPr><w:sdtContent>${content}</w:sdtContent></w:sdt>`;
+  }
+  if (edit.kind === "date") {
+    pr = `<w:date><w:dateFormat w:val="dd.MM.yyyy"/><w:lid w:val="${edit.lang === "en" ? "en-GB" : "pl-PL"}"/><w:storeMappedDataAs w:val="dateTime"/><w:calendar w:val="gregorian"/></w:date>`;
+    content = phRun(ph.date);
+  } else if (edit.kind === "dropdown") {
+    const items = (edit.options || []).map((o) => String(o).trim()).filter(Boolean);
+    pr = `<w:dropDownList><w:listItem w:displayText="${esc(ph.dropdown)}" w:value=""/>${items.map((o) => `<w:listItem w:displayText="${esc(o)}" w:value="${esc(o)}"/>`).join("")}</w:dropDownList>`;
+    content = phRun(ph.dropdown);
+  } else {
+    pr = "<w:text/>";
+    content = phRun(ph.text);
+  }
+  return `<w:sdt xmlns:w="${W_NS}"><w:sdtPr>${label}<w:id w:val="${id}"/><w:showingPlcHdr/>${pr}</w:sdtPr><w:sdtContent>${content}</w:sdtContent></w:sdt>`;
+}
+
+async function applyFormInsertInZip(zip, xml, edit) {
+  const doc = composeParse(xml);
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  const p = paragraphs[edit.index];
+  if (!p || !["text", "date", "dropdown", "checkbox"].includes(edit.kind)) return { xml, count: 0 };
+  const phId = await composeEnsureCharStyle(zip, "Placeholder Text", "PlaceholderText",
+    `<w:uiPriority w:val="99"/><w:semiHidden/><w:rPr><w:color w:val="666666"/></w:rPr>`);
+  const sdtXml = composeSdtXml(edit, phId);
+  const sdtEl = composeParse(sdtXml).documentElement;
+  const runs = extractRunsFromParagraphXml(p);
+  const total = previewRunsToPlainText(runs).length;
+  const at = Math.max(0, Math.min(total, edit.offset | 0));
+  const { before, after } = composeSliceRuns(runs, at, at);
+  const island = { island: new XMLSerializer().serializeToString(sdtEl), text: ffText(ffKid(sdtEl, "sdtContent")) };
+  applyRunsToParagraphXml(p, [...before, island, ...after]);
+  return { xml: composeSerialize(doc), count: 1 };
 }

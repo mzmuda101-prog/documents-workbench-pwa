@@ -144,13 +144,13 @@ async function run() {
   await caretTo(page, 1, true);
   await page.click("#insertMenuBtn");
   const menu = await page.evaluate(() => { const el = document.querySelector(".compose-pop-insert"); return el && { items: Array.from(el.querySelectorAll(".compose-item-label")).map((x) => x.textContent), chars: el.querySelectorAll(".compose-char").length }; });
-  check("menu „Wstaw”: podział strony, linia, data + znaki specjalne", menu && menu.items.length === 3 && menu.chars >= 16, JSON.stringify(menu));
+  check("menu „Wstaw”: podział strony, linia, link, data, spis treści, 4 pola formularza + znaki", menu && ["Podział strony", "Linia pozioma", "Link…", "Dzisiejsza data", "Spis treści", "Tekst", "Lista wyboru", "Data", "Pole wyboru"].every((x) => menu.items.includes(x)) && menu.chars >= 16, JSON.stringify(menu));
   await page.click('.compose-char[aria-label="§"]');
   await page.waitForTimeout(200);
   ps = await paras(page);
   check("znak specjalny trafia w miejsce kursora", ps[1].text === "Wstęp do raportu.§", ps[1].text);
   await page.click("#insertMenuBtn");
-  await page.click(".compose-item:has-text('Dzisiejsza data')");
+  await page.click(".compose-item-label:text-is('Dzisiejsza data')");
   await page.waitForTimeout(200);
   ps = await paras(page);
   const today = await page.evaluate(() => new Date().toLocaleDateString("pl-PL", { day: "numeric", month: "long", year: "numeric" }));
@@ -165,7 +165,7 @@ async function run() {
   // linia pozioma za akapitem 1
   await caretTo(page, 1, true);
   await page.click("#insertMenuBtn");
-  await page.click(".compose-item:has-text('Linia pozioma')");
+  await page.click(".compose-item-label:text-is('Linia pozioma')");
   await idle(page);
   ps = await paras(page);
   const hr = await page.evaluate(() => { const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[2]; const cs = getComputedStyle(p); return { style: cs.borderBottomStyle, w: cs.borderBottomWidth }; });
@@ -187,7 +187,7 @@ async function run() {
   // podział z menu na końcu ostatniego akapitu → nowa pusta strona, kursor tam
   await caretTo(page, 6, true);
   await page.click("#insertMenuBtn");
-  await page.click(".compose-item:has-text('Podział strony')");
+  await page.click(".compose-item-label:text-is('Podział strony')");
   await idle(page);
   const pages3 = await page.evaluate(() => document.querySelectorAll(".docx-preview-host section.docx").length);
   const focusPb = await page.evaluate(() => { const p = document.activeElement?.closest?.(".docx-editable-p"); return p ? resolveParaIndex(p) : -1; });

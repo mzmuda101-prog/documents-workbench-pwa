@@ -93,8 +93,10 @@ async function run() {
   check("lista ma znaczek ▾ (::after), pole tekstowe bez znaczka", scan.chevron === "inline-block" && scan.textIcon === "none", `${scan.chevron} / ${scan.textIcon}`);
   const noLeak = await page.evaluate(async () => { inlineDirtyValid = false; const n = collectInlineParagraphEdits().length; inlineDirtyValid = true; return { n, same: (await buildDocumentForSave()) === originalFileBytes }; });
   check("ramki pól nie są zmianą dokumentu (zapis bez zmian = te same bajty)", noLeak.n === 0 && noLeak.same, JSON.stringify(noLeak));
-  check("akapity z polem tylko do odczytu, „Uwagi” (bogaty tekst) i spis treści edytowalne",
-    scan.locks[2] === "lockForm" && scan.locks[8] === "lockForm" && scan.locks[14] === "lockForm" && scan.locks[1] === "-" && scan.locks[12] === "-", scan.locks.join(" "));
+  // Etap 2 (2026-10-01): proste pole w zdaniu to „wyspa” — akapit edytowalny, pole przenoszone w całości.
+  // Tylko do odczytu zostają: lista na cały akapit (8) i stare pola FORMTEXT/CHECKBOX/DROPDOWN (13–15).
+  check("akapity z polem w zdaniu edytowalne; lista-akapit i stare pola tylko do odczytu",
+    scan.locks.join(" ") === "- - - - - - - - lockForm - - - - lockForm lockForm lockForm -", scan.locks.join(" "));
   check("daty w formacie Worda (dopełniacz przy dniu, mianownik bez dnia)", scan.date === "1 października 2026 | czwartek, 01.10.26 | październik 2026", scan.date);
   const glyph = await page.evaluate(() => document.querySelector('.ff-field[data-ff="f1"]')?.textContent);
   check("stare pole wyboru ma w podglądzie kratkę ☐", glyph === "☐", glyph);
@@ -121,8 +123,8 @@ async function run() {
   const after = await page.evaluate(() => collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).length);
   s = await fileState(page, true);
   const mergeToast = await page.$$eval(".toast", (els) => els.map((e) => e.textContent).join(" | "));
-  check("Backspace przed akapitem z polem nie skleja (pola całe) i mówi dlaczego",
-    before === after && s.sdt["20"]?.text === "ACME sp. z o.o." && s.paras[12].startsWith("Uwagi") && /pole formularza/.test(mergeToast), `${before}→${after} | ${mergeToast}`);
+  check("Backspace na początku bloku „Uwagi” nie skleja z akapitem spoza bloku (pola całe) i mówi dlaczego",
+    before === after && s.sdt["20"]?.text === "ACME sp. z o.o." && s.paras[12].startsWith("Uwagi") && /różnych miejscach/.test(mergeToast), `${before}→${after} | ${mergeToast}`);
 
   // ── pole wyboru: klik w dokumencie ─────────────────────────────────────────
   await clickField(page, "s5");
@@ -259,4 +261,9 @@ async function run() {
   console.log(`\n✅ formularz [${ENGINE}]: ${results.length}/${results.length}`);
 }
 
-run().catch((e) => { console.error(e); process.exit(1); });
+run().catch((e) => {
+  // wypisz też to, co zdążyło się sprawdzić — łatwiej znaleźć przyczynę
+  results.forEach((r) => console.log(`${r.ok ? "✅" : "❌"} ${r.name}${!r.ok && r.detail ? `  (${r.detail})` : ""}`));
+  console.error(e);
+  process.exit(1);
+});

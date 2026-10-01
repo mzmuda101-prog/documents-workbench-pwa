@@ -34,19 +34,71 @@ const INLINE_LOCK_TAGS = [
   ["ins", "lockTracked"], ["del", "lockTracked"], ["moveFrom", "lockTracked"], ["moveTo", "lockTracked"], ["rPrChange", "lockTracked"],
   ["footnoteReference", "lockNote"], ["endnoteReference", "lockNote"],
   ["drawing", "lockObject"], ["pict", "lockObject"], ["object", "lockObject"],
-  ["fldChar", "lockField"], ["fldSimple", "lockField"], ["hyperlink", "lockLink"],
+  ["fldChar", "lockField"], ["fldSimple", "lockField"],
 ];
+// Linki (w:hyperlink) z samym tekstem są edytowalne — model akapitu je zachowuje
+// (docx-run-styles.js). Fragment tekstu GŁĘBIEJ niż akapit/link (np. w smartTag, customXml,
+// kontrolce) zapis akapitu by zgubił — taki akapit zostaje tylko do odczytu.
+function paragraphNestedRunLock(xp) {
+  const runs = xp.getElementsByTagNameNS(W_NS, "r");
+  for (let i = 0; i < runs.length; i++) {
+    const parent = runs[i].parentNode;
+    if (parent === xp) continue;
+    if (parent.localName === "hyperlink" && parent.parentNode === xp) continue;
+    const sdt = parent.localName === "sdtContent" ? parent.parentNode : null;
+    if (sdt && sdt.parentNode === xp && typeof formIslandSdt === "function" && formIslandSdt(sdt)) continue; // pole-wyspa
+    return parent.localName === "hyperlink" ? "lockLink" : "lockField";
+  }
+  return null;
+}
+
+// Linki w podglądzie ↔ w pliku (w tej samej kolejności): <a> dostaje odwołanie z pliku,
+// żeby zapis akapitu odtworzył DOKŁADNIE ten link. Gdy się nie zgadzają — tylko do odczytu.
+function stampParagraphLinks(xp, el) {
+  const links = Array.from(xp.childNodes).filter((n) => n.localName === "hyperlink" && n.namespaceURI === W_NS && n.getElementsByTagNameNS(W_NS, "t").length);
+  const anchors = Array.from(el.querySelectorAll("a[href]:not(.doc-xref)"));
+  if (!links.length && !anchors.length) return true;
+  if (links.length !== anchors.length) return false;
+  links.forEach((h, i) => {
+    const ref = hyperlinkRef(h);
+    anchors[i].dataset.dwbLink = ref;
+    if (ref.startsWith("rel:")) docLinkHrefs.set(ref, anchors[i].getAttribute("href") || "");
+  });
+  return true;
+}
 async function markLockedParagraphs(bytes) {
   const host = docCanvasEl?.querySelector(".docx-preview-host");
   if (!host || !bytes) return;
   const doc = await getDocumentXmlDom(bytes);
   if (!doc || bytes !== originalFileBytes) return; // w międzyczasie inny plik/wersja
+  // pola-wyspy: XML każdej kontrolki pod jej kluczem („s<N>” = N-te w:sdt, jak w docx-forms.js),
+  // a opakowania pól w podglądzie muszą już być (paintFormFields) — inaczej akapit tylko do odczytu
+  docIslandXml.clear();
+  const sdts = Array.from(doc.getElementsByTagNameNS(W_NS, "sdt"));
+  const islandKey = new Map();
+  sdts.forEach((sdt, n) => {
+    if (typeof formIslandSdt !== "function" || !formIslandSdt(sdt)) return;
+    docIslandXml.set(`s${n}`, new XMLSerializer().serializeToString(sdt));
+    islandKey.set(sdt, `s${n}`);
+  });
+  if (islandKey.size && typeof refreshFormScan === "function") {
+    await refreshFormScan().catch(() => {});
+    if (bytes !== originalFileBytes) return;
+  }
   const previews = collectPreviewParagraphElements(host);
+  const boxes = new Map(); // rodzic akapitu w pliku → numer „pojemnika”
   collectParagraphElements(doc.documentElement, "all").forEach((xp, i) => {
     const el = previews[i];
     if (!el) return;
+    if (!boxes.has(xp.parentNode)) boxes.set(xp.parentNode, String(boxes.size));
+    el.dataset.box = boxes.get(xp.parentNode);
     const hit = INLINE_LOCK_TAGS.find(([tag]) => xp.getElementsByTagNameNS(W_NS, tag).length);
-    const lock = formParagraphLock(xp) || hit?.[1]; // pole formularza Worda: docx-forms.js
+    let lock = formParagraphLock(xp) || hit?.[1] || paragraphNestedRunLock(xp); // pole formularza Worda: docx-forms.js
+    if (!lock && !stampParagraphLinks(xp, el)) lock = "lockLink";
+    if (!lock) {
+      const keys = Array.from(xp.childNodes).filter((n) => islandKey.has(n)).map((n) => islandKey.get(n));
+      if (keys.some((k) => !el.querySelector(`.ff-field[data-ff="${k}"]`))) lock = "lockForm";
+    }
     if (lock) el.dataset.lock = lock;
     else delete el.dataset.lock;
   });
@@ -104,7 +156,7 @@ function resetInlineDirtyAfterRender() {
 
 function collectInlineParagraphEdits() {
   const host = docCanvasEl?.querySelector(".docx-preview-host");
-  if (!host || !baselineParagraphRuns.length) return [];
+  if (!host || !baselineParagraphRuns.length || inlineLocksPending) return [];
   const previews = collectPreviewParagraphElements(host);
   const edits = [];
   if (inlineDirtyValid && previews.length === baselineParagraphRuns.length) {
@@ -142,6 +194,11 @@ function restoreInlineParagraphs(snapshotEdits) {
   if (previews.length !== baselineParagraphRuns.length) return false;
   const want = new Map((snapshotEdits || []).map((e) => [e.index, e.runs]));
   const touch = new Set([...collectInlineParagraphEdits().map((e) => e.index), ...want.keys()]);
+  // akapit z polem formularza: odbudowa z fragmentów zgubiłaby opakowanie pola — rysujemy od nowa
+  for (const i of touch) {
+    const runs = want.has(i) ? want.get(i) : pristineParas.get(previews[i]) ? null : baselineParagraphRuns[i];
+    if (runs?.some((r) => r.island)) return false;
+  }
   touch.forEach((i) => {
     const p = previews[i];
     if (!p) return;
@@ -300,6 +357,19 @@ function focusParagraphAtOffset(paraIndex, offset) {
   let node = walker.nextNode();
   while (node) {
     const len = node.length;
+    // pole formularza (nieedytowalna „wyspa”) — kursor przed albo za nim, nigdy w środku
+    const island = node.parentElement?.closest('[contenteditable="false"]');
+    if (island && el.contains(island) && remaining <= len) {
+      if (remaining === 0) range.setStartBefore(island); else range.setStartAfter(island);
+      range.collapse(true); sel?.removeAllRanges(); sel?.addRange(range); return;
+    }
+    // Na granicy końca linku kursor stoi ZA linkiem (jak w Wordzie: pisanie nie wydłuża linku)
+    if (remaining === len && node.parentElement?.closest("a")) {
+      const next = walker.nextNode();
+      if (next && !next.parentElement?.closest("a")) { range.setStart(next, 0); range.collapse(true); sel?.removeAllRanges(); sel?.addRange(range); return; }
+      if (next) { remaining -= len; node = next; continue; }
+      walker.previousNode();
+    }
     if (remaining <= len) {
       range.setStart(node, remaining);
       range.collapse(true);
@@ -411,6 +481,8 @@ async function handleInlineEnter(p, paraIndex, e) {
     return;
   }
   e.preventDefault();
+  // Enter w PUSTYM punkcie listy kończy listę (jak w Wordzie), zamiast robić kolejny pusty punkt
+  if (isListParagraph(p) && !previewRunsToPlainText(extractRunsFromPreviewParagraph(p)) && typeof composeUi !== "undefined" && composeUi.endListAt(p)) return;
   const newP = splitParagraphDomAtCaret(p);
   if (!newP) return;
   prepareEditableParagraph(newP);
@@ -435,7 +507,15 @@ async function handleInlineEnter(p, paraIndex, e) {
 }
 
 async function handleInlineBackspace(p, paraIndex, e) {
-  if (getCaretOffset(p) !== 0 || paraIndex <= 0) return;
+  if (getCaretOffset(p) !== 0) return;
+  const sel = window.getSelection();
+  // Backspace na początku punktu listy najpierw zdejmuje numerację (jak w Wordzie); kolejny skleja
+  if (isListParagraph(p) && sel?.isCollapsed && !e.fromDelete && typeof composeUi !== "undefined") {
+    e.preventDefault();
+    composeUi.endListAt(p);
+    return;
+  }
+  if (paraIndex <= 0) return;
   e.preventDefault();
   const host = docCanvasEl?.querySelector(".docx-preview-host");
   const paras = collectPreviewParagraphElements(host);
@@ -443,6 +523,12 @@ async function handleInlineBackspace(p, paraIndex, e) {
   // poprzedni akapit tylko do odczytu (pole, link, przypis…) — sklejenie przepisałoby go i zgubiło zawartość
   if (!prev || prev.dataset.lock) {
     if (prev) toast(t(prev.dataset.lock), "info");
+    return;
+  }
+  // różne „pojemniki” w pliku (komórka tabeli, blok kontrolki, treść główna): sklejenie
+  // przeniosłoby akapit z jednego do drugiego i zostawiło pusty pojemnik (Word też tu nie skleja)
+  if ((prev.dataset.box || "") !== (p.dataset.box || "")) {
+    toast(t("mergeAcross"), "info");
     return;
   }
   const joinAt = previewRunsToPlainText(extractRunsFromPreviewParagraph(prev)).length;
@@ -725,10 +811,22 @@ function syncInlineEditMode() {
   }
 }
 
+// Od świeżego renderu do oznaczenia akapitów tylko do odczytu podgląd nie jest edytowalny,
+// więc nie ma w nim zmian — a porównanie w tej chwili wzięłoby np. znaczek ☐ starego pola
+// (docx-forms.js dorysowuje go do podglądu) za zmianę i przepisało akapit, gubiąc pole
+// (odtworzone 2026-10-01: trzy szybkie kliknięcia w ☐ kasowały pole FORMTEXT obok).
+let inlineLocksPending = false;
+let inlineSetupSeq = 0;
+
 function setupInlineEditingAfterRender() {
   if (!originalFileBytes) return;
   const bytes = originalFileBytes;
-  refreshInlineEditBaseline(bytes).then(() => markLockedParagraphs(bytes)).then(() => syncInlineEditMode());
+  const seq = ++inlineSetupSeq;
+  inlineLocksPending = true;
+  refreshInlineEditBaseline(bytes)
+    .then(() => markLockedParagraphs(bytes))
+    .finally(() => { if (seq === inlineSetupSeq) inlineLocksPending = false; }) // tylko ostatni render zdejmuje
+    .then(() => syncInlineEditMode());
 }
 
 async function mergeInlineEditsIntoBytes() {

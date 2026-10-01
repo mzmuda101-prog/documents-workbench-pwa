@@ -141,7 +141,7 @@
       if (!next || all.indexOf(next) !== all.indexOf(p) + 1 || typeof handleInlineBackspace !== "function") return;
       e.preventDefault();
       placeAt(next, 0);
-      handleInlineBackspace(next, all.indexOf(next), { preventDefault() {}, key: "Backspace" });
+      handleInlineBackspace(next, all.indexOf(next), { preventDefault() {}, key: "Backspace", fromDelete: true });
     }
   }
 

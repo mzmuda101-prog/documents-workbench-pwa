@@ -45,9 +45,11 @@ function initIntroSplash() {
 
   // Intro znika dopiero, gdy OBA warunki są spełnione: film się skończył i aplikacja pod spodem
   // jest gotowa (load + czcionki + 2 klatki). Pomiar 2026-10-01: gotowość ≤ 0,05 s po starcie
-  // filmu nawet przy CPU ×6 i wolnym 4G — więc film leci szybciej: tempo liczone tak, żeby
-  // trwał INTRO_MS (prośba Mateusza: 2 s, nie krócej; dawniej 1,5× ≈ 3,7 s). Gdyby ładowanie
-  // trwało dłużej, zostaje ostatnia klatka aż do gotowości.
+  // filmu nawet przy CPU ×6 i wolnym 4G. Film trwa INTRO_MS (prośba Mateusza: 2 s, nie krócej).
+  // Od 2026-10-01 plik (mateusz-intro-2s.mp4) MA już 2 s przy 60 kl./s — dawniej 5,6 s grane
+  // 2,8× szybciej: przeglądarka dekodowała ~168 kl./s i wyrzucała klatki nierówno (2–3 naraz),
+  // co wyglądało jak przycinanie (zgłoszenie Mateusza). Tempo niżej zostaje jako zabezpieczenie
+  // dla dłuższego pliku. Gdyby ładowanie trwało dłużej, zostaje ostatnia klatka aż do gotowości.
   const INTRO_MS = 2000;
   const introRate = () => (vid?.duration > 0 && Number.isFinite(vid.duration) ? Math.min(4, Math.max(1, (vid.duration * 1000) / INTRO_MS)) : 2.8);
   const INTRO_MAX_MS = 15000; // bezpiecznik: nigdy nie wisi na intro

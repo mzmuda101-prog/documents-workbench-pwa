@@ -65,6 +65,8 @@ function getParagraphText(pEl) {
 
 function clearParagraphRuns(pEl) {
   Array.from(pEl.getElementsByTagNameNS(W_NS, "r")).forEach((r) => r.parentNode.removeChild(r));
+  // puste opakowania linków (fragmenty już usunięte) — nowe linki tworzy applyRunsToParagraphXml
+  Array.from(pEl.childNodes).forEach((n) => { if (n.localName === "hyperlink" && n.namespaceURI === W_NS) pEl.removeChild(n); });
 }
 
 function setParagraphText(pEl, text) {
@@ -670,6 +672,7 @@ function applyEditToXml(xml, edit, opts = {}) {
   if (edit.op === "splitParagraph") return splitParagraphInXml(xml, edit.index, edit.before, edit.after, edit.beforeRuns, edit.afterRuns, edit.nextNormal);
   if (edit.op === "pageBreak") return applyPageBreakInXml(xml, edit); // docx-compose.js
   if (edit.op === "hrule") return applyHruleInXml(xml, edit);
+  if (edit.op === "link") return applyLinkInXml(xml, edit);
   if (edit.op === "mergeParagraph") return mergeParagraphInXml(xml, edit.index, edit.mergedRuns);
   if (edit.op === "listLevel") return changeListLevelInXml(xml, edit.index, edit.delta);
   if (edit.op === "case" || edit.op === "trim" || edit.op === "affix") return applyParagraphTransformInXml(xml, edit, scope);
@@ -711,6 +714,24 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
       total += res.count;
       continue;
     }
+    if (normalized.op === "formInsert") { // docx-compose.js — styl „Tekst zastępczy”
+      const res = await applyFormInsertInZip(zip, xml, normalized);
+      xml = res.xml;
+      total += res.count;
+      continue;
+    }
+    if (normalized.op === "toc") { // docx-compose.js — style spisu treści + pole TOC
+      const res = await applyTocInZip(zip, xml, normalized);
+      xml = res.xml;
+      total += res.count;
+      continue;
+    }
+    if (normalized.op === "list") { // docx-compose.js — dopisuje definicje do numbering.xml
+      const res = await applyListInZip(zip, xml, normalized);
+      xml = res.xml;
+      total += res.count;
+      continue;
+    }
     if (normalized.op === "paraFormat") { // docx-compose.js — styl może wymagać dopisania do styles.xml
       const res = await applyParaFormatInZip(zip, xml, normalized);
       xml = res.xml;
@@ -730,6 +751,7 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
     // „Zamień wszystkie” z zaznaczonym „też w nagłówkach, stopkach i przypisach”
     if (normalized.op === "replace" && normalized.otherParts && !opts.target) total += await replaceInOtherParts(zip, normalized);
   }
+  if (typeof finalizeComposeParts === "function") xml = await finalizeComposeParts(zip, xml); // nowe linki: powiązania + styl
   zip.file("word/document.xml", xml);
   if (coreXml !== null) zip.file("docProps/core.xml", coreXml);
   const out = await zip.generateAsync({

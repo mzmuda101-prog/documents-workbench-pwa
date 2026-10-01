@@ -67,8 +67,9 @@ async function run() {
   check("statystyki: najdłuższe zdanie to celowo długie", /celowo bardzo długie/.test(r.longest), r.longest);
   check("metadane: autor „Jan Przykładowy”", r.author === "Jan Przykładowy", r.author);
   check("tabela i listy są", r.tables === 1 && r.lists >= 4, `${r.tables} tab, ${r.lists} list`);
-  check("zablokowane: zmiana, przypis, 13 wpisów spisu (linki), 4 pola formularza, odsyłacz",
-    r.locked.lockLink === 13 && r.locked.lockForm === 4 && r.locked.lockField === 1 && r.locked.lockTracked === 1 && r.locked.lockNote === 1 && Object.keys(r.locked).length === 5, JSON.stringify(r.locked));
+  // Etap 2: linki i proste pola formularza w zdaniu nie blokują akapitu (model akapitu je zachowuje)
+  check("zablokowane: zmiana, przypis, odsyłacz (linki i pola w zdaniu edytowalne)",
+    !r.locked.lockLink && !r.locked.lockForm && r.locked.lockField === 1 && r.locked.lockTracked === 1 && r.locked.lockNote === 1 && Object.keys(r.locked).length === 3, JSON.stringify(r.locked));
   check("formularz: tekst, lista, data, pole wyboru", r.forms === "text,dropdown,date,checkbox", r.forms);
   check("spis treści: 13 linków do rozdziałów + odsyłacz do „Zapisu”", r.toc === 13 && r.xref === "#_Guide12", `${r.toc} ${r.xref}`);
 

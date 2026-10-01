@@ -178,6 +178,9 @@ function onDocLinkClick(e) {
   const sel = window.getSelection();
   if (sel && !sel.isCollapsed && a.contains(sel.anchorNode)) return; // zaznaczanie tekstu linku
   e.preventDefault(); // nigdy nie zastępuj aplikacji stroną z linku
+  // Edycja: klik w link w edytowalnym akapicie stawia kursor (jak w Wordzie), Ctrl/⌘+klik
+  // otwiera; karta linku (compose-ui.js) ma też „Otwórz”.
+  if (a.closest(".docx-editable-p") && !(e.ctrlKey || e.metaKey)) return;
   const href = a.getAttribute("href") || "";
   if (href.startsWith("#")) { jumpToLinkTarget(href.slice(1)); return; }
   if (LINK_SAFE_RE.test(href)) { window.open(href, "_blank", "noopener,noreferrer"); return; }

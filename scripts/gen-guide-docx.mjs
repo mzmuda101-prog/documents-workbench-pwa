@@ -151,6 +151,9 @@ const body = [
   p("„Nowy dokument” (ekran startowy, menu ⋯, panel Plik albo Ctrl/⌘+Alt+N) tworzy plik od razu w przeglądarce: pusta kartka A4, pismo z polami {{…}} albo notatka z tytułem i nagłówkami. Pierwsze „Zapisz” zapyta o nazwę i miejsce."),
   p("W trybie Edycja na pasku są: „＋ Wstaw” (podział strony, linia pozioma, dzisiejsza data, znaki specjalne), lista stylu akapitu (Normalny, Tytuł, Podtytuł, Nagłówek 1–3, Cytat) i wyrównanie. Nagłówki od razu trafiają do skrótów sekcji, Struktury i spisu treści w Wordzie. Enter na końcu nagłówka zaczyna zwykły tekst, a Ctrl/⌘+Enter przenosi dalszy tekst na nową stronę."),
   tip("kliknij na końcu tego akapitu i wybierz z listy stylu „Nagłówek 2” — pojawi się w skrótach sekcji. Potem „＋ Wstaw” → „Dzisiejsza data”, a na koniec ↶ cofnie jedno i drugie."),
+  p("Przycisk listy robi listę punktowaną albo numerowaną (drugi raz — zdejmuje). Tab / Shift+Tab albo „Głębiej / Płycej” w tym samym okienku zmienia poziom punktu; Enter w pustym punkcie kończy listę, a Backspace na początku punktu zdejmuje numerację."),
+  p("Ctrl/⌘+K (albo „＋ Wstaw” → „Link…”) robi link z zaznaczonego tekstu — do strony WWW albo do nagłówka w tym dokumencie. Gdy kursor stoi w linku, pod nim pojawia się mała karta: otwórz, zmień, usuń. W „＋ Wstaw” są też pola formularza (tekst, lista wyboru, data, pole wyboru) — wstawiasz je w środek zdania i dalej piszesz obok — oraz spis treści z nagłówków 1–3, który później aktualizujesz tym samym przyciskiem."),
+  tip("zaznacz słowo „spis treści” w zdaniu wyżej, naciśnij Ctrl/⌘+K, przełącz na „Miejsce w dokumencie” i wybierz rozdział 1 — kliknięcie w link (albo „Otwórz” na karcie) przeniesie Cię tam."),
 ];
 
 const tocBlock = [

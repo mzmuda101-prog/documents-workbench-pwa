@@ -88,9 +88,22 @@ function formSdtLevel(sdt) {
   return "inline";
 }
 
+// Pole w zdaniu, które zapis akapitu przenosi w całości („wyspa”, docx-run-styles.js):
+// kontrolka bezpośrednio w akapicie, do wypełniania (tekst, lista, data, ☐), bez zagnieżdżeń.
+// Akapit z takimi polami jest edytowalny — pisze się obok pola, pole zostaje nietknięte.
+function formIslandSdt(sdt) {
+  if (sdt.parentNode?.localName !== "p" || sdt.parentNode.namespaceURI !== W_NS) return false;
+  const content = ffKid(sdt, "sdtContent");
+  if (!content || content.getElementsByTagNameNS(W_NS, "sdt").length) return false;
+  const kind = formSdtKind(ffKid(sdt, "sdtPr"));
+  if (!(FORM_FILLABLE.has(kind) || kind === "rich") || formSdtLevel(sdt) !== "inline") return false;
+  return !["ffData", "drawing", "pict", "footnoteReference", "endnoteReference", "ins", "del"].some((tag) => content.getElementsByTagNameNS(W_NS, tag).length);
+}
+
 // Akapit w Edycji tylko do odczytu, bo zawiera pole formularza (albo cały jest polem).
 function formParagraphLock(p) {
-  if (p.getElementsByTagNameNS(W_NS, "sdt").length || p.getElementsByTagNameNS(W_NS, "ffData").length) return "lockForm";
+  if (p.getElementsByTagNameNS(W_NS, "ffData").length) return "lockForm";
+  if (Array.from(p.getElementsByTagNameNS(W_NS, "sdt")).some((sdt) => !formIslandSdt(sdt))) return "lockForm";
   for (let s = ffClosest(p, "sdt"); s; s = ffClosest(s, "sdt")) {
     if (FORM_LOCK_KINDS.has(formSdtKind(ffKid(s, "sdtPr")))) return "lockForm";
   }
@@ -668,6 +681,7 @@ function formDecorate(w, f) {
     w.textContent = shown || "  ";
   }
   w.tabIndex = 0;
+  w.contentEditable = "false"; // w edytowalnym akapicie pole jest całością — pisze się obok
   w.setAttribute("role", f.kind === "checkbox" ? "checkbox" : "button");
   if (f.kind === "checkbox") w.setAttribute("aria-checked", String(!!f.value));
   else w.setAttribute("aria-haspopup", "dialog");
