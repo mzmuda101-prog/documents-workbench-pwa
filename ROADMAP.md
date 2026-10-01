@@ -51,6 +51,8 @@ Stan na **v0.2** (lipiec 2026). Ostatnia wersja cache: `20260702-03`.
 
 | **Poprawka zapisu** (zgłoszenie z Windows: plik otwarty przeciągnięciem / „Przykład” → „Zapisz” otwierało okno OTWIERANIA plików). Teraz bez prawa do nadpisania „Zapisz” = okno ZAPISU z podpowiedzianą nazwą; przeciągnięty plik w Chrome/Edge dostaje uchwyt (zapis w miejscu); zgoda na zapis pytana przed budowaniem pliku; „Zapisać w oryginale?” raz na plik; na iPhonie komunikat „pobrany — Pliki → Pobrane”. Sprawdzone na symulatorze iPhone'a. Strażnik `test:save` Chromium + WebKit | ✅ 2026-10-01 |
 
+| **„Otwórz za pomocą” / „Udostępnij”** (`app/launch-files.js`, manifest `file_handlers` + `launch_handler: navigate-new` + `share_target`, odbiór POST w `sw.js`): zainstalowana aplikacja w Chrome/Edge na Windows/macOS pojawia się w „Otwórz za pomocą” dla .docx (plik z uchwytem → „Zapisz” do oryginału, każdy plik we własnym oknie); Android — „Udostępnij → Documents Workbench” (kopia). iPhone/iPad/Safari — nie obsługują, bez zmian. Strażnik `test:launch` Chromium + WebKit | ✅ 2026-10-01 |
+
 **Plan przenoszenia z Sheet Workbench (A–F) zakończony.** Otwarte tematy: cofnięcie kroku z Enterem nadal rysuje dokument od nowa (~4 s przy 300 stronach); pierwszy układ bardzo długiego dokumentu jest kosztem docx-preview (content-visibility odrzucone — psuje numerację list przez izolację stylów). Później: „Ostatnio otwierane” (tylko Chrome/Edge, uchwyty plików w IndexedDB — lokalnie).
 
 **Poza pierwotnym planem (ale wartościowe):** … edycja inline ze stylami runów + rozmiar czcionki, zoom 0.5–2.

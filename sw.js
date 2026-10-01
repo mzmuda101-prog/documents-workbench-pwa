@@ -1,4 +1,4 @@
-const CACHE_VERSION = "20261001-03";
+const CACHE_VERSION = "20261001-04";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
@@ -45,6 +45,7 @@ const SHELL_ASSETS = [
   `./app/view-mode.js?v=${ASSET_V}`,
   `./app/keyboard.js?v=${ASSET_V}`,
   `./app/cursor-hint.js?v=${ASSET_V}`,
+  `./app/launch-files.js?v=${ASSET_V}`,
   `./app/bootstrap.js?v=${ASSET_V}`,
   "./assets/images/favicon.png",
   "./assets/images/apple-touch-icon.png",
@@ -126,7 +127,7 @@ self.addEventListener("activate", (event) => {
     caches.keys().then((keys) =>
       Promise.all(
         keys
-          .filter((key) => key !== APP_CACHE && key !== HEAVY_CACHE && key !== RUNTIME_CACHE)
+          .filter((key) => key !== APP_CACHE && key !== HEAVY_CACHE && key !== RUNTIME_CACHE && key !== SHARE_CACHE)
           .map((key) => caches.delete(key))
       )
     )
@@ -144,8 +145,30 @@ self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
 });
 
+// Android „Udostępnij → Documents Workbench” (manifest share_target): system wysyła plik
+// POST-em. Odkładamy go do osobnego cache i przekierowujemy na stronę, która go odbierze
+// (app/launch-files.js). Tylko ten jeden adres — reszta zapytań bez zmian.
+const SHARE_CACHE = "docs-wb-share";
+async function receiveSharedFile(request) {
+  try {
+    const form = await request.formData();
+    const file = form.getAll("file").find((f) => f && typeof f === "object" && f.size >= 0);
+    if (file) {
+      const cache = await caches.open(SHARE_CACHE);
+      await cache.put("./__shared-file", new Response(file, {
+        headers: { "Content-Type": file.type || "application/octet-stream", "X-File-Name": encodeURIComponent(file.name || "dokument.docx") },
+      }));
+    }
+  } catch (_) { /* uszkodzone dane — strona po prostu nic nie otworzy */ }
+  return Response.redirect("./?open=shared", 303);
+}
+
 self.addEventListener("fetch", (event) => {
   const { request } = event;
+  if (request.method === "POST" && new URL(request.url).pathname.endsWith("/share-target")) {
+    event.respondWith(receiveSharedFile(request));
+    return;
+  }
   if (request.method !== "GET") return;
   const reqUrl = new URL(request.url);
   const sameOrigin = reqUrl.origin === self.location.origin;
