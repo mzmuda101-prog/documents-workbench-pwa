@@ -585,7 +585,20 @@ async function refreshFormScan() {
   }
 }
 
-// ── pola w podglądzie: zakresy, wyróżnienie, znaczki pól wyboru ─────────────
+// ── pola w podglądzie: „kafelki” do kliknięcia ───────────────────────────────
+// Tekst pola dostaje w podglądzie opakowanie <span class="ff-field ff-<rodzaj>"> (ramka, znaczek
+// rodzaju — ▾ lista, kalendarz, przerywana ramka tekstu, kłódka). Treść się NIE zmienia: akapit
+// z polem jest tylko do odczytu, a zapis z podglądu pomija takie akapity — więc nic z tego nie
+// trafia do pliku. Znaczki są z CSS (::after), więc nie wchodzą też do tekstu (szukanie, eksport).
+const FF_HINT = {
+  checkbox: ["Pole wyboru — kliknij, żeby zaznaczyć lub odznaczyć", "Check box — click to tick or untick"],
+  dropdown: ["Lista — kliknij, żeby wybrać", "List — click to choose"],
+  combo: ["Lista lub własny tekst — kliknij", "List or your own text — click"],
+  date: ["Data — kliknij, żeby wybrać z kalendarza", "Date — click to pick from a calendar"],
+  text: ["Pole tekstowe — kliknij, żeby wpisać", "Text field — click to type"],
+  locked: ["Pole zablokowane w Wordzie", "Field locked in Word"],
+};
+
 function formShadeOn() {
   try { return localStorage.getItem(FORM_SHADE_KEY) !== "0"; } catch (_) { return true; }
 }
@@ -609,61 +622,86 @@ function formDomRange(el, start, end) {
   return null;
 }
 
-// Pole bez widocznego tekstu (stare pole wyboru, pusta kontrolka) dostaje w podglądzie znaczek.
-// Akapit z polem jest tylko do odczytu, a zapis z podglądu pomija takie akapity — znaczek nie trafi do pliku.
-function formGlyph(p, f, offset) {
-  let g = p.querySelector(`.ff-glyph[data-ff="${f.key}"]`);
-  if (!g) {
-    g = document.createElement("span");
-    g.className = "ff-glyph";
-    g.dataset.ff = f.key;
-    g.contentEditable = "false";
-    const at = formDomRange(p, offset, offset);
-    if (at) at.insertNode(g); else p.prepend(g);
+// Gdzie w podglądzie jest tekst pola (null = pole bez widocznego tekstu).
+function formPreviewRange(p, f) {
+  if (f.level === "block") {
+    const range = document.createRange();
+    range.selectNodeContents(p);
+    return range;
   }
-  // stara lista bez wyniku w pliku (Word rysuje wybraną pozycję sam) — pokazujemy ją tu
-  const shown = f.kind === "checkbox" ? (f.value ? f.on.char : f.off.char) : f.kind === "dropdown" && f.value ? f.value : "";
-  g.classList.toggle("is-empty", !shown);
-  g.textContent = shown || "\u2003\u2003";
-  return g;
+  if (!f.display || (f.source === "legacy" && f.kind === "checkbox")) return null;
+  const text = p.textContent || "";
+  let at = text.indexOf(f.display, Math.max(0, f.before.length - 4));
+  if (at < 0 || Math.abs(at - f.before.length) > 12) at = text.indexOf(f.display);
+  return at >= 0 ? formDomRange(p, at, at + f.display.length) : null;
+}
+
+function formWrap(p, f) {
+  const w = document.createElement("span");
+  w.dataset.ff = f.key;
+  const range = formPreviewRange(p, f);
+  if (range) {
+    try {
+      w.appendChild(range.extractContents()); // fragmenty z różnym formatem zostają w środku
+      range.insertNode(w);
+      return w;
+    } catch (_) { /* zakres przez granice elementów, których nie da się rozciąć — znaczek obok */ }
+  }
+  // stare pole wyboru / lista bez wyniku w pliku / pusta kontrolka — znaczek w miejscu pola
+  w.classList.add("ff-glyph");
+  const at = formDomRange(p, f.before.length, f.before.length);
+  if (at) at.insertNode(w); else p.prepend(w);
+  return w;
+}
+
+function formDecorate(w, f) {
+  const glyph = w.classList.contains("ff-glyph");
+  w.className = `ff-field ff-${f.kind}`;
+  w.classList.toggle("ff-glyph", glyph);
+  w.classList.toggle("is-block", f.level === "block");
+  w.classList.toggle("is-placeholder", !!f.placeholder);
+  w.classList.toggle("is-locked", !!f.locked);
+  if (glyph) {
+    // Word rysuje stare pole wyboru i wybraną pozycję starej listy sam — pokazujemy je tu
+    const shown = f.kind === "checkbox" ? (f.value ? f.on.char : f.off.char) : f.kind === "dropdown" && f.value ? f.value : "";
+    w.classList.toggle("is-empty", !shown);
+    w.textContent = shown || "  ";
+  }
+  w.tabIndex = 0;
+  w.setAttribute("role", f.kind === "checkbox" ? "checkbox" : "button");
+  if (f.kind === "checkbox") w.setAttribute("aria-checked", String(!!f.value));
+  else w.setAttribute("aria-haspopup", "dialog");
+  const shownText = f.kind === "checkbox" ? "" : f.placeholder ? "" : `: ${f.kind === "date" || f.kind === "text" || f.kind === "combo" ? f.display : f.options.find((o) => o.value === f.value)?.text || f.display}`;
+  w.setAttribute("aria-label", `${formFieldName(f)}${shownText}`);
+  const [pl, en] = FF_HINT[f.locked ? "locked" : f.kind];
+  w.dataset.hint = "";
+  w.dataset.hintPl = pl;
+  w.dataset.hintEn = en;
 }
 
 function paintFormFields() {
   formUi.byPara = new Map();
   formUi.ranges = new Map();
-  const hl = typeof CSS !== "undefined" && CSS.highlights && typeof Highlight === "function";
-  if (hl) CSS.highlights.delete("dwb-form");
+  docCanvasEl?.classList.toggle("ff-plain", !formShadeOn());
   const host = docCanvasEl?.querySelector(".docx-preview-host");
   if (!host || !formScan?.fields.length || formScan.bytes !== originalFileBytes) return;
   const previews = collectPreviewParagraphElements(host);
-  const all = hl ? new Highlight() : null;
   formScan.fields.forEach((f) => {
     const p = Number.isFinite(f.paraIndex) ? previews[f.paraIndex] : null;
     if (!p) return;
-    let range = null;
-    if (f.level === "block") {
-      range = document.createRange();
-      range.selectNodeContents(p);
-    } else if (f.display && !(f.source === "legacy" && f.kind === "checkbox")) {
-      const text = p.textContent || "";
-      let at = text.indexOf(f.display, Math.max(0, f.before.length - 4));
-      if (at < 0 || Math.abs(at - f.before.length) > 12) at = text.indexOf(f.display);
-      if (at >= 0) range = formDomRange(p, at, at + f.display.length);
-    }
-    if (!range) {
-      const g = formGlyph(p, f, f.before.length);
-      range = document.createRange();
-      range.selectNodeContents(g);
-    }
+    // ten sam podgląd (np. kolejne odświeżenie panelu) — opakowanie już jest
+    const w = p.querySelector(`.ff-field[data-ff="${f.key}"]`) || formWrap(p, f);
+    formDecorate(w, f);
+    const range = document.createRange();
+    range.selectNodeContents(w);
     formUi.ranges.set(f.key, range);
     if (!formUi.byPara.has(p)) formUi.byPara.set(p, []);
     formUi.byPara.get(p).push(f);
     p.classList.add("ff-para");
-    if (all) all.add(range);
   });
-  if (all && formShadeOn()) CSS.highlights.set("dwb-form", all);
 }
 
+// Dotyk: palec trafia obok małego pola (☐) — liczymy też kilka px wokół.
 function formFieldAt(p, x, y) {
   const list = formUi.byPara.get(p);
   if (!list) return null;
@@ -796,27 +834,34 @@ function openFormPop(f, anchorRect) {
   first?.focus({ preventScroll: true });
 }
 
+function activateFormField(f, anchorRect) {
+  if (f.kind === "checkbox" && !f.locked) { toggleFormCheckbox(f.key); return; }
+  openFormPop(f, anchorRect);
+}
+
 function onFormDocClick(e) {
   if (!formUi.byPara.size || e.button > 0) return;
   const sel = window.getSelection();
   if (sel && !sel.isCollapsed && docCanvasEl.contains(sel.anchorNode)) return; // zaznaczanie tekstu
+  const w = e.target.closest?.(".ff-field");
   const p = e.target.closest?.(".ff-para");
-  if (!p) return;
-  const f = formFieldAt(p, e.clientX, e.clientY);
+  const f = w ? formScan?.fields.find((x) => x.key === w.dataset.ff) : p ? formFieldAt(p, e.clientX, e.clientY) : null;
   if (!f) return;
   e.preventDefault();
   const range = formUi.ranges.get(f.key);
   const rects = range ? [...range.getClientRects()] : [];
   const rect = rects.find((r) => e.clientY >= r.top - 12 && e.clientY <= r.bottom + 12) || rects[0] || p.getBoundingClientRect();
-  if (f.kind === "checkbox" && !f.locked) { toggleFormCheckbox(f.key); return; }
-  openFormPop(f, rect);
+  activateFormField(f, rect);
 }
 
-function onFormHover(e) {
-  if (!formUi.byPara.size || e.pointerType === "touch") return;
-  const p = e.target.closest?.(".ff-para");
-  const hit = p ? formFieldAt(p, e.clientX, e.clientY) : null;
-  docCanvasEl.classList.toggle("ff-hover", !!hit);
+// Klawiatura: Tab dochodzi do pola, Enter / spacja = jak kliknięcie.
+function onFormDocKeydown(e) {
+  const w = e.target.closest?.(".ff-field");
+  if (!w || (e.key !== "Enter" && e.key !== " ") || e.ctrlKey || e.metaKey || e.altKey) return;
+  const f = formScan?.fields.find((x) => x.key === w.dataset.ff);
+  if (!f) return;
+  e.preventDefault();
+  activateFormField(f, w.getBoundingClientRect());
 }
 
 // Skok do pola z panelu: przewiń, mrugnij polem, otwórz okienko.
@@ -824,19 +869,21 @@ function jumpToFormField(key, opts = {}) {
   const f = formScan?.fields.find((x) => x.key === key);
   const range = formUi.ranges.get(key);
   if (!f || !range) return;
-  const el = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
-  const p = el?.closest?.("p");
+  const w = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
+  const p = w?.closest?.("p");
   if (p) jumpToStructureItem({ el: p, id: "form" }, { silentSelect: true });
-  if (typeof CSS !== "undefined" && CSS.highlights && typeof Highlight === "function") {
-    CSS.highlights.set("dwb-form-active", new Highlight(range));
-    setTimeout(() => CSS.highlights.delete("dwb-form-active"), 1600);
+  if (w?.classList.contains("ff-field")) {
+    w.classList.remove("is-flash");
+    void w.offsetWidth; // od nowa, gdy klikane drugi raz
+    w.classList.add("is-flash");
+    setTimeout(() => w.classList.remove("is-flash"), 1600);
   }
   if (opts.open) setTimeout(() => openFormPop(f, range.getBoundingClientRect()), 350);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
   docCanvasEl?.addEventListener("click", onFormDocClick);
-  docCanvasEl?.addEventListener("pointermove", onFormHover, { passive: true });
+  docCanvasEl?.addEventListener("keydown", onFormDocKeydown);
   document.addEventListener("pointerdown", (e) => { if (formUi.pop && !formUi.pop.contains(e.target)) closeFormPop(); }, true);
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && formUi.pop) { e.preventDefault(); e.stopPropagation(); closeFormPop(); }

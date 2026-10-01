@@ -79,18 +79,24 @@ async function run() {
     kinds: formScan.fields.map((f) => `${f.key}:${f.kind}`).join(" "),
     main: docFormCounts.fields, empty: docFormCounts.empty, prot: formScan.protection,
     badge: document.querySelector("#panel-forms > summary .panel-count")?.textContent,
-    hl: typeof CSS !== "undefined" && CSS.highlights ? CSS.highlights.has("dwb-form") : "brak API",
+    wraps: [...document.querySelectorAll(".docx-preview-host .ff-field")].map((w) => `${w.dataset.ff}:${[...w.classList].filter((c) => c !== "ff-field").join(".")}`).join(" "),
+    chevron: getComputedStyle(document.querySelector('.ff-field[data-ff="s2"]'), "::after").display,
+    textIcon: getComputedStyle(document.querySelector('.ff-field[data-ff="s1"]'), "::after").display,
     locks: collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).map((p) => p.dataset.lock || "-"),
     date: formatWordDate("2026-10-01", "d MMMM yyyy", "pl-PL") + " | " + formatWordDate("2026-10-01", "dddd, dd.MM.yy", "pl-PL") + " | " + formatWordDate("2026-10-01", "MMMM yyyy", "pl-PL"),
   }));
   check("13 pól (12 + kopia powiązanego), spis treści i blok „Uwagi” to nie pola",
     scan.kinds === "s1:text s2:dropdown s3:combo s4:date s5:checkbox s6:checkbox s7:dropdown s8:text s9:text s10:text f0:text f1:checkbox f2:dropdown", scan.kinds);
   check("plakietka panelu = 12, do uzupełnienia 2, ochrona „forms”", scan.badge === "12" && scan.main === 12 && scan.empty === 2 && scan.prot === "forms", JSON.stringify(scan));
-  check("wyróżnienie pól (CSS Highlight)", scan.hl === true || scan.hl === "brak API", String(scan.hl));
+  check("każde pole ma w podglądzie ramkę z rodzajem (13), placeholder/zablokowane oznaczone",
+    scan.wraps.split(" ").length === 13 && /s2:ff-dropdown/.test(scan.wraps) && /s4:ff-date/.test(scan.wraps) && /s1:ff-text\.is-placeholder/.test(scan.wraps) && /s8:ff-text\.is-locked/.test(scan.wraps) && /f1:ff-checkbox\.ff-glyph/.test(scan.wraps) && /s7:ff-dropdown\.is-block/.test(scan.wraps), scan.wraps);
+  check("lista ma znaczek ▾ (::after), pole tekstowe bez znaczka", scan.chevron === "inline-block" && scan.textIcon === "none", `${scan.chevron} / ${scan.textIcon}`);
+  const noLeak = await page.evaluate(async () => { inlineDirtyValid = false; const n = collectInlineParagraphEdits().length; inlineDirtyValid = true; return { n, same: (await buildDocumentForSave()) === originalFileBytes }; });
+  check("ramki pól nie są zmianą dokumentu (zapis bez zmian = te same bajty)", noLeak.n === 0 && noLeak.same, JSON.stringify(noLeak));
   check("akapity z polem tylko do odczytu, „Uwagi” (bogaty tekst) i spis treści edytowalne",
     scan.locks[2] === "lockForm" && scan.locks[8] === "lockForm" && scan.locks[14] === "lockForm" && scan.locks[1] === "-" && scan.locks[12] === "-", scan.locks.join(" "));
   check("daty w formacie Worda (dopełniacz przy dniu, mianownik bez dnia)", scan.date === "1 października 2026 | czwartek, 01.10.26 | październik 2026", scan.date);
-  const glyph = await page.evaluate(() => document.querySelector('.ff-glyph[data-ff="f1"]')?.textContent);
+  const glyph = await page.evaluate(() => document.querySelector('.ff-field[data-ff="f1"]')?.textContent);
   check("stare pole wyboru ma w podglądzie kratkę ☐", glyph === "☐", glyph);
 
   // ── BŁĄD: edycja akapitu obok pola nie może rozbić kontrolki ───────────────
@@ -166,6 +172,13 @@ async function run() {
   check("tekst: wpis zastępuje podpowiadacz (bez showingPlcHdr i szarego stylu)", s.sdt["11"].text === "Jan Kowalski" && !s.sdt["11"].ph && !s.sdt["11"].phStyle, JSON.stringify(s.sdt["11"]));
   check("akapit „Imię i nazwisko: Jan Kowalski”", s.paras[2] === "Imię i nazwisko: Jan Kowalski", s.paras[2]);
 
+  // ── klawiatura: Tab do pola, Enter otwiera ─────────────────────────────────
+  await page.focus('.ff-field[data-ff="s7"]');
+  await page.keyboard.press("Enter");
+  const kbPop = await page.$$eval(".ff-pop .ff-pop-opt", (els) => els.map((e) => e.textContent).join("|"));
+  check("Enter na polu z klawiatury otwiera listę", kbPop === "Normalny|Pilny", kbPop);
+  await page.keyboard.press("Escape");
+
   // ── zablokowane ────────────────────────────────────────────────────────────
   await clickField(page, "s8");
   const lockedMsg = await page.textContent(".ff-pop").catch(() => "");
@@ -217,7 +230,7 @@ async function run() {
   check("FORMTEXT: wynik przycięty do 15 znaków", s.legacy[0].result === "123 456 789 000", s.legacy[0].result);
   check("FORMCHECKBOX: checked=1", s.legacy[1].checked === "1", JSON.stringify(s.legacy[1]));
   check("FORMDROPDOWN: result=2 i tekst „L”", s.legacy[2].ddResult === "2" && s.legacy[2].result === "L", JSON.stringify(s.legacy[2]));
-  const glyph2 = await page.evaluate(() => document.querySelector('.ff-glyph[data-ff="f1"]')?.textContent);
+  const glyph2 = await page.evaluate(() => document.querySelector('.ff-field[data-ff="f1"]')?.textContent);
   check("kratka starego pola w podglądzie: ☒", glyph2 === "☒", glyph2);
 
   // ── Narzędzia edycji: WIELKIE LITERY na całym dokumencie omija akapity z polami ──

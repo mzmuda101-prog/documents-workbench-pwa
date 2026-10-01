@@ -1368,11 +1368,44 @@ button.stat-row { cursor: pointer; }
 ::highlight(dwb-find) { background-color: color-mix(in srgb, var(--warning) 38%, transparent); }
 ::highlight(dwb-find-active) { background-color: color-mix(in srgb, var(--accent) 42%, transparent); color: inherit; }
 /* Formularz Worda (docx-forms.js): pola jak szare cieniowanie pól w Wordzie, tylko w kolorze akcentu */
-::highlight(dwb-form) { background-color: color-mix(in srgb, var(--accent) 13%, transparent); }
-::highlight(dwb-form-active) { background-color: color-mix(in srgb, var(--accent) 38%, transparent); }
-.doc-canvas.ff-hover, .doc-canvas.ff-hover .docx-locked-p { cursor: pointer; }
-.ff-glyph { display: inline-block; min-width: 1em; text-align: center; cursor: pointer; }
-.ff-glyph.is-empty { min-width: 2.5em; border-bottom: 1px solid currentColor; opacity: .55; }
+/* Pole formularza w podglądzie: lekka ramka-„kafelek” + znaczek rodzaju (::after, poza tekstem) */
+.ff-field {
+  --ff-c: var(--accent);
+  border-radius: 4px; padding: 0 .18em; cursor: pointer;
+  background: color-mix(in srgb, var(--ff-c) 7%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ff-c) 30%, transparent);
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+  transition: background-color .15s, box-shadow .15s;
+}
+.ff-field:hover { background: color-mix(in srgb, var(--ff-c) 14%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ff-c) 65%, transparent); }
+.ff-field:focus-visible { outline: 2px solid var(--ff-c); outline-offset: 1px; }
+.ff-field.ff-text { background: color-mix(in srgb, var(--ff-c) 4%, transparent); box-shadow: none; outline: 1px dashed color-mix(in srgb, var(--ff-c) 50%, transparent); outline-offset: -1px; }
+.ff-field.ff-text:hover { outline-color: var(--ff-c); background: color-mix(in srgb, var(--ff-c) 10%, transparent); }
+.ff-field.ff-text:focus-visible { outline: 2px solid var(--ff-c); outline-offset: 1px; }
+.ff-field.ff-checkbox { background: transparent; box-shadow: none; padding: 0 .08em; color: var(--ff-c); }
+.ff-field.ff-checkbox:hover { background: color-mix(in srgb, var(--ff-c) 14%, transparent); }
+.ff-field.is-placeholder { color: color-mix(in srgb, currentColor 55%, transparent); font-style: italic; }
+.ff-field.is-locked { --ff-c: #8a94a6; cursor: default; }
+.ff-field.is-flash { animation: ff-flash 1.6s ease-out; }
+@keyframes ff-flash { 0%, 35% { background: color-mix(in srgb, var(--ff-c) 38%, transparent); } }
+.ff-field::after {
+  content: ""; display: inline-block; width: .72em; height: .72em; margin-left: .22em; vertical-align: -.04em;
+  background: var(--ff-c); -webkit-mask: var(--ff-icon) center / contain no-repeat; mask: var(--ff-icon) center / contain no-repeat;
+}
+.ff-field.ff-text::after, .ff-field.ff-checkbox::after { display: none; }
+.ff-field.ff-dropdown, .ff-field.ff-combo { --ff-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 9 7 7 7-7'/%3E%3C/svg%3E"); }
+.ff-field.ff-date { --ff-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='5' width='18' height='16' rx='2'/%3E%3Cpath d='M3 10h18M8 3v4M16 3v4'/%3E%3C/svg%3E"); }
+.ff-field.is-locked::after { display: inline-block; --ff-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='11' width='16' height='10' rx='2'/%3E%3Cpath d='M8 11V7a4 4 0 0 1 8 0v4'/%3E%3C/svg%3E"); }
+.ff-field.ff-glyph { display: inline-block; min-width: 1em; text-align: center; }
+.ff-field.ff-glyph.is-empty { min-width: 2.5em; }
+.ff-field.is-block { display: inline; }
+/* „Wyróżniaj pola” wyłączone + wydruk: dokument jak w Wordzie, bez ramek i znaczków */
+.doc-canvas.ff-plain .ff-field:not(:hover):not(:focus-visible) { background: transparent; box-shadow: none; outline: none; }
+.doc-canvas.ff-plain .ff-field::after { display: none; }
+@media print {
+  .ff-field { background: none !important; box-shadow: none !important; outline: none !important; padding: 0 !important; font-style: inherit !important; }
+  .ff-field::after { display: none !important; }
+}
 .ff-pop {
   position: fixed; z-index: 75; display: flex; flex-direction: column; gap: 6px;
   background: var(--surface); color: var(--ink); border: 1px solid var(--border); border-radius: var(--r-sm);
