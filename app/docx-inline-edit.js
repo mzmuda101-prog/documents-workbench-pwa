@@ -792,6 +792,19 @@ function fixHangingBox(p) {
   if (!p || p.tagName !== "P" || p.dataset.hang) return;
   p.dataset.hang = "0";
   if (isListParagraph(p)) return; // listy mają znacznik w wysunięciu — osobny styl
+  // Widok mobilny: wcięcia akapitu skalowane zmiennymi (softenReflowIndents) — przestawiamy
+  // oryginały, żeby wcięcie dalej reagowało na zoom
+  const ti0 = parseFloat(p.style.getPropertyValue("--dwb-ti0"));
+  if (ti0 < -1) {
+    const ml0 = parseFloat(p.style.getPropertyValue("--dwb-ml0")) || 0;
+    const pl0 = parseFloat(p.style.getPropertyValue("--dwb-pl0")) || 0;
+    p.style.setProperty("--dwb-ml0", `${ml0 + ti0}px`);
+    p.style.setProperty("--dwb-pl0", `${pl0 - ti0}px`);
+    p.style.setProperty("margin-left", "calc(var(--dwb-ml0) * var(--dwb-ik, 1))");
+    p.style.setProperty("padding-left", "calc(var(--dwb-pl0) * var(--dwb-ik, 1))");
+    p.dataset.hang = "1";
+    return;
+  }
   const cs = getComputedStyle(p);
   const hang = -(parseFloat(cs.textIndent) || 0);
   if (!(hang > 1)) return;

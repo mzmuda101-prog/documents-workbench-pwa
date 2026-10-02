@@ -969,12 +969,14 @@ const composeUi = (() => {
   }
   function imagePct(img, p) {
     const w = p.clientWidth - parseFloat(getComputedStyle(p).paddingLeft || 0) - parseFloat(getComputedStyle(p).paddingRight || 0);
-    return Math.max(5, Math.min(100, Math.round((img.getBoundingClientRect().width / (w || 1)) * 100 / (docZoomScale() || 1))));
+    return Math.max(5, Math.min(100, Math.round((img.getBoundingClientRect().width / (w || 1)) * 100 / (docZoomScale(img) || 1))));
   }
-  function docZoomScale() {
-    const shell = document.getElementById("docZoomShell");
-    const m = shell && getComputedStyle(shell).transform.match(/matrix\(([^,]+)/);
-    return m ? parseFloat(m[1]) || 1 : 1;
+  // Skala dokumentu na ekranie (zoom, transform Widoku desktopowego, gest) — mierzona wprost:
+  // szerokość akapitu na ekranie / jego szerokość w układzie.
+  function docZoomScale(el) {
+    const p = el?.closest?.("p") || docCanvasEl?.querySelector(".docx-preview-host section.docx article p");
+    const w = p?.offsetWidth;
+    return w ? p.getBoundingClientRect().width / w || 1 : 1;
   }
   function showImageCard(img) {
     const p = img.closest("p");
@@ -1002,7 +1004,7 @@ const composeUi = (() => {
     const baseW = img.getBoundingClientRect().width / (pct0 / 100);
     range.addEventListener("input", () => {
       val.textContent = `${range.value}%`;
-      img.style.width = `${(baseW / docZoomScale()) * range.value / 100}px`; // podgląd na żywo
+      img.style.width = `${(baseW / docZoomScale(img)) * range.value / 100}px`; // podgląd na żywo
       img.style.height = "auto";
       placeImageCard();
     });

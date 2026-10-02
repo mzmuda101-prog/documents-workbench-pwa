@@ -131,6 +131,7 @@ function maybeShowAutoViewTip(layout) {
 function syncViewportClass() {
   rootEl.classList.toggle("is-mobile", isMobileViewport());
   docCanvasEl?.classList.toggle("doc-reflow-mode", shouldUseMobileReflow());
+  syncPageScaleBox();
 }
 
 function getZoomLimits() {
@@ -210,8 +211,9 @@ function applyMobileReflowLayout(host) {
   });
 
   const readPad = Math.max(10, Math.min(14, Math.round(vpW * 0.028)));
-  section.style.paddingLeft = `${readPad}px`;
-  section.style.paddingRight = `${readPad}px`;
+  // boczny odstęp jak wcięcia: rośnie jak √zoom (softenReflowIndents)
+  section.style.paddingLeft = `calc(${readPad}px * var(--dwb-ik, 1))`;
+  section.style.paddingRight = `calc(${readPad}px * var(--dwb-ik, 1))`;
   section.style.paddingTop = "10px";
   section.style.paddingBottom = "16px";
 
@@ -233,6 +235,32 @@ function applyMobileReflowLayout(host) {
       el.style.width = "";
       el.style.maxWidth = "100%";
     }
+  });
+  softenReflowIndents(host);
+}
+
+// Wcięcia w Widoku mobilnym rosną wolniej niż litery (jak Word: tekst ma wypełniać ekran).
+// Przy CSS zoom wcięcie 36 pt przy 200% zajmowało dwa razy więcej wąskiego ekranu — ramka
+// „Spróbuj”, listy i spis treści zostawiały pusty pas, a tekst rósł „mniej niż puste miejsce”.
+// Oryginał każdego akapitu trzymamy w zmiennych (--dwb-ml0 …), a skalę --dwb-ik ustawia
+// applyZoom: 1 do 100%, powyżej 1/√zoom (na ekranie wcięcie rośnie jak √zoom, litery jak zoom).
+// Mierzone przy zoomie 1 — WebKit potrafi podać wartości już przemnożone przez zoom.
+const INDENT_PROPS = [["marginLeft", "margin-left", "--dwb-ml0"], ["marginRight", "margin-right", "--dwb-mr0"],
+  ["paddingLeft", "padding-left", "--dwb-pl0"], ["textIndent", "text-indent", "--dwb-ti0"]];
+function softenReflowIndents(host) {
+  const paras = [...host.querySelectorAll("section.docx > article p")].filter((p) => !p.dataset.dwbInd);
+  if (!paras.length) return;
+  const prevZoom = docCanvasEl.style.getPropertyValue("--doc-zoom") || "1";
+  docCanvasEl.style.setProperty("--doc-zoom", "1");
+  const read = paras.map((p) => { const cs = getComputedStyle(p); return INDENT_PROPS.map(([k]) => parseFloat(cs[k]) || 0); });
+  docCanvasEl.style.setProperty("--doc-zoom", prevZoom);
+  paras.forEach((p, i) => {
+    p.dataset.dwbInd = "1";
+    INDENT_PROPS.forEach(([, css, v], j) => {
+      if (!read[i][j]) return;
+      p.style.setProperty(v, `${read[i][j]}px`);
+      p.style.setProperty(css, `calc(var(${v}) * var(--dwb-ik, 1))`);
+    });
   });
 }
 
@@ -274,12 +302,15 @@ let _docReflowObserver = null;
 let _refitRaf = 0;
 function ensureMobileReflowObserver() {
   if (!docViewportEl || _docReflowObserver) return;
+  let boxRaf = 0;
   _docReflowObserver = new ResizeObserver(() => {
     if (shouldUseMobileReflow()) {
       const host = docCanvasEl?.querySelector(".docx-preview-host");
       if (host) applyMobileReflowLayout(host);
       return;
     }
+    // inna szerokość obszaru → płótno i obszar przewijania od nowa (w następnej klatce — patrz wyżej)
+    if (!boxRaf) boxRaf = requestAnimationFrame(() => { boxRaf = 0; syncPageScaleBox(); });
     // Widok desktopowy z dopasowaniem: panel obok / węższe okno → strona dalej się mieści.
     // Próg 20 px: pasek przewijania (pojawia się po zmianie zoomu) nie rozkręca pętli.
     if (pageFitMode === "manual" || _refitRaf) return;
@@ -314,8 +345,60 @@ function computeFitZoom() {
   return clampZoom(Math.floor((avail / naturalW) * 100) / 100);
 }
 
+// applyZoom (core.js) woła to po każdej zmianie zoomu
 function updateZoomShellHeight(_zoom) {
-  if (docZoomShellEl) docZoomShellEl.style.height = ""; // [EN] CSS zoom expands layout — no manual height hack
+  syncPageScaleBox();
+}
+
+// Widok desktopowy: płótno ma naturalny rozmiar (strona + odstępy), a na ekranie jest
+// przeskalowane transformem. Obszar przewijania = rozmiar PO skalowaniu (shell). Płótno jest
+// co najmniej tak szerokie, żeby po przeskalowaniu wypełniło obszar — strony zostają na środku.
+function syncPageScaleBox() {
+  const shell = docZoomShellEl;
+  const canvas = docCanvasEl;
+  if (!shell || !canvas || !docViewportEl) return;
+  const host = canvas.querySelector(".docx-preview-host");
+  if (shouldUseMobileReflow() || !host || canvas.classList.contains("hidden")) {
+    if (shell.classList.contains("is-page-scaled")) {
+      shell.classList.remove("is-page-scaled");
+      shell.style.width = "";
+      shell.style.height = "";
+      canvas.style.width = "";
+    }
+    return;
+  }
+  const z = parseFloat(canvas.style.getPropertyValue("--doc-zoom")) || 1;
+  const cs = getComputedStyle(canvas);
+  const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+  let pageW = 0;
+  host.querySelectorAll(".docx-wrapper > section.docx").forEach((sec) => { pageW = Math.max(pageW, sec.offsetWidth); });
+  const vpW = docViewportEl.clientWidth;
+  const w = Math.max(pageW + padX, Math.floor(vpW / z));
+  if (canvas.style.width !== `${w}px`) canvas.style.width = `${w}px`;
+  shell.classList.add("is-page-scaled");
+  shell.style.width = `${Math.floor(w * z)}px`;
+  shell.style.height = `${Math.ceil(canvas.offsetHeight * z)}px`;
+}
+
+// Wysokość płótna zmienia się sama (pisanie, obrazy, przebudowa) — obszar przewijania za nią.
+let _pageBoxObserver = null;
+function ensurePageBoxObserver() {
+  if (!docCanvasEl || _pageBoxObserver) return;
+  // w następnej klatce, nie w środku obserwatora — inaczej zmiana obszaru (pasek przewijania)
+  // wraca jako kolejna zmiana rozmiaru w tej samej klatce („ResizeObserver loop” w Safari)
+  let raf = 0;
+  _pageBoxObserver = new ResizeObserver(() => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = 0;
+      const shell = docZoomShellEl;
+      if (!shell?.classList.contains("is-page-scaled")) return;
+      const z = parseFloat(docCanvasEl.style.getPropertyValue("--doc-zoom")) || 1;
+      const h = `${Math.ceil(docCanvasEl.offsetHeight * z)}px`;
+      if (shell.style.height !== h) shell.style.height = h;
+    });
+  });
+  _pageBoxObserver.observe(docCanvasEl);
 }
 
 function syncZoomFitButtonState() {
@@ -542,6 +625,7 @@ function initMobileDocZoom() {
   if (zoomResetBtnEl) zoomResetBtnEl.addEventListener("click", resetZoomTo100);
 
   ensureMobileReflowObserver();
+  ensurePageBoxObserver();
   trackScrollAnchor();
   for (const mq of [MOBILE_MQ, COARSE_MQ, PORTRAIT_MQ]) mq.addEventListener("change", onViewportChange);
   window.addEventListener("orientationchange", () => setTimeout(onViewportChange, 120));

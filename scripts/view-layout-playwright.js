@@ -189,6 +189,46 @@ async function run() {
   await page.click("#zoomFitBtn");
   check("„Dopasuj” w Widoku mobilnym wraca do 100%", (await look(page)).label === "100%");
 
+  // Widok mobilny przy 200%: litery ×2, wcięcia wolniej (√zoom) — tekst wypełnia ekran jak w Wordzie
+  const ind = async () => page.evaluate(() => {
+    const ps = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"));
+    const vpL = document.getElementById("docViewport").getBoundingClientRect().left;
+    const left = (re) => { const el = ps.find((x) => re.test(x.textContent)); const r = document.createRange(); r.selectNodeContents(el); const q = r.getClientRects()[0]; return { x: q.left - vpL, h: q.height }; };
+    const body = left(/^Pole wyboru|^Ten plik|^Numer:/);
+    const ref = ps.find((x) => parseFloat(x.style.getPropertyValue("--dwb-ml0")) > 20);
+    const r = document.createRange(); r.selectNodeContents(ref);
+    return { body: body.x, h: body.h, indent: r.getClientRects()[0].left - vpL - body.x, ox: document.getElementById("docViewport").scrollWidth - document.getElementById("docViewport").clientWidth };
+  });
+  await openDoc(page, "przewodnik");
+  await page.evaluate(() => setViewLayoutPref("mobile"));
+  await idle(page);
+  const i1 = await ind();
+  await page.evaluate(() => { zoomLevelEl.value = "2"; zoomLevelEl.dispatchEvent(new Event("input", { bubbles: true })); });
+  await page.waitForTimeout(200);
+  const i2 = await ind();
+  check("Widok mobilny 200%: litery ×2, wcięcia i margines tylko ~×1,4, bez przewijania w bok",
+    i2.h > i1.h * 1.8 && i2.indent < i1.indent * 1.6 && i2.indent > i1.indent * 1.2 && i2.body < i1.body * 1.6 && i2.ox <= 1, JSON.stringify({ i1, i2 }));
+  await page.click("#zoomFitBtn");
+
+  // Widok desktopowy, plik BEZ rozmiaru strony: stała kartka A4, zoom = zdjęcie (tekst się nie przekłada)
+  await openDoc(page, "sample");
+  await page.evaluate(() => setViewLayoutPref("desktop"));
+  await idle(page);
+  const page1 = async () => page.evaluate(() => {
+    const sec = document.querySelector(".docx-preview-host section.docx");
+    const p = [...sec.querySelectorAll("article p")].sort((a, b) => b.textContent.length - a.textContent.length)[0];
+    const r = document.createRange(); r.selectNodeContents(p);
+    return { z: zoomLevelEl.value, w: Math.round(sec.getBoundingClientRect().width), lines: new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size };
+  });
+  const a0 = await page1();
+  await page.evaluate(() => { zoomLevelEl.value = "2"; zoomLevelEl.dispatchEvent(new Event("input", { bubbles: true })); });
+  await page.waitForTimeout(200);
+  const a1 = await page1();
+  check("Widok desktopowy (plik bez rozmiaru strony): kartka A4 rośnie z zoomem, tekst się nie przekłada",
+    Math.abs(a0.w / parseFloat(a0.z) - 794) < 3 && Math.abs(a1.w - 1588) < 4 && a1.lines === a0.lines, JSON.stringify({ a0, a1 }));
+  await page.evaluate(() => setViewLayoutPref("auto"));
+  await idle(page);
+
   // EN
   await page.evaluate(() => setLanguage("en"));
   await page.click("#zoomNow");

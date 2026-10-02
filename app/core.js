@@ -1,6 +1,6 @@
 // Core runtime: DOM refs, shared state, and base UI helpers.
 
-const APP_BUILD_VERSION = "20261002-03";
+const APP_BUILD_VERSION = "20261002-05";
 
 const IS_LOW_POWER = (() => {
   try {
@@ -165,6 +165,8 @@ function applyZoom() {
   zoom = Math.max(min, Math.min(max, zoom));
   zoomLevelEl.value = String(zoom);
   docCanvasEl.style.setProperty("--doc-zoom", String(zoom));
+  // Widok mobilny: wcięcia akapitów rosną jak √zoom, nie jak litery (softenReflowIndents)
+  docCanvasEl.style.setProperty("--dwb-ik", zoom > 1 ? String(Math.round((1 / Math.sqrt(zoom)) * 1000) / 1000) : "1");
   if (zoomValueEl) zoomValueEl.textContent = `${Math.round(zoom * 100)}%`;
   if (typeof updateZoomShellHeight === "function") updateZoomShellHeight(zoom);
 }
