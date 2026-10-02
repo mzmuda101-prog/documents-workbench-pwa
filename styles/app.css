@@ -1690,3 +1690,59 @@ textarea.ff-pop-input { min-height: 4.5em; resize: vertical; }
   .image-size input { flex: 1; width: auto; }
   .image-card > .tb-sep:first-of-type { display: none; }
 }
+
+/* ── Etap 4: kolor czcionki i wyróżnienie ── */
+.color-btn { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 0 7px; }
+.color-btn-a { font-weight: 800; font-size: 14px; line-height: 1; }
+.color-btn-bar { display: block; width: 16px; height: 4px; border-radius: 2px; background: #C00000; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .12); }
+.compose-pop-color { width: min(296px, calc(100vw - 16px)); }
+.color-grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; padding: 4px 8px 8px; }
+.color-grid-theme { row-gap: 1px; }
+.color-grid-theme .color-swatch.is-base { margin-bottom: 4px; }
+.color-swatch {
+  aspect-ratio: 1; min-width: 0; padding: 0; border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent); border-radius: 3px;
+  background: var(--sw); cursor: pointer;
+}
+.color-swatch:hover, .color-swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; z-index: 1; }
+.color-grid-hl { grid-template-columns: repeat(8, 1fr); gap: 4px; }
+.color-grid-hl .color-swatch { border-radius: 5px; }
+.color-swatch.is-none { background: linear-gradient(135deg, #fff 45%, #d33 45%, #d33 55%, #fff 55%); }
+.color-auto-chip, .color-more-chip { width: 20px; height: 20px; border-radius: 4px; flex: none; }
+.color-auto-chip { background: #000; box-shadow: inset 0 0 0 2px #fff, 0 0 0 1px var(--border); }
+.color-more-chip { background: conic-gradient(red, yellow, lime, cyan, blue, magenta, red); }
+.color-more { position: relative; cursor: pointer; }
+.color-more input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+@media (pointer: coarse) { .color-grid { gap: 5px; } .color-grid-theme { row-gap: 3px; } }
+
+/* ── Etap 4: komentarze ── */
+::highlight(dwb-comment) { background-color: rgba(255, 196, 0, 0.32); }
+::highlight(dwb-comment-done) { background-color: rgba(140, 150, 165, 0.18); }
+.cm-mark { display: inline; }
+.comment-card {
+  position: fixed; z-index: 8950; width: min(320px, calc(100vw - 16px)); max-height: min(50vh, 360px); display: flex; flex-direction: column;
+  border: 1px solid var(--border); border-left: 4px solid #f0b400; border-radius: 12px; background: var(--surface);
+  box-shadow: 0 10px 28px rgba(8, 14, 28, 0.2); animation: compose-pop-in 120ms ease-out;
+}
+.comment-card.is-done { border-left-color: var(--muted); }
+.cc-done { padding: 6px 12px 0; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.cc-list { overflow-y: auto; padding: 8px 12px 4px; display: flex; flex-direction: column; gap: 8px; }
+.cc-entry + .cc-entry { padding-top: 8px; border-top: 1px solid var(--border-subtle); }
+.cc-head { font-size: 12px; font-weight: 700; color: var(--ink-2); }
+.cc-text { font-size: 13.5px; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.cc-actions { display: flex; gap: 6px; padding: 6px 10px 10px; flex-wrap: wrap; }
+.cc-actions .btn { padding: 5px 10px; border-radius: 9px; min-height: 0; font-size: 12.5px; }
+.cc-actions .cc-del { margin-left: auto; color: var(--danger, #c0392b); }
+@media (pointer: coarse) { .cc-actions .btn { min-height: 38px; } }
+@media print { .comment-card { display: none !important; } }
+
+/* ── Etap 4: nagłówek i stopka ── */
+.compose-pop-hf .seg { margin-top: -4px; }
+.compose-pop-hf .seg[hidden] { display: none; }
+.seg-icons { width: max-content; }
+.seg-icons button { display: grid; place-items: center; padding: 5px 12px; }
+.seg-icons button.is-on svg { color: #fff; }
+.compose-check { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--ink); cursor: pointer; }
+.compose-check input { margin-top: 2px; width: 16px; height: 16px; accent-color: var(--accent); flex: none; }
+.hf-note { font-size: 12px; }
+.doc-canvas.edit-mode .docx-preview-host section.docx > header, .doc-canvas.edit-mode .docx-preview-host section.docx > footer { cursor: pointer; border-radius: 4px; transition: outline-color var(--t); outline: 1px dashed transparent; outline-offset: 4px; }
+@media (hover: hover) { .doc-canvas.edit-mode .docx-preview-host section.docx > header:hover, .doc-canvas.edit-mode .docx-preview-host section.docx > footer:hover { outline-color: color-mix(in srgb, var(--accent) 45%, transparent); } }

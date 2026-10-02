@@ -673,6 +673,7 @@ function applyEditToXml(xml, edit, opts = {}) {
   if (edit.op === "pageBreak") return applyPageBreakInXml(xml, edit); // docx-compose.js
   if (edit.op === "hrule") return applyHruleInXml(xml, edit);
   if (edit.op === "link") return applyLinkInXml(xml, edit);
+  if (edit.op === "runStyle") return applyRunStyleInXml(xml, edit);
   if (edit.op === "table") return applyTableInXml(xml, edit);
   if (edit.op === "image") return applyImageInXml(xml, edit);
   if (edit.op === "mergeParagraph") return mergeParagraphInXml(xml, edit.index, edit.mergedRuns);
@@ -712,6 +713,18 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
     }
     if (normalized.op === "formFill") { // docx-forms.js — pola powiązane zmieniają też customXml / docProps
       const res = await applyFormFillInZip(zip, xml, normalized);
+      xml = res.xml;
+      total += res.count;
+      continue;
+    }
+    if (normalized.op === "headerFooter") { // docx-compose.js — części nagłówków/stopek
+      const res = await applyHeaderFooterInZip(zip, xml, normalized);
+      xml = res.xml;
+      total += res.count;
+      continue;
+    }
+    if (normalized.op === "commentAdd" || normalized.op === "commentReply" || normalized.op === "commentDone") { // docx-compose.js
+      const res = normalized.op === "commentAdd" ? await applyCommentAddInZip(zip, xml, normalized) : await applyCommentThreadInZip(zip, xml, normalized);
       xml = res.xml;
       total += res.count;
       continue;

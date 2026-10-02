@@ -13,6 +13,19 @@ function parseCssColorToWordHex(color) {
   return null;
 }
 
+// Wyróżnienie tekstu (Word w:highlight = 16 nazw) albo cieniowanie (w:shd fill = dowolny kolor).
+// Podgląd rysuje oba jako background-color: nazwę zostawia nazwą, cieniowanie daje „#hex”.
+const WORD_HIGHLIGHTS = ["yellow", "green", "cyan", "magenta", "blue", "red", "darkBlue", "darkCyan", "darkGreen", "darkMagenta", "darkRed", "darkYellow", "darkGray", "lightGray", "black", "white"];
+const WORD_HIGHLIGHT_BY_CSS = new Map(WORD_HIGHLIGHTS.map((n) => [n.toLowerCase(), n]));
+function normHighlight(v) {
+  if (!v) return "";
+  const s = String(v).trim().toLowerCase();
+  if (!s || s === "transparent" || s === "none" || s === "auto" || s === "rgba(0, 0, 0, 0)") return "";
+  if (WORD_HIGHLIGHT_BY_CSS.has(s)) return s;
+  const hex = parseCssColorToWordHex(s);
+  return hex ? `#${hex.toLowerCase()}` : s;
+}
+
 function cssFontSizeToPt(val) {
   if (!val) return null;
   const px = String(val).match(/^([\d.]+)px$/i);
@@ -35,6 +48,7 @@ function parseSpanStyle(cssText) {
     if (key === "font-style" && val === "italic") style.italic = true;
     if (key === "text-decoration" && val.includes("underline")) style.underline = true;
     if (key === "color") style.color = val;
+    if (key === "background-color" || key === "background") { const h = normHighlight(val); if (h) style.highlight = h; }
     if (key === "font-family") style.fontFamily = val.replace(/^["']|["']$/g, "").split(",")[0].trim();
     if (key === "font-size") {
       const pt = cssFontSizeToPt(val);
@@ -52,6 +66,7 @@ function runStyleToCss(run) {
   if (run.color) parts.push(`color:${run.color}`);
   if (run.fontFamily) parts.push(`font-family:"${run.fontFamily}"`);
   if (run.fontSize) parts.push(`font-size:${run.fontSize}`);
+  if (run.highlight) parts.push(`background-color:${run.highlight}`);
   return parts.join(";");
 }
 
@@ -62,7 +77,8 @@ function runsStyleEqual(a, b) {
     && (parseCssColorToWordHex(a.color) || "") === (parseCssColorToWordHex(b.color) || "") // „rgb(5, 99, 193)” z podglądu = „#0563C1” z pliku
     && (a.fontFamily || "") === (b.fontFamily || "")
     && (a.fontSize || "") === (b.fontSize || "")
-    && (a.link || "") === (b.link || "");
+    && (a.link || "") === (b.link || "")
+    && normHighlight(a.highlight) === normHighlight(b.highlight);
 }
 
 function mergeAdjacentRuns(runs) {
@@ -103,6 +119,10 @@ function extractRunsFromPreviewParagraph(pEl) {
     // pole formularza w zdaniu (docx-forms.js): cała kontrolka z pliku, bez zmian
     if (node.dataset?.ff && docIslandXml.has(node.dataset.ff)) {
       runs.push({ island: docIslandXml.get(node.dataset.ff), text: node.textContent || "" });
+      return;
+    }
+    if (node.dataset?.cm && docIslandXml.has(node.dataset.cm)) { // znacznik komentarza (docx-inline-edit.js)
+      runs.push({ island: docIslandXml.get(node.dataset.cm), text: "" });
       return;
     }
     const tag = node.localName.toLowerCase();
@@ -177,6 +197,7 @@ function paragraphXmlParts(pEl) {
     const child = pEl.childNodes[i];
     if (child.nodeType !== 1 || child.namespaceURI !== W_NS) continue;
     if (child.localName === "r") parts.push(child);
+    else if (child.localName === "commentRangeStart" || child.localName === "commentRangeEnd") parts.push(child); // znaczniki komentarza
     else if (child.localName === "hyperlink") {
       for (let j = 0; j < child.childNodes.length; j++) {
         const sub = child.childNodes[j];
@@ -187,11 +208,20 @@ function paragraphXmlParts(pEl) {
   return parts;
 }
 
+function isCommentReferenceRun(r) {
+  return r.localName === "r" && Array.from(r.childNodes).some((n) => n.localName === "commentReference");
+}
+
 function extractRunsFromParagraphXml(pEl) {
   const runs = [];
   paragraphXmlParts(pEl).forEach((r) => {
     if (r.localName === "sdt") {
       runs.push({ island: new XMLSerializer().serializeToString(r), text: ffText(ffKid(r, "sdtContent")) });
+      return;
+    }
+    // komentarz: początek/koniec zakresu i fragment z odwołaniem — „wyspy” o zerowej długości
+    if (r.localName !== "r" || isCommentReferenceRun(r)) {
+      runs.push({ island: new XMLSerializer().serializeToString(r), text: "" });
       return;
     }
     const style = {};
@@ -211,6 +241,12 @@ function extractRunsFromParagraphXml(pEl) {
       if (fonts) {
         style.fontFamily = fonts.getAttributeNS(W_NS, "ascii") || fonts.getAttributeNS(W_NS, "hAnsi") || getWVal(fonts);
       }
+      const hl = Array.from(rPr.childNodes).find((n) => n.localName === "highlight");
+      const shd = Array.from(rPr.childNodes).find((n) => n.localName === "shd");
+      const hlVal = hl ? getWVal(hl) : null;
+      const shdFill = shd ? (shd.getAttributeNS(W_NS, "fill") || shd.getAttribute("w:fill")) : null;
+      if (hlVal && hlVal !== "none") style.highlight = normHighlight(hlVal);
+      else if (shdFill && shdFill !== "auto") style.highlight = normHighlight(`#${shdFill}`);
       const sz = Array.from(rPr.childNodes).find((n) => n.localName === "sz");
       if (sz) {
         const half = parseInt(getWVal(sz) || "0", 10);
@@ -286,7 +322,27 @@ function createRunElement(doc, run) {
       hasPr = true;
     }
   }
-  if (hasPr) r.appendChild(rPr);
+  const hl = normHighlight(run.highlight);
+  if (hl) { // kolejność w rPr: … sz, szCs, highlight, u (u dalej — Word toleruje), shd
+    if (WORD_HIGHLIGHT_BY_CSS.has(hl)) {
+      const h = doc.createElementNS(W_NS, "highlight");
+      setWVal(h, WORD_HIGHLIGHT_BY_CSS.get(hl));
+      rPr.appendChild(h);
+    } else {
+      const shd = doc.createElementNS(W_NS, "shd");
+      setWVal(shd, "clear");
+      shd.setAttributeNS(W_NS, "w:color", "auto");
+      shd.setAttributeNS(W_NS, "w:fill", hl.replace(/^#/, "").toUpperCase());
+      rPr.appendChild(shd);
+    }
+    hasPr = true;
+  }
+  if (hasPr) {
+    // kolejność dzieci w:rPr wg schematu Worda (dawniej u przed color, rFonts po color)
+    const order = ["rStyle", "rFonts", "b", "bCs", "i", "iCs", "color", "sz", "szCs", "highlight", "u", "shd"];
+    Array.from(rPr.childNodes).sort((x, y) => order.indexOf(x.localName) - order.indexOf(y.localName)).forEach((n) => rPr.appendChild(n));
+    r.appendChild(rPr);
+  }
   const t = doc.createElementNS(W_NS, "t");
   const text = sanitizeXmlText(run.text || "");
   if (/^\s|\s$/.test(text)) t.setAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:space", "preserve");
@@ -308,7 +364,9 @@ function createHyperlinkElement(doc, link) {
 function applyRunsToParagraphXml(pEl, runs) {
   // pola-wyspy wracają z listy fragmentów (w swoich miejscach) — stare kontrolki precz
   Array.from(pEl.childNodes).forEach((n) => {
-    if (n.localName === "sdt" && n.namespaceURI === W_NS && typeof formIslandSdt === "function" && formIslandSdt(n)) pEl.removeChild(n);
+    if (n.namespaceURI !== W_NS) return;
+    if (n.localName === "sdt" && typeof formIslandSdt === "function" && formIslandSdt(n)) pEl.removeChild(n);
+    else if (n.localName === "commentRangeStart" || n.localName === "commentRangeEnd") pEl.removeChild(n);
   });
   clearParagraphRuns(pEl);
   const doc = pEl.ownerDocument;
@@ -317,7 +375,7 @@ function applyRunsToParagraphXml(pEl, runs) {
     if (run.island) {
       hl = null;
       const frag = new DOMParser().parseFromString(run.island, "application/xml").documentElement;
-      if (frag && frag.localName === "sdt") pEl.appendChild(doc.importNode(frag, true));
+      if (frag && frag.namespaceURI === W_NS && ["sdt", "r", "commentRangeStart", "commentRangeEnd"].includes(frag.localName)) pEl.appendChild(doc.importNode(frag, true));
       return;
     }
     if (run.break) {
@@ -379,7 +437,7 @@ function applyRunsToPreviewParagraph(pEl, runs) {
 const docLinkHrefs = new Map();
 
 function runStyleHasProps(style) {
-  return !!(style?.bold || style?.italic || style?.underline || style?.color || style?.fontFamily || style?.fontSize);
+  return !!(style?.bold || style?.italic || style?.underline || style?.color || style?.fontFamily || style?.fontSize || style?.highlight);
 }
 
 function accumulateElementStyle(el, style) {
@@ -436,6 +494,20 @@ function insertStyledTextAtCaret(text, style, rootEl) {
   if (rootEl && !rootEl.contains(range.startContainer)) return false;
   range.deleteContents();
   const css = runStyleToCss(style || {});
+  // kolejna litera tuż za fragmentem w tym samym stylu — dopisz do niego (dawniej każda litera
+  // dostawała własny <span>; zapis i tak je sklejał, ale podgląd puchł przy dłuższym pisaniu)
+  const sc = range.startContainer;
+  const prevEl = sc.nodeType === 1 ? sc.childNodes[range.startOffset - 1]
+    : sc.nodeType === 3 && range.startOffset === sc.length && sc.parentElement?.localName === "span" && !sc.nextSibling ? sc.parentElement : null;
+  if (css && prevEl?.localName === "span" && prevEl.getAttribute("style") === css && prevEl.lastChild?.nodeType === 3) {
+    const tn = prevEl.lastChild;
+    tn.appendData(text);
+    range.setStart(tn, tn.length);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    return true;
+  }
   let node;
   if (css) {
     const span = document.createElement("span");

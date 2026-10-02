@@ -157,6 +157,10 @@ const body = [
   p("„＋ Wstaw → Tabela” pokazuje siatkę — wybierasz liczbę kolumn i wierszy. Tab przechodzi do następnej komórki, a w ostatniej dokłada wiersz. Gdy kursor stoi w tabeli, na pasku pojawia się przycisk „Tabela”: wiersz powyżej / poniżej, kolumna z lewej / z prawej, usuwanie wiersza, kolumny albo całej tabeli."),
   p("„＋ Wstaw → Obraz…” wstawia zdjęcie z dysku (na telefonie także z aparatu), a Ctrl/⌘+V wkleja zrzut ekranu. Duże zdjęcia są zmniejszane, żeby plik nie puchł. Kliknięcie obrazu pokazuje kartę: suwak szerokości, wyrównanie, tekst alternatywny (opis dla czytników ekranu) i usuwanie — działa też z obrazami z plików Worda."),
   tip("kliknij w komórkę tabeli z rozdziału 8 — na pasku pojawi się „Tabela”; dodaj wiersz poniżej i wpisz coś, przechodząc Tabem."),
+  p("Przycisk „A” na pasku to kolor czcionki (paleta jak w Wordzie, „Automatyczny”, „Więcej kolorów…”) i wyróżnienie tekstu (zakreślacz). Bez zaznaczenia kolor obowiązuje dla dalszego pisania."),
+  p("Komentarz: zaznacz tekst i Ctrl/⌘+Alt+M (albo „＋ Wstaw → Komentarz”). Komentowany tekst jest podświetlony; gdy kursor w nim stoi, karta pozwala odpowiedzieć, oznaczyć jako rozwiązany albo usunąć. Wszystkie komentarze są też w panelu Recenzja."),
+  p("„＋ Wstaw → Nagłówek, stopka, numer strony…” (albo kliknięcie w nagłówek/stopkę w Edycji): tekst u góry i na dole każdej strony, numer strony („1”, „Strona 1”, „Strona 1 z 5”, „– 1 –”) i inna pierwsza strona, np. tytułowa bez numeru."),
+  tip("zaznacz słowo w tym akapicie, naciśnij Ctrl/⌘+Alt+M i dodaj komentarz — potem kliknij w podświetlony tekst i odpowiedz na niego."),
 ];
 
 const tocBlock = [

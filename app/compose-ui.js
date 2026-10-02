@@ -20,6 +20,8 @@ const composeUi = (() => {
   const alignBtn = document.getElementById("fmtAlignBtn");
   const listBtn = document.getElementById("fmtListBtn");
   const tableBtn = document.getElementById("tableToolsBtn");
+  const colorBtn = document.getElementById("fmtColorBtn");
+  const colorBar = document.getElementById("fmtColorBar");
   const dialog = document.getElementById("newDocDialog");
 
   const ALIGN_ICONS = {
@@ -304,6 +306,8 @@ const composeUi = (() => {
   function openPop(anchor, build) {
     const same = pop?.anchor === anchor;
     closePop();
+    hideLinkCard(); // karty pod kursorem nie wiszą pod okienkiem
+    if (typeof hideCommentCard === "function") hideCommentCard();
     if (same) return; // drugi klik w ten sam przycisk = zamknij
     const el = document.createElement("div");
     el.className = "compose-pop";
@@ -362,6 +366,11 @@ const composeUi = (() => {
       onPick: insertPageBreak,
     });
     popItem(el, {
+      label: t("hfInsert"), desc: t("hfInsertDesc"),
+      icon: ICON('<rect x="4" y="3" width="16" height="18" rx="2"/><line x1="7" y1="6.5" x2="17" y2="6.5"/><line x1="7" y1="17.5" x2="12" y2="17.5"/><line x1="15" y1="17.5" x2="17" y2="17.5"/>'),
+      onPick: () => openHeaderFooterForm(),
+    });
+    popItem(el, {
       label: t("insertHrule"), desc: t("insertHruleDesc"),
       icon: ICON('<line x1="3" y1="12" x2="21" y2="12"/>'),
       onPick: insertHrule,
@@ -371,6 +380,11 @@ const composeUi = (() => {
       label: t("insertLink"), desc: t("insertLinkDesc"), kbd: "Ctrl/⌘+K",
       icon: ICON('<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'),
       onPick: () => openLinkForm(insertBtn),
+    });
+    popItem(el, {
+      label: t("insertComment"), desc: t("insertCommentDesc"), kbd: "Ctrl/⌘+Alt+M",
+      icon: ICON('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="13" y2="13"/>'),
+      onPick: () => openCommentForm(insertBtn),
     });
     popItem(el, {
       label: t("insertDate"), desc: todayText(),
@@ -1056,6 +1070,425 @@ const composeUi = (() => {
     });
   }
 
+  // ── kolor czcionki i wyróżnienie (jak w Wordzie) ───────────────────────────
+  const COLOR_KEY = "dwb.lastFontColor";
+  const THEME_BASE = [
+    ["FFFFFF", "colWhite"], ["000000", "colBlack"], ["E7E6E6", "colLightGray"], ["44546A", "colBlueGray"], ["4472C4", "colBlue"],
+    ["ED7D31", "colOrange"], ["A5A5A5", "colGray"], ["FFC000", "colGold"], ["5B9BD5", "colLightBlue"], ["70AD47", "colGreen"],
+  ];
+  const STANDARD = [
+    ["C00000", "colDarkRed"], ["FF0000", "colRed"], ["FFC000", "colOrange"], ["FFFF00", "colYellow"], ["92D050", "colLightGreen"],
+    ["00B050", "colGreen"], ["00B0F0", "colLightBlue"], ["0070C0", "colBlue"], ["002060", "colDarkBlue"], ["7030A0", "colPurple"],
+  ];
+  // nazwa wyróżnienia Worda → kolor, jaki pokazuje Word (nazwy CSS bywają inne: „green” Worda to jasna zieleń)
+  const HIGHLIGHTS = [
+    ["yellow", "FFFF00", "colYellow"], ["green", "00FF00", "colBrightGreen"], ["cyan", "00FFFF", "colTurquoise"], ["magenta", "FF00FF", "colPink"],
+    ["blue", "0000FF", "colBlue"], ["red", "FF0000", "colRed"], ["darkBlue", "000080", "colDarkBlue"], ["darkCyan", "008080", "colTeal"],
+    ["darkGreen", "008000", "colDarkGreen"], ["darkMagenta", "800080", "colViolet"], ["darkRed", "800000", "colDarkRed"],
+    ["darkGray", "808080", "colGray"], ["lightGray", "C0C0C0", "colLightGray"], ["black", "000000", "colBlack"],
+  ];
+  const mix = (hex, k, toWhite) => hex.match(/../g).map((h) => {
+    const c = parseInt(h, 16);
+    return Math.round(toWhite ? c + (255 - c) * k : c * (1 - k)).toString(16).padStart(2, "0");
+  }).join("").toUpperCase();
+  // kolumna motywu: kolor + 5 odcieni (jak paleta Worda)
+  function themeColumn([hex, key]) {
+    const variants = hex === "FFFFFF" ? [[0.05, 0], [0.15, 0], [0.25, 0], [0.35, 0], [0.5, 0]].map(([k]) => [mix(hex, k, false), `-${k * 100}`])
+      : hex === "000000" ? [0.5, 0.35, 0.25, 0.15, 0.05].map((k) => [mix(hex, k, true), `+${k * 100}`])
+      : [[0.8, true], [0.6, true], [0.4, true], [0.25, false], [0.5, false]].map(([k, w]) => [mix(hex, k, w), `${w ? "+" : "-"}${k * 100}`]);
+    return [[hex, key, ""], ...variants.map(([h, d]) => [h, key, d])];
+  }
+
+  function lastColor() {
+    try { return localStorage.getItem(COLOR_KEY) || "C00000"; } catch (_) { return "C00000"; }
+  }
+  function syncColorBar() {
+    if (colorBar) colorBar.style.background = `#${lastColor()}`;
+  }
+
+  // Zaznaczenie w akapicie z kursorem (przycięte do akapitu) jako przesunięcia w jego tekście.
+  function selectionInParagraph() {
+    const p = caretParagraph();
+    if (!p) return null;
+    const index = resolveParaIndex(p);
+    const range = window.getSelection().getRangeAt(0);
+    const start = p.contains(range.startContainer) ? textOffset(p, range.startContainer, range.startOffset) : 0;
+    const end = p.contains(range.endContainer) ? textOffset(p, range.endContainer, range.endOffset) : previewRunsToPlainText(extractRunsFromPreviewParagraph(p)).length;
+    return { p, index, start, end, collapsed: range.collapsed || end <= start };
+  }
+
+  function reselect(index, start, end) {
+    const el = collectPreviewParagraphElements(host())[index];
+    const r = el && formDomRange(el, start, end);
+    if (!r) return;
+    el.focus({ preventScroll: true });
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
+
+  // kind: "color" | "highlight"; value: "RRGGBB" / nazwa wyróżnienia / "" (= automatyczny / brak)
+  async function applyColor(kind, value) {
+    const ctx = selectionInParagraph();
+    if (!ctx) return;
+    if (kind === "color" && value) { try { localStorage.setItem(COLOR_KEY, value); } catch (_) { /* prywatne */ } syncColorBar(); }
+    const css = kind === "color" ? (value ? `#${value}` : "#000000") : (value ? (value.length === 6 && /^[0-9A-F]+$/i.test(value) ? `#${value}` : value.toLowerCase()) : "");
+    if (ctx.collapsed) {
+      // bez zaznaczenia — kolor dla dalszego pisania (jak w Wordzie)
+      activeTypingStyle = mergeRunStyles(activeTypingStyle || {}, { [kind]: css || undefined });
+      if (!css && activeTypingStyle) delete activeTypingStyle[kind];
+      restoreDocCaret();
+      return;
+    }
+    const edit = { op: "runStyle", index: ctx.index, start: ctx.start, end: ctx.end };
+    edit[kind] = kind === "color" ? (value ? `#${value}` : "auto") : css;
+    const top = docViewportEl?.scrollTop || 0;
+    await applyDocumentEdit(edit).catch((err) => log(`Kolor: ${err.message || err}`, "error"));
+    if (docViewportEl) docViewportEl.scrollTop = top;
+    await whenEditable();
+    if (!readOnlyMode) reselect(ctx.index, ctx.start, ctx.end); // zaznaczenie zostaje — można dodać wyróżnienie
+  }
+
+  function swatch(hex, label, onPick, extraClass = "") {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = `color-swatch ${extraClass}`.trim();
+    b.style.setProperty("--sw", `#${hex}`);
+    b.setAttribute("aria-label", label);
+    b.dataset.hint = label;
+    b.dataset.hintDelay = "0.3";
+    b.addEventListener("click", () => { closePop(); onPick(); });
+    return b;
+  }
+
+  function buildColorMenu(el) {
+    el.classList.add("compose-pop-color");
+    popCap(el, t("colorFont"));
+    const auto = document.createElement("button");
+    auto.type = "button";
+    auto.className = "compose-item compose-item-sm color-auto";
+    auto.innerHTML = '<span class="color-auto-chip" aria-hidden="true"></span><span class="compose-item-label"></span>';
+    auto.querySelector(".compose-item-label").textContent = t("colorAuto");
+    auto.addEventListener("click", () => { closePop(); applyColor("color", ""); });
+    el.appendChild(auto);
+    const theme = document.createElement("div");
+    theme.className = "color-grid color-grid-theme";
+    const cols = THEME_BASE.map(themeColumn);
+    for (let row = 0; row < 6; row++) {
+      cols.forEach((col) => {
+        const [hex, key, d] = col[row];
+        const name = d ? t(d.startsWith("+") ? "colLighter" : "colDarker", { name: t(key), pct: d.slice(1) }) : t(key);
+        theme.appendChild(swatch(hex, name, () => applyColor("color", hex), row === 0 ? "is-base" : ""));
+      });
+    }
+    el.appendChild(theme);
+    const std = document.createElement("div");
+    std.className = "color-grid";
+    STANDARD.forEach(([hex, key]) => std.appendChild(swatch(hex, t(key), () => applyColor("color", hex))));
+    el.appendChild(std);
+    const more = document.createElement("label");
+    more.className = "compose-item compose-item-sm color-more";
+    more.innerHTML = '<span class="color-more-chip" aria-hidden="true"></span><span class="compose-item-label"></span><input type="color">';
+    more.querySelector(".compose-item-label").textContent = t("colorMore");
+    const picker = more.querySelector("input");
+    picker.value = `#${lastColor()}`;
+    picker.addEventListener("change", () => { closePop(); applyColor("color", picker.value.replace("#", "").toUpperCase()); });
+    el.appendChild(more);
+    popCap(el, t("colorHighlight"));
+    const hl = document.createElement("div");
+    hl.className = "color-grid color-grid-hl";
+    HIGHLIGHTS.forEach(([name, hex, key]) => hl.appendChild(swatch(hex, t(key), () => applyColor("highlight", name))));
+    const none = swatch("FFFFFF", t("colorNoHighlight"), () => applyColor("highlight", ""), "is-none");
+    hl.appendChild(none);
+    el.appendChild(hl);
+  }
+
+  // ── komentarze ────────────────────────────────────────────────────────────
+  const AUTHOR_KEY = "dwb.authorName";
+  function authorName() { try { return localStorage.getItem(AUTHOR_KEY) || ""; } catch (_) { return ""; } }
+  function initialsOf(name) { return String(name || "").trim().split(/\s+/).map((w) => w[0] || "").join("").slice(0, 3).toUpperCase(); }
+
+  // dane komentarzy (autor, treść, odpowiedzi, „rozwiązany”) — z panelu Recenzja, raz na wersję pliku
+  let commentData = { bytes: null, byId: new Map(), job: null };
+  function loadComments() {
+    const bytes = originalFileBytes;
+    if (!bytes || typeof scanDocxRevisions !== "function") return Promise.resolve(commentData.byId);
+    if (commentData.bytes === bytes) return commentData.job || Promise.resolve(commentData.byId);
+    commentData = { bytes, byId: new Map(), job: null };
+    commentData.job = scanDocxRevisions(bytes).then((r) => {
+      if (commentData.bytes !== bytes) return commentData.byId;
+      r.comments.forEach((c) => commentData.byId.set(c.id, c));
+      commentData.job = null;
+      paintCommentHighlights();
+      queueSync();
+      return commentData.byId;
+    }).catch(() => commentData.byId);
+    return commentData.job;
+  }
+
+  // Zakresy komentarzy w podglądzie (między znacznikami <span data-cm>).
+  function commentRanges() {
+    const h = host();
+    if (!h) return [];
+    const out = [];
+    h.querySelectorAll('span[data-cm-kind="start"]').forEach((sp) => {
+      const end = h.querySelector(`span[data-cm-kind="end"][data-cm-id="${CSS.escape(sp.dataset.cmId)}"]`);
+      if (!end) return;
+      const r = document.createRange();
+      r.setStartAfter(sp);
+      r.setEndBefore(end);
+      out.push({ id: sp.dataset.cmId, range: r });
+    });
+    return out;
+  }
+
+  function paintCommentHighlights() {
+    if (typeof CSS === "undefined" || !CSS.highlights || typeof Highlight === "undefined") return;
+    const open = new Highlight();
+    const done = new Highlight();
+    commentRanges().forEach(({ id, range }) => {
+      const c = commentData.byId.get(id);
+      if (c?.parentId) return; // odpowiedź — zakres ma komentarz nadrzędny
+      (c?.done ? done : open).add(range);
+    });
+    CSS.highlights.set("dwb-comment", open);
+    CSS.highlights.set("dwb-comment-done", done);
+    if (originalFileBytes && commentData.bytes !== originalFileBytes) loadComments();
+  }
+
+  function commentAtCaret() {
+    const sel = window.getSelection();
+    if (!sel?.rangeCount || !sel.isCollapsed) return null;
+    const node = sel.anchorNode; const off = sel.anchorOffset;
+    let hit = null;
+    commentRanges().forEach(({ id, range }) => {
+      try { if (range.isPointInRange(node, off) && commentData.byId.get(id) && !commentData.byId.get(id).parentId) hit = { id, range }; } catch (_) { /* inny dokument */ }
+    });
+    return hit;
+  }
+
+  function openCommentForm(anchor, opts = {}) {
+    if (readOnlyMode) return;
+    const ctx = opts.replyTo ? null : selectionInParagraph();
+    if (!opts.replyTo && !ctx) return;
+    hideCommentCard();
+    closePop();
+    openPop(anchor || insertBtn, (el) => {
+      el.classList.add("compose-pop-form");
+      el.setAttribute("role", "dialog");
+      el.setAttribute("aria-label", t(opts.replyTo ? "commentReply" : "insertComment"));
+      el.innerHTML = `<div class="compose-cap"></div>
+        <label class="compose-field"><span></span><textarea rows="3" class="cf-text" data-autofocus="1"></textarea></label>
+        <label class="compose-field"><span></span><input type="text" class="cf-author" autocomplete="name" enterkeyhint="done"></label>
+        <div class="compose-actions"><span class="compose-actions-gap"></span><button type="button" class="btn lf-cancel"></button><button type="button" class="btn primary lf-ok"></button></div>`;
+      el.querySelector(".compose-cap").textContent = t(opts.replyTo ? "commentReply" : "insertComment");
+      const [l1, l2] = el.querySelectorAll(".compose-field > span");
+      l1.textContent = t(opts.replyTo ? "commentReplyText" : "commentText");
+      l2.textContent = t("commentAuthor");
+      const ta = el.querySelector(".cf-text");
+      const au = el.querySelector(".cf-author");
+      au.value = authorName();
+      au.placeholder = t("commentAuthorPh");
+      el.querySelector(".lf-cancel").textContent = t("linkCancel");
+      el.querySelector(".lf-cancel").addEventListener("click", () => closePop());
+      el.querySelector(".lf-ok").textContent = t(opts.replyTo ? "commentReplyBtn" : "commentAddBtn");
+      el.querySelector(".lf-ok").addEventListener("click", async () => {
+        const text = ta.value.trim();
+        const author = au.value.trim();
+        if (!text) { ta.focus(); return; }
+        if (!author) { toast(t("commentNeedAuthor"), "info"); au.focus(); return; }
+        try { localStorage.setItem(AUTHOR_KEY, author); } catch (_) { /* prywatne */ }
+        closePop();
+        if (opts.replyTo) {
+          await runFileEdit({ op: "commentReply", id: opts.replyTo, text, author, initials: initialsOf(author) }, null);
+          return;
+        }
+        let { start, end } = ctx;
+        if (end <= start) { // bez zaznaczenia — słowo pod kursorem (jak w Wordzie)
+          const full = previewRunsToPlainText(extractRunsFromPreviewParagraph(ctx.p));
+          while (start > 0 && /\S/.test(full[start - 1])) start--;
+          while (end < full.length && /\S/.test(full[end])) end++;
+        }
+        await runFileEdit({ op: "commentAdd", index: ctx.index, start, end, text, author, initials: initialsOf(author) }, { paraIndex: ctx.index, offset: end });
+      });
+    });
+    if (!authorName()) setTimeout(() => pop?.el.querySelector(".cf-text")?.focus(), 0);
+  }
+
+  // Karta komentarza: NAD wierszem z kursorem (pod nim bywa karta linku), tylko gdy kursor stoi
+  // w komentowanym tekście; pisanie ją chowa do następnego ruchu kursora.
+  let cCard = null; // { el, id }
+  let cCardMuted = false;
+  function hideCommentCard() { if (cCard) { cCard.el.remove(); cCard = null; } }
+  function fmtDate(iso) {
+    const d = iso ? new Date(iso) : null;
+    return d && !isNaN(d) ? d.toLocaleDateString(currentLang === "en" ? "en-GB" : "pl-PL", { day: "numeric", month: "short", year: "numeric" }) : "";
+  }
+  function showCommentCard(hit) {
+    const c = commentData.byId.get(hit.id);
+    if (!c) return;
+    if (cCard?.id === hit.id && cCard.done === c.done) { placeCommentCard(); return; }
+    hideCommentCard();
+    const el = document.createElement("div");
+    el.className = `comment-card${c.done ? " is-done" : ""}`;
+    el.setAttribute("role", "region");
+    el.setAttribute("aria-label", t("commentCard"));
+    const entry = (x) => {
+      const box = document.createElement("div");
+      box.className = "cc-entry";
+      const head = document.createElement("div");
+      head.className = "cc-head";
+      head.textContent = [x.author, fmtDate(x.date)].filter(Boolean).join(" · ");
+      const body = document.createElement("div");
+      body.className = "cc-text";
+      body.textContent = x.text;
+      box.append(head, body);
+      return box;
+    };
+    const list = document.createElement("div");
+    list.className = "cc-list";
+    list.append(entry(c), ...c.replies.map(entry));
+    const actions = document.createElement("div");
+    actions.className = "cc-actions";
+    const mk = (key, fn, cls = "") => { const b = document.createElement("button"); b.type = "button"; b.className = `btn ${cls}`.trim(); b.textContent = t(key); b.addEventListener("click", fn); return b; };
+    actions.append(
+      mk("commentReply", () => openCommentForm(actions.firstChild, { replyTo: c.id })),
+      mk(c.done ? "commentReopen" : "commentResolve", () => runFileEdit({ op: "commentDone", id: c.id, done: !c.done }, null)),
+      mk("commentDelete", () => { hideCommentCard(); applyDocumentEdit({ op: "revisions", action: "removeComments", ids: [c.id, ...c.replies.map((r) => r.id)] }); }, "cc-del"),
+    );
+    if (c.done) { const badge = document.createElement("div"); badge.className = "cc-done"; badge.textContent = t("commentResolved"); el.appendChild(badge); }
+    el.append(list, actions);
+    el.addEventListener("mousedown", (e) => { if (e.target.closest("button")) e.preventDefault(); });
+    document.body.appendChild(el);
+    cCard = { el, id: hit.id, done: c.done };
+    placeCommentCard();
+  }
+  function placeCommentCard() {
+    if (!cCard) return;
+    const sel = window.getSelection();
+    if (!sel?.rangeCount) return;
+    const rects = sel.getRangeAt(0).getClientRects();
+    const r = rects[0] || sel.getRangeAt(0).getBoundingClientRect();
+    const vv = window.visualViewport;
+    const vp = docViewportEl?.getBoundingClientRect();
+    if (!r || (vp && (r.bottom < vp.top || r.top > vp.bottom))) { cCard.el.style.visibility = "hidden"; return; }
+    cCard.el.style.visibility = "";
+    const viewW = vv ? vv.width : window.innerWidth;
+    const w = cCard.el.offsetWidth; const h = cCard.el.offsetHeight;
+    const left = Math.max(8, Math.min(r.left - 16, viewW - w - 8));
+    let top = r.top - h - 8;
+    if (top < (vp?.top ?? 8)) top = r.bottom + 40; // brak miejsca nad wierszem — pod nim (z zapasem na kartę linku)
+    cCard.el.style.left = `${left + (vv ? vv.offsetLeft : 0)}px`;
+    cCard.el.style.top = `${top + (vv ? vv.offsetTop : 0)}px`;
+  }
+
+  // ── nagłówek i stopka ─────────────────────────────────────────────────────
+  // Strony w podglądzie: docx-preview łamie tylko przy jawnych podziałach, więc wysoka kartka =
+  // kilka stron (szacunek z wysokości strony). Nagłówek kartki = jej pierwsza strona, stopka = ostatnia.
+  function sectionPages() {
+    const h = host();
+    const out = [];
+    let page = 1;
+    (h ? Array.from(h.querySelectorAll("section.docx")) : []).forEach((sec) => {
+      const ph = parseFloat(getComputedStyle(sec).minHeight) || sec.offsetHeight || 1;
+      const n = Math.max(1, Math.ceil((sec.offsetHeight - 2) / ph));
+      out.push({ sec, first: page, last: page + n - 1 });
+      page += n;
+    });
+    return { list: out, total: Math.max(1, page - 1) };
+  }
+
+  function fixPreviewPageNumbers() {
+    const cls = [...docComposeStyleClasses].filter(([, k]) => k === "pagenum").map(([c]) => c);
+    if (!cls.length) return;
+    const sel = cls.map((c) => `span.${CSS.escape(c)}`).join(",");
+    const { list, total } = sectionPages();
+    list.forEach(({ sec, first, last }) => {
+      sec.querySelectorAll(":scope > header, :scope > footer").forEach((part) => {
+        const page = part.localName === "header" ? first : last;
+        part.querySelectorAll("p").forEach((p) => {
+          const spans = Array.from(p.querySelectorAll(sel));
+          if (spans[0]) spans[0].textContent = String(page);
+          if (spans[1]) spans[1].textContent = String(total);
+        });
+      });
+    });
+  }
+
+  const ALIGN3 = ["left", "center", "right"];
+  function segAlign(name, value) {
+    return `<div class="seg seg-icons" role="group" data-seg="${name}">${ALIGN3.map((a) => `<button type="button" data-v="${a}" class="${a === value ? "is-on" : ""}" aria-pressed="${a === value}" aria-label="${t(ALIGN_KEYS[a])}">${alignSvg(a)}</button>`).join("")}</div>`;
+  }
+
+  async function openHeaderFooterForm(opts = {}) {
+    if (readOnlyMode || !originalFileBytes) return;
+    let st;
+    try { await mergeInlineEditsIntoBytes(); st = await readHeaderFooterState(originalFileBytes); } catch (err) { log(`Nagłówek: ${err.message || err}`, "error"); return; }
+    if (opts.pageNumber && !st.footer.number) { st.footer.number = "n"; st.footer.numAlign = "center"; }
+    hideImageCard();
+    closePop();
+    openPop(insertBtn, (el) => {
+      el.classList.add("compose-pop-form", "compose-pop-hf");
+      el.setAttribute("role", "dialog");
+      el.setAttribute("aria-label", t("hfTitle"));
+      const fmts = [["", "hfNumNone"], ["n", "hfNumN"], ["page", "hfNumPage"], ["pageOf", "hfNumPageOf"], ["dash", "hfNumDash"]];
+      el.innerHTML = `<div class="compose-cap"></div>
+        <label class="compose-field"><span></span><input type="text" class="hf-h" autocomplete="off" enterkeyhint="next"></label>
+        ${segAlign("h", st.header.align)}
+        <label class="compose-field"><span></span><input type="text" class="hf-f" autocomplete="off" enterkeyhint="done"></label>
+        ${segAlign("f", st.footer.align)}
+        <label class="compose-field"><span></span><select class="hf-n">${fmts.map(([v, k]) => `<option value="${v}">${t(k)}</option>`).join("")}</select></label>
+        ${segAlign("n", st.footer.numAlign || "center")}
+        <label class="compose-check"><input type="checkbox" class="hf-first"><span></span></label>
+        <p class="compose-note hf-note"></p>
+        <div class="compose-actions"><span class="compose-actions-gap"></span><button type="button" class="btn lf-cancel"></button><button type="button" class="btn primary lf-ok"></button></div>`;
+      el.querySelector(".compose-cap").textContent = t("hfTitle");
+      const labels = el.querySelectorAll(".compose-field > span");
+      labels[0].textContent = t("hfHeader");
+      labels[1].textContent = t("hfFooter");
+      labels[2].textContent = t("hfNumber");
+      el.querySelector(".compose-check span").textContent = t("hfFirst");
+      const hIn = el.querySelector(".hf-h"); const fIn = el.querySelector(".hf-f"); const nSel = el.querySelector(".hf-n"); const first = el.querySelector(".hf-first");
+      hIn.value = st.header.text; fIn.value = st.footer.text; nSel.value = st.footer.number || ""; first.checked = st.firstDifferent;
+      hIn.placeholder = t("hfHeaderPh"); fIn.placeholder = t("hfFooterPh");
+      (opts.pageNumber ? nSel : hIn).dataset.autofocus = "1";
+      const notes = [];
+      if (st.header.complex || st.footer.complex) notes.push(t("hfComplex"));
+      if (st.sections > 1) notes.push(t("hfSections", { n: st.sections }));
+      notes.push(t("hfWordUpdates"));
+      el.querySelector(".hf-note").textContent = notes.join(" ");
+      const segs = {};
+      el.querySelectorAll("[data-seg]").forEach((g) => {
+        segs[g.dataset.seg] = g.querySelector(".is-on")?.dataset.v || "left";
+        g.addEventListener("click", (e) => {
+          const b = e.target.closest("button[data-v]");
+          if (!b) return;
+          segs[g.dataset.seg] = b.dataset.v;
+          g.querySelectorAll("button").forEach((x) => { x.classList.toggle("is-on", x === b); x.setAttribute("aria-pressed", String(x === b)); });
+        });
+      });
+      const syncNum = () => { el.querySelector('[data-seg="n"]').hidden = !nSel.value; };
+      nSel.addEventListener("change", syncNum);
+      syncNum();
+      el.querySelector(".lf-cancel").textContent = t("linkCancel");
+      el.querySelector(".lf-cancel").addEventListener("click", () => closePop());
+      el.querySelector(".lf-ok").textContent = t("linkSave");
+      el.querySelector(".lf-ok").addEventListener("click", async () => {
+        const edit = {
+          op: "headerFooter", lang: currentLang, total: sectionPages().total,
+          header: { text: hIn.value.trim(), align: segs.h },
+          footer: { text: fIn.value.trim(), align: segs.f },
+          number: { fmt: nSel.value || null, align: segs.n },
+          firstDifferent: first.checked,
+        };
+        closePop();
+        const p = activeParagraph() || lastP;
+        await runFileEdit(edit, p?.isConnected ? caretState(p) : null);
+      });
+      el.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.matches("input[type=text]")) { e.preventDefault(); el.querySelector(".lf-ok").click(); } });
+    });
+  }
+
   // ── stan paska (styl i wyrównanie akapitu z kursorem) ──────────────────────
   function activeParagraph() {
     const sel = window.getSelection();
@@ -1090,6 +1523,8 @@ const composeUi = (() => {
     const sel = window.getSelection();
     const a = !readOnlyMode && !pop && sel?.isCollapsed ? linkAtCaret() : null;
     if (a) showLinkCard(a); else hideLinkCard();
+    const hit = !readOnlyMode && !pop && !cCardMuted ? commentAtCaret() : null;
+    if (hit) showCommentCard(hit); else hideCommentCard();
   }
 
   let syncQueued = false;
@@ -1148,6 +1583,11 @@ const composeUi = (() => {
   listBtn?.addEventListener("click", () => openPop(listBtn, buildListMenu));
   alignBtn?.addEventListener("click", () => openPop(alignBtn, buildAlignMenu));
   styleSel?.addEventListener("change", () => applyStyle(styleSel.value));
+  colorBtn?.addEventListener("mousedown", (e) => e.preventDefault());
+  colorBtn?.addEventListener("click", () => openPop(colorBtn, buildColorMenu));
+  syncColorBar();
+  // kolor „do dalszego pisania” obowiązuje do kliknięcia w inne miejsce (jak w Wordzie)
+  docCanvasEl?.addEventListener("pointerdown", () => { if (activeTypingStyle) { delete activeTypingStyle.color; delete activeTypingStyle.highlight; } }, true);
   tableBtn?.addEventListener("mousedown", (e) => e.preventDefault());
   tableBtn?.addEventListener("click", () => openPop(tableBtn, buildTableMenu));
 
@@ -1192,7 +1632,22 @@ const composeUi = (() => {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && pop) { e.preventDefault(); e.stopPropagation(); closePop(true); }
   }, true);
-  docViewportEl?.addEventListener("scroll", () => { closePop(); placeLinkCard(); placeImageCard(); }, { passive: true });
+  docViewportEl?.addEventListener("scroll", () => { closePop(); placeLinkCard(); placeImageCard(); placeCommentCard(); }, { passive: true });
+  // Edycja: klik w nagłówek / stopkę strony w podglądzie = okienko nagłówka i stopki (jak dwuklik w Wordzie)
+  docCanvasEl?.addEventListener("click", (e) => {
+    if (readOnlyMode || !e.target.closest?.(".docx-preview-host section.docx > header, .docx-preview-host section.docx > footer")) return;
+    if (e.target.closest("a")) return;
+    openHeaderFooterForm();
+  });
+
+  // Ctrl/⌘+Alt+M = komentarz (jak w Wordzie; po e.code — Alt na Macu zmienia znak)
+  document.addEventListener("keydown", (e) => {
+    if (!(e.ctrlKey || e.metaKey) || !e.altKey || e.shiftKey || e.code !== "KeyM") return;
+    if (readOnlyMode || !originalFileBytes || (!e.target.closest?.(".docx-editable-p") && !lastDocCaret)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    openCommentForm(insertBtn);
+  }, true);
   bar?.addEventListener("scroll", () => closePop(), { passive: true });
   window.addEventListener("resize", () => closePop());
   window.visualViewport?.addEventListener("resize", () => { if (pop) placePop(pop.el, pop.anchor); });
@@ -1216,7 +1671,18 @@ const composeUi = (() => {
     insertPageBreak();
   }, true);
 
-  document.addEventListener("selectionchange", queueSync);
+  // pisanie chowa kartę komentarza; wraca przy ruchu kursora, który NIE jest skutkiem pisania
+  // (zmiana zaznaczenia > 150 ms po ostatnim wpisanym znaku: klik, strzałki, kursor po operacji)
+  let lastInputAt = 0;
+  docCanvasEl?.addEventListener("beforeinput", () => { cCardMuted = true; lastInputAt = performance.now(); hideCommentCard(); }, true);
+  docCanvasEl?.addEventListener("input", () => { lastInputAt = performance.now(); }, true);
+  const unmute = () => { cCardMuted = false; lastInputAt = 0; };
+  docCanvasEl?.addEventListener("pointerdown", unmute, true);
+  docCanvasEl?.addEventListener("keydown", (e) => { if (/^(Arrow|Home|End|Page)/.test(e.key)) unmute(); }, true);
+  document.addEventListener("selectionchange", () => {
+    if (cCardMuted && performance.now() - lastInputAt > 150) cCardMuted = false;
+    queueSync();
+  });
 
   dialog?.addEventListener("click", (e) => {
     const card = e.target.closest(".newdoc-card");
@@ -1227,5 +1693,5 @@ const composeUi = (() => {
     document.getElementById(id)?.addEventListener("click", openNewDialog);
   });
 
-  return { insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, openLinkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
+  return { openHeaderFooterForm, fixPreviewPageNumbers, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, openLinkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
 })();

@@ -124,7 +124,9 @@ async function run() {
   check("usuń komentarze: brak komentarzy i odwołań w pliku", s.comments === 0 && s.refs === 0, JSON.stringify({ c: s.comments, r: s.refs }));
 
   // ── reszta (Anna): Odrzuć wszystkie ────────────────────────────────────────
-  await page.selectOption("#rvAuthor", "").catch(() => {});
+  // pole autora bywa ukryte (jeden autor) — selectOption czekał wtedy 30 s na widoczność i błąd
+  // był połykany; ustawiamy wartość wprost (2026-10-02: test 36 s → kilka sekund)
+  await page.evaluate(() => { const s = document.getElementById("rvAuthor"); if (s) { s.value = ""; s.dispatchEvent(new Event("change", { bubbles: true })); } });
   await page.click("#rvRejectAllBtn");
   await page.waitForTimeout(600);
   s = await fileState(page);

@@ -43,6 +43,11 @@ const UNDO_OP_LABEL = {
   table: "undoOpTable",
   imageInsert: "undoOpImage",
   image: "undoOpImage",
+  runStyle: "undoOpFormat",
+  commentAdd: "undoOpComment",
+  commentReply: "undoOpComment",
+  commentDone: "undoOpComment",
+  headerFooter: "undoOpHeaderFooter",
 };
 
 const dwbUndo = (() => {

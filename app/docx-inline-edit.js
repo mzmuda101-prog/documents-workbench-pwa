@@ -39,6 +39,51 @@ const INLINE_LOCK_TAGS = [
 // Linki (w:hyperlink) z samym tekstem są edytowalne — model akapitu je zachowuje
 // (docx-run-styles.js). Fragment tekstu GŁĘBIEJ niż akapit/link (np. w smartTag, customXml,
 // kontrolce) zapis akapitu by zgubił — taki akapit zostaje tylko do odczytu.
+// Znaczniki komentarza głębiej niż w akapicie (np. w linku) — zapis akapitu by je zgubił.
+function paragraphCommentLock(xp) {
+  const deep = ["commentRangeStart", "commentRangeEnd"].some((tag) => Array.from(xp.getElementsByTagNameNS(W_NS, tag)).some((m) => m.parentNode !== xp))
+    || Array.from(xp.getElementsByTagNameNS(W_NS, "commentReference")).some((m) => m.parentNode?.parentNode !== xp);
+  return deep ? "lockField" : null;
+}
+
+// Znaczniki komentarza w podglądzie: puste <span data-cm> w tych samych miejscach tekstu co w pliku
+// (podgląd ich nie rysuje). Zapis akapitu oddaje je jako „wyspy” — komentarz nie ginie przy pisaniu.
+function stampCommentMarks(xp, el, nextKey) {
+  const parts = paragraphXmlParts(xp);
+  if (!parts.some((n) => n.localName !== "r" || isCommentReferenceRun(n))) return;
+  el.querySelectorAll("span[data-cm]").forEach((x) => x.remove());
+  let offset = 0;
+  const groups = new Map(); // przesunięcie → [znaczniki po kolei]
+  parts.forEach((n) => {
+    if (n.localName === "sdt") { offset += ffText(ffKid(n, "sdtContent")).length; return; }
+    if (n.localName !== "r" || isCommentReferenceRun(n)) {
+      const key = nextKey();
+      docIslandXml.set(key, new XMLSerializer().serializeToString(n));
+      const span = document.createElement("span");
+      span.dataset.cm = key;
+      span.dataset.cmId = n.getAttributeNS(W_NS, "id") || n.getElementsByTagNameNS(W_NS, "commentReference")[0]?.getAttributeNS(W_NS, "id") || "";
+      span.dataset.cmKind = n.localName === "r" ? "ref" : n.localName === "commentRangeStart" ? "start" : "end";
+      span.contentEditable = "false";
+      span.className = "cm-mark";
+      if (!groups.has(offset)) groups.set(offset, []);
+      groups.get(offset).push(span);
+      return;
+    }
+    Array.from(n.childNodes).forEach((c) => {
+      if (c.localName === "t") offset += (c.textContent || "").length;
+      else if (c.localName === "br") offset += 1;
+    });
+  });
+  groups.forEach((spans, at) => {
+    const frag = document.createDocumentFragment();
+    spans.forEach((sp) => frag.appendChild(sp));
+    const range = at > 0 ? formDomRange(el, at, at) : null;
+    if (range) range.insertNode(frag);
+    else if (at === 0) el.insertBefore(frag, el.firstChild);
+    else el.appendChild(frag);
+  });
+}
+
 function paragraphNestedRunLock(xp) {
   const runs = xp.getElementsByTagNameNS(W_NS, "r");
   for (let i = 0; i < runs.length; i++) {
@@ -87,21 +132,27 @@ async function markLockedParagraphs(bytes) {
   }
   const previews = collectPreviewParagraphElements(host);
   const boxes = new Map(); // rodzic akapitu w pliku → numer „pojemnika”
+  let commentKey = 0;
   collectParagraphElements(doc.documentElement, "all").forEach((xp, i) => {
     const el = previews[i];
     if (!el) return;
     if (!boxes.has(xp.parentNode)) boxes.set(xp.parentNode, String(boxes.size));
     el.dataset.box = boxes.get(xp.parentNode);
     const hit = INLINE_LOCK_TAGS.find(([tag]) => xp.getElementsByTagNameNS(W_NS, tag).length);
-    let lock = formParagraphLock(xp) || hit?.[1] || paragraphNestedRunLock(xp); // pole formularza Worda: docx-forms.js
+    let lock = formParagraphLock(xp) || hit?.[1] || paragraphNestedRunLock(xp) || paragraphCommentLock(xp); // pole formularza Worda: docx-forms.js
     if (!lock && !stampParagraphLinks(xp, el)) lock = "lockLink";
     if (!lock) {
       const keys = Array.from(xp.childNodes).filter((n) => islandKey.has(n)).map((n) => islandKey.get(n));
       if (keys.some((k) => !el.querySelector(`.ff-field[data-ff="${k}"]`))) lock = "lockForm";
     }
+    if (!lock) stampCommentMarks(xp, el, () => `c${commentKey++}`);
     if (lock) el.dataset.lock = lock;
     else delete el.dataset.lock;
   });
+  if (typeof composeUi !== "undefined") {
+    composeUi.paintCommentHighlights(); // podświetlenie komentowanego tekstu
+    composeUi.fixPreviewPageNumbers(); // numery stron w nagłówkach/stopkach podglądu
+  }
 }
 
 async function refreshInlineEditBaseline(bytes) {

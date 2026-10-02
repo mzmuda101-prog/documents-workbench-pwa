@@ -58,7 +58,13 @@ steps.sort((a, b) => (timings[b.raw] || 30000) - (timings[a.raw] || 30000));
 // wchodził na pełne obroty (prośba Mateusza 2026-09-25 w Sheet Workbench — wentylator). `npm run test:fast`
 // = 5 naraz (~1 min). Dodatkowo każdy test dostaje niższy priorytet (nice), więc
 // reszta systemu ma pierwszeństwo.
-const JOBS = Math.max(1, parseInt(process.env.JOBS || 2, 10));
+// 2026-10-02 (prośba Mateusza: szybciej): domyślnie 4 naraz — Mac ma 10 rdzeni, a testy i tak
+// idą z obniżonym priorytetem. `npm run test:calm` = 2 naraz (ciszej), JOBS=… nadpisuje.
+const JOBS = Math.max(1, parseInt(process.env.JOBS || 4, 10));
+// Sztywne pauzy w testach (page.waitForTimeout) w pierwszym przebiegu ×0,5 (sleep-scale.cjs);
+// powtórka porażki — pojedynczo i z pełnymi pauzami. SLEEP_SCALE=1 wyłącza skracanie.
+const SLEEP_SCALE = process.env.SLEEP_SCALE || "0.5";
+const PRELOAD = path.join(ROOT, "scripts", "sleep-scale.cjs");
 const NICE = 10;
 
 function serverUp() {
@@ -80,10 +86,12 @@ async function ensureServer() {
   throw new Error("Serwer testów nie wstał na porcie " + PORT);
 }
 
-function runStep(step) {
+function runStep(step, sleepScale = SLEEP_SCALE) {
   return new Promise((resolve) => {
     const t0 = Date.now();
-    const child = spawn(step.cmd, step.args, { cwd: ROOT, env: { ...process.env, ...step.env } });
+    // SLEEP_SCALE=1 w kroku (package.json) = test na timerach, zawsze pełne pauzy
+    const env = { ...process.env, SLEEP_SCALE: sleepScale, ...step.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS || ""} --require ${JSON.stringify(PRELOAD)}`.trim() };
+    const child = spawn(step.cmd, step.args, { cwd: ROOT, env });
     try { os.setPriority(child.pid, NICE); } catch {} // przeglądarki odpalone przez test dziedziczą priorytet
     let out = "";
     child.stdout.on("data", (d) => { out += d; });
@@ -112,7 +120,7 @@ const sec = (ms) => (ms / 1000).toFixed(1).replace(".", ",") + " s";
 async function main() {
   await ensureServer();
   const t0 = Date.now();
-  console.log(`Testy: ${steps.length} kroków, ${JOBS} naraz\n`);
+  console.log(`Testy: ${steps.length} kroków, ${JOBS} naraz, pauzy ×${SLEEP_SCALE}\n`);
   let done = 0;
   const results = await runPool(steps, JOBS, (r) => {
     done += 1;
@@ -126,7 +134,7 @@ async function main() {
   if (failed.length) {
     console.log(`\nPowtarzam ${failed.length} pojedynczo…`);
     for (const r of failed) {
-      const again = await runStep(r.step);
+      const again = await runStep(r.step, "1");
       if (again.ok) {
         flaky.push(r);
         console.log(`⚠️  ${r.step.label} — przeszedł za drugim razem (niestabilny w tłoku). Pierwsza porażka:`);

@@ -16,7 +16,7 @@
     <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png" />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin.woff2" crossorigin />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin-ext.woff2" crossorigin />
-    <link rel="stylesheet" href="styles/app.css?v=20261002-01" />
+    <link rel="stylesheet" href="styles/app.css?v=20261002-02" />
   </head>
   <body>
     <!-- Pierwszy przystanek Tab: skok prosto do dokumentu (panel to kilkadziesiąt kontrolek). -->
@@ -788,6 +788,9 @@
                   <button type="button" class="tb-btn format-btn" id="fmtBold" data-hint data-hint-pl="Pogrubienie (Ctrl/⌘+B)" data-hint-en="Bold (Ctrl/⌘+B)" data-hint-delay="0.7" aria-label="Bold (Ctrl+B)"><b>B</b></button>
                   <button type="button" class="tb-btn format-btn" id="fmtItalic" data-hint data-hint-pl="Kursywa (Ctrl/⌘+I)" data-hint-en="Italic (Ctrl/⌘+I)" data-hint-delay="0.7" aria-label="Italic (Ctrl+I)"><i>I</i></button>
                   <button type="button" class="tb-btn format-btn" id="fmtUnderline" data-hint data-hint-pl="Podkreślenie (Ctrl/⌘+U)" data-hint-en="Underline (Ctrl/⌘+U)" data-hint-delay="0.7" aria-label="Underline (Ctrl+U)"><u>U</u></button>
+                  <button type="button" class="tb-btn format-btn color-btn" id="fmtColorBtn" aria-haspopup="menu" aria-expanded="false" data-i18n-aria="colorLabel" aria-label="Kolor czcionki i wyróżnienie" data-hint data-hint-pl="Kolor czcionki i wyróżnienie tekstu" data-hint-en="Font color and text highlight" data-hint-delay="0.7">
+                    <span class="color-btn-a" aria-hidden="true">A</span><span class="color-btn-bar" id="fmtColorBar" aria-hidden="true"></span>
+                  </button>
                   <select id="fmtFontSize" class="tb-select" data-i18n-aria="fmtFontSizeLabel" aria-label="Rozmiar czcionki">
                     <option value="" data-i18n="fmtFontSizeInherit">Jak w akapicie</option>
                     <option value="9">9 pt</option>
@@ -895,40 +898,40 @@
         <p class="newdoc-foot" data-i18n="newDocFoot">Plik powstaje na tym urządzeniu. „Zapisz” zapyta, gdzie go zapisać.</p>
       </form>
     </dialog>
-    <script defer src="app/core.js?v=20261002-01"></script>
-    <script defer src="app/language.js?v=20261002-01"></script>
-    <script defer src="app/docx-metadata.js?v=20261002-01"></script>
-    <script defer src="app/docx-revisions.js?v=20261002-01"></script>
-    <script defer src="app/docx-forms.js?v=20261002-01"></script>
-    <script defer src="app/doc-links.js?v=20261002-01"></script>
-    <script defer src="app/docx-patch.js?v=20261002-01"></script>
-    <script defer src="app/docx-compose.js?v=20261002-01"></script>
-    <script defer src="app/template-tokens.js?v=20261002-01"></script>
-    <script defer src="app/docx-run-styles.js?v=20261002-01"></script>
-    <script defer src="app/docx-inline-edit.js?v=20261002-01"></script>
-    <script defer src="app/document.js?v=20261002-01"></script>
-    <script defer src="app/docx-render-fixes.js?v=20261002-01"></script>
-    <script defer src="app/docx-viewer.js?v=20261002-01"></script>
-    <script defer src="app/analysis.js?v=20261002-01"></script>
-    <script defer src="app/structure-panel.js?v=20261002-01"></script>
-    <script defer src="app/grammar-style.js?v=20261002-01"></script>
-    <script defer src="app/placeholders.js?v=20261002-01"></script>
-    <script defer src="app/snippets.js?v=20261002-01"></script>
-    <script defer src="app/snippet-suggest.js?v=20261002-01"></script>
-    <script defer src="app/doc-caret-nav.js?v=20261002-01"></script>
-    <script defer src="app/edit-tools.js?v=20261002-01"></script>
-    <script defer src="app/mobile-doc-zoom.js?v=20261002-01"></script>
-    <script defer src="app/ui-controls.js?v=20261002-01"></script>
-    <script defer src="app/lazy-features.js?v=20261002-01"></script>
-    <script defer src="app/app-frame.js?v=20261002-01"></script>
-    <script defer src="app/touch.js?v=20261002-01"></script>
-    <script defer src="app/pinch-zoom.js?v=20261002-01"></script>
-    <script defer src="app/undo.js?v=20261002-01"></script>
-    <script defer src="app/compose-ui.js?v=20261002-01"></script>
-    <script defer src="app/drafts.js?v=20261002-01"></script>
-    <script defer src="app/view-mode.js?v=20261002-01"></script>
-    <script defer src="app/keyboard.js?v=20261002-01"></script>
-    <script defer src="app/launch-files.js?v=20261002-01"></script>
-    <script defer src="app/bootstrap.js?v=20261002-01"></script>
+    <script defer src="app/core.js?v=20261002-02"></script>
+    <script defer src="app/language.js?v=20261002-02"></script>
+    <script defer src="app/docx-metadata.js?v=20261002-02"></script>
+    <script defer src="app/docx-revisions.js?v=20261002-02"></script>
+    <script defer src="app/docx-forms.js?v=20261002-02"></script>
+    <script defer src="app/doc-links.js?v=20261002-02"></script>
+    <script defer src="app/docx-patch.js?v=20261002-02"></script>
+    <script defer src="app/docx-compose.js?v=20261002-02"></script>
+    <script defer src="app/template-tokens.js?v=20261002-02"></script>
+    <script defer src="app/docx-run-styles.js?v=20261002-02"></script>
+    <script defer src="app/docx-inline-edit.js?v=20261002-02"></script>
+    <script defer src="app/document.js?v=20261002-02"></script>
+    <script defer src="app/docx-render-fixes.js?v=20261002-02"></script>
+    <script defer src="app/docx-viewer.js?v=20261002-02"></script>
+    <script defer src="app/analysis.js?v=20261002-02"></script>
+    <script defer src="app/structure-panel.js?v=20261002-02"></script>
+    <script defer src="app/grammar-style.js?v=20261002-02"></script>
+    <script defer src="app/placeholders.js?v=20261002-02"></script>
+    <script defer src="app/snippets.js?v=20261002-02"></script>
+    <script defer src="app/snippet-suggest.js?v=20261002-02"></script>
+    <script defer src="app/doc-caret-nav.js?v=20261002-02"></script>
+    <script defer src="app/edit-tools.js?v=20261002-02"></script>
+    <script defer src="app/mobile-doc-zoom.js?v=20261002-02"></script>
+    <script defer src="app/ui-controls.js?v=20261002-02"></script>
+    <script defer src="app/lazy-features.js?v=20261002-02"></script>
+    <script defer src="app/app-frame.js?v=20261002-02"></script>
+    <script defer src="app/touch.js?v=20261002-02"></script>
+    <script defer src="app/pinch-zoom.js?v=20261002-02"></script>
+    <script defer src="app/undo.js?v=20261002-02"></script>
+    <script defer src="app/compose-ui.js?v=20261002-02"></script>
+    <script defer src="app/drafts.js?v=20261002-02"></script>
+    <script defer src="app/view-mode.js?v=20261002-02"></script>
+    <script defer src="app/keyboard.js?v=20261002-02"></script>
+    <script defer src="app/launch-files.js?v=20261002-02"></script>
+    <script defer src="app/bootstrap.js?v=20261002-02"></script>
   </body>
 </html>

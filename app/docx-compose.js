@@ -140,6 +140,10 @@ async function readComposeStyleClasses(bytes) {
     const xml = await zip.file("word/styles.xml")?.async("string");
     if (!xml) return map;
     const idx = composeStylesIndex(composeParse(xml));
+    // styl znakowy numeru strony (pole PAGE w stopce) — podgląd podstawia w nim numer
+    const pn = Array.from(composeParse(xml).getElementsByTagNameNS(W_NS, "style")).find((st) => st.getAttributeNS(W_NS, "type") === "character"
+      && (composeDirectChild(st, "name")?.getAttributeNS(W_NS, "val") || "").trim().toLowerCase() === "page number");
+    if (pn) map.set(docxStyleClassName(pn.getAttributeNS(W_NS, "styleId")), "pagenum");
     [...COMPOSE_STYLE_KEYS, ...COMPOSE_TOC_KEYS].forEach((key) => {
       const id = key === "normal" ? idx.defaultId : idx.byName.get(COMPOSE_STYLE_DEFS[key].name);
       if (id && !map.has(docxStyleClassName(id))) map.set(docxStyleClassName(id), key);
@@ -1264,5 +1268,361 @@ function applyImageInXml(xml, edit) {
   } else {
     return { xml, count: 0 };
   }
+  return { xml: composeSerialize(doc), count: 1 };
+}
+
+// ── op "runStyle": kolor czcionki / wyróżnienie fragmentu akapitu ────────────
+// { index, start, end, color?: "#RRGGBB" | "auto", highlight?: nazwa Worda | "#RRGGBB" | "" }
+// Przez model akapitu (te same zasady co pisanie): linki i pola-wyspy zostają nietknięte.
+function applyRunStyleInXml(xml, edit) {
+  const doc = composeParse(xml);
+  const p = collectParagraphElements(doc.documentElement, "all")[edit.index];
+  if (!p) return { xml, count: 0 };
+  const runs = extractRunsFromParagraphXml(p);
+  const total = previewRunsToPlainText(runs).length;
+  const start = Math.max(0, Math.min(total, edit.start | 0));
+  const end = Math.max(start, Math.min(total, edit.end | 0));
+  if (end <= start) return { xml, count: 0 };
+  const { before, mid, after } = composeSliceRuns(runs, start, end);
+  const styled = mid.map((r) => {
+    if (r.break || r.island) return r;
+    const out = { ...r };
+    if (edit.color !== undefined) { if (!edit.color || edit.color === "auto") delete out.color; else out.color = edit.color; }
+    if (edit.highlight !== undefined) { if (!edit.highlight) delete out.highlight; else out.highlight = edit.highlight; }
+    return out;
+  });
+  applyRunsToParagraphXml(p, [...before, ...styled, ...after]);
+  return { xml: composeSerialize(doc), count: 1 };
+}
+
+// ── komentarze: dodaj / odpowiedz / rozwiąż ──────────────────────────────────
+// comments.xml (treść) + znaczniki w treści (commentRangeStart / End + fragment z
+// commentReference) + commentsExtended.xml (Word 2013+: odpowiedzi i „rozwiązany”, po w14:paraId).
+const COMPOSE_W15 = "http://schemas.microsoft.com/office/word/2012/wordml";
+
+function composeParaId(existing) {
+  let id;
+  do { id = Math.floor(Math.random() * 0x7fffffff).toString(16).toUpperCase().padStart(8, "0"); } while (existing?.has(id));
+  existing?.add(id);
+  return id;
+}
+
+async function composeCommentsParts(zip) {
+  const cXml = await composeEnsurePart(zip, "word/comments.xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:comments xmlns:w="${W_NS}" xmlns:w14="${COMPOSE_W14}"/>`,
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml",
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments");
+  return composeParse(cXml);
+}
+
+async function composeCommentsExDoc(zip) {
+  const xml = await composeEnsurePart(zip, "word/commentsExtended.xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w15:commentsEx xmlns:w15="${COMPOSE_W15}" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="w15"/>`,
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml",
+    "http://schemas.microsoft.com/office/2011/relationships/commentsExtended");
+  return composeParse(xml);
+}
+
+function composeCommentEl(cDoc, { id, author, initials, text, paraIds }) {
+  const c = cDoc.createElementNS(W_NS, "w:comment");
+  c.setAttributeNS(W_NS, "w:id", String(id));
+  c.setAttributeNS(W_NS, "w:author", author || "Autor");
+  c.setAttributeNS(W_NS, "w:date", new Date().toISOString().replace(/\.\d+Z$/, "Z"));
+  if (initials) c.setAttributeNS(W_NS, "w:initials", initials);
+  const lines = String(text || "").replace(/\r\n?/g, "\n").split("\n");
+  let lastParaId = "";
+  lines.forEach((line, i) => {
+    const p = cDoc.createElementNS(W_NS, "w:p");
+    if (i === lines.length - 1) { lastParaId = composeParaId(paraIds); p.setAttributeNS(COMPOSE_W14, "w14:paraId", lastParaId); p.setAttributeNS(COMPOSE_W14, "w14:textId", "77777777"); }
+    if (i === 0) { // znacznik komentarza w dymku Worda
+      const r = cDoc.createElementNS(W_NS, "w:r");
+      r.appendChild(cDoc.createElementNS(W_NS, "w:annotationRef"));
+      p.appendChild(r);
+    }
+    if (line) {
+      const r = cDoc.createElementNS(W_NS, "w:r");
+      const t = cDoc.createElementNS(W_NS, "w:t");
+      t.setAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:space", "preserve");
+      t.textContent = sanitizeXmlText(line);
+      r.appendChild(t);
+      p.appendChild(r);
+    }
+    c.appendChild(p);
+  });
+  cDoc.documentElement.appendChild(c);
+  return lastParaId;
+}
+
+function composeCommentInfo(cDoc) {
+  const comments = Array.from(cDoc.getElementsByTagNameNS(W_NS, "comment"));
+  const ids = comments.map((c) => parseInt(c.getAttributeNS(W_NS, "id"), 10)).filter(Number.isFinite);
+  const paraIds = new Set(Array.from(cDoc.getElementsByTagNameNS(W_NS, "p")).map((p) => (p.getAttributeNS(COMPOSE_W14, "paraId") || "").toUpperCase()).filter(Boolean));
+  return { comments, nextId: (ids.length ? Math.max(...ids) : -1) + 1, paraIds };
+}
+
+// paraId ostatniego akapitu komentarza (dopisany, gdy go brak — potrzebny do odpowiedzi i „rozwiązany”)
+function composeCommentParaId(cDoc, comment, paraIds) {
+  const ps = Array.from(comment.getElementsByTagNameNS(W_NS, "p"));
+  const last = ps[ps.length - 1];
+  if (!last) return "";
+  let pid = last.getAttributeNS(COMPOSE_W14, "paraId");
+  if (!pid) { pid = composeParaId(paraIds); last.setAttributeNS(COMPOSE_W14, "w14:paraId", pid); }
+  return pid.toUpperCase();
+}
+
+function composeCommentEx(exDoc, paraId) {
+  let ex = Array.from(exDoc.getElementsByTagNameNS(COMPOSE_W15, "commentEx")).find((e) => (e.getAttributeNS(COMPOSE_W15, "paraId") || "").toUpperCase() === paraId);
+  if (!ex) {
+    ex = exDoc.createElementNS(COMPOSE_W15, "w15:commentEx");
+    ex.setAttributeNS(COMPOSE_W15, "w15:paraId", paraId);
+    ex.setAttributeNS(COMPOSE_W15, "w15:done", "0");
+    exDoc.documentElement.appendChild(ex);
+  }
+  return ex;
+}
+
+// op "commentAdd": { index, start, end, text, author, initials }
+async function applyCommentAddInZip(zip, xml, edit) {
+  const doc = composeParse(xml);
+  const p = collectParagraphElements(doc.documentElement, "all")[edit.index];
+  if (!p || !String(edit.text || "").trim()) return { xml, count: 0 };
+  const cDoc = await composeCommentsParts(zip);
+  const info = composeCommentInfo(cDoc);
+  const id = info.nextId;
+  const paraId = composeCommentEl(cDoc, { id, author: edit.author, initials: edit.initials, text: edit.text, paraIds: info.paraIds });
+  const runs = extractRunsFromParagraphXml(p);
+  const total = previewRunsToPlainText(runs).length;
+  const start = Math.max(0, Math.min(total, edit.start | 0));
+  const end = Math.max(start, Math.min(total, edit.end | 0));
+  const { before, mid, after } = composeSliceRuns(runs, start, end);
+  const isl = (x) => ({ island: x, text: "" });
+  applyRunsToParagraphXml(p, [
+    ...before,
+    isl(`<w:commentRangeStart xmlns:w="${W_NS}" w:id="${id}"/>`),
+    ...mid,
+    isl(`<w:commentRangeEnd xmlns:w="${W_NS}" w:id="${id}"/>`),
+    isl(`<w:r xmlns:w="${W_NS}"><w:commentReference w:id="${id}"/></w:r>`),
+    ...after,
+  ]);
+  zip.file("word/comments.xml", composeSerialize(cDoc));
+  const exDoc = await composeCommentsExDoc(zip);
+  composeCommentEx(exDoc, paraId);
+  zip.file("word/commentsExtended.xml", composeSerialize(exDoc));
+  return { xml: composeSerialize(doc), count: 1 };
+}
+
+// op "commentReply": { id (komentarz nadrzędny), text, author, initials }
+// op "commentDone":  { id, done: true|false }
+async function applyCommentThreadInZip(zip, xml, edit) {
+  if (!zip.file("word/comments.xml")) return { xml, count: 0 };
+  const cDoc = await composeCommentsParts(zip);
+  const info = composeCommentInfo(cDoc);
+  const parent = info.comments.find((c) => c.getAttributeNS(W_NS, "id") === String(edit.id));
+  if (!parent) return { xml, count: 0 };
+  const parentPid = composeCommentParaId(cDoc, parent, info.paraIds);
+  const exDoc = await composeCommentsExDoc(zip);
+  const parentEx = composeCommentEx(exDoc, parentPid);
+  if (edit.op === "commentDone") {
+    parentEx.setAttributeNS(COMPOSE_W15, "w15:done", edit.done ? "1" : "0");
+    zip.file("word/comments.xml", composeSerialize(cDoc));
+    zip.file("word/commentsExtended.xml", composeSerialize(exDoc));
+    return { xml, count: 1 };
+  }
+  if (!String(edit.text || "").trim()) return { xml, count: 0 };
+  const id = info.nextId;
+  const pid = composeCommentEl(cDoc, { id, author: edit.author, initials: edit.initials, text: edit.text, paraIds: info.paraIds });
+  const ex = composeCommentEx(exDoc, pid);
+  ex.setAttributeNS(COMPOSE_W15, "w15:paraIdParent", parentPid);
+  // znaczniki odpowiedzi tuż przy znacznikach komentarza nadrzędnego (tak robi Word)
+  const doc = composeParse(xml);
+  const pid0 = String(edit.id);
+  const find = (tag) => Array.from(doc.getElementsByTagNameNS(W_NS, tag)).find((m) => m.getAttributeNS(W_NS, "id") === pid0);
+  const s = find("commentRangeStart");
+  const e = find("commentRangeEnd");
+  const ref = find("commentReference");
+  if (s) s.parentNode.insertBefore(composeEl(doc, "commentRangeStart", { id }), s.nextSibling);
+  if (e) e.parentNode.insertBefore(composeEl(doc, "commentRangeEnd", { id }), e.nextSibling);
+  const refRun = ref?.parentNode;
+  if (refRun?.localName === "r") {
+    const r = composeEl(doc, "r");
+    r.appendChild(composeEl(doc, "commentReference", { id }));
+    refRun.parentNode.insertBefore(r, refRun.nextSibling);
+  }
+  zip.file("word/comments.xml", composeSerialize(cDoc));
+  zip.file("word/commentsExtended.xml", composeSerialize(exDoc));
+  return { xml: composeSerialize(doc), count: 1 };
+}
+
+// ── nagłówek i stopka (z numerem strony) ─────────────────────────────────────
+// Prosty model, jak „Wstaw → Nagłówek/Stopka/Numer strony” w Wordzie: tekst nagłówka, tekst
+// stopki, numer strony (format + wyrównanie, w stopce), „inna pierwsza strona” (bez nagłówka i
+// stopki). Dotyczy wszystkich sekcji dokumentu. Numer = pole PAGE (i NUMPAGES dla „z N”) —
+// Word liczy je sam; w podglądzie podstawia je fixPreviewPageNumbers (compose-ui.js).
+const COMPOSE_REL_HEADER = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header";
+const COMPOSE_REL_FOOTER = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer";
+const COMPOSE_PN_FORMATS = ["n", "page", "pageOf", "dash"];
+
+function composeSectPrs(doc) {
+  return Array.from(doc.getElementsByTagNameNS(W_NS, "sectPr")).filter((s) => s.parentNode?.localName === "body" || s.parentNode?.localName === "pPr");
+}
+
+function composeHfRef(sect, kind, type) {
+  return Array.from(sect.childNodes).find((n) => n.localName === `${kind}Reference` && (n.getAttributeNS(W_NS, "type") || "default") === type) || null;
+}
+
+function composeFieldRuns(instr, cached, rStyle) {
+  const rpr = rStyle ? `<w:rPr><w:rStyle w:val="${rStyle}"/></w:rPr>` : "";
+  return `<w:r>${rpr}<w:fldChar w:fldCharType="begin"/></w:r><w:r>${rpr}<w:instrText xml:space="preserve"> ${instr} </w:instrText></w:r><w:r>${rpr}<w:fldChar w:fldCharType="separate"/></w:r><w:r>${rpr}<w:t>${cached}</w:t></w:r><w:r>${rpr}<w:fldChar w:fldCharType="end"/></w:r>`;
+}
+
+function composeHfParagraph(inner, align) {
+  const jc = COMPOSE_ALIGNS.includes(align) && align !== "left" ? `<w:pPr><w:jc w:val="${align}"/></w:pPr>` : "";
+  return `<w:p>${jc}${inner}</w:p>`;
+}
+
+function composeTextRun(text) {
+  return text ? `<w:r><w:t xml:space="preserve">${composeXmlText(sanitizeXmlText(text))}</w:t></w:r>` : "";
+}
+
+function composePageNumberXml(fmt, lang, styleId, total) {
+  const pl = lang !== "en";
+  const page = composeFieldRuns("PAGE", "1", styleId);
+  const pages = composeFieldRuns("NUMPAGES", String(total || 1), styleId);
+  if (fmt === "page") return composeTextRun(pl ? "Strona " : "Page ") + page;
+  if (fmt === "pageOf") return composeTextRun(pl ? "Strona " : "Page ") + page + composeTextRun(pl ? " z " : " of ") + pages;
+  if (fmt === "dash") return composeTextRun("– ") + page + composeTextRun(" –");
+  return page;
+}
+
+// Stan do okienka: { header: { text, align, complex }, footer: {…, number: fmt|null, numAlign}, firstDifferent, sections }
+async function readHeaderFooterState(bytes) {
+  const out = { header: { text: "", align: "left", complex: false }, footer: { text: "", align: "left", complex: false, number: null, numAlign: "center" }, firstDifferent: false, sections: 1 };
+  if (!bytes || !window.JSZip) return out;
+  const zip = await loadDocxZipCached(bytes);
+  const doc = await getDocumentXmlDom(bytes);
+  if (!doc) return out;
+  const sects = composeSectPrs(doc);
+  out.sections = Math.max(1, sects.length);
+  const body = composeDirectChild(doc.getElementsByTagNameNS(W_NS, "body")[0], "sectPr") || sects[sects.length - 1];
+  if (!body) return out;
+  out.firstDifferent = !!composeDirectChild(body, "titlePg");
+  const rels = (await composeReadRels(zip)).doc;
+  const target = (rid) => Array.from(rels.documentElement.getElementsByTagName("Relationship")).find((r) => r.getAttribute("Id") === rid)?.getAttribute("Target");
+  for (const kind of ["header", "footer"]) {
+    const ref = composeHfRef(body, kind, "default");
+    const path = ref && target(ref.getAttributeNS(R_NS, "id") || ref.getAttribute("r:id"));
+    const file = path && zip.file(`word/${path.replace(/^\/?word\//, "")}`);
+    if (!file) continue;
+    const part = composeParse(await file.async("string"));
+    const root = part.documentElement;
+    const st = out[kind];
+    st.complex = ["tbl", "drawing", "pict", "sdt", "txbxContent"].some((tag) => root.getElementsByTagNameNS(W_NS, tag).length)
+      || Array.from(root.childNodes).filter((n) => n.localName === "p").length > 2;
+    Array.from(root.childNodes).filter((n) => n.localName === "p").forEach((p) => {
+      const instr = Array.from(p.getElementsByTagNameNS(W_NS, "instrText")).map((x) => x.textContent).join(" ")
+        + " " + Array.from(p.getElementsByTagNameNS(W_NS, "fldSimple")).map((x) => x.getAttributeNS(W_NS, "instr")).join(" ");
+      const jc = composeDirectChild(composeDirectChild(p, "pPr") || p, "jc")?.getAttributeNS(W_NS, "val") || "left";
+      const align = jc === "both" || jc === "start" ? "left" : jc === "end" ? "right" : jc;
+      if (/\bPAGE\b/.test(instr)) {
+        const plain = Array.from(p.childNodes).filter((r) => r.localName === "r" && !r.getElementsByTagNameNS(W_NS, "fldChar").length && !r.getElementsByTagNameNS(W_NS, "instrText").length).map((r) => Array.from(r.getElementsByTagNameNS(W_NS, "t")).map((x) => x.textContent).join("")).join("");
+        st.number = /\bNUMPAGES\b/.test(instr) ? "pageOf" : /[–-]/.test(plain) ? "dash" : /\S/.test(plain) ? "page" : "n";
+        st.numAlign = align;
+        if (kind === "header") { out.footer.number = st.number; out.footer.numAlign = align; st.number = null; }
+      } else {
+        const text = getParagraphText(p).replace(/\n/g, " ");
+        if (text.trim() && !st.text) { st.text = text; st.align = align; }
+      }
+    });
+  }
+  return out;
+}
+
+// op "headerFooter": { header: { text, align }, footer: { text, align }, number: { fmt|null, align }, firstDifferent, lang, total }
+async function applyHeaderFooterInZip(zip, xml, edit) {
+  const doc = composeParse(xml);
+  const sects = composeSectPrs(doc);
+  if (!sects.length) return { xml, count: 0 };
+  const relsInfo = await composeReadRels(zip);
+  const rels = relsInfo.doc;
+  const relEls = () => Array.from(rels.documentElement.getElementsByTagName("Relationship"));
+  const ct = zip.file("[Content_Types].xml") ? await zip.file("[Content_Types].xml").async("string") : "";
+  let ctXml = ct;
+  const body = composeDirectChild(doc.getElementsByTagNameNS(W_NS, "body")[0], "sectPr") || sects[sects.length - 1];
+  const numStyle = edit.number?.fmt ? await composeEnsureCharStyle(zip, "page number", "PageNumber", "<w:uiPriority w:val=\"99\"/><w:unhideWhenUsed/>") : null;
+  const ns = `xmlns:w="${W_NS}" xmlns:r="${R_NS}"`;
+  const newPart = (kind, inner) => {
+    let n = 1;
+    while (zip.file(`word/${kind}${n}.xml`)) n++;
+    const name = `${kind}${n}.xml`;
+    zip.file(`word/${name}`, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:${kind === "header" ? "hdr" : "ftr"} ${ns}>${inner}</w:${kind === "header" ? "hdr" : "ftr"}>`);
+    if (!ctXml.includes(`PartName="/word/${name}"`)) ctXml = ctXml.replace("</Types>", `<Override PartName="/word/${name}" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.${kind}+xml"/></Types>`);
+    return composeAddRel(rels, kind === "header" ? COMPOSE_REL_HEADER : COMPOSE_REL_FOOTER, name, false);
+  };
+  const setRef = (sect, kind, type, rid) => {
+    const old = composeHfRef(sect, kind, type);
+    if (old) sect.removeChild(old);
+    if (!rid) return;
+    const ref = composeEl(doc, `${kind}Reference`, { type });
+    ref.setAttributeNS(R_NS, "r:id", rid);
+    // odwołania nagłówków/stopek są pierwsze w w:sectPr
+    let at = sect.firstChild;
+    while (at && (at.localName === "headerReference" || at.localName === "footerReference")) at = at.nextSibling;
+    sect.insertBefore(ref, at);
+  };
+  for (const kind of ["header", "footer"]) {
+    const conf = edit[kind] || {};
+    let inner = conf.text ? composeHfParagraph(composeTextRun(conf.text), conf.align) : "";
+    if (kind === "footer" && edit.number?.fmt) inner += composeHfParagraph(composePageNumberXml(edit.number.fmt, edit.lang, numStyle, edit.total), edit.number.align || "center");
+    if (!inner) { sects.forEach((s) => setRef(s, kind, "default", null)); continue; }
+    // ta sama część dla wszystkich sekcji: istniejąca (z odwołania sekcji końcowej) albo nowa
+    const oldRef = composeHfRef(body, kind, "default");
+    const oldRid = oldRef && (oldRef.getAttributeNS(R_NS, "id") || oldRef.getAttribute("r:id"));
+    const oldTarget = oldRid && relEls().find((r) => r.getAttribute("Id") === oldRid)?.getAttribute("Target");
+    let rid;
+    if (oldTarget && zip.file(`word/${oldTarget.replace(/^\/?word\//, "")}`)) {
+      const path = `word/${oldTarget.replace(/^\/?word\//, "")}`;
+      const part = composeParse(await zip.file(path).async("string"));
+      const root = part.documentElement;
+      while (root.firstChild) root.removeChild(root.firstChild);
+      const frag = composeParse(`<x ${ns}>${inner}</x>`).documentElement;
+      Array.from(frag.childNodes).forEach((n) => root.appendChild(part.importNode(n, true)));
+      zip.file(path, composeSerialize(part));
+      rid = oldRid;
+    } else {
+      rid = newPart(kind, inner);
+    }
+    sects.forEach((s) => setRef(s, kind, "default", rid));
+  }
+  // inna pierwsza strona: titlePg + puste części „first”
+  let emptyH = null; let emptyF = null;
+  sects.forEach((s) => {
+    const tp = composeDirectChild(s, "titlePg");
+    if (edit.firstDifferent) {
+      if (!emptyH) { emptyH = newPart("header", "<w:p/>"); emptyF = newPart("footer", "<w:p/>"); }
+      setRef(s, "header", "first", emptyH);
+      setRef(s, "footer", "first", emptyF);
+      if (!tp) {
+        const el = composeEl(doc, "titlePg");
+        const after = ["textDirection", "bidi", "rtlGutter", "docGrid", "printerSettings", "sectPrChange"].map((n) => composeDirectChild(s, n)).find(Boolean);
+        s.insertBefore(el, after || null);
+      }
+    } else {
+      if (tp) s.removeChild(tp);
+      setRef(s, "header", "first", null);
+      setRef(s, "footer", "first", null);
+    }
+  });
+  // osierocone części nagłówków/stopek (nikt się do nich nie odwołuje) — precz z paczki
+  const used = new Set(Array.from(doc.getElementsByTagNameNS(W_NS, "headerReference")).concat(Array.from(doc.getElementsByTagNameNS(W_NS, "footerReference"))).map((r) => r.getAttributeNS(R_NS, "id") || r.getAttribute("r:id")));
+  relEls().forEach((r) => {
+    const type = r.getAttribute("Type");
+    if ((type !== COMPOSE_REL_HEADER && type !== COMPOSE_REL_FOOTER) || used.has(r.getAttribute("Id"))) return;
+    const name = (r.getAttribute("Target") || "").replace(/^\/?word\//, "");
+    zip.remove(`word/${name}`);
+    ctXml = ctXml.replace(new RegExp(`<Override PartName="/word/${name.replace(/\./g, "\\.")}"[^>]*/>`), "");
+    r.parentNode.removeChild(r);
+  });
+  zip.file(relsInfo.path, composeSerialize(rels));
+  if (ctXml) zip.file("[Content_Types].xml", ctXml);
   return { xml: composeSerialize(doc), count: 1 };
 }
