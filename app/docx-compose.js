@@ -914,3 +914,355 @@ async function applyFormInsertInZip(zip, xml, edit) {
   applyRunsToParagraphXml(p, [...before, island, ...after]);
   return { xml: composeSerialize(doc), count: 1 };
 }
+
+// ── tabele ───────────────────────────────────────────────────────────────────
+// Szerokość tekstu (twipy) z sekcji akapitu (albo ostatniej w dokumencie): strona − marginesy.
+function composeTextWidthTwips(doc, near) {
+  let sect = null;
+  if (near) {
+    // sekcja akapitu = pierwszy w:sectPr w akapicie od tego miejsca w dół, inaczej sekcja dokumentu
+    const paras = collectParagraphElements(doc.documentElement, "all");
+    for (let i = Math.max(0, paras.indexOf(near)); i < paras.length && !sect; i++) {
+      const pPr = composeDirectChild(paras[i], "pPr");
+      sect = pPr && composeDirectChild(pPr, "sectPr");
+    }
+  }
+  if (!sect) sect = composeDirectChild(doc.getElementsByTagNameNS(W_NS, "body")[0], "sectPr");
+  const num = (el, a, d) => parseInt(el?.getAttributeNS(W_NS, a), 10) || d;
+  const pgSz = sect && composeDirectChild(sect, "pgSz");
+  const mar = sect && composeDirectChild(sect, "pgMar");
+  const w = num(pgSz, "w", 11906);
+  return Math.max(1440, w - num(mar, "left", 1418) - num(mar, "right", 1418));
+}
+
+function composeCellXml(widthTw) {
+  return `<w:tc><w:tcPr><w:tcW w:w="${widthTw}" w:type="dxa"/></w:tcPr><w:p/></w:tc>`;
+}
+
+// op "tableInsert": { index, rows, cols } — tabela pod akapitem z kursorem (pusty akapit zostaje
+// pod tabelą, żeby dało się pisać dalej; tabela nie może być ostatnim elementem treści).
+async function applyTableInsertInZip(zip, xml, edit) {
+  const doc = composeParse(xml);
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  const p = paragraphs[edit.index];
+  if (!p) return { xml, count: 0 };
+  const rows = Math.max(1, Math.min(50, edit.rows | 0));
+  const cols = Math.max(1, Math.min(20, edit.cols | 0));
+  const styleId = await composeEnsureTableStyle(zip);
+  const total = composeTextWidthTwips(doc, p);
+  const colW = Math.floor(total / cols);
+  const grid = Array.from({ length: cols }, () => `<w:gridCol w:w="${colW}"/>`).join("");
+  const row = `<w:tr>${Array.from({ length: cols }, () => composeCellXml(colW)).join("")}</w:tr>`;
+  const tblXml = `<w:tbl xmlns:w="${W_NS}"><w:tblPr><w:tblStyle w:val="${styleId}"/><w:tblW w:w="${colW * cols}" w:type="dxa"/><w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/></w:tblPr><w:tblGrid>${grid}</w:tblGrid>${row.repeat(rows)}</w:tbl>`;
+  const tbl = doc.importNode(composeParse(tblXml).documentElement, true);
+  const empty = !getParagraphText(p).trim() && !p.getElementsByTagNameNS(W_NS, "drawing").length;
+  if (empty) {
+    p.parentNode.insertBefore(tbl, p); // pusty akapit zostaje pod tabelą
+  } else {
+    p.parentNode.insertBefore(tbl, p.nextSibling);
+    const next = composeEl(doc, "p");
+    tbl.parentNode.insertBefore(next, tbl.nextSibling);
+    composeMoveSectPr(p, next);
+  }
+  return { xml: composeSerialize(doc), count: 1 };
+}
+
+async function composeEnsureTableStyle(zip) {
+  const xml = await composeEnsureStylesPart(zip);
+  const doc = composeParse(xml);
+  const found = Array.from(doc.getElementsByTagNameNS(W_NS, "style")).find((st) => st.getAttributeNS(W_NS, "type") === "table"
+    && (composeDirectChild(st, "name")?.getAttributeNS(W_NS, "val") || "").trim().toLowerCase() === "table grid");
+  if (found) { zip.file("word/styles.xml", xml); return found.getAttributeNS(W_NS, "styleId"); }
+  const b = (side) => `<w:${side} w:val="single" w:sz="4" w:space="0" w:color="auto"/>`;
+  const frag = composeParse(`<w:styles xmlns:w="${W_NS}"><w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/><w:uiPriority w:val="39"/><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:tblPr><w:tblBorders>${["top", "left", "bottom", "right", "insideH", "insideV"].map(b).join("")}</w:tblBorders><w:tblCellMar><w:left w:w="108" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style></w:styles>`);
+  doc.documentElement.appendChild(doc.importNode(frag.documentElement.firstChild, true));
+  zip.file("word/styles.xml", composeSerialize(doc));
+  return "TableGrid";
+}
+
+// Komórka z akapitem: { tbl, tr, tc, rowIndex, gridCol } (kolumna siatki z uwzględnieniem gridSpan).
+function composeCellOf(p) {
+  let tc = p.parentNode;
+  while (tc && !(tc.localName === "tc" && tc.namespaceURI === W_NS)) tc = tc.parentNode;
+  if (!tc) return null;
+  const tr = tc.parentNode;
+  const tbl = tr?.parentNode;
+  if (!tr || tr.localName !== "tr" || !tbl || tbl.localName !== "tbl") return null;
+  return { tbl, tr, tc, rowIndex: composeRows(tbl).indexOf(tr), gridCol: composeGridStart(tc) };
+}
+const composeRows = (tbl) => Array.from(tbl.childNodes).filter((n) => n.localName === "tr" && n.namespaceURI === W_NS);
+const composeCells = (tr) => Array.from(tr.childNodes).filter((n) => n.localName === "tc" && n.namespaceURI === W_NS);
+function composeSpan(tc) {
+  const tcPr = composeDirectChild(tc, "tcPr");
+  return parseInt(tcPr && composeDirectChild(tcPr, "gridSpan")?.getAttributeNS(W_NS, "val"), 10) || 1;
+}
+function composeGridStart(tc) {
+  let col = 0;
+  for (const c of composeCells(tc.parentNode)) { if (c === tc) return col; col += composeSpan(c); }
+  return col;
+}
+// Komórka wiersza zajmująca kolumnę siatki col (albo null).
+function composeCellAtCol(tr, col) {
+  let at = 0;
+  for (const c of composeCells(tr)) { const s = composeSpan(c); if (col >= at && col < at + s) return c; at += s; }
+  return null;
+}
+// Pusta kopia komórki: te same właściwości (szerokość, tło), bez scalenia w pionie, jeden pusty akapit.
+function composeBlankCell(doc, tc) {
+  const nc = composeEl(doc, "tc");
+  const tcPr = composeDirectChild(tc, "tcPr");
+  if (tcPr) {
+    const pr = tcPr.cloneNode(true);
+    Array.from(pr.childNodes).filter((n) => n.localName === "vMerge").forEach((n) => pr.removeChild(n));
+    nc.appendChild(pr);
+  }
+  const firstP = Array.from(tc.childNodes).find((n) => n.localName === "p");
+  const np = composeEl(doc, "p");
+  const pPr = firstP && composeDirectChild(firstP, "pPr");
+  if (pPr) {
+    const c = pPr.cloneNode(true);
+    Array.from(c.childNodes).filter((n) => ["sectPr", "numPr"].includes(n.localName)).forEach((n) => c.removeChild(n));
+    np.appendChild(c);
+  }
+  nc.appendChild(np);
+  return nc;
+}
+// Scalenie w pionie: "restart" (początek), "continue" (ciąg dalszy) albo null.
+function composeVMerge(tc) {
+  const tcPr = tc && composeDirectChild(tc, "tcPr");
+  const v = tcPr && composeDirectChild(tcPr, "vMerge");
+  if (!v) return null;
+  return v.getAttributeNS(W_NS, "val") === "restart" ? "restart" : "continue";
+}
+function composeSetVMerge(doc, tc, kind) {
+  let tcPr = composeDirectChild(tc, "tcPr");
+  if (!tcPr) { tcPr = composeEl(doc, "tcPr"); tc.insertBefore(tcPr, tc.firstChild); }
+  const old = composeDirectChild(tcPr, "vMerge");
+  if (old) tcPr.removeChild(old);
+  if (!kind) return;
+  const v = composeEl(doc, "vMerge", kind === "restart" ? { val: "restart" } : {});
+  // kolejność w tcPr: tcW, gridSpan, (hMerge), vMerge, tcBorders… — za gridSpan/tcW
+  const after = composeDirectChild(tcPr, "gridSpan") || composeDirectChild(tcPr, "tcW");
+  tcPr.insertBefore(v, after ? after.nextSibling : tcPr.firstChild);
+}
+
+function composeSetCellWidth(tc, w) {
+  const tcPr = composeDirectChild(tc, "tcPr");
+  const tcW = tcPr && composeDirectChild(tcPr, "tcW");
+  if (tcW && tcW.getAttributeNS(W_NS, "type") !== "pct") { tcW.setAttributeNS(W_NS, "w:w", String(Math.round(w))); tcW.setAttributeNS(W_NS, "w:type", "dxa"); }
+}
+
+// op "table": { index, action } — rowAbove / rowBelow / colLeft / colRight / delRow / delCol / delTable
+function applyTableInXml(xml, edit) {
+  const doc = composeParse(xml);
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  const p = paragraphs[edit.index];
+  const cell = p && composeCellOf(p);
+  if (!cell) return { xml, count: 0 };
+  const { tbl, tr, tc, gridCol } = cell;
+  const rows = composeRows(tbl);
+  const gridEl = composeDirectChild(tbl, "tblGrid");
+  const gridCols = gridEl ? Array.from(gridEl.childNodes).filter((n) => n.localName === "gridCol") : [];
+  const a = edit.action;
+  if (a === "rowAbove" || a === "rowBelow") {
+    const nr = composeEl(doc, "tr");
+    const trPr = composeDirectChild(tr, "trPr");
+    if (trPr) nr.appendChild(trPr.cloneNode(true));
+    // wiersz wstawiony w środek scalenia pionowego je przedłuża (jak w Wordzie)
+    const below = a === "rowAbove" ? tr : rows[rows.indexOf(tr) + 1];
+    composeCells(tr).forEach((c) => {
+      const nc = composeBlankCell(doc, c);
+      const under = below && composeCellAtCol(below, composeGridStart(c));
+      if (composeVMerge(under) === "continue") composeSetVMerge(doc, nc, "continue");
+      nr.appendChild(nc);
+    });
+    tbl.insertBefore(nr, a === "rowAbove" ? tr : tr.nextSibling);
+  } else if (a === "colLeft" || a === "colRight") {
+    const at = a === "colLeft" ? gridCol : gridCol + composeSpan(tc); // nowa kolumna siatki na tej pozycji
+    const ref = gridCols[Math.min(gridCols.length - 1, a === "colLeft" ? gridCol : gridCol + composeSpan(tc) - 1)];
+    const total = gridCols.reduce((s, g) => s + (parseInt(g.getAttributeNS(W_NS, "w"), 10) || 0), 0);
+    const newW = parseInt(ref?.getAttributeNS(W_NS, "w"), 10) || Math.round(total / Math.max(1, gridCols.length));
+    if (gridEl) {
+      const g = composeEl(doc, "gridCol", { w: newW });
+      gridEl.insertBefore(g, gridCols[at] || null);
+      // ta sama szerokość tabeli: wszystkie kolumny proporcjonalnie węższe
+      const all = Array.from(gridEl.childNodes).filter((n) => n.localName === "gridCol");
+      const sum = all.reduce((s, x) => s + (parseInt(x.getAttributeNS(W_NS, "w"), 10) || 0), 0);
+      const k = total > 0 && sum > 0 ? total / sum : 1;
+      all.forEach((x) => x.setAttributeNS(W_NS, "w:w", String(Math.max(200, Math.round((parseInt(x.getAttributeNS(W_NS, "w"), 10) || 0) * k)))));
+    }
+    rows.forEach((r) => {
+      // komórka scalona w poziomie PRZEZ miejsce nowej kolumny — tylko szersza (jak w Wordzie)
+      const across = composeCells(r).find((c) => { const st = composeGridStart(c); return st < at && at < st + composeSpan(c); });
+      if (across) {
+        let tcPr = composeDirectChild(across, "tcPr");
+        let span = tcPr && composeDirectChild(tcPr, "gridSpan");
+        span.setAttributeNS(W_NS, "w:val", String(composeSpan(across) + 1));
+        return;
+      }
+      const near = composeCellAtCol(r, a === "colLeft" ? at : at - 1) || composeCells(r).slice(-1)[0];
+      if (!near) return;
+      const nc = composeBlankCell(doc, near);
+      const tcPr = composeDirectChild(nc, "tcPr");
+      const span = tcPr && composeDirectChild(tcPr, "gridSpan");
+      if (span) tcPr.removeChild(span);
+      if (gridEl) composeSetCellWidth(nc, parseInt(Array.from(gridEl.childNodes).filter((n) => n.localName === "gridCol")[at]?.getAttributeNS(W_NS, "w"), 10) || newW);
+      const start = composeGridStart(near);
+      // wstaw przed komórką zaczynającą się na „at”, inaczej za komórką obejmującą at−1
+      const before = composeCells(r).find((c) => composeGridStart(c) >= at);
+      if (a === "colLeft" && start === at) r.insertBefore(nc, near);
+      else if (before) r.insertBefore(nc, before);
+      else r.appendChild(nc);
+    });
+    // szerokości komórek z nowej siatki (komórka scalona = suma swoich kolumn)
+    if (gridEl) {
+      const all = Array.from(gridEl.childNodes).filter((n) => n.localName === "gridCol").map((g) => parseInt(g.getAttributeNS(W_NS, "w"), 10) || 0);
+      rows.forEach((r) => composeCells(r).forEach((c) => {
+        const st = composeGridStart(c);
+        const w = all.slice(st, st + composeSpan(c)).reduce((x, y) => x + y, 0);
+        if (w) composeSetCellWidth(c, w);
+      }));
+    }
+  } else if (a === "delRow") {
+    if (rows.length <= 1) return applyTableInXml(xml, { ...edit, action: "delTable" });
+    // usuwany wiersz zaczynał scalenie pionowe — jego ciąg dalszy staje się początkiem
+    const next = rows[rows.indexOf(tr) + 1];
+    if (next) composeCells(tr).forEach((c) => {
+      if (composeVMerge(c) !== "restart") return;
+      const under = composeCellAtCol(next, composeGridStart(c));
+      if (composeVMerge(under) === "continue") composeSetVMerge(doc, under, "restart");
+    });
+    tbl.removeChild(tr);
+  } else if (a === "delCol") {
+    if (gridCols.length <= 1 || rows.every((r) => composeCells(r).length <= 1)) return applyTableInXml(xml, { ...edit, action: "delTable" });
+    rows.forEach((r) => {
+      const c = composeCellAtCol(r, gridCol);
+      if (!c) return;
+      const s = composeSpan(c);
+      if (s > 1) { // komórka scalona w poziomie — tylko węższa
+        const tcPr = composeDirectChild(c, "tcPr");
+        composeDirectChild(tcPr, "gridSpan").setAttributeNS(W_NS, "w:val", String(s - 1));
+      } else if (composeCells(r).length > 1) r.removeChild(c);
+    });
+    if (gridCols[gridCol]) gridEl.removeChild(gridCols[gridCol]);
+  } else if (a === "delTable") {
+    const parent = tbl.parentNode;
+    // tabela w komórce — komórka musi kończyć się akapitem
+    if (parent.localName === "tc" && !Array.from(parent.childNodes).some((n) => n !== tbl && n.localName === "p")) parent.insertBefore(composeEl(doc, "p"), tbl.nextSibling);
+    parent.removeChild(tbl);
+  } else {
+    return { xml, count: 0 };
+  }
+  return { xml: composeSerialize(doc), count: 1 };
+}
+
+// ── obrazy ───────────────────────────────────────────────────────────────────
+const COMPOSE_NS = {
+  wp: "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
+  a: "http://schemas.openxmlformats.org/drawingml/2006/main",
+  pic: "http://schemas.openxmlformats.org/drawingml/2006/picture",
+  r: "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+};
+const COMPOSE_EMU_PER_TWIP = 635;
+const COMPOSE_EMU_PER_PX = 9525; // 96 dpi
+
+async function composeAddMedia(zip, bytes, ext, mime) {
+  let n = 1;
+  while (zip.file(`word/media/image${n}.${ext}`)) n++;
+  const name = `image${n}.${ext}`;
+  zip.file(`word/media/${name}`, bytes);
+  const ctFile = zip.file("[Content_Types].xml");
+  if (ctFile) {
+    let ct = await ctFile.async("string");
+    if (!new RegExp(`Extension="${ext}"`, "i").test(ct)) {
+      ct = ct.replace("<Default ", `<Default Extension="${ext}" ContentType="${mime}"/><Default `);
+      zip.file("[Content_Types].xml", ct);
+    }
+  }
+  const rels = await composeReadRels(zip);
+  const rid = composeAddRel(rels.doc, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image", `media/${name}`, false);
+  zip.file(rels.path, composeSerialize(rels.doc));
+  return { rid, name };
+}
+
+function composeDrawingXml({ rid, cx, cy, id, name, descr }) {
+  const esc = (v) => composeXmlText(v || "").replace(/"/g, "&quot;");
+  return `<w:r xmlns:w="${W_NS}"><w:drawing><wp:inline xmlns:wp="${COMPOSE_NS.wp}" distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="${id}" name="${esc(name)}" descr="${esc(descr)}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="${COMPOSE_NS.a}" noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic xmlns:a="${COMPOSE_NS.a}"><a:graphicData uri="${COMPOSE_NS.pic}"><pic:pic xmlns:pic="${COMPOSE_NS.pic}"><pic:nvPicPr><pic:cNvPr id="0" name="${esc(name)}" descr="${esc(descr)}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip xmlns:r="${COMPOSE_NS.r}" r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+}
+
+// op "imageInsert": { index, bytes (Uint8Array), ext, mime, width, height (px), descr }
+// Obraz w osobnym akapicie (wyśrodkowany) pod akapitem z kursorem — albo w nim, gdy jest pusty.
+// Szerszy niż tekst — zmniejszony do szerokości tekstu (proporcje zostają).
+async function applyImageInsertInZip(zip, xml, edit) {
+  const doc = composeParse(xml);
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  const p = paragraphs[edit.index];
+  if (!p || !edit.bytes?.length) return { xml, count: 0 };
+  const { rid, name } = await composeAddMedia(zip, edit.bytes, edit.ext, edit.mime);
+  const maxCx = composeTextWidthTwips(doc, p) * COMPOSE_EMU_PER_TWIP;
+  let cx = Math.round((edit.width || 600) * COMPOSE_EMU_PER_PX);
+  let cy = Math.round((edit.height || 400) * COMPOSE_EMU_PER_PX);
+  if (cx > maxCx) { cy = Math.round(cy * maxCx / cx); cx = maxCx; }
+  const ids = Array.from(doc.getElementsByTagNameNS(COMPOSE_NS.wp, "docPr")).map((d) => parseInt(d.getAttribute("id"), 10) || 0);
+  const id = Math.max(0, ...ids) + 1;
+  const runEl = doc.importNode(composeParse(composeDrawingXml({ rid, cx, cy, id, name: edit.name || name, descr: edit.descr || "" })).documentElement, true);
+  const empty = !getParagraphText(p).trim() && !p.getElementsByTagNameNS(W_NS, "drawing").length && !p.getElementsByTagNameNS(W_NS, "sdt").length;
+  let target = p;
+  if (!empty) {
+    target = composeNewParagraphAfter(p);
+    composeMoveSectPr(p, target);
+  }
+  const pPr = composeEnsurePPr(target);
+  composeSetPPrChild(pPr, "jc", { val: "center" });
+  target.appendChild(runEl);
+  // pod obrazem musi być gdzie pisać dalej
+  const after = target.nextSibling && target.nextSibling.nodeType === 1 ? target.nextSibling : null;
+  if (!after || after.localName !== "p") {
+    const np = composeNewParagraphAfter(target);
+    composeMoveSectPr(target, np);
+  }
+  return { xml: composeSerialize(doc), count: 1 };
+}
+
+// op "image": { index, action: "size" (widthPct) | "align" (align) | "alt" (descr) | "delete" }
+// Działa na pierwszym obrazie akapitu — także z plików z Worda (wp:inline albo wp:anchor).
+function applyImageInXml(xml, edit) {
+  const doc = composeParse(xml);
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  const p = paragraphs[edit.index];
+  const drawing = p?.getElementsByTagNameNS(W_NS, "drawing")[0];
+  const box = drawing && Array.from(drawing.childNodes).find((n) => n.nodeType === 1 && (n.localName === "inline" || n.localName === "anchor"));
+  if (!box) return { xml, count: 0 };
+  const extent = Array.from(box.childNodes).find((n) => n.localName === "extent");
+  if (edit.action === "size") {
+    const cx0 = parseInt(extent?.getAttribute("cx"), 10);
+    const cy0 = parseInt(extent?.getAttribute("cy"), 10);
+    if (!cx0 || !cy0) return { xml, count: 0 };
+    const pct = Math.max(5, Math.min(100, Number(edit.widthPct) || 100));
+    const cx = Math.round(composeTextWidthTwips(doc, p) * COMPOSE_EMU_PER_TWIP * pct / 100);
+    const cy = Math.round(cy0 * cx / cx0);
+    extent.setAttribute("cx", String(cx));
+    extent.setAttribute("cy", String(cy));
+    Array.from(box.getElementsByTagNameNS(COMPOSE_NS.a, "ext")).forEach((e) => {
+      if (e.parentNode?.localName === "xfrm" && e.getAttribute("cx")) { e.setAttribute("cx", String(cx)); e.setAttribute("cy", String(cy)); }
+    });
+  } else if (edit.action === "align") {
+    if (!COMPOSE_ALIGNS.includes(edit.align)) return { xml, count: 0 };
+    composeSetPPrChild(composeEnsurePPr(p), "jc", { val: edit.align });
+  } else if (edit.action === "alt") {
+    Array.from(box.getElementsByTagNameNS(COMPOSE_NS.wp, "docPr")).forEach((d) => d.setAttribute("descr", String(edit.descr || "")));
+    Array.from(box.getElementsByTagNameNS(COMPOSE_NS.pic, "cNvPr")).forEach((d) => d.setAttribute("descr", String(edit.descr || "")));
+  } else if (edit.action === "delete") {
+    let run = drawing.parentNode;
+    while (run && run.localName !== "r") run = run.parentNode;
+    if (!run) return { xml, count: 0 };
+    run.parentNode.removeChild(run);
+    // akapit był tylko obrazem — znika, jeśli coś zostaje w tym miejscu
+    const parent = p.parentNode;
+    const siblingsP = Array.from(parent.childNodes).filter((n) => n.localName === "p");
+    if (!getParagraphText(p).trim() && !p.getElementsByTagNameNS(W_NS, "drawing").length && siblingsP.length > 1 && !composeDirectChild(composeDirectChild(p, "pPr") || p, "sectPr")) parent.removeChild(p);
+  } else {
+    return { xml, count: 0 };
+  }
+  return { xml: composeSerialize(doc), count: 1 };
+}

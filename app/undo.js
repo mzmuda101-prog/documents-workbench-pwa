@@ -39,6 +39,10 @@ const UNDO_OP_LABEL = {
   list: "undoOpList",
   toc: "undoOpToc",
   formInsert: "undoOpFormInsert",
+  tableInsert: "undoOpTable",
+  table: "undoOpTable",
+  imageInsert: "undoOpImage",
+  image: "undoOpImage",
 };
 
 const dwbUndo = (() => {

@@ -154,6 +154,9 @@ const body = [
   p("Przycisk listy robi listę punktowaną albo numerowaną (drugi raz — zdejmuje). Tab / Shift+Tab albo „Głębiej / Płycej” w tym samym okienku zmienia poziom punktu; Enter w pustym punkcie kończy listę, a Backspace na początku punktu zdejmuje numerację."),
   p("Ctrl/⌘+K (albo „＋ Wstaw” → „Link…”) robi link z zaznaczonego tekstu — do strony WWW albo do nagłówka w tym dokumencie. Gdy kursor stoi w linku, pod nim pojawia się mała karta: otwórz, zmień, usuń. W „＋ Wstaw” są też pola formularza (tekst, lista wyboru, data, pole wyboru) — wstawiasz je w środek zdania i dalej piszesz obok — oraz spis treści z nagłówków 1–3, który później aktualizujesz tym samym przyciskiem."),
   tip("zaznacz słowo „spis treści” w zdaniu wyżej, naciśnij Ctrl/⌘+K, przełącz na „Miejsce w dokumencie” i wybierz rozdział 1 — kliknięcie w link (albo „Otwórz” na karcie) przeniesie Cię tam."),
+  p("„＋ Wstaw → Tabela” pokazuje siatkę — wybierasz liczbę kolumn i wierszy. Tab przechodzi do następnej komórki, a w ostatniej dokłada wiersz. Gdy kursor stoi w tabeli, na pasku pojawia się przycisk „Tabela”: wiersz powyżej / poniżej, kolumna z lewej / z prawej, usuwanie wiersza, kolumny albo całej tabeli."),
+  p("„＋ Wstaw → Obraz…” wstawia zdjęcie z dysku (na telefonie także z aparatu), a Ctrl/⌘+V wkleja zrzut ekranu. Duże zdjęcia są zmniejszane, żeby plik nie puchł. Kliknięcie obrazu pokazuje kartę: suwak szerokości, wyrównanie, tekst alternatywny (opis dla czytników ekranu) i usuwanie — działa też z obrazami z plików Worda."),
+  tip("kliknij w komórkę tabeli z rozdziału 8 — na pasku pojawi się „Tabela”; dodaj wiersz poniżej i wpisz coś, przechodząc Tabem."),
 ];
 
 const tocBlock = [

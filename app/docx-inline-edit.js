@@ -541,6 +541,12 @@ async function handleInlineBackspace(p, paraIndex, e) {
 }
 
 async function handleInlineTab(p, paraIndex, e) {
+  // w tabeli Tab / Shift+Tab chodzi po komórkach (compose-ui.js), jak w Wordzie
+  if (p.closest("td, th") && typeof composeUi !== "undefined") {
+    e.preventDefault();
+    composeUi.tableTab(p, e.shiftKey);
+    return;
+  }
   if (e.shiftKey) {
     if (!isListParagraph(p)) return;
     e.preventDefault();

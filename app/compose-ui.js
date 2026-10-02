@@ -8,8 +8,10 @@
 //     zamykane klikiem obok / Esc / przewinięciem. Okienko jest poza rzędem (rząd przewija się,
 //     overflow by je przycinał), kotwiczone POD przyciskiem — na telefonie z klawiaturą
 //     arkusz od dołu chowałby się pod klawiaturą (iOS: fixed liczy się od layout viewportu).
-//   - przyciski w okienkach nie zabierają fokusu z tekstu (pointerdown → preventDefault),
-//     więc na iPhonie klawiatura i kursor zostają.
+//   - przyciski w okienkach nie zabierają fokusu z tekstu (mousedown → preventDefault; NIE
+//     pointerdown — w Safari/iOS kasuje to tap), więc na iPhonie klawiatura i kursor zostają.
+//   - rzeczy kontekstowe pojawiają się tylko, gdy są potrzebne: przycisk „Tabela” na pasku, gdy
+//     kursor stoi w tabeli (Etap 3), karta obrazu po kliknięciu obrazu, karta linku w linku.
 
 const composeUi = (() => {
   const bar = document.getElementById("formatToolbar");
@@ -17,6 +19,7 @@ const composeUi = (() => {
   const styleSel = document.getElementById("fmtParaStyle");
   const alignBtn = document.getElementById("fmtAlignBtn");
   const listBtn = document.getElementById("fmtListBtn");
+  const tableBtn = document.getElementById("tableToolsBtn");
   const dialog = document.getElementById("newDocDialog");
 
   const ALIGN_ICONS = {
@@ -375,6 +378,16 @@ const composeUi = (() => {
       onPick: () => insertText(todayText()),
     });
     popCap(el, t("insertGroupDoc"));
+    popItem(el, {
+      label: t("insertTable"), desc: t("insertTableDesc"),
+      icon: ICON('<rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="4" x2="9" y2="20"/><line x1="15" y1="4" x2="15" y2="20"/>'),
+      onPick: () => openPop(insertBtn, buildTablePicker),
+    });
+    popItem(el, {
+      label: t("insertImage"), desc: t("insertImageDesc"),
+      icon: ICON('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 17-5-5-8 8"/>'),
+      onPick: pickImage,
+    });
     const hasToc = typeof composeHasToc === "function" && composeHasToc();
     popItem(el, {
       label: t(hasToc ? "tocUpdate" : "tocInsert"), desc: t(hasToc ? "tocUpdateDesc" : "tocInsertDesc"),
@@ -708,6 +721,341 @@ const composeUi = (() => {
     card.el.style.top = `${r.bottom + 6 + (vv ? vv.offsetTop : 0)}px`;
   }
 
+  // ── tabele ────────────────────────────────────────────────────────────────
+  const host = () => docCanvasEl?.querySelector(".docx-preview-host");
+
+  // Czeka, aż po przerysowaniu akapity będą edytowalne (oznaczenia „tylko do odczytu” gotowe).
+  function whenEditable() {
+    return new Promise((resolve) => {
+      const t0 = performance.now();
+      const tick = () => (!inlineLocksPending || performance.now() - t0 > 4000 ? resolve() : requestAnimationFrame(tick));
+      tick();
+    });
+  }
+  function firstParaIndexIn(el) {
+    const p = el?.querySelector?.("p");
+    return p ? resolveParaIndex(p) : -1;
+  }
+
+  // Siatka rozmiaru jak w Wordzie: najechanie podświetla, klik/tap wstawia. Klawiatura: strzałki + Enter.
+  const PICK_MAX = 8;
+  function buildTablePicker(el) {
+    el.classList.add("compose-pop-table");
+    popCap(el, t("insertTable"));
+    const grid = document.createElement("div");
+    grid.className = "table-pick";
+    grid.setAttribute("role", "grid");
+    const label = document.createElement("div");
+    label.className = "table-pick-size";
+    const mark = (r, c) => {
+      grid.querySelectorAll("button").forEach((b) => b.classList.toggle("on", +b.dataset.r <= r && +b.dataset.c <= c));
+      label.textContent = r && c ? `${c} × ${r}` : t("insertTablePick");
+    };
+    for (let r = 1; r <= PICK_MAX; r++) {
+      for (let c = 1; c <= PICK_MAX; c++) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.dataset.r = r;
+        b.dataset.c = c;
+        b.setAttribute("aria-label", t("insertTableCells", { cols: c, rows: r }));
+        b.addEventListener("mouseenter", () => mark(r, c));
+        b.addEventListener("focus", () => mark(r, c));
+        b.addEventListener("click", () => { closePop(); insertTable(r, c); });
+        grid.appendChild(b);
+      }
+    }
+    grid.addEventListener("keydown", (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      let r = +b.dataset.r; let c = +b.dataset.c;
+      if (e.key === "ArrowRight") c = Math.min(PICK_MAX, c + 1);
+      else if (e.key === "ArrowLeft") c = Math.max(1, c - 1);
+      else if (e.key === "ArrowDown") r = Math.min(PICK_MAX, r + 1);
+      else if (e.key === "ArrowUp") r = Math.max(1, r - 1);
+      else return;
+      e.preventDefault();
+      e.stopPropagation();
+      grid.querySelector(`button[data-r="${r}"][data-c="${c}"]`)?.focus();
+    }, true);
+    el.appendChild(grid);
+    el.appendChild(label);
+    mark(0, 0);
+    // klawiatura: fokus od razu w siatce; dotyk: bez podświetlonego „1 × 1” przed wyborem
+    const first = grid.querySelector("button");
+    if (first && !window.matchMedia?.("(pointer: coarse)").matches) first.dataset.autofocus = "1";
+  }
+
+  async function insertTable(rows, cols) {
+    const p = caretParagraph();
+    if (!p) return;
+    const index = resolveParaIndex(p);
+    if (index < 0) return;
+    const empty = !previewRunsToPlainText(extractRunsFromPreviewParagraph(p)).trim();
+    // kursor w pierwszej komórce: tabela przed pustym akapitem albo za akapitem z tekstem
+    await runFileEdit({ op: "tableInsert", index, rows, cols }, { paraIndex: empty ? index : index + 1, offset: 0 });
+  }
+
+  function cellOf(p) {
+    const td = p?.closest?.("td, th");
+    const tr = td?.parentElement;
+    const table = tr?.closest("table");
+    if (!td || !table) return null;
+    const tables = Array.from(host()?.querySelectorAll("table") || []);
+    return { td, tr, table, ti: tables.indexOf(table), r: Array.from(table.rows).indexOf(tr), c: Array.from(tr.cells).indexOf(td) };
+  }
+
+  // Po przerysowaniu: kursor do komórki (tabela nr ti, wiersz r, kolumna c) — granice przycięte.
+  function focusCell(ti, r, c) {
+    const table = host()?.querySelectorAll("table")[ti];
+    if (!table) return false;
+    const row = table.rows[Math.max(0, Math.min(table.rows.length - 1, r))];
+    const cell = row?.cells[Math.max(0, Math.min(row.cells.length - 1, c))];
+    const idx = firstParaIndexIn(cell);
+    if (idx < 0) return false;
+    focusParagraphAtOffset(idx, 0);
+    return true;
+  }
+
+  async function tableAction(action) {
+    const p = caretParagraph();
+    const cell = cellOf(p);
+    if (!cell) { toast(t("tableNoCaret"), "info"); return; }
+    const index = resolveParaIndex(p);
+    const firstIdx = firstParaIndexIn(cell.table);
+    const top = docViewportEl?.scrollTop || 0;
+    await applyDocumentEdit({ op: "table", index, action }).catch((err) => log(`Tabela: ${err.message || err}`, "error"));
+    if (docViewportEl) docViewportEl.scrollTop = top;
+    await whenEditable();
+    if (readOnlyMode) return;
+    const { ti, r, c } = cell;
+    const target = { rowAbove: [r, c], rowBelow: [r + 1, c], colLeft: [r, c], colRight: [r, c + 1], delRow: [r, c], delCol: [r, c - 1] }[action];
+    if (target) focusCell(ti, target[0], Math.max(0, target[1]));
+    else if (action === "delTable" && firstIdx >= 0) focusParagraphAtOffset(firstIdx, 0); // akapit, który był pod tabelą
+  }
+
+  function buildTableMenu(el) {
+    el.classList.add("compose-pop-tabletools");
+    popCap(el, t("tableInsertGroup"));
+    const grid = document.createElement("div");
+    grid.className = "compose-grid2";
+    [
+      ["tableRowAbove", "rowAbove", '<rect x="3" y="12" width="18" height="8" rx="1"/><line x1="12" y1="3" x2="12" y2="9"/><line x1="9" y1="6" x2="15" y2="6"/>'],
+      ["tableRowBelow", "rowBelow", '<rect x="3" y="4" width="18" height="8" rx="1"/><line x1="12" y1="15" x2="12" y2="21"/><line x1="9" y1="18" x2="15" y2="18"/>'],
+      ["tableColLeft", "colLeft", '<rect x="12" y="3" width="8" height="18" rx="1"/><line x1="3" y1="12" x2="9" y2="12"/><line x1="6" y1="9" x2="6" y2="15"/>'],
+      ["tableColRight", "colRight", '<rect x="4" y="3" width="8" height="18" rx="1"/><line x1="15" y1="12" x2="21" y2="12"/><line x1="18" y1="9" x2="18" y2="15"/>'],
+    ].forEach(([key, action, svg]) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "compose-item compose-item-sm";
+      b.setAttribute("role", "menuitem");
+      b.innerHTML = `<span class="compose-item-icon" aria-hidden="true">${ICON(svg)}</span><span class="compose-item-label"></span>`;
+      b.querySelector(".compose-item-label").textContent = t(key);
+      b.addEventListener("click", () => { closePop(); tableAction(action); });
+      grid.appendChild(b);
+    });
+    el.appendChild(grid);
+    popCap(el, t("tableDeleteGroup"));
+    [["tableDelRow", "delRow"], ["tableDelCol", "delCol"], ["tableDelTable", "delTable"]].forEach(([key, action]) => {
+      popItem(el, { label: t(key), icon: ICON('<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>'), onPick: () => tableAction(action) });
+    });
+    const hint = document.createElement("p");
+    hint.className = "compose-note compose-note-pad";
+    hint.textContent = t("tableTabHint");
+    el.appendChild(hint);
+  }
+
+  // Tab / Shift+Tab w komórce = następna / poprzednia komórka; Tab w ostatniej = nowy wiersz (jak Word).
+  function tableTab(p, back) {
+    const cell = cellOf(p);
+    if (!cell) return false;
+    const cells = Array.from(cell.table.querySelectorAll("td, th")).filter((td) => td.closest("table") === cell.table);
+    const i = cells.indexOf(cell.td);
+    const next = cells[i + (back ? -1 : 1)];
+    if (next) {
+      const idx = firstParaIndexIn(next);
+      if (idx >= 0) {
+        const el = collectPreviewParagraphElements(host())[idx];
+        focusParagraphAtOffset(idx, back ? previewRunsToPlainText(extractRunsFromPreviewParagraph(el)).length : 0);
+      }
+      return true;
+    }
+    if (back) return true;
+    tableAction("rowBelow").then(() => focusCell(cell.ti, cell.r + 1, 0));
+    return true;
+  }
+
+  // ── obrazy ────────────────────────────────────────────────────────────────
+  const IMG_MAX_PX = 2400;
+  const IMG_KEEP_BYTES = 2.5 * 1024 * 1024;
+
+  // Obraz → bajty do .docx: PNG/JPEG/GIF zostają (gdy nie za duże), resztę (WebP, HEIC…) i zbyt
+  // duże zdjęcia przerabiamy w przeglądarce (canvas) — Word nie zna WebP, a 12 MP z aparatu
+  // niepotrzebnie puchnie plik.
+  async function prepareImage(file) {
+    const type = (file.type || "").toLowerCase();
+    let bitmap;
+    try { bitmap = await createImageBitmap(file); } catch (_) {
+      bitmap = await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = URL.createObjectURL(file);
+      });
+    }
+    const w0 = bitmap.width; const h0 = bitmap.height;
+    const keep = { "image/png": "png", "image/jpeg": "jpeg", "image/jpg": "jpeg", "image/gif": "gif" }[type];
+    if (keep && file.size <= IMG_KEEP_BYTES && Math.max(w0, h0) <= IMG_MAX_PX) {
+      return { bytes: new Uint8Array(await file.arrayBuffer()), ext: keep === "jpeg" ? "jpeg" : keep, mime: keep === "gif" ? "image/gif" : `image/${keep}`, width: w0, height: h0 };
+    }
+    const k = Math.min(1, IMG_MAX_PX / Math.max(w0, h0));
+    const w = Math.max(1, Math.round(w0 * k)); const h = Math.max(1, Math.round(h0 * k));
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, w, h);
+    const png = type === "image/png" || type === "image/gif" || type === "image/webp" || type === "image/svg+xml";
+    const mime = png ? "image/png" : "image/jpeg";
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, mime, 0.86));
+    return { bytes: new Uint8Array(await blob.arrayBuffer()), ext: png ? "png" : "jpeg", mime, width: w, height: h };
+  }
+
+  async function insertImageFile(file, p) {
+    if (!file || !/^image\//.test(file.type || "")) { toast(t("imageBadType"), "warning"); return; }
+    p = p || caretParagraph();
+    if (!p) return;
+    const index = resolveParaIndex(p);
+    if (index < 0) return;
+    let img;
+    try { img = await prepareImage(file); } catch (err) {
+      log(`Obraz: ${err.message || err}`, "error");
+      toast(t("imageBadType"), "warning");
+      return;
+    }
+    const empty = !previewRunsToPlainText(extractRunsFromPreviewParagraph(p)).trim();
+    const imgIdx = empty ? index : index + 1;
+    await runFileEdit({ op: "imageInsert", index, ...img, name: (file.name || "").replace(/\.[^.]+$/, "") }, { paraIndex: imgIdx + 1, offset: 0 });
+  }
+
+  function pickImage() {
+    const p = caretParagraph(); // zapamiętane, zanim okno wyboru zabierze fokus
+    if (!p) return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.addEventListener("change", () => { if (input.files?.[0]) insertImageFile(input.files[0], p); }, { once: true });
+    input.click();
+  }
+
+  // Karta obrazu: klik w obraz w Edycji — rozmiar (suwak, % szerokości tekstu), wyrównanie, opis, usuń.
+  let imgCard = null; // { el, img, p }
+  function hideImageCard() {
+    if (!imgCard) return;
+    imgCard.img.classList.remove("img-selected");
+    imgCard.el.remove();
+    imgCard = null;
+  }
+  function imagePct(img, p) {
+    const w = p.clientWidth - parseFloat(getComputedStyle(p).paddingLeft || 0) - parseFloat(getComputedStyle(p).paddingRight || 0);
+    return Math.max(5, Math.min(100, Math.round((img.getBoundingClientRect().width / (w || 1)) * 100 / (docZoomScale() || 1))));
+  }
+  function docZoomScale() {
+    const shell = document.getElementById("docZoomShell");
+    const m = shell && getComputedStyle(shell).transform.match(/matrix\(([^,]+)/);
+    return m ? parseFloat(m[1]) || 1 : 1;
+  }
+  function showImageCard(img) {
+    const p = img.closest("p");
+    if (!p) return;
+    const index = resolveParaIndex(p);
+    if (index < 0) return;
+    hideImageCard();
+    hideLinkCard();
+    img.classList.add("img-selected");
+    const el = document.createElement("div");
+    el.className = "image-card";
+    el.setAttribute("role", "toolbar");
+    el.setAttribute("aria-label", t("imageTools"));
+    const pct0 = imagePct(img, p);
+    el.innerHTML = `<label class="image-size"><span class="image-size-val"></span><input type="range" min="10" max="100" step="5"></label>
+      <span class="tb-sep" aria-hidden="true"></span>
+      <button type="button" class="tb-btn" data-align="left"></button><button type="button" class="tb-btn" data-align="center"></button><button type="button" class="tb-btn" data-align="right"></button>
+      <span class="tb-sep" aria-hidden="true"></span>
+      <button type="button" class="tb-btn ic-alt"></button><button type="button" class="tb-btn ic-del"></button>`;
+    const range = el.querySelector("input");
+    const val = el.querySelector(".image-size-val");
+    range.value = String(Math.round(pct0 / 5) * 5);
+    range.setAttribute("aria-label", t("imageSize"));
+    val.textContent = `${range.value}%`;
+    const baseW = img.getBoundingClientRect().width / (pct0 / 100);
+    range.addEventListener("input", () => {
+      val.textContent = `${range.value}%`;
+      img.style.width = `${(baseW / docZoomScale()) * range.value / 100}px`; // podgląd na żywo
+      img.style.height = "auto";
+      placeImageCard();
+    });
+    range.addEventListener("change", () => imageEdit(index, { action: "size", widthPct: +range.value }));
+    const hint = (b, key) => { b.setAttribute("aria-label", t(key)); b.dataset.hint = ""; b.dataset.hintPl = I18N.pl[key]; b.dataset.hintEn = I18N.en[key]; b.dataset.hintDelay = "0.4"; };
+    el.querySelectorAll("[data-align]").forEach((b) => {
+      hint(b, ALIGN_KEYS[b.dataset.align]);
+      b.innerHTML = alignSvg(b.dataset.align);
+      b.addEventListener("click", () => imageEdit(index, { action: "align", align: b.dataset.align }));
+    });
+    const alt = el.querySelector(".ic-alt");
+    hint(alt, "imageAlt");
+    alt.innerHTML = '<span class="ic-alt-text">ALT</span>';
+    alt.addEventListener("click", () => openAltForm(index, img));
+    const del = el.querySelector(".ic-del");
+    hint(del, "imageDelete");
+    del.innerHTML = ICON('<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>');
+    del.addEventListener("click", () => { hideImageCard(); imageEdit(index, { action: "delete" }, false); });
+    el.addEventListener("mousedown", (e) => { if (e.target.closest("button")) e.preventDefault(); });
+    document.body.appendChild(el);
+    imgCard = { el, img, p, index };
+    placeImageCard();
+  }
+  function placeImageCard() {
+    if (!imgCard) return;
+    const vv = window.visualViewport;
+    const r = imgCard.img.getBoundingClientRect();
+    const vp = docViewportEl?.getBoundingClientRect();
+    if (vp && (r.bottom < vp.top || r.top > vp.bottom)) { imgCard.el.style.visibility = "hidden"; return; }
+    imgCard.el.style.visibility = "";
+    const viewW = vv ? vv.width : window.innerWidth;
+    const viewH = vv ? vv.height : window.innerHeight;
+    const w = imgCard.el.offsetWidth; const h = imgCard.el.offsetHeight;
+    const left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, viewW - w - 8));
+    // pod obrazem, a gdy nie ma miejsca — nad nim (albo przy dolnej krawędzi widoku)
+    let top = r.bottom + 8;
+    if (top + h > viewH - 8) top = r.top - h - 8 >= 8 ? r.top - h - 8 : viewH - h - 8;
+    imgCard.el.style.left = `${left + (vv ? vv.offsetLeft : 0)}px`;
+    imgCard.el.style.top = `${top + (vv ? vv.offsetTop : 0)}px`;
+  }
+  async function imageEdit(index, edit, reselect = true) {
+    const top = docViewportEl?.scrollTop || 0;
+    await applyDocumentEdit({ op: "image", index, ...edit }).catch((err) => log(`Obraz: ${err.message || err}`, "error"));
+    if (docViewportEl) docViewportEl.scrollTop = top;
+    if (!reselect) return;
+    await whenEditable();
+    const img = collectPreviewParagraphElements(host())[index]?.querySelector("img");
+    if (img && !readOnlyMode) showImageCard(img);
+  }
+  function openAltForm(index, img) {
+    openPop(imgCard?.el.querySelector(".ic-alt") || insertBtn, (el) => {
+      el.classList.add("compose-pop-form");
+      el.setAttribute("role", "dialog");
+      el.setAttribute("aria-label", t("imageAlt"));
+      el.innerHTML = `<div class="compose-cap"></div><label class="compose-field"><span></span><textarea rows="3" data-autofocus="1"></textarea></label>
+        <div class="compose-actions"><span class="compose-actions-gap"></span><button type="button" class="btn lf-cancel"></button><button type="button" class="btn primary lf-ok"></button></div>`;
+      el.querySelector(".compose-cap").textContent = t("imageAlt");
+      el.querySelector(".compose-field span").textContent = t("imageAltHelp");
+      const ta = el.querySelector("textarea");
+      ta.value = img.getAttribute("alt") || "";
+      el.querySelector(".lf-cancel").textContent = t("linkCancel");
+      el.querySelector(".lf-cancel").addEventListener("click", () => closePop());
+      el.querySelector(".lf-ok").textContent = t("linkSave");
+      el.querySelector(".lf-ok").addEventListener("click", () => { closePop(); imageEdit(index, { action: "alt", descr: ta.value.trim() }); });
+    });
+  }
+
   // ── stan paska (styl i wyrównanie akapitu z kursorem) ──────────────────────
   function activeParagraph() {
     const sel = window.getSelection();
@@ -737,6 +1085,8 @@ const composeUi = (() => {
     }
     if (alignBtn) alignBtn.innerHTML = alignSvg(currentAlign());
     listBtn?.classList.toggle("is-on", !!target && isListParagraph(target) && !pop);
+    // tylko gdy kursor stoi (albo ostatnio stał — fokus mógł przejść na pasek) w tabeli
+    if (tableBtn) tableBtn.hidden = !(target?.isConnected && target.closest("td, th") && !readOnlyMode);
     const sel = window.getSelection();
     const a = !readOnlyMode && !pop && sel?.isCollapsed ? linkAtCaret() : null;
     if (a) showLinkCard(a); else hideLinkCard();
@@ -798,6 +1148,41 @@ const composeUi = (() => {
   listBtn?.addEventListener("click", () => openPop(listBtn, buildListMenu));
   alignBtn?.addEventListener("click", () => openPop(alignBtn, buildAlignMenu));
   styleSel?.addEventListener("change", () => applyStyle(styleSel.value));
+  tableBtn?.addEventListener("mousedown", (e) => e.preventDefault());
+  tableBtn?.addEventListener("click", () => openPop(tableBtn, buildTableMenu));
+
+  // Obraz: klik w Edycji pokazuje kartę; klik obok / Esc / tryb Czytanie chowa.
+  docCanvasEl?.addEventListener("click", (e) => {
+    const img = e.target.closest?.(".docx-preview-host img");
+    if (!img || readOnlyMode || !collectPreviewParagraphElements(host()).includes(img.closest("p"))) return;
+    e.preventDefault();
+    showImageCard(img);
+  });
+  document.addEventListener("pointerdown", (e) => {
+    if (!imgCard || imgCard.el.contains(e.target) || e.target === imgCard.img || pop?.el.contains(e.target)) return;
+    hideImageCard();
+  }, true);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && imgCard && !pop) { e.preventDefault(); hideImageCard(); }
+    if ((e.key === "Delete" || e.key === "Backspace") && imgCard && !pop && !e.target.closest?.("input, textarea")) {
+      e.preventDefault();
+      const { index } = imgCard;
+      hideImageCard();
+      imageEdit(index, { action: "delete" }, false);
+    }
+  }, true);
+  document.getElementById("readMode")?.addEventListener("change", () => { hideImageCard(); if (tableBtn) tableBtn.hidden = true; });
+
+  // Wklejony obraz (zrzut ekranu, skopiowane zdjęcie) — w miejscu kursora, jak „Wstaw → Obraz”.
+  docCanvasEl?.addEventListener("paste", (e) => {
+    const p = e.target?.closest?.(".docx-editable-p");
+    if (!p || readOnlyMode) return;
+    const file = Array.from(e.clipboardData?.files || []).find((f) => /^image\//.test(f.type));
+    if (!file) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    insertImageFile(file, p);
+  }, true);
 
   // klik obok / przewinięcie / zmiana rozmiaru — okienko znika
   document.addEventListener("pointerdown", (e) => {
@@ -807,7 +1192,7 @@ const composeUi = (() => {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && pop) { e.preventDefault(); e.stopPropagation(); closePop(true); }
   }, true);
-  docViewportEl?.addEventListener("scroll", () => { closePop(); placeLinkCard(); }, { passive: true });
+  docViewportEl?.addEventListener("scroll", () => { closePop(); placeLinkCard(); placeImageCard(); }, { passive: true });
   bar?.addEventListener("scroll", () => closePop(), { passive: true });
   window.addEventListener("resize", () => closePop());
   window.visualViewport?.addEventListener("resize", () => { if (pop) placePop(pop.el, pop.anchor); });
@@ -842,5 +1227,5 @@ const composeUi = (() => {
     document.getElementById(id)?.addEventListener("click", openNewDialog);
   });
 
-  return { insertToc, insertFormField, applyList, changeListLevel, endListAt, openLinkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
+  return { insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, openLinkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
 })();

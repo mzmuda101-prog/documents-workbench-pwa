@@ -673,6 +673,8 @@ function applyEditToXml(xml, edit, opts = {}) {
   if (edit.op === "pageBreak") return applyPageBreakInXml(xml, edit); // docx-compose.js
   if (edit.op === "hrule") return applyHruleInXml(xml, edit);
   if (edit.op === "link") return applyLinkInXml(xml, edit);
+  if (edit.op === "table") return applyTableInXml(xml, edit);
+  if (edit.op === "image") return applyImageInXml(xml, edit);
   if (edit.op === "mergeParagraph") return mergeParagraphInXml(xml, edit.index, edit.mergedRuns);
   if (edit.op === "listLevel") return changeListLevelInXml(xml, edit.index, edit.delta);
   if (edit.op === "case" || edit.op === "trim" || edit.op === "affix") return applyParagraphTransformInXml(xml, edit, scope);
@@ -710,6 +712,12 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
     }
     if (normalized.op === "formFill") { // docx-forms.js — pola powiązane zmieniają też customXml / docProps
       const res = await applyFormFillInZip(zip, xml, normalized);
+      xml = res.xml;
+      total += res.count;
+      continue;
+    }
+    if (normalized.op === "tableInsert" || normalized.op === "imageInsert") { // docx-compose.js — style / pliki w paczce
+      const res = normalized.op === "tableInsert" ? await applyTableInsertInZip(zip, xml, normalized) : await applyImageInsertInZip(zip, xml, normalized);
       xml = res.xml;
       total += res.count;
       continue;
