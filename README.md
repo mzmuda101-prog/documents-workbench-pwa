@@ -29,8 +29,13 @@ Siostrzana aplikacja [Sheet Workbench PWA](../sheet-workbench-pwa/README.md).
   z paskiem — 85–87% ekranu zamiast 43–69%
 - **Dotyk / iPhone** (sprawdzone na symulatorze iOS): pisanie z klawiaturą ekranową bez
   uciekania paska, brak przybliżania strony przy polach, „Zapisz” w Safari = zapis kopii,
-  lżejsze efekty na dotyku, **przybliżanie dwoma palcami** (też przy „Dopasuj”: tekst skaluje się
-  i dalej zawija; „Dopasuj” wraca do 100%; zakres 35–300%); `?sample=nazwa` otwiera `docs/samples/nazwa.docx`
+  lżejsze efekty na dotyku, **przybliżanie dwoma palcami** (w Widoku mobilnym tekst skaluje się
+  i dalej zawija, w desktopowym strony przybliżają się jak zdjęcie; „Dopasuj” wraca do 100% /
+  szerokości strony; zakres 35–300%); `?sample=nazwa` otwiera `docs/samples/nazwa.docx`
+- **Widok mobilny / Widok desktopowy** (panel Widok albo stuknięcie w procent na pasku): Auto =
+  mobilny na dotyku w pionie i w wąskim oknie (≤768 px), desktopowy poza tym; ręczny wybór
+  pamiętany osobno dla dotyku w pionie, w poziomie i komputera. Zmiana widoku i obrót wracają
+  do tego samego akapitu, niezapisane zmiany zostają (`npm run test:view`)
 
 - **Eksport**: TXT, Markdown, HTML (z Twoimi edycjami: nagłówki, listy, tabele) oraz
   „Drukuj / zapisz jako PDF” z układem stron jak w podglądzie

@@ -256,11 +256,14 @@ const appFrame = (() => {
   readModeEl?.addEventListener("change", syncModeSwitch);
 
   // ── zoom na pasku ──────────────────────────────────────────────────────────
-  const zoomNowEl = document.getElementById("zoomNow");
+  // Procent + ikonka widoku (telefon = Widok mobilny, monitor = desktopowy); stuknięcie
+  // otwiera wybór widoku (mobile-doc-zoom.js).
+  const zoomNowEl = document.getElementById("zoomNowText");
   function syncZoomNow() {
     if (!zoomNowEl) return;
-    const reflow = typeof shouldUseMobileReflow === "function" && shouldUseMobileReflow();
-    zoomNowEl.textContent = reflow && !(typeof isReflowScaled === "function" && isReflowScaled()) ? t("zoomFitShort") : `${Math.round((parseFloat(zoomLevelEl?.value) || 1) * 100)}%`;
+    zoomNowEl.textContent = `${Math.round((parseFloat(zoomLevelEl?.value) || 1) * 100)}%`;
+    const btn = document.getElementById("zoomNow");
+    if (btn && typeof getViewLayout === "function") btn.dataset.layout = getViewLayout();
   }
   function stepZoom(dir) {
     if (!zoomLevelEl) return;
@@ -279,14 +282,6 @@ const appFrame = (() => {
     syncZoomNow();
     return r;
   };
-  if (typeof window.setZoomMode === "function") {
-    const origMode = window.setZoomMode;
-    window.setZoomMode = function setZoomModeAndShow(...args) {
-      const r = origMode.apply(this, args);
-      syncZoomNow();
-      return r;
-    };
-  }
 
   // ── szukanie na pasku (moduł Znajdź i zamień ładuje się leniwie) ────────────
   // Pole i ↑↓ są na wierzchu od razu, a find-replace-workbench.js dociąga się przy

@@ -72,9 +72,14 @@ async function run() {
   if (!panelClosed) throw new Error("Panel nie zamknął się");
   console.log("  ✓ Panel zamknięty");
 
-  const sliderHidden = await page.evaluate(() => document.getElementById("zoomSliderField")?.classList.contains("hidden"));
-  if (!sliderHidden) throw new Error("Suwak zoom powinien być ukryty w trybie reflow");
-  console.log("  ✓ Suwak zoom ukryty w reflow");
+  // Widok mobilny: suwak zostaje (skaluje tekst), w panelu wybór Auto / mobilny / desktopowy
+  const viewUi = await page.evaluate(() => ({
+    slider: !document.getElementById("zoomSliderField")?.classList.contains("hidden"),
+    opts: [...document.querySelectorAll("#viewLayoutPanel .view-layout-opt")].map((b) => `${b.dataset.layout}:${b.getAttribute("aria-checked")}`).join(","),
+  }));
+  if (!viewUi.slider) throw new Error("Suwak zoom powinien być widoczny także w Widoku mobilnym");
+  if (viewUi.opts !== "auto:true,mobile:false,desktop:false") throw new Error(`Wybór widoku w panelu: ${viewUi.opts}`);
+  console.log("  ✓ Suwak + wybór widoku (Auto zaznaczone) w panelu Widok");
 
   assertNoErrors(errors, "mobile-playwright");
   await browser.close();

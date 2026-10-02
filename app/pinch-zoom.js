@@ -1,8 +1,8 @@
 // pinch-zoom.js — przybliżanie i oddalanie dokumentu dwoma palcami (jak Word mobile).
 //
-// Działa też przy włączonym „Dopasuj do ekranu”: na telefonie skaluje tekst (dalej
-// zawija się do szerokości ekranu), na tablecie przechodzi w zoom ręczny. „Dopasuj”
-// wraca do dopasowania. Tylko dotyk (pointer: coarse) — mysz i gładzik bez zmian.
+// W Widoku mobilnym skaluje tekst (dalej zawija się do szerokości ekranu), w Widoku
+// desktopowym przybliża strony jak zdjęcie (mobile-doc-zoom.js). „Dopasuj” wraca do
+// dopasowania. Tylko dotyk (pointer: coarse) — mysz i gładzik bez zmian.
 //
 // W trakcie gestu NIE zmieniamy `zoom` (przy dużym dokumencie każda klatka to pełny
 // układ strony) — tylko tanie transform: translate/scale na #docZoomShell. Po
@@ -29,7 +29,7 @@
   badge.className = "zoom-badge";
   badge.setAttribute("aria-hidden", "true");
   document.body.appendChild(badge);
-  const zoomNowEl = document.getElementById("zoomNow");
+  const zoomNowEl = document.getElementById("zoomNowText");
   let badgeTimer = 0;
   function showBadge(z) {
     const pct = `${Math.round(z * 100)}%`;

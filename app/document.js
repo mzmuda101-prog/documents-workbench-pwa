@@ -157,16 +157,50 @@ async function renderCurrentDocument() {
 // (zgłoszenie Mateusza, Windows, 2026-10-01). Najpierw wpisane zmiany do pliku, potem rysowanie;
 // kolejne wywołania czekają na poprzednie (szybkie zmiany rozmiaru okna).
 let relayoutJob = Promise.resolve();
-function rerenderKeepingEdits() {
+// opts.anchor — miejsce zapamiętane wcześniej (zmiana widoku: zanim zmieni się układ)
+function rerenderKeepingEdits(opts = {}) {
   relayoutJob = relayoutJob.then(async () => {
     if (!originalFileBytes || currentFileType !== "docx") return;
     if (typeof mergeInlineEditsIntoBytes === "function") await mergeInlineEditsIntoBytes();
     const vp = docViewportEl;
     const ratio = vp && vp.scrollHeight > vp.clientHeight ? vp.scrollTop / (vp.scrollHeight - vp.clientHeight) : 0;
+    const anchor = opts.anchor !== undefined ? opts.anchor : ratio ? captureDocScrollAnchor() : null;
     await renderCurrentDocument();
-    if (vp && ratio) vp.scrollTop = ratio * Math.max(0, vp.scrollHeight - vp.clientHeight); // to samo miejsce w dokumencie
+    if (!vp || (!ratio && !anchor)) return;
+    // to samo miejsce w dokumencie: ten sam akapit u góry (Widok mobilny ⇄ desktopowy
+    // zawija tekst inaczej, więc sama proporcja przewinięcia potrafiła odjechać o strony)
+    if (!restoreDocScrollAnchor(anchor)) vp.scrollTop = ratio * Math.max(0, vp.scrollHeight - vp.clientHeight);
   }).catch((e) => log(String(e?.message || e), "error"));
   return relayoutJob;
+}
+
+// Pierwszy akapit treści widoczny u góry obszaru dokumentu + jaka jego część jest już nad
+// krawędzią. Akapity idą z góry na dół, więc wystarczy wyszukiwanie binarne.
+function captureDocScrollAnchor() {
+  const vp = docViewportEl;
+  if (!vp || typeof docBodyParagraphs !== "function") return null;
+  const paras = docBodyParagraphs(docCanvasEl);
+  if (!paras.length) return null;
+  const top = vp.getBoundingClientRect().top;
+  let lo = 0;
+  let hi = paras.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (paras[mid].getBoundingClientRect().bottom <= top + 1) lo = mid + 1;
+    else hi = mid;
+  }
+  const r = paras[lo].getBoundingClientRect();
+  return { index: lo, frac: r.height ? Math.max(0, Math.min(1, (top - r.top) / r.height)) : 0, gap: Math.max(0, r.top - top) };
+}
+
+function restoreDocScrollAnchor(anchor) {
+  const vp = docViewportEl;
+  if (!vp || !anchor || typeof docBodyParagraphs !== "function") return false;
+  const p = docBodyParagraphs(docCanvasEl)[anchor.index];
+  if (!p) return false;
+  const r = p.getBoundingClientRect();
+  vp.scrollTop += r.top + anchor.frac * r.height - anchor.gap - vp.getBoundingClientRect().top;
+  return true;
 }
 
 async function buildDocumentForSave() {

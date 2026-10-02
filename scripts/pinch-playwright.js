@@ -135,7 +135,8 @@ async function run() {
   await page.click("#zoomFitBtn");
   await page.waitForTimeout(300);
   const s5 = await state(page);
-  check("„Dopasuj” wraca do 100% i etykiety „Dopasuj”", s5.zoom === 1 && s5.mode === "fit" && !/%/.test(s5.now), JSON.stringify(s5));
+  check("„Dopasuj” wraca do 100% (etykieta „100%” z ikonką Widoku mobilnego)", s5.zoom === 1 && s5.mode === "fit" && s5.now === "100%"
+    && await page.evaluate(() => document.getElementById("zoomNow").dataset.layout === "mobile"), JSON.stringify(s5));
 
   // jeden palec = zwykłe przewijanie, nic się nie zmienia
   await fingers(page, "touchstart", 0);
@@ -148,16 +149,28 @@ async function run() {
   });
   check("jeden palec nie startuje gestu", one === "");
 
-  // tablet: ręczny zoom, pinch przełącza fit → manual bez przebudowy
+  // tablet w pionie (Auto): Widok mobilny — pinch skaluje tekst, który dalej się zawija
   await page.setViewportSize({ width: 820, height: 1000 });
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(600);
   await page.click("#zoomFitBtn");
   await page.waitForTimeout(300);
+  const p0 = await state(page);
+  check("tablet w pionie: Widok mobilny (tekst zawija się)", p0.mode === "fit" && p0.reflow, JSON.stringify(p0));
+  await pinch(page, 100, 140, 410, 500);
+  const p1 = await state(page);
+  check("tablet w pionie: pinch powiększa tekst, bez poziomego przewijania", p1.reflow && p1.lineH > p0.lineH * 1.25 && p1.sw <= 1, JSON.stringify({ p0: p0.lineH, p1: p1.lineH, sw: p1.sw }));
+  await page.click("#zoomFitBtn");
+
+  // tablet w poziomie (Auto): Widok desktopowy — strony, pinch przybliża jak zdjęcie
+  await page.setViewportSize({ width: 1180, height: 820 });
+  await page.waitForTimeout(800);
+  await page.waitForFunction(() => !document.getElementById("docCanvas").classList.contains("doc-reflow-mode"));
+  await page.waitForTimeout(300);
   const t0 = await state(page);
-  await pinch(page, 100, 160, 410, 500);
+  await pinch(page, 100, 160, 590, 500);
   const t1 = await state(page);
-  check("tablet: pinch zmienia zoom i przechodzi w tryb ręczny", t1.mode === "manual" && t1.zoom > t0.zoom * 1.4, JSON.stringify({ t0: t0.zoom, t1: t1.zoom, mode: t1.mode }));
-  check("tablet: tekst na ekranie faktycznie większy", t1.lineH > t0.lineH * 1.4, `${t0.lineH} → ${t1.lineH}`);
+  check("tablet w poziomie: Widok desktopowy, pinch zmienia zoom stron", t1.mode === "manual" && !t1.reflow && t1.zoom > t0.zoom * 1.4, JSON.stringify({ t0: t0.zoom, t1: t1.zoom, mode: t1.mode }));
+  check("tablet w poziomie: tekst na ekranie faktycznie większy", t1.lineH > t0.lineH * 1.4, `${t0.lineH} → ${t1.lineH}`);
 
   if (errors.length) check("brak błędów strony", false, errors.slice(0, 3).join(" | "));
   await browser.close();
