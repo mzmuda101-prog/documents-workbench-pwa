@@ -73,6 +73,19 @@ async function makePdfs() {
   await page.pdf({ path: path.join(TMP, "proba.pdf"), format: "A4", printBackground: true, displayHeaderFooter: true, headerTemplate: "<span></span>", footerTemplate: footer, margin: { top: "22mm", bottom: "24mm", left: "20mm", right: "20mm" } });
   await page.setContent(BIG_HTML, { waitUntil: "load" });
   await page.pdf({ path: path.join(TMP, "duzy.pdf"), format: "A4" });
+  // lista tuż przy zdjęciu / zdjęcie lekko zachodzi na wiersze (karty terenu 101–103: mapka
+  // zaczyna się 1 px za albo 3 px przed końcem najdłuższego wiersza)
+  for (const [name, off] of [["styka", -1], ["zachodzi", 3]]) {
+    await page.setContent(`<!doctype html><html lang="pl"><head><meta charset="utf-8"><style>body{margin:40px;font-family:Arial;font-size:16px}.row{display:flex;align-items:flex-start}.list{width:140px}.list p{margin:0 0 6px}img{width:260px;height:150px;display:block}</style></head><body><p>Karta testowa</p><div class="row"><div class="list"><p>KLATKI:</p><p>1/1 - 10</p><p>14/131 - 140</p><p>17/161 - 170</p></div><img src="__IMG__"></div><p>Akapit pod spodem.</p></body></html>`.replace("__IMG__", img), { waitUntil: "load" });
+    await page.evaluate((off) => {
+      const ps = [...document.querySelectorAll(".list p")];
+      const r = document.createRange();
+      const widest = Math.max(...ps.map((p) => { r.selectNodeContents(p); return r.getBoundingClientRect().right; }));
+      const im = document.querySelector("img");
+      im.style.marginLeft = `${widest - off - im.getBoundingClientRect().left}px`;
+    }, off);
+    await page.pdf({ path: path.join(TMP, `${name}.pdf`), width: "210mm", height: "148mm" });
+  }
   // „skan”: zrzut strony z tekstem jako obraz, PDF z samym obrazem (bez warstwy tekstu)
   await page.setViewportSize({ width: 794, height: 1123 });
   await page.setContent(`<!doctype html><html lang="pl"><head><meta charset="utf-8"><style>body{margin:60px;font-family:Arial;font-size:22px;color:#111}h1{font-size:34px}.box{background:#f39a5b;padding:10px 16px}</style></head><body><div class="box"><b>KATEDRA AUTOMATYKI</b></div><h1>Lista obecności — lipiec</h1><p>Spóźnienia usprawiedliwione oraz nieusprawiedliwione.</p><p>Zażółć gęślą jaźń.</p></body></html>`, { waitUntil: "load" });
@@ -223,6 +236,21 @@ async function run() {
   check("zepsuty PDF: czytelny błąd, dokument bez zmian", bad.msg && bad.name === before, JSON.stringify(bad));
   const again = await convert(page, path.join(TMP, "proba.pdf"));
   check("po błędzie kolejna konwersja działa", again && again.name === "proba.docx", "");
+
+  // --- 4b. zdjęcie tuż przy liście / lekko na nią zachodzi: lista zostaje OBOK (nie spada pod nie)
+  for (const name of ["styka", "zachodzi"]) {
+    await page.evaluate(() => { setDirtyState(false); });
+    await convert(page, path.join(TMP, `${name}.pdf`));
+    const side = await page.evaluate(() => {
+      const sec = document.querySelector("section.docx");
+      const img = [...sec.querySelectorAll("img")].sort((a, b) => b.getBoundingClientRect().width - a.getBoundingClientRect().width)[0];
+      const p = [...sec.querySelectorAll("p")].find((q) => q.textContent.includes("17/161 - 170"));
+      if (!img || !p) return { img: !!img, paras: [...sec.querySelectorAll("p")].map((q) => q.textContent.trim()).filter(Boolean) };
+      const a = img.getBoundingClientRect(), b = p.getBoundingClientRect();
+      return { listBottom: Math.round(b.bottom), imgTop: Math.round(a.top), imgBottom: Math.round(a.bottom), listLeft: Math.round(b.left), imgLeft: Math.round(a.left) };
+    });
+    check(`zdjęcie ${name === "styka" ? "tuż przy liście" : "lekko zachodzi na listę"}: lista obok zdjęcia, nie pod nim`, side && side.listBottom <= side.imgBottom + 4 && side.imgLeft > side.listLeft, JSON.stringify(side));
+  }
 
   // --- 5. skan: pytanie o OCR, rozpoznanie na urządzeniu, tekst + obraz tła bez słów
   await page.evaluate(() => { setDirtyState(false); window.__conv = null; });

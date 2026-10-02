@@ -580,8 +580,13 @@
     return ys.length + atoms.filter((a) => a.type !== "text").length * 2;
   }
 
+  // Brzeg obrazu może lekko zachodzić na tekst obok (karty: mapka przykrywa końcówki wierszy
+  // listy) — w podziale na kolumny obraz liczymy węższy o IMG_INSET z obu stron.
+  const IMG_INSET = 6;
+  const xSpan = (a) => (a.type === "image" && a.x1 - a.x0 > IMG_INSET * 4 ? [a.x0 + IMG_INSET, a.x1 - IMG_INSET] : [a.x0, a.x1]);
+
   function projectionGaps(atoms, axis) {
-    const iv = atoms.map((a) => (axis === "x" ? [a.x0, a.x1] : [a.top, a.bottom])).sort((p, q) => p[0] - q[0]);
+    const iv = atoms.map((a) => (axis === "x" ? xSpan(a) : [a.top, a.bottom])).sort((p, q) => p[0] - q[0]);
     const gaps = [];
     let end = iv.length ? iv[0][1] : 0;
     for (let i = 1; i < iv.length; i++) {
@@ -598,10 +603,10 @@
     // pionowe cięcie: kolumny/karty obok siebie
     let bestV = null;
     for (const g of projectionGaps(atoms, "x")) {
-      const left = atoms.filter((a) => a.x1 <= g.at), right = atoms.filter((a) => a.x0 >= g.at);
-      // Obok obrazu/tabeli wystarczy mała przerwa i jeden wiersz tekstu (podpis, opis z boku).
+      const left = atoms.filter((a) => xSpan(a)[1] <= g.at), right = atoms.filter((a) => xSpan(a)[0] >= g.at);
+      // Obok obrazu/tabeli wystarczy styk (obraz i tak „wcięty”) i jeden wiersz tekstu.
       const lObj = left.some((a) => a.type !== "text"), rObj = right.some((a) => a.type !== "text");
-      const minGap = lObj || rObj ? 4 : Math.max(ms * 1.4, 10);
+      const minGap = lObj || rObj ? 0.5 : Math.max(ms * 1.4, 10);
       if (g.size < minGap) continue;
       const okL = rowsCount(left) >= 2 || (rObj && left.length > 0) || lObj;
       const okR = rowsCount(right) >= 2 || (lObj && right.length > 0) || rObj;
@@ -1320,7 +1325,11 @@
         cell.frags.push(atom);
         continue;
       }
-      const overlapsText = textBoxes.some((t) => overlap1d(t.x0, t.x1, b.x0, b.x1) > 2 && overlap1d(t.y0, t.y1, b.y0, b.y1) > 2);
+      // nachodzenie tylko na brzeg obrazu (≤ IMG_INSET) to wciąż „obok” — obraz zostaje w tekście
+      const ix0 = b.x1 - b.x0 > IMG_INSET * 4 ? b.x0 + IMG_INSET : b.x0, ix1 = b.x1 - b.x0 > IMG_INSET * 4 ? b.x1 - IMG_INSET : b.x1;
+      // ten sam próg co w podziale na kolumny (xSpan) — inaczej przy zachodzeniu 6–8 pt obraz nie
+      // był ani „obok” (brak przerwy), ani „pływający”, i lądował nad tekstem
+      const overlapsText = textBoxes.some((t) => overlap1d(t.x0, t.x1, ix0, ix1) > 0.3 && overlap1d(t.y0, t.y1, b.y0, b.y1) > 2);
       if (overlapsText) {
         const firstText = Math.min(...free.filter((f) => overlap1d(f.x0, f.x1, b.x0, b.x1) > 2 && overlap1d(f.top, f.bottom, b.y0, b.y1) > 2).flatMap((f) => f.glyphs.map((g) => g.order)));
         floats.push({ ...atom, behind: im.order < firstText });
@@ -1379,21 +1388,34 @@
     };
     collect(node);
     const bounds = cols.map((c) => atomsBox(c));
+    const textB = cols.map((c) => atomsBox(c, true));
     const edges = [box.x0];
-    for (let i = 1; i < cols.length; i++) edges.push((bounds[i - 1].x1 + bounds[i].x0) / 2);
+    for (let i = 1; i < cols.length; i++) {
+      const L = bounds[i - 1], R = bounds[i];
+      if (L.x1 <= R.x0) edges.push((L.x1 + R.x0) / 2);
+      // brzeg obrazu zachodzi na tekst obok: granica tuż za tekstem (obraz przesunie się o te
+      // kilka punktów), żeby wiersz tekstu się nie zawinął
+      else if (textB[i - 1] && textB[i - 1].x1 > R.x0) edges.push(textB[i - 1].x1 + 0.5);
+      else if (textB[i] && textB[i].x0 < L.x1) edges.push(textB[i].x0 - 0.5);
+      else edges.push((L.x1 + R.x0) / 2);
+    }
     edges.push(box.x1);
     const cells = cols.map((c, i) => ({ blocks: treeToBlocks(c, { x0: edges[i], x1: edges[i + 1], top: bounds[i].top }), x0: edges[i], x1: edges[i + 1], top: bounds[i].top }));
     const top = Math.min(...bounds.map((b) => b.top)), bottom = Math.max(...bounds.map((b) => b.bottom));
     return [{ type: "columns", cells, x0: box.x0, x1: box.x1, top, bottom }];
   }
 
-  function atomsBox(node) {
-    const atoms = [];
+  function atomsBox(node, textOnly = false) {
+    let atoms = [];
     const walk = (n) => {
       if (n.type === "flow") atoms.push(...n.atoms);
       else n.children.forEach(walk);
     };
     walk(node);
+    if (textOnly) {
+      atoms = atoms.filter((a) => a.type === "text");
+      if (!atoms.length) return null;
+    }
     return {
       x0: Math.min(...atoms.map((a) => a.x0)), x1: Math.max(...atoms.map((a) => a.x1)),
       top: Math.min(...atoms.map((a) => a.top)), bottom: Math.max(...atoms.map((a) => a.bottom)),
