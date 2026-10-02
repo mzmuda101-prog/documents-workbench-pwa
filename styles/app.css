@@ -138,6 +138,10 @@
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  /* Aplikacja, nie strona: bez przybliżania podwójnym stuknięciem. Na iPadzie szybkie „−/+”
+     Safari brał za podwójne stuknięcie i powiększał CAŁĄ aplikację (pasek ucięty z lewej),
+     mimo manipulation na samych przyciskach. Dokument przybliża się własnym gestem. */
+  touch-action: manipulation;
 }
 
 ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -770,16 +774,17 @@ html.is-mobile .doc-zoom-shell { width: 100%; min-height: 0; }
 html:has(.doc-canvas.doc-reflow-mode), .doc-canvas.doc-reflow-mode {
   -webkit-text-size-adjust: none; text-size-adjust: none;
 }
-/* Widok mobilny na szerszym ekranie (iPad w pionie, komputer): kolumna o wygodnej szerokości
-   na środku, jak kartka — linia tekstu przez cały monitor byłaby nie do czytania. 760 px to
-   szerokość logiczna: przy powiększeniu kolumna rośnie razem z literami (CSS zoom). */
+/* Widok mobilny na szerszym ekranie (iPad w pionie, komputer): kartka na CAŁĄ szerokość
+   obszaru dokumentu, przy każdym zoomie — jak Word na telefonie. (Dawniej kolumna max 760 px
+   logicznych: przy oddalaniu zwężała się do 40–48% ekranu — „chowała się”.) Odstępy rosną
+   jak √zoom, tak jak wcięcia (--dwb-ik). */
 html:not(.is-mobile) .doc-canvas.doc-reflow-mode { padding: 16px 12px 40px; }
 html:not(.is-mobile) .doc-canvas.doc-reflow-mode .docx-preview-host {
-  max-width: 760px !important; margin: 0 auto !important;
+  margin: 0 !important;
   border-radius: var(--r-sm); box-shadow: var(--shadow-lg);
 }
 html:not(.is-mobile) .doc-canvas.doc-reflow-mode section.docx {
-  padding: 28px clamp(16px, 4%, 40px) 36px !important;
+  padding: calc(28px * var(--dwb-ik, 1)) calc(clamp(16px, 4%, 40px) * var(--dwb-ik, 1)) calc(36px * var(--dwb-ik, 1)) !important;
 }
 
 /* Tryb czytania — cały stos podglądu na białym tle (bez szarej ramki) */

@@ -304,8 +304,13 @@ async function run() {
 
   await pickInPopover(dp, "mobile");
   const c1 = await look(dp);
-  check("komputer: Widok mobilny działa — kolumna ≤ 760 px na środku, tekst się zawija",
-    c1.reflow && c1.hostW <= 762 && Math.abs(c1.hostL - (c1.vpW - c1.hostW) / 2) < 16 && c1.overflowX <= 1, JSON.stringify(c1));
+  check("komputer: Widok mobilny wypełnia całą szerokość obszaru, tekst się zawija",
+    c1.reflow && c1.hostW >= c1.vpW * 0.95 && c1.overflowX <= 1, JSON.stringify(c1));
+  await dp.evaluate(() => { zoomLevelEl.value = "0.5"; zoomLevelEl.dispatchEvent(new Event("input", { bubbles: true })); });
+  await dp.waitForTimeout(200);
+  const c1b = await look(dp);
+  check("…także przy oddaleniu do 50% (kolumna się nie zwęża)", c1b.reflow && c1b.hostW >= c1b.vpW * 0.95 && c1b.overflowX <= 1, JSON.stringify(c1b));
+  await dp.click("#zoomFitBtn");
   await scrollToPara(dp, 45);
   await dp.waitForTimeout(250);
   const m0b = await topPara(dp);
