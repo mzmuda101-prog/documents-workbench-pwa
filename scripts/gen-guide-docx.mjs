@@ -161,6 +161,15 @@ const body = [
   p("Komentarz: zaznacz tekst i Ctrl/⌘+Alt+M (albo „＋ Wstaw → Komentarz”). Komentowany tekst jest podświetlony; gdy kursor w nim stoi, karta pozwala odpowiedzieć, oznaczyć jako rozwiązany albo usunąć. Wszystkie komentarze są też w panelu Recenzja."),
   p("„＋ Wstaw → Nagłówek, stopka, numer strony…” (albo kliknięcie w nagłówek/stopkę w Edycji): tekst u góry i na dole każdej strony, numer strony („1”, „Strona 1”, „Strona 1 z 5”, „– 1 –”) i inna pierwsza strona, np. tytułowa bez numeru."),
   tip("zaznacz słowo w tym akapicie, naciśnij Ctrl/⌘+Alt+M i dodaj komentarz — potem kliknij w podświetlony tekst i odpowiedz na niego."),
+
+  h1("14. PDF → Word (.docx)"),
+  p("Otwórz plik .pdf tak jak .docx (Otwórz, przeciągnięcie do okna, „Otwórz za pomocą”) — aplikacja zamieni go w edytowalny dokument Worda. Wszystko dzieje się na tym urządzeniu: plik nigdzie nie jest wysyłany, działa też bez internetu. Okienko pokazuje postęp strona po stronie; „Anuluj” przerywa w każdej chwili."),
+  bullet("Zostają: akapity z wyrównaniem i wcięciami, nagłówki (trafiają do skrótów sekcji i Struktury), punktory, tabele z liniami i tłem komórek, obrazy, linki, spis treści z kropkami, numery stron w stopce, kolumny i układ kilku kart na stronie."),
+  bullet("Czcionki z PDF są osadzane w pliku, gdy na komputerze może ich brakować — tekst zawija się jak w oryginale."),
+  bullet("Wypełnione pola formularza PDF trafiają do tekstu z polskimi literami, nawet gdy PDF rysował je bez „Ł” czy „Ś”."),
+  p("Skan (zdjęcie strony) — aplikacja zapyta, czy rozpoznać tekst (OCR). Rozpoznany druk staje się zwykłym tekstem, a skan zostaje pod spodem jako tło: kolory, linie tabel i pieczątki widać jak w oryginale. Na tekst zamieniane są tylko słowa rozpoznane z dużą pewnością; pismo odręczne i nieczytelne fragmenty zostają na obrazie bez zmian (rozpoznawanie pisma odręcznego — do poprawy w przyszłości)."),
+  p("Po konwersji dokument jest nowy i niezapisany — „Zapisz” zapyta o nazwę i miejsce pliku .docx. Sprawdź wynik, zwłaszcza po OCR."),
+  tip("zapisz dowolną stronę WWW jako PDF (Drukuj → Zapisz jako PDF) i otwórz ją tutaj — zobaczysz, jak wygląda po zamianie na Worda."),
 ];
 
 const tocBlock = [

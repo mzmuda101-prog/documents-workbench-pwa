@@ -254,13 +254,14 @@ async function openFilePicker() {
       const [handle] = await window.showOpenFilePicker({
         mode: "readwrite",
         types: [{
-          description: "Word Document",
-          accept: { "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"] },
+          description: "Word / PDF",
+          accept: { "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"], "application/pdf": [".pdf"] },
         }],
         multiple: false,
       });
       const file = await handle.getFile();
-      await ingestFile(file, { handle });
+      // PDF zamienia się w nowy .docx — uchwyt do PDF-a nie może służyć do „Zapisz”
+      await ingestFile(file, /\.pdf$/i.test(file.name) ? {} : { handle });
       return;
     } catch (e) {
       if (e && e.name === "AbortError") return;

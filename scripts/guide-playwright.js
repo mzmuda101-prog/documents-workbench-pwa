@@ -54,7 +54,7 @@ async function run() {
     out.xref = host.querySelector("a.doc-xref")?.getAttribute("href");
     return out;
   });
-  check("skróty sekcji: tytuł + 13 rozdziałów", r.chips === 14, String(r.chips));
+  check("skróty sekcji: tytuł + 14 rozdziałów", r.chips === 15, String(r.chips));
   const [all, ww, mc] = r.find;
   check("szukanie „najemca” znajduje też „Najemcami”", all.some((t) => /^Najemcami/.test(t)), all.join("|"));
   check("„Tylko całe słowa” wyklucza „Najemcami”", ww.length === all.length - all.filter((t) => /^Najemcami/i.test(t)).length && !ww.some((t) => /^najemcami/i.test(t)), ww.join("|"));
@@ -71,7 +71,7 @@ async function run() {
   check("zablokowane: zmiana, przypis, odsyłacz (linki i pola w zdaniu edytowalne)",
     !r.locked.lockLink && !r.locked.lockForm && r.locked.lockField === 1 && r.locked.lockTracked === 1 && r.locked.lockNote === 1 && Object.keys(r.locked).length === 3, JSON.stringify(r.locked));
   check("formularz: tekst, lista, data, pole wyboru", r.forms === "text,dropdown,date,checkbox", r.forms);
-  check("spis treści: 13 linków do rozdziałów + odsyłacz do „Zapisu”", r.toc === 13 && r.xref === "#_Guide12", `${r.toc} ${r.xref}`);
+  check("spis treści: 14 linków do rozdziałów + odsyłacz do „Zapisu”", r.toc === 14 && r.xref === "#_Guide12", `${r.toc} ${r.xref}`);
 
   // ── „Spróbuj:” z nowych rozdziałów robi to, co obiecuje ────────────────────
   const clickIn = async (sel) => {

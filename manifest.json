@@ -29,6 +29,9 @@
       "accept": {
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
           ".docx"
+        ],
+        "application/pdf": [
+          ".pdf"
         ]
       },
       "launch_type": "multiple-clients"
@@ -47,7 +50,9 @@
           "name": "file",
           "accept": [
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            ".docx"
+            ".docx",
+            "application/pdf",
+            ".pdf"
           ]
         }
       ]

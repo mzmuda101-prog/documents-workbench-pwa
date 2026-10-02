@@ -1,4 +1,4 @@
-const CACHE_VERSION = "20261002-09";
+const CACHE_VERSION = "20261002-10";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
@@ -68,6 +68,13 @@ const SHELL_ASSETS = [
   `./app/snippets-panel.js?v=${ASSET_V}`,
   `./app/find-replace-workbench.js?v=${ASSET_V}`,
   `./app/metadata-panel.js?v=${ASSET_V}`,
+  `./app/pdf-import.js?v=${ASSET_V}`,
+  `./app/pdf-extract.js?v=${ASSET_V}`,
+  `./app/pdf-layout.js?v=${ASSET_V}`,
+  `./app/pdf-docx.js?v=${ASSET_V}`,
+  `./app/pdf-fonts.js?v=${ASSET_V}`,
+  `./app/pdf-ocr.js?v=${ASSET_V}`,
+  `./app/pdf-convert.js?v=${ASSET_V}`,
 ];
 
 // Ciężkie biblioteki + film intro — osobny kubełek, dogrywany PO aktywacji (niżej).
@@ -75,14 +82,18 @@ const HEAVY_ASSETS = [
   "./lib/jszip.min.js",
   "./lib/docx-preview.bundle.js",
   "./assets/media/mateusz-intro-2s.mp4",
+  // PDF → DOCX: silnik pdf.js (bez niego konwersja nie ruszy offline); wasm i cmapy — przy użyciu
+  `./lib/pdfjs/pdf.min.mjs?v=${ASSET_V}`,
+  `./lib/pdfjs/pdf.worker.min.mjs?v=${ASSET_V}`,
 ];
 
 function isStaticAsset(url) {
-  return /\.(?:css|js|png|svg|jpg|jpeg|gif|webp|ico|woff2?|mp4|docx|pdf)$/i.test(url.pathname);
+  return /\.(?:css|js|mjs|wasm|bcmap|png|svg|jpg|jpeg|gif|webp|ico|woff2?|mp4|docx|pdf)$/i.test(url.pathname);
 }
 
 function isHeavyAsset(url) {
   return /\/lib\/(?:jszip\.min|docx-preview\.bundle)\.js$/i.test(url.pathname)
+    || /\/lib\/pdfjs\//i.test(url.pathname)
     || /\/assets\/media\/mateusz-intro(?:-2s)?\.mp4$/i.test(url.pathname);
 }
 

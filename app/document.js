@@ -51,9 +51,18 @@ function setFileUi(name, size) {
 async function ingestFile(file, options = {}) {
   if (!file) return false;
   const type = detectFileType(file.name, file.type);
+  if (type === "pdf") {
+    // PDF → DOCX na urządzeniu (app/pdf-import.js, ładowany dopiero teraz)
+    try {
+      await loadLazyScript("app/pdf-import.js");
+    } catch (_) {
+      toast(t("libsMissingToast"), "error");
+      return false;
+    }
+    return window.dwbPdfImport.convertFile(file, options);
+  }
   if (type !== "docx") {
-    if (type === "pdf") toast(t("pdfSoon"), "info");
-    else if (/\.doc$/i.test(file.name || "")) toast(t("docOldFormat"), "warning");
+    if (/\.doc$/i.test(file.name || "")) toast(t("docOldFormat"), "warning");
     else toast(t("unsupportedType"), "warning");
     return false;
   }

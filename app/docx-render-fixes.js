@@ -103,6 +103,106 @@ const WORD_LINE_FACTORS = {
   "courier new": 1.1328, consolas: 1.1709, "century gothic": 1.2251,
 };
 
+// Obrazy zakotwiczone do STRONY (łatka w vendor-libs: position:absolute, „za tekstem” = z-index −1)
+// przenosimy wprost do strony: w komórce tabeli czy akapicie z position:relative liczyłyby się
+// od tamtego elementu, nie od rogu kartki.
+function fixPageAnchoredDrawings(host) {
+  const root = host?.querySelector?.(".docx-wrapper") || host;
+  if (!root) return 0;
+  let moved = 0;
+  root.querySelectorAll("section.docx").forEach((section) => {
+    section.querySelectorAll("div").forEach((d) => {
+      if (d.style.position !== "absolute" || d.parentElement === section) return;
+      if (!d.querySelector("img")) return;
+      d.classList.add("dwb-page-anchor");
+      section.insertBefore(d, section.firstChild);
+      moved++;
+    });
+  });
+  return moved;
+}
+
+// Tabulatory jak w Wordzie: docx-preview rysuje każdy tabulator jako stałą spację, a łatka w
+// vendor-libs zostawia na <span class="docx-tab"> pozycje tabulatorów akapitu. Tu liczymy
+// szerokość każdego: lewy (do pozycji), prawy/środkowy (tekst za nim kończy się/centruje na
+// pozycji), domyślna siatka co data-dt pt, wcięcie wiszące = ukryty tabulator (punktory).
+// Wypełnienie kropkami/kreską (spis treści, „Miejscowość: ……”). Współrzędne bez skali widoku
+// (powiększenie robi transform). Przebiegi: najpierw wszystkie 1. tabulatory akapitów, potem 2.…
+// — jedno przeliczenie układu na przebieg, nie na każdy tabulator.
+function layoutTabStops(host) {
+  const root = host?.querySelector?.(".docx-wrapper") || host;
+  if (!root) return 0;
+  const spans = [...root.querySelectorAll("span.docx-tab")];
+  if (!spans.length) return 0;
+  const byPara = new Map();
+  for (const sp of spans) {
+    const p = sp.closest("p");
+    if (!p) continue;
+    if (!byPara.has(p)) byPara.set(p, []);
+    byPara.get(p).push(sp);
+  }
+  const PX2PT = 0.75;
+  let done = 0;
+  for (let pass = 0; ; pass++) {
+    const jobs = [];
+    for (const [p, list] of byPara) if (list[pass]) jobs.push([p, list[pass], list[pass + 1] || null]);
+    if (!jobs.length || pass > 40) break;
+    // odczyt
+    const plans = jobs.map(([p, sp, next]) => {
+      const pr = p.getBoundingClientRect();
+      const scale = p.offsetWidth ? pr.width / p.offsetWidth : 1;
+      if (!scale) return null;
+      const cs = getComputedStyle(p);
+      const ml = parseFloat(cs.marginLeft) || 0, pl = parseFloat(cs.paddingLeft) || 0;
+      const originPx = pr.left - ml * scale;
+      const r = sp.getBoundingClientRect();
+      const x = ((r.left - originPx) / scale) * PX2PT;
+      const indent = (ml + pl) * PX2PT;
+      const hanging = (parseFloat(cs.textIndent) || 0) < -0.5;
+      let stops = [];
+      try {
+        stops = JSON.parse(sp.dataset.stops || "[]").map(([pos, leader, style]) => ({ pos, leader, style }));
+      } catch (_) { stops = []; }
+      stops = stops.filter((t) => t.style !== "clear").sort((a, b) => a.pos - b.pos);
+      if (hanging && indent > x + 0.5 && !stops.some((t) => t.pos > x + 0.5 && t.pos < indent)) stops.push({ pos: indent, leader: "none", style: "left" });
+      stops.sort((a, b) => a.pos - b.pos);
+      let stop = stops.find((t) => t.pos > x + 0.5);
+      if (!stop) {
+        const dt = parseFloat(sp.dataset.dt) || 36;
+        const last = stops.length ? stops[stops.length - 1].pos : 0;
+        let pos = Math.max(last, 0);
+        while (pos <= x + 0.5) pos += dt;
+        stop = { pos, leader: "none", style: "left" };
+      }
+      let after = 0;
+      if (stop.style === "right" || stop.style === "center" || stop.style === "decimal") {
+        const range = document.createRange();
+        range.setStartAfter(sp);
+        if (next) range.setEndBefore(next);
+        else range.setEndAfter(p.lastChild || p);
+        after = (range.getBoundingClientRect().width / scale) * PX2PT;
+        if (stop.style === "center") after /= 2;
+      }
+      return { sp, width: Math.max(0, stop.pos - x - after), leader: stop.leader };
+    });
+    // zapis
+    for (const pl of plans) {
+      if (!pl) continue;
+      const st = pl.sp.style;
+      st.display = "inline-block";
+      st.width = `${pl.width.toFixed(2)}pt`;
+      st.whiteSpace = "pre";
+      st.overflow = "hidden"; // wyrównanie w pionie: CSS (.docx-tab-laid, p.dwb-exact)
+      pl.sp.innerHTML = "&nbsp;";
+      pl.sp.classList.add("docx-tab-laid");
+      pl.sp.classList.toggle("tab-dot", pl.leader === "dot" || pl.leader === "middleDot");
+      pl.sp.classList.toggle("tab-line", pl.leader === "underscore" || pl.leader === "heavy" || pl.leader === "hyphen");
+      done++;
+    }
+  }
+  return done;
+}
+
 function wordLineFactor(fontFamily) {
   const first = String(fontFamily || "").split(",")[0].trim().replace(/^["']|["']$/g, "").toLowerCase();
   return WORD_LINE_FACTORS[first] || 1.17;
@@ -126,7 +226,24 @@ function applyWordLineMetrics(host) {
       m = Number.isFinite(a) && Number.isFinite(b) && Math.abs(b - 2 * a) < 1 ? a / 100 : null;
       multiplierCache.set(key, m);
     }
-    if (!m) return; // dokładny odstęp w pt albo „normal” — zostaje
+    if (!m) {
+      // Interlinia „dokładnie” (wartość w pt): wysokość linijki w przeglądarce bierze się też
+      // z czcionki SAMEGO akapitu (domyślnej z dokumentu), nie tylko tekstu. Gdy tekst jest
+      // mniejszy, każda linijka rosła o 1–2 pt (tabela z PDF „puchła” o 90 pt na stronie).
+      // Word liczy tylko podaną wysokość — ustawiamy akapitowi rozmiar jego tekstu.
+      if (/(pt|px)$/.test(p.style.lineHeight)) {
+        p.classList.add("dwb-exact"); // fragmenty tekstu nie podnoszą linijki (CSS niżej)
+        const run = [...p.querySelectorAll("span")].find((sp) => sp.textContent.trim());
+        if (run) {
+          const fs = parseFloat(getComputedStyle(run).fontSize);
+          if (fs && Math.abs(fs - parseFloat(getComputedStyle(p).fontSize)) > 0.1) {
+            p.style.fontSize = `${fs}px`;
+            fixed++;
+          }
+        }
+      }
+      return;
+    }
     const run = [...p.querySelectorAll("span")].find((s) => s.textContent.trim()) || p.querySelector("span") || p;
     const cs = getComputedStyle(run);
     const fs = parseFloat(cs.fontSize);

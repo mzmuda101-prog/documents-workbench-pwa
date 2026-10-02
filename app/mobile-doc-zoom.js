@@ -188,8 +188,12 @@ function applyMobileReflowLayout(host) {
   const section = host.querySelector("section.docx") || host.querySelector(".docx");
   if (!section) return;
   const vpW = docViewportEl?.clientWidth || window.innerWidth;
+  // WSZYSTKIE kartki: po podziale strony docx-preview robi kolejne <section> — dawniej tylko
+  // pierwsza dopasowywała się do ekranu, następne zostawały szerokie (strona przewijała się w bok)
+  const sections = [...host.querySelectorAll("section.docx")];
+  if (!sections.length) sections.push(section);
 
-  [host, section, ...host.querySelectorAll(".docx-wrapper, article")].forEach((el) => {
+  [host, ...sections, ...host.querySelectorAll(".docx-wrapper, article")].forEach((el) => {
     el.style.width = "100%";
     el.style.maxWidth = "100%";
     el.style.minWidth = "0";
@@ -212,15 +216,29 @@ function applyMobileReflowLayout(host) {
 
   const readPad = Math.max(10, Math.min(14, Math.round(vpW * 0.028)));
   // boczny odstęp jak wcięcia: rośnie jak √zoom (softenReflowIndents)
-  section.style.paddingLeft = `calc(${readPad}px * var(--dwb-ik, 1))`;
-  section.style.paddingRight = `calc(${readPad}px * var(--dwb-ik, 1))`;
-  section.style.paddingTop = "10px";
-  section.style.paddingBottom = "16px";
+  sections.forEach((sec) => {
+    sec.style.paddingLeft = `calc(${readPad}px * var(--dwb-ik, 1))`;
+    sec.style.paddingRight = `calc(${readPad}px * var(--dwb-ik, 1))`;
+    sec.style.paddingTop = "10px";
+    sec.style.paddingBottom = "16px";
+  });
 
   host.querySelectorAll("table").forEach((table) => {
     table.style.width = "100%";
     table.style.maxWidth = "100%";
     table.style.tableLayout = "fixed";
+    // Szerokości kolumn w pt (tabele z PDF, „stałe” tabele Worda) → procenty: suma szerokości
+    // komórek ponad ekran rozpychała całą stronę w bok.
+    const cols = table.querySelectorAll(":scope > colgroup > col");
+    const colW = [...cols].map((c) => parseFloat(c.style.width) || 0);
+    const colSum = colW.reduce((a, b) => a + b, 0);
+    if (colSum > 0) cols.forEach((c, i) => (c.style.width = `${(colW[i] / colSum) * 100}%`));
+    table.querySelectorAll(":scope > tbody > tr, :scope > tr").forEach((tr) => {
+      const cells = [...tr.children].filter((c) => /^T[DH]$/.test(c.tagName));
+      const ws = cells.map((c) => (/(pt|px)$/.test(c.style.width) ? parseFloat(c.style.width) : 0));
+      const sum = ws.reduce((a, b) => a + b, 0);
+      if (sum > 0) cells.forEach((c, i) => ws[i] && (c.style.width = `${(ws[i] / sum) * 100}%`));
+    });
   });
 
   host.querySelectorAll("img").forEach((img) => {
@@ -235,6 +253,39 @@ function applyMobileReflowLayout(host) {
       el.style.width = "";
       el.style.maxWidth = "100%";
     }
+  });
+  // Ujemne wcięcie (zapas na prawo przy akapitach z PDF) wychodziłoby poza wąski ekran.
+  // Bardzo duże wcięcie (tekst z prawej połowy kartki, np. podpis „Propozycję przygotowała…”)
+  // robiło akapit szerszy niż ekran — przycinamy do 15% szerokości.
+  const toPx = (v) => (/pt$/.test(v) ? parseFloat(v) * (4 / 3) : parseFloat(v));
+  host.querySelectorAll("p").forEach((p) => {
+    for (const side of ["marginLeft", "marginRight", "marginInlineStart", "marginInlineEnd"]) {
+      const v = p.style[side];
+      if (!v || !/(pt|px)$/.test(v)) continue;
+      const px = toPx(v);
+      if (px < 0) p.style[side] = "0";
+      else if (px > vpW * 0.15) p.style[side] = `${Math.round(vpW * 0.15)}px`;
+    }
+  });
+  // Obrazy przypięte do strony (warstwa grafiki, tło skanu z PDF): w tekście zawiniętym do
+  // ekranu nie mają już „swojego” miejsca. Na stronie z tekstem — tło/ozdobniki chowamy; na
+  // stronie bez tekstu (sam skan) — zwykły obraz na szerokość ekranu.
+  host.querySelectorAll("section.docx").forEach((sec) => {
+    const anchors = sec.querySelectorAll(":scope > .dwb-page-anchor");
+    if (!anchors.length) return;
+    const hasText = (sec.textContent || "").replace(/\s+/g, "").length > 40;
+    anchors.forEach((a) => {
+      if (hasText && a.style.zIndex === "-1") a.style.display = "none";
+      else {
+        a.style.position = "static";
+        a.style.width = "100%";
+        a.style.height = "auto";
+        a.querySelectorAll("img").forEach((img) => {
+          img.style.width = "100%";
+          img.style.height = "auto";
+        });
+      }
+    });
   });
   softenReflowIndents(host);
 }

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <!-- [EN] CSP — offline-first app, locked to 'self'. docx-preview injects <style>
          elements and blob: images from .docx, hence 'unsafe-inline' styles + blob: imgs. -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; media-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; media-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
     <meta id="pageDescription" name="description" content="Lokalne przeglądanie, edycja i analiza dokumentów Word" />
     <title>Documents Workbench</title>
     <meta name="application-name" content="Documents Workbench" />
@@ -16,7 +16,7 @@
     <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png" />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin.woff2" crossorigin />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin-ext.woff2" crossorigin />
-    <link rel="stylesheet" href="styles/app.css?v=20261002-09" />
+    <link rel="stylesheet" href="styles/app.css?v=20261002-10" />
   </head>
   <body>
     <!-- Pierwszy przystanek Tab: skok prosto do dokumentu (panel to kilkadziesiąt kontrolek). -->
@@ -140,9 +140,9 @@
                       <polyline points="9 14 12 11 15 14" />
                     </svg>
                   </div>
-                  <p class="drop-text"><span data-i18n="dropText">Przeciągnij plik</span> <strong>.docx</strong></p>
+                  <p class="drop-text"><span data-i18n="dropText">Przeciągnij plik</span> <strong>.docx</strong> / <strong>.pdf</strong></p>
                   <span class="drop-btn" data-i18n="dropOr">lub kliknij tutaj</span>
-                  <input id="fileInput" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden />
+                  <input id="fileInput" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pdf,application/pdf" hidden />
                 </label>
                 <div class="file-name hidden" id="fileName">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -837,7 +837,7 @@
                     <line x1="8" y1="17" x2="14" y2="17" />
                   </svg>
                 </div>
-                <h2 id="emptyTitle" data-i18n="emptyTitle">Otwórz dokument .docx</h2>
+                <h2 id="emptyTitle" data-i18n="emptyTitle">Otwórz dokument .docx lub .pdf</h2>
                 <p id="emptySub" data-i18n="emptySub">Plik zostaje w przeglądarce — bez wysyłania na serwer.</p>
                 <div class="draft-recovery" id="draftRecovery" hidden aria-live="polite"></div>
                 <div class="empty-actions" id="emptyActions">
@@ -845,7 +845,7 @@
                   <button class="btn" id="emptyNewBtn" type="button" data-i18n="emptyNew">Nowy dokument</button>
                   <button class="btn" id="emptySampleBtn" type="button" data-i18n="emptySample">Wypróbuj na przykładowym dokumencie</button>
                 </div>
-                <p class="empty-drop-hint" id="emptyDropHint" data-i18n="emptyDropHint">albo przeciągnij plik .docx w dowolne miejsce okna</p>
+                <p class="empty-drop-hint" id="emptyDropHint" data-i18n="emptyDropHint">albo przeciągnij plik .docx lub .pdf w dowolne miejsce okna — PDF zamieni się w edytowalny .docx</p>
               </div>
               <div class="doc-zoom-shell" id="docZoomShell">
                 <div class="doc-canvas hidden" id="docCanvas"></div>
@@ -903,41 +903,41 @@
         <p class="newdoc-foot" data-i18n="newDocFoot">Plik powstaje na tym urządzeniu. „Zapisz” zapyta, gdzie go zapisać.</p>
       </form>
     </dialog>
-    <script defer src="app/core.js?v=20261002-09"></script>
-    <script defer src="app/language.js?v=20261002-09"></script>
-    <script defer src="app/docx-metadata.js?v=20261002-09"></script>
-    <script defer src="app/docx-revisions.js?v=20261002-09"></script>
-    <script defer src="app/docx-forms.js?v=20261002-09"></script>
-    <script defer src="app/doc-links.js?v=20261002-09"></script>
-    <script defer src="app/docx-patch.js?v=20261002-09"></script>
-    <script defer src="app/docx-compose.js?v=20261002-09"></script>
-    <script defer src="app/template-tokens.js?v=20261002-09"></script>
-    <script defer src="app/docx-run-styles.js?v=20261002-09"></script>
-    <script defer src="app/docx-inline-edit.js?v=20261002-09"></script>
-    <script defer src="app/document.js?v=20261002-09"></script>
-    <script defer src="app/docx-render-fixes.js?v=20261002-09"></script>
-    <script defer src="app/docx-viewer.js?v=20261002-09"></script>
-    <script defer src="app/analysis.js?v=20261002-09"></script>
-    <script defer src="app/structure-panel.js?v=20261002-09"></script>
-    <script defer src="app/grammar-style.js?v=20261002-09"></script>
-    <script defer src="app/placeholders.js?v=20261002-09"></script>
-    <script defer src="app/snippets.js?v=20261002-09"></script>
-    <script defer src="app/snippet-suggest.js?v=20261002-09"></script>
-    <script defer src="app/doc-caret-nav.js?v=20261002-09"></script>
-    <script defer src="app/edit-tools.js?v=20261002-09"></script>
-    <script defer src="app/mobile-doc-zoom.js?v=20261002-09"></script>
-    <script defer src="app/ui-controls.js?v=20261002-09"></script>
-    <script defer src="app/lazy-features.js?v=20261002-09"></script>
-    <script defer src="app/app-frame.js?v=20261002-09"></script>
-    <script defer src="app/touch.js?v=20261002-09"></script>
-    <script defer src="app/pinch-zoom.js?v=20261002-09"></script>
-    <script defer src="app/page-breaks.js?v=20261002-09"></script>
-    <script defer src="app/undo.js?v=20261002-09"></script>
-    <script defer src="app/compose-ui.js?v=20261002-09"></script>
-    <script defer src="app/drafts.js?v=20261002-09"></script>
-    <script defer src="app/view-mode.js?v=20261002-09"></script>
-    <script defer src="app/keyboard.js?v=20261002-09"></script>
-    <script defer src="app/launch-files.js?v=20261002-09"></script>
-    <script defer src="app/bootstrap.js?v=20261002-09"></script>
+    <script defer src="app/core.js?v=20261002-10"></script>
+    <script defer src="app/language.js?v=20261002-10"></script>
+    <script defer src="app/docx-metadata.js?v=20261002-10"></script>
+    <script defer src="app/docx-revisions.js?v=20261002-10"></script>
+    <script defer src="app/docx-forms.js?v=20261002-10"></script>
+    <script defer src="app/doc-links.js?v=20261002-10"></script>
+    <script defer src="app/docx-patch.js?v=20261002-10"></script>
+    <script defer src="app/docx-compose.js?v=20261002-10"></script>
+    <script defer src="app/template-tokens.js?v=20261002-10"></script>
+    <script defer src="app/docx-run-styles.js?v=20261002-10"></script>
+    <script defer src="app/docx-inline-edit.js?v=20261002-10"></script>
+    <script defer src="app/document.js?v=20261002-10"></script>
+    <script defer src="app/docx-render-fixes.js?v=20261002-10"></script>
+    <script defer src="app/docx-viewer.js?v=20261002-10"></script>
+    <script defer src="app/analysis.js?v=20261002-10"></script>
+    <script defer src="app/structure-panel.js?v=20261002-10"></script>
+    <script defer src="app/grammar-style.js?v=20261002-10"></script>
+    <script defer src="app/placeholders.js?v=20261002-10"></script>
+    <script defer src="app/snippets.js?v=20261002-10"></script>
+    <script defer src="app/snippet-suggest.js?v=20261002-10"></script>
+    <script defer src="app/doc-caret-nav.js?v=20261002-10"></script>
+    <script defer src="app/edit-tools.js?v=20261002-10"></script>
+    <script defer src="app/mobile-doc-zoom.js?v=20261002-10"></script>
+    <script defer src="app/ui-controls.js?v=20261002-10"></script>
+    <script defer src="app/lazy-features.js?v=20261002-10"></script>
+    <script defer src="app/app-frame.js?v=20261002-10"></script>
+    <script defer src="app/touch.js?v=20261002-10"></script>
+    <script defer src="app/pinch-zoom.js?v=20261002-10"></script>
+    <script defer src="app/page-breaks.js?v=20261002-10"></script>
+    <script defer src="app/undo.js?v=20261002-10"></script>
+    <script defer src="app/compose-ui.js?v=20261002-10"></script>
+    <script defer src="app/drafts.js?v=20261002-10"></script>
+    <script defer src="app/view-mode.js?v=20261002-10"></script>
+    <script defer src="app/keyboard.js?v=20261002-10"></script>
+    <script defer src="app/launch-files.js?v=20261002-10"></script>
+    <script defer src="app/bootstrap.js?v=20261002-10"></script>
   </body>
 </html>

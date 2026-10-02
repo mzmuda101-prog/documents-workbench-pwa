@@ -55,6 +55,8 @@ Stan na **v0.2** (lipiec 2026). Ostatnia wersja cache: `20260702-03`.
 
 | **Linki w dokumencie** (`app/doc-links.js`): spis treści / zakładki → płynny skok w dokumencie + „↩ Wróć” (Alt+←), adres strony bez #…; adres WWW → nowa karta (dawniej ZASTĘPOWAŁ aplikację); javascript:/plik na dysku → zablokowane z komunikatem; odsyłacze Worda (REF/PAGEREF/NOTEREF \h, HYPERLINK) klikalne; podpowiedź dokąd prowadzi link. **Fix:** podświetlenie edytowanego akapitu / wyniku szukania przy wysuniętym 1. wierszu zaczynało się w środku słowa (`fixHangingBox`). Strażnik `test:links` Chromium + WebKit | ✅ 2026-10-01 |
 
+| **Paczka L — PDF → DOCX** (`app/pdf-extract.js` interpreter listy operacji pdf.js: znaki z pozycją/czcionką/kolorem, linie, tła, obrazy, adnotacje i pola formularza; `app/pdf-layout.js` wiersze → akapity z wyrównaniem/wcięciami/interlinią, punktory (też rysowane jako kształt), indeksy, tabele z linii i teł (sklejanie kawałków tabeli z Worda), cięcie XY na kolumny/karty, kropki spisu treści jako tabulatory, akcenty rysowane osobno → „ś”, pola formularza wpisane w wiersz; `app/pdf-docx.js` OOXML: strona PDF = strona Worda, interlinia „dokładnie” w punktach PDF, obrazy w tekście lub przypięte do strony, warstwa grafiki wektorowej (ramki, znaczniki cięcia) jako obraz pod tekstem, stopki z PAGE/NUMPAGES, Nagłówek 1–n; `app/pdf-fonts.js` osadzanie czcionek TrueType z PDF (nowa cmap Unicode, licencja tylko edytowalna); `app/pdf-ocr.js` OCR skanów tesseract.js na urządzeniu (pol, druk ≥ 92% pewności, pismo odręczne zostaje obrazem, słowa wymazane z tła); `app/pdf-import.js` okno postępu, Anuluj, hasło, kodowanie obrazów, rozpoznawanie kształtu liter o złych kodach (ą = a + ogonek). Podgląd: tabulatory wg pozycji (łatka docx-preview + `layoutTabStops`), interlinia „dokładnie” jak w Wordzie, obrazy przypięte do strony, bez kerningu/ligatur; widok mobilny: wszystkie kartki na szerokość ekranu, kolumny jedna pod drugą. Biblioteki lokalnie: `lib/pdfjs`, `lib/tesseract`. Strażnik `test:pdf` Chromium + WebKit — PDF-y generowane w teście, `PDF_SAMPLES=katalog` dla własnych próbek spoza repo) | ✅ 2026-10-02 |
+
 | **Przewodnik + intro** (przewodnik.docx: klikalny spis treści, rozdział „Formularz Worda” z 4 polami, „Linki i odsyłacze” z odsyłaczem REF, zapis / „Otwórz za pomocą” / „Udostępnij”; strażnik `test:guide` klika nowe „Spróbuj:”. Intro: film 2 s (tempo z długości filmu), znika dopiero gdy film się skończy I aplikacja jest gotowa; blokada autoodtwarzania nie odsłania ładowania. Komunikat „to formularz Worda” nie dla wbudowanych przykładów) | ✅ 2026-10-01 |
 
 | **Niezapisane zmiany nie giną** (zgłoszenie: okno przeciągnięte na inny monitor → dokument narysował się od nowa, wpisany tekst zniknął z ekranu, „Zapisz” świeciło, a zapis byłby BEZ niego). Przerysowanie przy zmianie układu (telefon ⇄ komputer, obrót iPada, „Dopasuj”) najpierw przenosi wpisane zmiany do pliku (`rerenderKeepingEdits`). „Aktualizuj” / „Odśwież aplikację” pytają przy niezapisanych zmianach (iOS nie pokazuje „Opuścić stronę?”); aktualizacja z innego okna nie przeładowuje okna z niezapisanymi zmianami. Strażnik `test:survival` (25 czynności, Chromium + WebKit) | ✅ 2026-10-01 |
@@ -179,10 +181,10 @@ Lokalny, **offline-first** moduł — bez wysyłania tekstu na serwer.
 
 ---
 
-## Faza 5: PDF (opcjonalnie)
+## Faza 5: PDF → DOCX ✅ (Paczka L, 2026-10-02)
 
-- Podgląd `.pdf` (PDF.js), strony, zoom
-- Bez OCR / edycji PDF w v1
+- ✅ Konwersja na urządzeniu, OCR skanów (druk)
+- Do poprawy: pismo odręczne na skanach (dziś zostaje obrazem), tekst obrócony, tabele bez linii, osadzanie czcionek CFF/Type1
 
 ---
 

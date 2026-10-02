@@ -22,6 +22,12 @@ async function renderDocxPreview(bytes, container) {
     renderEndnotes: true,
   });
   fixDocxBulletRendering(wrapper);
+  fixPageAnchoredDrawings(wrapper);
   applyWordLineMetrics(wrapper); // odstępy między wierszami jak w Wordzie (też granice stron)
+  if (!mobileReflow) {
+    layoutTabStops(wrapper); // tabulatory na pozycjach z akapitu (spis treści, formularze)
+    // czcionki z pliku mogą dojść później — wtedy szerokości tekstu się zmieniają
+    if (document.fonts && document.fonts.status === "loading") document.fonts.ready.then(() => layoutTabStops(wrapper)).catch(() => {});
+  }
   if (mobileReflow && typeof applyMobileReflowLayout === "function") applyMobileReflowLayout(wrapper);
 }
