@@ -764,6 +764,12 @@ html.is-mobile .doc-zoom-shell { width: 100%; min-height: 0; }
   max-width: 100% !important; height: auto !important;
 }
 
+/* iPad (Safari w trybie „komputerowym”): przy CSS zoom z text-size-adjust 100%/auto dzieli
+   wielkość liter przez zoom — przy 300% litery zostawały jak przy 100%, rosły tylko odstępy
+   (sprawdzone sondą na symulatorze iPada: działa tylko `none`). iPhone: bez zmian. */
+html:has(.doc-canvas.doc-reflow-mode), .doc-canvas.doc-reflow-mode {
+  -webkit-text-size-adjust: none; text-size-adjust: none;
+}
 /* Widok mobilny na szerszym ekranie (iPad w pionie, komputer): kolumna o wygodnej szerokości
    na środku, jak kartka — linia tekstu przez cały monitor byłaby nie do czytania. 760 px to
    szerokość logiczna: przy powiększeniu kolumna rośnie razem z literami (CSS zoom). */
