@@ -22,5 +22,6 @@ async function renderDocxPreview(bytes, container) {
     renderEndnotes: true,
   });
   fixDocxBulletRendering(wrapper);
+  applyWordLineMetrics(wrapper); // odstępy między wierszami jak w Wordzie (też granice stron)
   if (mobileReflow && typeof applyMobileReflowLayout === "function") applyMobileReflowLayout(wrapper);
 }

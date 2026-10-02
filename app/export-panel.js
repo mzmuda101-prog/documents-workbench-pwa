@@ -138,7 +138,8 @@ function printDocument() {
 <style>@page{margin:0}html,body{margin:0;background:#fff}
 .docx-wrapper{background:none!important;padding:0!important}
 .docx-wrapper>section.docx{box-shadow:none!important;margin:0 auto!important;break-after:page}
-.search-hit,.search-hit-active{background:none!important;outline:none!important}</style></head>
+.search-hit,.search-hit-active{background:none!important;outline:none!important}
+.dwb-page-break{display:none!important}</style></head>
 <body>${host.outerHTML}</body></html>`;
   const frame = document.createElement("iframe");
   frame.setAttribute("aria-hidden", "true");

@@ -440,6 +440,7 @@ function syncMobileDocZoomAfterRender() {
   syncViewportClass();
   syncMobileZoomUi();
   applyZoomForLayout();
+  if (typeof dwbPageBreaks !== "undefined") dwbPageBreaks.schedule(0); // nowy podgląd / inny widok
 }
 
 function onZoomSliderInput() {

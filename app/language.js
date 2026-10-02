@@ -303,6 +303,9 @@ const I18N = {
     viewCtxDesktop: "komputer",
     viewAutoTip: "{view} — zmienisz go stuknięciem w procent na pasku",
     pinchToPages: "Puść — Widok desktopowy",
+    showPageBreaks: "Granice stron (Widok desktopowy)",
+    pageBreaksHint: "Przybliżone — Word może przenieść linijkę lub dwie na inną stronę.",
+    pageBreakLabel: "str. {n}",
     dropText: "Przeciągnij plik",
     dropOr: "lub kliknij tutaj",
     dropBtn: "Wybierz plik",
@@ -961,6 +964,9 @@ const I18N = {
     viewCtxDesktop: "computer",
     viewAutoTip: "{view} — change it by tapping the percentage in the toolbar",
     pinchToPages: "Release — Desktop view",
+    showPageBreaks: "Page boundaries (Desktop view)",
+    pageBreaksHint: "Approximate — Word may move a line or two to another page.",
+    pageBreakLabel: "p. {n}",
     dropText: "Drop a file",
     dropOr: "or click here",
     dropBtn: "Choose file",
@@ -1359,6 +1365,7 @@ function applyLanguage() {
   if (typeof dwbUndo !== "undefined") dwbUndo.sync();
   if (typeof dwbView !== "undefined") dwbView.syncMenu();
   if (typeof syncViewLayoutUi === "function") syncViewLayoutUi();
+  if (typeof dwbPageBreaks !== "undefined") dwbPageBreaks.schedule(0); // „str. N” / „p. N”
 }
 
 function setLanguage(lang) {

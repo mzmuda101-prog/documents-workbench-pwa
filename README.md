@@ -33,6 +33,11 @@ Siostrzana aplikacja [Sheet Workbench PWA](../sheet-workbench-pwa/README.md).
   i dalej zawija, w desktopowym strony przybliżają się jak zdjęcie; „Dopasuj” wraca do 100% /
   szerokości strony; zakres: tekst 50–300%, strony 25–300%; zsunięcie palców poniżej 50% w
   Widoku mobilnym przechodzi na strony); `?sample=nazwa` otwiera `docs/samples/nazwa.docx`
+- **Granice stron** (Widok desktopowy, opcja w panelu Widok, domyślnie wł.): przerywana linia
+  i „str. N” tam, gdzie Word zaczyna nową stronę — wysokość strony i marginesy z pliku, zasady
+  Worda („razem z następnym”, wiersze razem, wdowy/sieroty) i odstępy wierszy jak w Wordzie;
+  sprawdzone z prawdziwym Wordem (`npm run test:pages`). Przybliżone przy czcionkach, których
+  przeglądarka nie ma
 - **Komputer jak Word**: Ctrl + kółko (co 10%) i szczypanie na gładziku przybliżają sam
   dokument w miejscu kursora; −/+, suwak i „Dopasuj” zostają w tym samym miejscu dokumentu
 - **Widok mobilny / Widok desktopowy** (panel Widok albo stuknięcie w procent na pasku): Auto =

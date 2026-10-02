@@ -1,4 +1,4 @@
-const CACHE_VERSION = "20261002-08";
+const CACHE_VERSION = "20261002-09";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
@@ -43,6 +43,7 @@ const SHELL_ASSETS = [
   `./app/app-frame.js?v=${ASSET_V}`,
   `./app/touch.js?v=${ASSET_V}`,
   `./app/pinch-zoom.js?v=${ASSET_V}`,
+  `./app/page-breaks.js?v=${ASSET_V}`,
   `./app/undo.js?v=${ASSET_V}`,
   `./app/compose-ui.js?v=${ASSET_V}`,
   `./app/drafts.js?v=${ASSET_V}`,
