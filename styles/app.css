@@ -1211,6 +1211,8 @@ body:not(.has-document) .doc-toolbar { display: none; }
 .empty-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 6px; }
 .empty-actions .btn { flex: none; padding: 10px 16px; border-radius: 12px; }
 .empty-drop-hint { font-size: 12px !important; color: var(--muted); margin: 0; }
+.empty-beta { font-size: 12px !important; color: var(--muted); margin: -2px 0 0; }
+.beta-tag { display: inline-block; padding: 0 6px; border-radius: var(--r-full); background: var(--accent-light); color: var(--accent); font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; vertical-align: 1px; }
 body.drag-active .doc-panel { outline: 2px dashed var(--accent); outline-offset: -6px; }
 
 /* ── pasek stanu ── */

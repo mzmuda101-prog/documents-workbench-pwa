@@ -26,8 +26,16 @@ async function renderDocxPreview(bytes, container) {
   applyWordLineMetrics(wrapper); // odstępy między wierszami jak w Wordzie (też granice stron)
   if (!mobileReflow) {
     layoutTabStops(wrapper); // tabulatory na pozycjach z akapitu (spis treści, formularze)
-    // czcionki z pliku mogą dojść później — wtedy szerokości tekstu się zmieniają
-    if (document.fonts && document.fonts.status === "loading") document.fonts.ready.then(() => layoutTabStops(wrapper)).catch(() => {});
+    // Czcionki osadzone w pliku (np. z PDF) docx-preview wczytuje z opóźnieniem — po ich
+    // dojściu szerokości tekstu się zmieniają: liczymy tabulatory jeszcze raz.
+    if (document.fonts) {
+      const again = () => { if (wrapper.isConnected) layoutTabStops(wrapper); };
+      document.fonts.ready.then(again).catch(() => {});
+      let t = 0;
+      const onDone = () => { clearTimeout(t); t = setTimeout(again, 60); };
+      document.fonts.addEventListener("loadingdone", onDone);
+      setTimeout(() => document.fonts.removeEventListener("loadingdone", onDone), 8000);
+    }
   }
   if (mobileReflow && typeof applyMobileReflowLayout === "function") applyMobileReflowLayout(wrapper);
 }

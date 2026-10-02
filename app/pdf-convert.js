@@ -328,6 +328,7 @@
     const t3 = Date.now();
     const bytes = await NS.buildDocx(pages, images, meta, env.JSZip);
     report.timings.write = Date.now() - t3;
+    report.suspectChars = meta.suspectChars || 0;
     report.bodyFont = bodyFont;
     report.bodySize = bodySize;
     report.textChars = 0;

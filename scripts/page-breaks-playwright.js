@@ -7,7 +7,8 @@
 // Wzorzec z prawdziwego Worda (Microsoft Word dla Maca, 2026-10-02, AppleScript „active end
 // page number” dla każdego akapitu docs/samples/przewodnik.docx): 5 stron; strona 2 zaczyna się
 // od „3. Placeholdery…”, strona 3 od „8. Przypisy, tabele i listy”. Akapit „1. Czytanie
-// i edycja” (rozdział) Word stawia 452,6 pt od góry strony 1.
+// i edycja” (rozdział) Word stawia 468,0 pt od góry strony 1 (pomiar 2026-10-03 po dodaniu
+// rozdziału 14 — spis treści o jedną pozycję dłuższy; wcześniej 452,6 pt przy 13 rozdziałach).
 
 const pw = require("playwright");
 const { APP_URL } = require("./docx-test-helpers");
@@ -58,10 +59,11 @@ async function run() {
   // odstępy wierszy jak w Wordzie: nagłówek rozdziału 1 tam, gdzie w Wordzie (±6 pt)
   const y19 = await page.evaluate(() => {
     const sec = document.querySelector(".docx-preview-host section.docx");
-    const p = [...sec.querySelectorAll("article p")].filter((x) => !x.closest("table"))[18];
+    // nagłówek rozdziału (nie pozycja spisu treści — ta jest linkiem)
+    const p = [...sec.querySelectorAll("article p")].filter((x) => !x.closest("table") && /^1\. Czytanie/.test(x.textContent) && !x.querySelector("a"))[0];
     return { text: p.textContent.slice(0, 20), pt: (p.getBoundingClientRect().top - sec.getBoundingClientRect().top) * 0.75 };
   });
-  check("odstępy jak w Wordzie: „1. Czytanie i edycja” ~452,6 pt od góry (±6)", /^1\. Czytanie/.test(y19.text) && Math.abs(y19.pt - 452.6) < 6, JSON.stringify(y19));
+  check("odstępy jak w Wordzie: „1. Czytanie i edycja” ~468,0 pt od góry (±6)", /^1\. Czytanie/.test(y19.text) && Math.abs(y19.pt - 468.0) < 6, JSON.stringify(y19));
 
   const s1 = await pageStarts(page);
   check("domyślnie włączone: 4 granice (5 stron jak w Wordzie)", s1.length === 4 && s1.map((s) => s.label).join(",") === "str. 2,str. 3,str. 4,str. 5", JSON.stringify(s1));

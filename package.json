@@ -49,6 +49,7 @@
     "test:keys": "node scripts/keyboard-playwright.js && ENGINE=webkit node scripts/keyboard-playwright.js",
     "test:compose": "node scripts/compose-playwright.js && ENGINE=webkit node scripts/compose-playwright.js && node scripts/compose2-playwright.js && ENGINE=webkit node scripts/compose2-playwright.js && node scripts/compose3-playwright.js && ENGINE=webkit node scripts/compose3-playwright.js && node scripts/compose4-playwright.js && ENGINE=webkit node scripts/compose4-playwright.js",
     "test:visual": "node scripts/visual-audit-playwright.js",
+    "pdf:score": "node scripts/pdf-score.js",
     "test:pdf": "node scripts/pdf-import-playwright.js && ENGINE=webkit node scripts/pdf-import-playwright.js",
     "test:stress": "node scripts/test-runner.js",
     "test:all": "npm test && npm run test:stress",

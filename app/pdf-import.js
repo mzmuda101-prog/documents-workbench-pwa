@@ -42,7 +42,7 @@
     d.setAttribute("aria-labelledby", "pdfConvTitle");
     d.innerHTML = `
       <div class="pdfconv-inner">
-        <h2 id="pdfConvTitle">${T("Konwersja PDF → Word", "PDF → Word conversion")}</h2>
+        <h2 id="pdfConvTitle">${T("Konwersja PDF → Word", "PDF → Word conversion")} <span class="beta-tag">beta</span></h2>
         <p class="pdfconv-file" id="pdfConvFile"></p>
         <div class="pdfconv-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="pdfConvBar"><i></i></div>
         <p class="pdfconv-phase" id="pdfConvPhase" aria-live="polite"></p>
@@ -338,9 +338,15 @@
 
   const glyphCache = new Map();
 
+  // Zwykła kanwa (nie OffscreenCanvas): czcionki pdf.js są w document.fonts, a kanwa „poza
+  // ekranem” w Safari potrafi ich nie widzieć — wtedy ą/ę z PDF zostawały jako „¨”/„ª”.
+  let maskCanvas = null;
   function renderMask(family, ch, px) {
     const W = px * 3, H = px * 3;
-    const c = OffscreenCanvasOr(W, H);
+    if (!maskCanvas) maskCanvas = document.createElement("canvas");
+    const c = maskCanvas;
+    c.width = W;
+    c.height = H;
     const ctx = c.getContext("2d", { willReadFrequently: true });
     ctx.font = `${px}px "${family}"`;
     ctx.fillStyle = "#000";
@@ -500,7 +506,12 @@
                 const mark = classifyMark(U, best.L);
                 if (mark === "STROKE") result = STROKE_MAP[best.u] || null;
                 else if (mark) {
-                  const comp = (best.u + mark).normalize("NFC");
+                  // Znak pod „a/e” to w praktyce ogonek (ą, ę), pod „c/s/t” — cedylla; kształt
+                  // ogonka pod „e” bywa brany za cedyllę i wychodziło „ȩ” zamiast „ę”.
+                  let mk = mark;
+                  if ((mk === "\u0327" || mk === "\u0328") && /[aeiuAEIU]/.test(best.u)) mk = "\u0328";
+                  if ((mk === "\u0327" || mk === "\u0328") && /[cstCST]/.test(best.u)) mk = "\u0327";
+                  const comp = (best.u + mk).normalize("NFC");
                   if ([...comp].length === 1) result = comp;
                 }
               }
@@ -603,7 +614,7 @@
         },
       }));
       try {
-        await pdfDoc.destroy();
+        await loadingTask.destroy();
       } catch (_) { /* nic */ }
       if (signal.cancelled) throw new window.DWPdf.CancelledError();
       setProgress(1, T("Otwieranie dokumentu…", "Opening the document…"));
@@ -620,6 +631,7 @@
         if (r.images) parts.push(`${r.images} ${plural(r.images, "obraz", "obrazy", "obrazów", "image", "images")}`);
         const secs = ((performance.now() - t0) / 1000).toFixed(1);
         toast(`${T("Przekonwertowano PDF", "PDF converted")}: ${parts.join(", ")} (${secs} s). ${T("Zapisz jako .docx.", "Save it as .docx.")}`, "success");
+        if (r.suspectChars) toast(T(`${r.suspectChars} ${plural(r.suspectChars, "znak mógł", "znaki mogły", "znaków mogło")} się źle odczytać z PDF — ${r.suspectChars === 1 ? "jest zaznaczony" : "są zaznaczone"} na żółto. Sprawdź je.`, `${r.suspectChars} character(s) may have been read incorrectly — highlighted in yellow.`), "warning");
         if (r.ocrPages) toast(T(`Rozpoznano druk na ${r.ocrPages} ${plural(r.ocrPages, "stronie", "stronach", "stronach")} — sprawdź go, OCR bywa omylny.`, `Printed text recognized on ${r.ocrPages} page(s) — please check it, OCR can make mistakes.`), "info");
         if (r.ocrSkipped) toast(T(`${r.ocrSkipped} ${plural(r.ocrSkipped, "fragment", "fragmenty", "fragmentów")} (np. pismo odręczne) ${r.ocrSkipped === 1 ? "został" : "zostało"} jako obraz, bez zmian — tego jeszcze nie rozpoznajemy.`, `${r.ocrSkipped} fragment(s) (e.g. handwriting) kept unchanged as image — not recognized yet.`), "info");
         if (r.scannedPages && !r.ocrPages && !r.ocrLayerPages) {

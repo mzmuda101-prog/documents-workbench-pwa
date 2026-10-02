@@ -15,6 +15,9 @@
   // Model wiersza Worda przy interlinii „dokładnie”: wysokość L, linia bazowa ~ BASE·L od góry.
   // (Skalibrowane na Wordzie: tekst siedzi tak, że zejście mieści się na dole wiersza.)
   const BASE = 0.8;
+  // + luźne znaki łączące (akcent nie złączył się z literą) i litery łudząco podobne do polskich
+  //   (ȩ zamiast ę, ş/ţ, ǫ) — typowy ślad źle odczytanego kodowania
+  const SUSPECT = /[\ufffd\ue000-\uf8ff\u0300-\u036fȩȨǫǪşŞţŢ]|(?<=\p{L})\?(?=\p{L})|(?<=\p{L})[¨ª´˙¸˛˘ˇ`]|[¨ª´˙¸˛˘ˇ`](?=\p{L})/u;
   const MIN_LINE = 1.0; // pt — minimalna wysokość wiersza dla bardzo małych tekstów
 
   function lineHeightFor(block) {
@@ -59,6 +62,7 @@
       this.bodyFont = opts.bodyFont || "Calibri";
       this.bodySize = opts.bodySize || 11;
       this.lang = opts.lang || "pl-PL";
+      this.suspect = 0;
     }
 
     addRel(type, target, external) {
@@ -86,6 +90,7 @@
         const hp = Math.max(2, Math.round(t.size * 2));
         p.push(`<w:sz w:val="${hp}"/><w:szCs w:val="${hp}"/>`);
       }
+      if (t.hl) p.push('<w:highlight w:val="yellow"/>');
       if (t.underline) p.push('<w:u w:val="single"/>');
       if (t.vert) p.push(`<w:vertAlign w:val="${t.vert}"/>`);
       return p.length ? `<w:rPr>${p.join("")}</w:rPr>` : "";
@@ -122,6 +127,21 @@
     textRun(t) {
       const text = clean(t.text);
       if (!text) return "";
+      // Znak, który mógł się źle odczytać (zły kod w PDF: „?” albo samotny akcent w środku
+      // słowa, znak zastępczy, kod prywatny) — żółte zaznaczenie, żeby łatwo go znaleźć.
+      if (SUSPECT.test(text)) {
+        SUSPECT.lastIndex = 0;
+        let out = "", last = 0, m;
+        const re = new RegExp(SUSPECT.source, "gu");
+        while ((m = re.exec(text))) {
+          if (m.index > last) out += `<w:r>${this.runProps(t)}<w:t xml:space="preserve">${esc(text.slice(last, m.index))}</w:t></w:r>`;
+          out += `<w:r>${this.runProps({ ...t, hl: true })}<w:t xml:space="preserve">${esc(m[0])}</w:t></w:r>`;
+          this.suspect++;
+          last = m.index + m[0].length;
+        }
+        if (last < text.length) out += `<w:r>${this.runProps(t)}<w:t xml:space="preserve">${esc(text.slice(last))}</w:t></w:r>`;
+        return out;
+      }
       return `<w:r>${this.runProps(t)}<w:t xml:space="preserve">${esc(text)}</w:t></w:r>`;
     }
 
@@ -394,6 +414,7 @@
       });
     });
     const finalSect = sections.length ? w.sectPrXml(sections[sections.length - 1]) : "";
+    meta.suspectChars = w.suspect;
     const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document ${DOC_NS}><w:body>${body}${finalSect}</w:body></w:document>`;
 

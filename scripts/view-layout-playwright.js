@@ -252,16 +252,25 @@ async function run() {
   const box = await dp.locator("#docViewport").boundingBox();
   const cx = Math.round(box.x + box.width / 2);
   const cy = Math.round(box.y + 260);
+  // Znak „pod kursorem” bywa obok kursora (kursor w pustym miejscu za krótkim nagłówkiem —
+  // przeglądarka zwraca najbliższą pozycję w wierszu). Po przybliżeniu o u jego odległość od
+  // kursora ma urosnąć dokładnie u razy — mierzymy odchyłkę od tego położenia, nie od kursora.
   const caretAt = ([x, y]) => {
     const r = document.caretRangeFromPoint ? document.caretRangeFromPoint(x, y) : (() => { const p = document.caretPositionFromPoint(x, y); const q = document.createRange(); q.setStart(p.offsetNode, p.offset); return q; })();
     window.__n = r.startContainer; window.__o = r.startOffset;
+    const q = document.createRange();
+    q.setStart(window.__n, window.__o);
+    q.setEnd(window.__n, Math.min(window.__o + 1, window.__n.length || 0));
+    const b = q.getBoundingClientRect();
+    window.__d0 = [b.left - x, b.top + b.height / 2 - y];
   };
-  const drift = ([x, y]) => {
+  const drift = ([x, y, u]) => {
     const r = document.createRange();
     r.setStart(window.__n, window.__o);
     r.setEnd(window.__n, Math.min(window.__o + 1, window.__n.length || 0));
     const b = r.getBoundingClientRect();
-    return Math.round(Math.hypot(b.left - x, b.top + b.height / 2 - y));
+    const ex = x + window.__d0[0] * u, ey = y + window.__d0[1] * u;
+    return Math.round(Math.hypot(b.left - ex, b.top + b.height / 2 - ey));
   };
   await dp.evaluate(caretAt, [cx, cy]);
   await dp.mouse.move(cx, cy);
@@ -272,7 +281,7 @@ async function run() {
   await dp.keyboard.up("Control");
   await dp.waitForTimeout(600);
   const w1 = await look(dp);
-  const d1 = await dp.evaluate(drift, [cx, cy]);
+  const d1 = await dp.evaluate(drift, [cx, cy, 1.2]);
   check("Ctrl + kółko: dwa ząbki = 120% (co 10%, jak Word)", w1.zoom === 1.2 && w1.label === "120%" && !w1.reflow, JSON.stringify(w1));
   check("Ctrl + kółko: tekst pod kursorem zostaje pod kursorem", d1 < 40, String(d1));
   // szczypanie na gładziku = kółko z Ctrl i małymi ułamkowymi krokami → płynnie

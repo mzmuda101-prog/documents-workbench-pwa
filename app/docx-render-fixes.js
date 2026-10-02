@@ -142,6 +142,9 @@ function layoutTabStops(host) {
     byPara.get(p).push(sp);
   }
   const PX2PT = 0.75;
+  // ponowne liczenie (np. po dojściu czcionki): najpierw zerujemy szerokości — tabulator z
+  // poprzedniego liczenia mógł zepchnąć resztę wiersza do nowej linijki i stamtąd byśmy mierzyli
+  for (const sp of spans) if (sp.classList.contains("docx-tab-laid")) sp.style.width = "0pt";
   let done = 0;
   for (let pass = 0; ; pass++) {
     const jobs = [];
@@ -233,6 +236,10 @@ function applyWordLineMetrics(host) {
       // Word liczy tylko podaną wysokość — ustawiamy akapitowi rozmiar jego tekstu.
       if (/(pt|px)$/.test(p.style.lineHeight)) {
         p.classList.add("dwb-exact"); // fragmenty tekstu nie podnoszą linijki (CSS niżej)
+        // docx-preview daje akapitowi min-height z domyślnej czcionki dokumentu — mały tekst
+        // (podpis 6 pt przy domyślnych 10 pt) zajmował więcej miejsca niż w Wordzie. Wysokość
+        // = podana wysokość linijki (pusty akapit-odstęp też ją ma — bez min-height miałby 0).
+        if (p.style.minHeight) p.style.minHeight = p.style.lineHeight;
         const run = [...p.querySelectorAll("span")].find((sp) => sp.textContent.trim());
         if (run) {
           const fs = parseFloat(getComputedStyle(run).fontSize);
