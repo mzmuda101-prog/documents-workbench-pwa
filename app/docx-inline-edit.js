@@ -282,6 +282,14 @@ function onParagraphBeforeInput(e) {
       expandSnippetAtCaret(p, sn, m[0].length, ch);
       return;
     }
+    // iOS zjadł spację przed „!” (snippet-suggest.js) — wyzwalacz mimo to, spacja wraca
+    const eaten = !m && typeof window.snippetEatenSpaceQuery === "function" ? window.snippetEatenSpaceQuery(p, before) : null;
+    const sn2 = eaten ? getSnippetByName(eaten) : null;
+    if (sn2) {
+      e.preventDefault();
+      expandSnippetAtCaret(p, sn2, eaten.length + 1, ch, " ");
+      return;
+    }
   }
 
   const inherited = getInheritedRunStyleAtCaret(p);

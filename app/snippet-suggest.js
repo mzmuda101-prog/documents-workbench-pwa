@@ -89,9 +89,9 @@
 
   // Wstaw snippet w akapicie p w miejscu kursora; deleteLen — ile znaków przed kursorem zastąpić
   // (wpisany „!nazwa”), trailing — znak, który wywołał rozwinięcie w trybie auto (spacja, kropka).
-  async function expandSnippetAtCaret(p, sn, deleteLen = 0, trailing = "") {
+  async function expandSnippetAtCaret(p, sn, deleteLen = 0, trailing = "", lead = "") {
     if (!p || !sn) return false;
-    let body = resolveSnippetBody(sn.body, { cursorMark: true });
+    let body = lead + resolveSnippetBody(sn.body, { cursorMark: true });
     const fields = [...new Set(scanPlaceholdersInText(body).map((h) => h.name))];
     if (fields.length) {
       const saved = window.getSelection()?.rangeCount ? window.getSelection().getRangeAt(0).cloneRange() : null;
@@ -113,6 +113,40 @@
     return true;
   }
   window.expandSnippetAtCaret = expandSnippetAtCaret;
+
+  // ── iOS: spacja zjedzona przed „!” ─────────────────────────────────────────
+  // Klawiatura iPhone'a po słowie z paska podpowiedzi sama dokleja spację, a gdy wpiszesz
+  // znak interpunkcyjny („!”), kasuje ją („Dobrze !” → „Dobrze!”) — w Notatkach tak samo.
+  // Dla snippetów to psuło wyzwalacz (zgłoszenie Mateusza 2026-10-02: trzeba było dawać dwie
+  // spacje). Zapamiętujemy, że iOS zjadł spację tuż przed „!”; jeśli zaraz potem pisana jest
+  // nazwa (litera po „!” — wykrzyknik kończący zdanie nie ma litery bez spacji), to wyzwalacz,
+  // a przy wstawieniu snippetu spacja wraca. Samo „Dobrze!” zostaje bez zmian.
+  let eatenSpace = null; // { p, index: pozycja „!” w tekście akapitu }
+  // iOS bywa, że robi to jedną zmianą („ ” → „!”), a bywa, że dwiema (skasuj spację, wstaw „!”) —
+  // dlatego krótka historia stanów tekstu przed kursorem (ostatnie zmiany z ~0,6 s).
+  const recent = []; // { p, text, at }
+  docCanvasEl?.addEventListener("beforeinput", (e) => {
+    const p = e.target?.closest?.(".docx-editable-p");
+    if (!p) return;
+    recent.push({ p, text: getTextBeforeCaret(p), at: performance.now() });
+    if (recent.length > 4) recent.shift();
+  }, true);
+  docCanvasEl?.addEventListener("input", (e) => {
+    const p = e.target?.closest?.(".docx-editable-p");
+    if (!p) return;
+    const now = getTextBeforeCaret(p);
+    if (!/[^\s!]!$/u.test(now)) return; // „słowo!” — tylko wtedy coś mogło zjeść spację
+    const want = `${now.slice(0, -1)} `;
+    const t0 = performance.now() - 600;
+    if (recent.some((r) => r.p === p && r.at >= t0 && (r.text === want || r.text === `${now.slice(0, -1)}\u00a0`))) eatenSpace = { p, index: now.length - 1 };
+  }, true);
+  // Nazwa snippetu pisana za „!”, przed którym iOS zjadł spację: zwraca nazwę albo null.
+  function eatenSpaceQuery(p, before) {
+    if (!eatenSpace || eatenSpace.p !== p || before.length <= eatenSpace.index || before[eatenSpace.index] !== "!") return null;
+    const m = before.slice(eatenSpace.index).match(/^!([\p{L}\p{N}_-]*)$/u);
+    return m ? m[1] : null;
+  }
+  window.snippetEatenSpaceQuery = eatenSpaceQuery;
 
   // ── podpowiedzi po „!” ──────────────────────────────────────────────────────
   const box = document.createElement("div");
@@ -203,22 +237,27 @@
     const el = node?.nodeType === 1 ? node : node?.parentElement;
     const p = el?.closest?.(".docx-editable-p");
     if (!p || !sel.isCollapsed) { close(); return; }
-    const m = getTextBeforeCaret(p).match(TRIGGER_BEFORE_CARET_RE);
-    if (!m) { close(); return; }
-    const items = matches(m[1]);
+    const before = getTextBeforeCaret(p);
+    const m = before.match(TRIGGER_BEFORE_CARET_RE);
+    // iOS zjadł spację przed „!”, a za nim jest nazwa (co najmniej jedna litera) — też wyzwalacz
+    const eaten = !m ? eatenSpaceQuery(p, before) : null;
+    if (!m && !eaten) { close(); return; }
+    const query = m ? m[1] : eaten;
+    const items = matches(query);
     if (!items.length) { close(); return; }
-    const same = state && state.p === p && state.query === m[1];
-    state = { p, query: m[1], items, active: same ? Math.min(state.active, items.length - 1) : 0 };
+    const same = state && state.p === p && state.query === query;
+    state = { p, query, items, active: same ? Math.min(state.active, items.length - 1) : 0, lead: m ? "" : " " };
     render();
     position();
   }
 
   async function accept(i) {
     if (!state) return;
-    const { p, query, items } = state;
+    const { p, query, items, lead } = state;
     const sn = items[i];
     close();
-    await expandSnippetAtCaret(p, sn, query.length + 1);
+    eatenSpace = null;
+    await expandSnippetAtCaret(p, sn, query.length + 1, "", lead || "");
   }
 
   docCanvasEl?.addEventListener("input", () => requestAnimationFrame(update));

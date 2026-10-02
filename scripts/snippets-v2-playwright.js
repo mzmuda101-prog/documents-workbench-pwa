@@ -171,6 +171,37 @@ async function run() {
   check("„Rozwiń”: wielowierszowy snippet zapisany z <w:br/> (nie „\\n” = spacja w Wordzie)", /Linia A<\/w:t><w:br\/><w:t[^>]*>Linia B/.test(f[12].xml) && !/Linia A\n/.test(f[12].xml), f[12].xml.slice(-200));
   check("„Uwaga!blok” (w środku słowa) nie jest rozwijane", /Uwaga!blok/.test(f[12].text), f[12].text.slice(-30));
 
+  // ── iOS: klawiatura zjada spację przed „!” (zgłoszenie 2026-10-02) ───────────
+  // Po słowie z paska podpowiedzi iOS dokleja spację, a „!” ją kasuje („Dobrze !” → „Dobrze!”).
+  // Symulacja tej zmiany (beforeinput „!” + podmiana spacji na „!” + input), potem nazwa snippetu.
+  const iosBang = () => page.evaluate(() => {
+    const sel = getSelection();
+    const tn = sel.anchorNode;
+    const el = tn.parentElement.closest(".docx-editable-p");
+    el.dispatchEvent(new InputEvent("beforeinput", { inputType: "insertText", data: "!", bubbles: true }));
+    const at = sel.anchorOffset;
+    tn.textContent = `${tn.textContent.slice(0, at - 1)}!${tn.textContent.slice(at)}`;
+    const r = document.createRange(); r.setStart(tn, at); r.collapse(true); sel.removeAllRanges(); sel.addRange(r);
+    el.dispatchEvent(new InputEvent("input", { inputType: "insertText", data: "!", bubbles: true }));
+  });
+  await clickEndOf(14);
+  await page.keyboard.type(" Dobrze ");
+  await iosBang();
+  await page.keyboard.type("bl");
+  await page.waitForTimeout(250);
+  const iosSug = await suggest();
+  check("iOS zjadł spację przed „!”: „Dobrze!bl” i tak podpowiada !blok", iosSug.open && iosSug.items.includes("!blok"), JSON.stringify(iosSug));
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(300);
+  f = await fileParas();
+  check("…a po wstawieniu spacja wraca: „Dobrze Linia A”", /Dobrze Linia A/.test(f[14].text), f[14].text.slice(-30));
+  await page.keyboard.type(" Super ");
+  await iosBang();
+  await page.keyboard.type(" Dalej");
+  await page.waitForTimeout(250);
+  f = await fileParas();
+  check("zwykłe „Super!” na końcu zdania zostaje bez zmian (bez podpowiedzi)", /Super! Dalej$/.test(f[14].text) && !(await suggest()).open, f[14].text.slice(-20));
+
   if (errors.length) check("brak błędów strony", false, errors.slice(0, 3).join(" | "));
   await browser.close();
   let failed = 0;
