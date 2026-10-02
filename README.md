@@ -31,7 +31,10 @@ Siostrzana aplikacja [Sheet Workbench PWA](../sheet-workbench-pwa/README.md).
   uciekania paska, brak przybliżania strony przy polach, „Zapisz” w Safari = zapis kopii,
   lżejsze efekty na dotyku, **przybliżanie dwoma palcami** (w Widoku mobilnym tekst skaluje się
   i dalej zawija, w desktopowym strony przybliżają się jak zdjęcie; „Dopasuj” wraca do 100% /
-  szerokości strony; zakres 35–300%); `?sample=nazwa` otwiera `docs/samples/nazwa.docx`
+  szerokości strony; zakres: tekst 50–300%, strony 25–300%; zsunięcie palców poniżej 50% w
+  Widoku mobilnym przechodzi na strony); `?sample=nazwa` otwiera `docs/samples/nazwa.docx`
+- **Komputer jak Word**: Ctrl + kółko (co 10%) i szczypanie na gładziku przybliżają sam
+  dokument w miejscu kursora; −/+, suwak i „Dopasuj” zostają w tym samym miejscu dokumentu
 - **Widok mobilny / Widok desktopowy** (panel Widok albo stuknięcie w procent na pasku): Auto =
   mobilny na dotyku w pionie i w wąskim oknie (≤768 px), desktopowy poza tym; ręczny wybór
   pamiętany osobno dla dotyku w pionie, w poziomie i komputera. Zmiana widoku i obrót wracają

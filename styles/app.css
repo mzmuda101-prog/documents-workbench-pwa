@@ -1521,6 +1521,7 @@ textarea.ff-pop-input { min-height: 4.5em; resize: vertical; }
   padding: 6px 14px; border-radius: var(--r-full);
   background: color-mix(in srgb, var(--ink) 82%, transparent); color: var(--surface);
   font: 700 15px/1.2 var(--font); font-variant-numeric: tabular-nums; letter-spacing: 0.01em;
+  white-space: nowrap; /* „Puść — Widok desktopowy” w jednej linii */
   box-shadow: 0 6px 18px rgba(8, 14, 28, 0.22);
   opacity: 0; pointer-events: none; transition: opacity 160ms ease, transform 160ms ease;
 }

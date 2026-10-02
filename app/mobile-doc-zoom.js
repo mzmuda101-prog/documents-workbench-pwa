@@ -18,8 +18,11 @@
 const MOBILE_MQ = window.matchMedia("(max-width: 768px)");
 const COARSE_MQ = window.matchMedia("(pointer: coarse)");
 const PORTRAIT_MQ = window.matchMedia("(orientation: portrait)");
-const ZOOM_MIN = 0.5;
-const ZOOM_MIN_MOBILE = 0.35; // [PL] telefon: pinch może zejść niżej (cała strona na ekranie)
+// Zakres zoomu zależy od widoku: tekst w Widoku mobilnym poniżej 50% to już ściana drobnego
+// druku (dalsze zsuwanie palców przechodzi na strony — pinch-zoom.js), a strony w Widoku
+// desktopowym schodzą do 25%, żeby cała kartka zmieściła się nawet na telefonie w poziomie.
+const ZOOM_MIN_REFLOW = 0.5;
+const ZOOM_MIN_PAGES = 0.25;
 const ZOOM_MAX = 3;
 const VIEW_LAYOUT_KEY = "dwb-view-layout-v1"; // { "touch-portrait": "mobile", ... }
 const VIEW_AUTO_TIP_KEY = "dwb-view-auto-tip-v1";
@@ -109,7 +112,10 @@ function applyViewLayout(opts = {}) {
     return rerenderKeepingEdits({ anchor: scrollAnchorBeforeChange }).then(() => { lastScrollAnchor = captureScrollAnchorNow(); });
   }
   appliedLayout = layout;
-  applyZoomForLayout();
+  // obrót / inna szerokość okna: przeglądarka już przełożyła tekst — wracamy do akapitu
+  // zapamiętanego przy ostatnim przewinięciu
+  if (opts.auto && originalFileBytes) keepPlaceWhile(applyZoomForLayout, lastScrollAnchor || captureScrollAnchorNow());
+  else applyZoomForLayout();
   return Promise.resolve();
 }
 
@@ -128,7 +134,7 @@ function syncViewportClass() {
 }
 
 function getZoomLimits() {
-  return { min: isMobileViewport() ? ZOOM_MIN_MOBILE : ZOOM_MIN, max: ZOOM_MAX };
+  return { min: shouldUseMobileReflow() ? ZOOM_MIN_REFLOW : ZOOM_MIN_PAGES, max: ZOOM_MAX };
 }
 
 function clampZoom(z) {
@@ -148,6 +154,7 @@ function syncZoomSliderLimits() {
 
 function applyZoomForLayout() {
   if (shouldUseMobileReflow()) {
+    reflowScale = clampZoom(reflowScale);
     if (zoomLevelEl) zoomLevelEl.value = String(reflowScale);
     applyZoom();
     const host = docCanvasEl?.querySelector(".docx-preview-host");
@@ -230,6 +237,18 @@ function applyMobileReflowLayout(host) {
 }
 
 // ── miejsce w dokumencie (akapit u góry) — na zmianę widoku i obrót ────────────
+// Zmiana zoomu przyciskiem / suwakiem / „Dopasuj” zostaje w tym samym miejscu dokumentu,
+// jak w Wordzie (gest palcami trzyma punkt pod palcami sam — pinch-zoom.js). W poziomie
+// trzymamy środek widoku.
+function keepPlaceWhile(change, anchor = captureScrollAnchorNow()) {
+  const vp = docViewportEl;
+  const cx = vp && vp.scrollWidth > vp.clientWidth ? (vp.scrollLeft + vp.clientWidth / 2) / vp.scrollWidth : null;
+  change();
+  if (!vp) return;
+  if (anchor && typeof restoreDocScrollAnchor === "function") restoreDocScrollAnchor(anchor);
+  if (cx != null && vp.scrollWidth > vp.clientWidth) vp.scrollLeft = cx * vp.scrollWidth - vp.clientWidth / 2;
+}
+
 function captureScrollAnchorNow() {
   const vp = docViewportEl;
   if (!vp || vp.scrollTop < 1 || typeof captureDocScrollAnchor !== "function") return null;
@@ -265,7 +284,7 @@ function ensureMobileReflowObserver() {
     // Próg 20 px: pasek przewijania (pojawia się po zmianie zoomu) nie rozkręca pętli.
     if (pageFitMode === "manual" || _refitRaf) return;
     if (Math.abs((docViewportEl.clientWidth || 0) - lastFitWidth) < 20) return;
-    _refitRaf = requestAnimationFrame(() => { _refitRaf = 0; applyZoomForLayout(); });
+    _refitRaf = requestAnimationFrame(() => { _refitRaf = 0; keepPlaceWhile(applyZoomForLayout); });
   });
   _docReflowObserver.observe(docViewportEl);
 }
@@ -313,15 +332,22 @@ function syncZoomFitButtonState() {
 function applyFitToWidth() {
   if (shouldUseMobileReflow()) reflowScale = 1;
   else pageFitMode = "fit";
-  applyZoomForLayout();
+  keepPlaceWhile(applyZoomForLayout);
   syncZoomFitButtonState();
 }
 
 function resetZoomTo100() {
   if (shouldUseMobileReflow()) reflowScale = 1;
   else { pageFitMode = "manual"; pageZoom = 1; }
-  applyZoomForLayout();
+  keepPlaceWhile(applyZoomForLayout);
   syncZoomFitButtonState();
+}
+
+// Zsunięcie palców poniżej dołu Widoku mobilnego (pinch-zoom.js): strony, cała szerokość
+// kartki na ekranie — jak oddalenie do całej strony. To zwykły wybór widoku (pamiętany).
+function switchToPagesFromPinch() {
+  pageFitMode = "auto";
+  return setViewLayoutPref("desktop");
 }
 
 function syncMobileDocZoomAfterRender() {
@@ -337,7 +363,7 @@ function onZoomSliderInput() {
   const z = clampZoom(parseFloat(zoomLevelEl?.value) || 1);
   if (shouldUseMobileReflow()) reflowScale = z; // [PL] +/− w Widoku mobilnym skalują tekst
   else { pageZoom = z; pageFitMode = "manual"; }
-  applyZoom();
+  keepPlaceWhile(applyZoom);
   syncZoomFitButtonState();
 }
 

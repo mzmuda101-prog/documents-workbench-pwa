@@ -98,9 +98,10 @@ async function run() {
   check("zsunięcie palców wraca do ~1×", Math.abs(s2.zoom - s1.zoom / 2) < 0.1, JSON.stringify(s2));
   check("tekst na ekranie wraca do pierwotnej wielkości", Math.abs(s2.lineH - s0.lineH) < s0.lineH * 0.15, `${s0.lineH} / ${s2.lineH}`);
 
-  await pinch(page, 300, 20);
+  await pinch(page, 200, 110); // ~55%
+  await pinch(page, 110, 97); // ~48% → dół Widoku mobilnego, ale jeszcze nie „na strony”
   const s3 = await state(page);
-  check("dół zakresu 0,35", s3.zoom >= 0.35 && s3.zoom <= 0.4, String(s3.zoom));
+  check("dół zakresu Widoku mobilnego 50% (zostaje w Widoku mobilnym)", s3.zoom === 0.5 && s3.reflow, JSON.stringify(s3));
   await pinch(page, 20, 600);
   const s4 = await state(page);
   check("góra zakresu 3×", s4.zoom <= 3.001 && s4.zoom >= 2.9, String(s4.zoom));
@@ -148,6 +149,29 @@ async function run() {
     return document.getElementById("docZoomShell").style.transform;
   });
   check("jeden palec nie startuje gestu", one === "");
+
+  // zsunięcie palców wyraźnie poniżej 50% = „cała strona”: Widok desktopowy (jak w zdjęciach)
+  await page.click("#zoomFitBtn");
+  await page.waitForTimeout(300);
+  await page.evaluate(() => { document.getElementById("docViewport").scrollTop = 1200; });
+  await page.waitForTimeout(250);
+  const topBefore = await page.evaluate(() => { const vp = document.getElementById("docViewport"); const t = vp.getBoundingClientRect().top; return collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).findIndex((p) => p.getBoundingClientRect().bottom > t + 1); });
+  await fingers(page, "touchstart", 200);
+  await fingers(page, "touchmove", 120);
+  await fingers(page, "touchmove", 70); // 35% — poniżej 80% minimum
+  await page.waitForTimeout(80);
+  const hint = await page.evaluate(() => document.querySelector(".zoom-badge").textContent);
+  check("plakietka uprzedza: „Puść — Widok desktopowy”", hint === "Puść — Widok desktopowy", hint);
+  await fingers(page, "touchend", 70);
+  await page.waitForFunction(() => document.getElementById("loadingOverlay").classList.contains("hidden") && getViewLayout() === "desktop", null, { timeout: 15000 });
+  await page.waitForTimeout(500);
+  const pg = await state(page);
+  const topAfter = await page.evaluate(() => { const vp = document.getElementById("docViewport"); const t = vp.getBoundingClientRect().top; return collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).findIndex((p) => p.getBoundingClientRect().bottom > t + 1); });
+  check("po puszczeniu: strony, cała kartka na szerokość, bez przewijania w bok", !pg.reflow && pg.zoom < 0.6 && pg.sw <= 1, JSON.stringify(pg));
+  check("…w tym samym miejscu dokumentu", topBefore > 0 && Math.abs(topAfter - topBefore) <= 1, `${topBefore} → ${topAfter}`);
+  check("dół zakresu stron 25%", await page.evaluate(() => getZoomLimits().min === 0.25));
+  await page.evaluate(() => setViewLayoutPref("auto"));
+  await page.waitForTimeout(800);
 
   // tablet w pionie (Auto): Widok mobilny — pinch skaluje tekst, który dalej się zawija
   await page.setViewportSize({ width: 820, height: 1000 });

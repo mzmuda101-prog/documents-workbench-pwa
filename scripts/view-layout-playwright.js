@@ -206,10 +206,77 @@ async function run() {
   await openDoc(dp, "przewodnik");
   const c0 = await look(dp);
   check("komputer, Auto → Widok desktopowy, 100%", c0.layout === "desktop" && !c0.reflow && c0.zoom === 1 && c0.label === "100%", JSON.stringify(c0));
+  // Ctrl + kółko (jak w Wordzie): przybliża dokument, nie aplikację; tekst pod kursorem zostaje pod kursorem
+  await dp.evaluate(() => { document.getElementById("docViewport").scrollTop = 900; });
+  await dp.waitForTimeout(250);
+  const box = await dp.locator("#docViewport").boundingBox();
+  const cx = Math.round(box.x + box.width / 2);
+  const cy = Math.round(box.y + 260);
+  const caretAt = ([x, y]) => {
+    const r = document.caretRangeFromPoint ? document.caretRangeFromPoint(x, y) : (() => { const p = document.caretPositionFromPoint(x, y); const q = document.createRange(); q.setStart(p.offsetNode, p.offset); return q; })();
+    window.__n = r.startContainer; window.__o = r.startOffset;
+  };
+  const drift = ([x, y]) => {
+    const r = document.createRange();
+    r.setStart(window.__n, window.__o);
+    r.setEnd(window.__n, Math.min(window.__o + 1, window.__n.length || 0));
+    const b = r.getBoundingClientRect();
+    return Math.round(Math.hypot(b.left - x, b.top + b.height / 2 - y));
+  };
+  await dp.evaluate(caretAt, [cx, cy]);
+  await dp.mouse.move(cx, cy);
+  await dp.keyboard.down("Control");
+  await dp.mouse.wheel(0, -100);
+  await dp.waitForTimeout(40);
+  await dp.mouse.wheel(0, -100);
+  await dp.keyboard.up("Control");
+  await dp.waitForTimeout(600);
+  const w1 = await look(dp);
+  const d1 = await dp.evaluate(drift, [cx, cy]);
+  check("Ctrl + kółko: dwa ząbki = 120% (co 10%, jak Word)", w1.zoom === 1.2 && w1.label === "120%" && !w1.reflow, JSON.stringify(w1));
+  check("Ctrl + kółko: tekst pod kursorem zostaje pod kursorem", d1 < 40, String(d1));
+  // szczypanie na gładziku = kółko z Ctrl i małymi ułamkowymi krokami → płynnie
+  await dp.evaluate(([x, y]) => {
+    const vp = document.getElementById("docViewport");
+    for (let i = 0; i < 8; i++) vp.dispatchEvent(new WheelEvent("wheel", { deltaY: 4.5, ctrlKey: true, clientX: x, clientY: y, bubbles: true, cancelable: true }));
+  }, [cx, cy]);
+  await dp.waitForTimeout(500);
+  const w2 = await look(dp);
+  check("szczypanie na gładziku: płynnie (nie co 10%) w dół", w2.zoom < 1.0 && w2.zoom > 0.75 && Math.round(w2.zoom * 100) % 10 !== 0, JSON.stringify(w2));
+  check("zwykłe kółko bez Ctrl dalej przewija", await dp.evaluate(async () => {
+    const vp = document.getElementById("docViewport"); const t0 = vp.scrollTop; const z0 = zoomLevelEl.value;
+    vp.dispatchEvent(new WheelEvent("wheel", { deltaY: 100, bubbles: true, cancelable: true }));
+    return zoomLevelEl.value === z0 && t0 >= 0;
+  }));
+
+  // − + i „Dopasuj” zostają w tym samym miejscu dokumentu (jak w Wordzie)
+  await scrollToPara(dp, 45);
+  await dp.waitForTimeout(250);
+  const k0 = await topPara(dp);
+  await dp.click("#zoomInBtn");
+  await dp.click("#zoomInBtn");
+  const k1 = await topPara(dp);
+  await dp.click("#zoomFitBtn");
+  const k2 = await topPara(dp);
+  await dp.click("#zoomOutBtn");
+  const k3 = await topPara(dp);
+  check("Widok desktopowy: +, +, Dopasuj, − — ten sam akapit u góry", [k1, k2, k3].every((k) => Math.abs(k.i - k0.i) <= 1), JSON.stringify({ k0, k1, k2, k3 }));
+
   await pickInPopover(dp, "mobile");
   const c1 = await look(dp);
   check("komputer: Widok mobilny działa — kolumna ≤ 760 px na środku, tekst się zawija",
     c1.reflow && c1.hostW <= 762 && Math.abs(c1.hostL - (c1.vpW - c1.hostW) / 2) < 16 && c1.overflowX <= 1, JSON.stringify(c1));
+  await scrollToPara(dp, 45);
+  await dp.waitForTimeout(250);
+  const m0b = await topPara(dp);
+  await dp.click("#zoomInBtn");
+  const m1b = await topPara(dp);
+  await dp.click("#zoomOutBtn");
+  await dp.click("#zoomOutBtn");
+  const m2b = await topPara(dp);
+  check("Widok mobilny: − + (tekst zawija się inaczej) — ten sam akapit u góry", [m1b, m2b].every((k) => Math.abs(k.i - m0b.i) <= 1), JSON.stringify({ m0b, m1b, m2b }));
+  check("Widok mobilny nie schodzi poniżej 50%", await dp.evaluate(() => { for (let i = 0; i < 8; i++) document.getElementById("zoomOutBtn").click(); return zoomLevelEl.value === "0.5"; }));
+  await dp.click("#zoomFitBtn");
   const note = await dp.evaluate(() => document.querySelector("#viewPop .view-layout-note")?.textContent || document.querySelector("#viewLayoutPanel .view-layout-note").textContent);
   check("komputer: pamiętane „dla: komputer”", /komputer/.test(note), note);
   await pickInPopover(dp, "auto");
