@@ -85,7 +85,10 @@
       if (step <= 0 || step > g.size * 1.6 || step > (g.adv || 0) + g.size * 0.15) continue;
       const i = SUB_INDEX.get(g.u);
       if (i === undefined) continue;
-      const tab = SUB_WIDTHS[(g.font.serif ? "times" : "arial") + (g.bold ? "B" : "")];
+      // tabela wg kroju, którym zastępujemy (rodzina), nie flagi „szeryfowy” z PDF — Ghostscript
+      // jej nie ustawia i „WtTimes” porównywaliśmy z Arialem (wychodziło zagęszczenie zamiast rozstrzelenia)
+      const serifSub = g.font.serif || /times|georgia|cambria|garamond|book antiqua/i.test(g.font.family || "");
+      const tab = SUB_WIDTHS[(serifSub ? "times" : "arial") + (g.bold ? "B" : "")];
       const key = g.fontRef + "|" + (g.bold ? 1 : 0);
       let a = acc.get(key);
       if (!a) acc.set(key, (a = { orig: 0, pred: 0, em: 0, n: 0 }));
@@ -1198,21 +1201,25 @@
       for (const l of apLines) l.glyphs.sort((p, q) => p.x - q.x);
       const textLines = String(a.text).replace(/\r\n?/g, "\n").replace(/\n+$/, "").split("\n");
       const visible = textLines.map((t, i) => ({ t, i })).filter((o) => o.t.trim());
-      // Rozmiar „auto” (0 w DA): przeglądarki liczą go różnie — przyjmujemy zasadę Acrobata:
-      // 12 pt, mniej tylko gdy wiersze nie mieszczą się w polu. Wygląd z pdf.js wtedy pomijamy.
+      // Rozmiar „auto” (0 w DA): przeglądarki liczą go różnie — bierzemy wygląd wygenerowany przez
+      // pdf.js (rozmiar dopasowany do pola, odstęp ~1,35 em; miernik pdf:score: karty +2…+5 pp).
+      // Gdy liczba wierszy wyglądu się nie zgadza — zasada Acrobata (12 pt, mniej gdy się nie mieści).
       const auto = !a.size;
       const h = a.y1 - a.y0;
+      const multi = textLines.length > 1;
+      const apMatches = apLines.length === visible.length && apLines.length > 0;
+      const fromAp = !auto || apMatches;
       let size;
-      if (auto) size = Math.max(4, Math.min(12, textLines.length > 1 ? (h - 4) / (textLines.length * 1.15) : (h - 2) / 1.15));
-      else size = (ag.length ? median(ag.map((g) => g.size)) : 0) || a.size;
+      if (!fromAp) size = Math.max(4, Math.min(12, multi ? (h - 4) / (textLines.length * 1.15) : (h - 2) / 1.15));
+      else size = (ag.length ? median(ag.map((g) => g.size)) : 0) || a.size || 10;
       const font = ag[0]?.font || { id: "annot", family: /cour/i.test(a.fontName) ? "Courier New" : /tim/i.test(a.fontName) ? "Times New Roman" : "Arial", bold: false, italic: false, mono: false, serif: false, symbolic: false, asc: 0.72, desc: 0.21 };
       const color = ag[0]?.color || a.color || "000000";
       // szerokości znaków z wyglądu (ten sam krój) — dokładniejsze niż tabela
       const wmap = new Map();
       for (const g of ag) if (g.u.length === 1 && g.adv > 0) wmap.set(g.u, g.adv / g.size);
       const charW = (ch, sz) => (wmap.has(ch) ? wmap.get(ch) : helvWidth(ch)) * sz;
-      const leading = !auto && apLines.length >= 2 ? median(apLines.slice(1).map((l, i) => l.y - apLines[i].y)) : size * 1.15;
-      const useAp = !auto && apLines.length === visible.length && apLines.length > 0;
+      const leading = fromAp && apLines.length >= 2 ? median(apLines.slice(1).map((l, i) => l.y - apLines[i].y)) : size * 1.15;
+      const useAp = fromAp && apMatches;
       const single = textLines.length === 1;
       let y0 = useAp ? apLines[0].y : single ? (a.y0 + a.y1) / 2 + size * 0.3 : a.y0 + 2 + size * 0.85;
       // gdy wygląd ma inną liczbę wierszy — linie bazowe od pierwszej w odstępach z wyglądu

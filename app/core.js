@@ -1,6 +1,6 @@
 // Core runtime: DOM refs, shared state, and base UI helpers.
 
-const APP_BUILD_VERSION = "20261003-04";
+const APP_BUILD_VERSION = "20261003-05";
 
 const IS_LOW_POWER = (() => {
   try {

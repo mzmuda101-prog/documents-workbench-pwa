@@ -196,6 +196,11 @@
       else if (/helvetica|arial/.test(l)) family = "Arial";
       else if (/courier/.test(l)) family = "Courier New";
     }
+    // Krój z Ghostscripta („WtTimesBold01…”) nazwą udaje Times/Helvetikę, ale ma inne szerokości
+    // liter — jak każdy zastępnik dostaje dopasowanie odstępów (karty terenu: tytuł i akapit
+    // „Prosimy…” zawijały się inaczej). Gdy szerokości się zgadzają, dopasowanie wychodzi zerowe.
+    // (Tylko bezszeryfowe: dla „WtTimes” rozstrzelenie psuło zawijanie akapitu — miernik −1,7 pp.)
+    if (parsed.ghostscript && !trueType && !mono && !/times|symbol|wingdings|dingbats|webdings/i.test(family)) substituted = true;
     const symbolic = /symbol|wingdings|dingbats|webdings/i.test(family);
     const asc = Number.isFinite(fontObj?.ascent) && fontObj.ascent > 0.3 && fontObj.ascent < 1.6 ? fontObj.ascent : 0.86;
     let desc = Number.isFinite(fontObj?.descent) ? Math.abs(fontObj.descent) : 0.22;

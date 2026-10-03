@@ -1684,6 +1684,10 @@ section.docx { font-kerning: none; font-variant-ligatures: none; }
    fragmenty nie wnoszą wysokości, linijkę wyznacza sam akapit (docx-render-fixes.js). */
 p.dwb-exact span { line-height: 0; }
 p.dwb-exact .docx-tab-laid { line-height: normal; height: 0.9em; vertical-align: -0.2em; }
+/* Tabulator to zagnieżdżony <span>, a docx-preview ma regułę „.docx span” z domyślną czcionką
+   dokumentu (np. 10 pt) — wygrywała z dziedziczeniem po tekście: przy podpisie 6 pt tabulator
+   miał 10 pt (i min-height 10 pt) i podnosił linijkę o 3 pt (dolny rząd kart z PDF zjeżdżał). */
+.docx span.docx-tab { font-size: inherit; font-family: inherit; min-height: 0; }
 p.dwb-exact img { vertical-align: baseline; }
 
 /* PDF → DOCX: okno postępu konwersji (app/pdf-import.js) */

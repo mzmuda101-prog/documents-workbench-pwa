@@ -254,6 +254,8 @@ async function run() {
   const prevAvg = history.runs[history.runs.length - 1]?.avg;
   console.log(`\nŚrednia zgodność wyglądu: ${avg}%${prevAvg != null ? ` (poprzednio ${prevAvg}%)` : ""}`);
   if (process.env.IMAGES) console.log(`Nakładki (czerwony = tylko oryginał, niebieski = tylko wynik): ${IMG_DIR}`);
+  // do historii tylko pełny przebieg listy próbek — pomiar wybranych plików nie zmienia punktu odniesienia
+  if (process.argv.slice(2).some((x) => /\.pdf$/i.test(x))) return;
   history.runs.push({ at: new Date().toISOString(), avg, results });
   history.runs = history.runs.slice(-50);
   fs.writeFileSync(HISTORY, JSON.stringify(history, null, 1));
