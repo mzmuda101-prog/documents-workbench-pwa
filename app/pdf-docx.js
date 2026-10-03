@@ -21,6 +21,7 @@
   const MIN_LINE = 1.0; // pt — minimalna wysokość wiersza dla bardzo małych tekstów
 
   function lineHeightFor(block) {
+    if (block.lineOverride) return block.lineOverride; // ciasny stos wierszy (blocksXml)
     if (block.lineGap && block.nLines > 1) return Math.max(MIN_LINE, block.lineGap);
     return Math.max(MIN_LINE, block.size * 1.17);
   }
@@ -85,6 +86,7 @@
       if (t.italic) p.push("<w:i/><w:iCs/>");
       if (t.strike) p.push("<w:strike/>");
       if (t.color) p.push(`<w:color w:val="${t.color.toUpperCase()}"/>`);
+      if (t.spacing && Math.abs(t.spacing) <= 400) p.push(`<w:spacing w:val="${t.spacing}"/>`); // kolejność w rPr: color → spacing → w
       if (t.hScale && t.hScale >= 1 && t.hScale <= 600) p.push(`<w:w w:val="${t.hScale}"/>`);
       if (t.size) {
         const hp = Math.max(2, Math.round(t.size * 2));
@@ -241,8 +243,19 @@
           anchors: first ? ctx.anchors || "" : "",
           sectPr: i === n - 1 ? ctx.sectPr || "" : "",
         };
-        const top = blockTop(b);
+        let top = blockTop(b);
         local.spaceBefore = top - cursor;
+        // Wiersze ciaśniej niż 1,17 × rozmiar (napisy w trójkącie DC-85: 11,9 pt przy 13,3 pt):
+        // odstęp „przed” wyszedłby ujemny. Jednowierszowy akapit dostaje niższy wiersz tak, by
+        // linia bazowa trafiła w PDF (litery mogą wystawać z wiersza — w „dokładnie” to normalne).
+        if (b.type === "para" && local.spaceBefore < -0.2 && b.nLines === 1 && b.firstBaseline > cursor) {
+          const L2 = (b.firstBaseline - cursor) / BASE;
+          if (L2 >= Math.max(MIN_LINE, (b.size || 0) * 0.6)) {
+            b.lineOverride = L2;
+            top = blockTop(b);
+            local.spaceBefore = top - cursor;
+          }
+        }
         // Odstęp „przed” na górze nowej strony Word/LibreOffice pomijają — zamiast niego pusty
         // akapit o dokładnej wysokości (podział strony idzie z nim).
         if (local.pageBreakBefore && local.spaceBefore > 0.5 && b.type !== "table" && b.type !== "columns") {
@@ -268,7 +281,9 @@
           xml += b.type === "table" ? this.tableXml(b, box, ctx) : this.columnsXml(b, box, ctx);
           if (local.sectPr) xml += this.emptyPara({ sectPr: local.sectPr }, 1);
         }
-        cursor = blockBottom(b);
+        // Ujemny odstęp się zeruje — blok w rzeczywistości stoi niżej o tyle; kursor musi to
+        // wiedzieć, inaczej przesunięcie ciągnęło się do końca strony (następne bloki go nie odrabiały).
+        cursor = blockBottom(b) + (b.type === "para" ? Math.max(0, -local.spaceBefore) : 0);
         if (b.type === "table" || b.type === "columns") cursor = Math.max(cursor, top);
       }
       if (!n) xml += this.emptyPara({ pageBreakBefore: ctx.pageBreakBefore, anchors: ctx.anchors, sectPr: ctx.sectPr, spaceBefore: 0 }, 1);

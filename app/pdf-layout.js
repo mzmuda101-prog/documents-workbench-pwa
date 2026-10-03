@@ -54,6 +54,62 @@
    * Czyszczenie znaków strony: niewidoczne/obcięte, symbole, doklejanie osobno rysowanych
    * akcentów (´ nad „s” → „ś”), poprawki z rozpoznania kształtów (opts.glyphFixes).
    */
+  // Szerokości znaków (1/1000 em) Arial / Times New Roman, zwykły i pogrubiony — zmierzone
+  // z prawdziwych czcionek (Arial = metryka Helvetiki). Do zagęszczenia tekstu, gdy krój
+  // z PDF zastępujemy Arialem/Timesem (niezależnie od czcionek na urządzeniu konwersji).
+  const SUB_CHARS = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~ąćęłńóśźżĄĆĘŁŃÓŚŹŻ„”“‚‘’–—…•°§€×ü";
+  const SUB_WIDTHS = {
+    arial: [278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584,556,500,556,222,556,556,500,500,500,667,722,667,556,722,778,667,611,611,333,333,333,222,222,222,556,1000,1000,350,400,556,556,584,556],
+    arialB: [278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584,556,556,556,278,611,611,556,500,500,722,722,667,611,722,778,667,611,611,500,500,500,278,278,278,556,1000,1000,350,400,556,556,584,611],
+    times: [250,333,408,500,500,833,778,180,333,333,500,564,250,333,250,278,500,500,500,500,500,500,500,500,500,500,278,278,564,564,564,444,921,722,667,667,722,611,556,722,722,333,389,722,611,889,722,722,556,722,667,556,611,722,722,944,722,722,611,333,278,333,469,500,333,444,500,444,500,444,333,500,500,278,278,500,278,778,500,500,500,500,333,389,278,500,500,722,500,500,444,480,200,480,541,444,444,444,278,500,500,389,444,444,722,667,611,611,722,722,556,611,611,444,444,444,333,333,333,500,1000,1000,350,400,500,500,564,500],
+    timesB: [250,333,555,500,500,1000,833,278,333,333,500,570,250,333,250,278,500,500,500,500,500,500,500,500,500,500,333,333,570,570,570,500,930,722,667,722,722,667,611,778,778,389,500,778,667,944,722,778,611,778,722,556,667,722,722,1000,722,722,667,333,278,333,581,500,333,500,556,444,556,444,333,500,556,278,333,556,278,833,556,500,556,556,444,389,333,556,500,722,500,500,444,394,220,394,520,500,444,444,278,556,500,389,444,444,722,722,667,667,722,778,556,667,667,500,500,500,333,333,333,500,1000,1000,350,400,500,500,570,556],
+  };
+  const SUB_INDEX = new Map([...SUB_CHARS].map((ch, i) => [ch, i]));
+
+  // Krój z PDF zastąpiony Arialem/Timesem (pdf-extract describeFont → substituted): litery
+  // w zastępniku są szersze/węższe niż w PDF — zawijałyby się inaczej (podtytuł formularza
+  // DC-85 schodził na 2 wiersze i wszystko poniżej zjeżdżało). Liczymy dla każdego kroju
+  // z PDF, o ile em różni się średnio litera, i zapisujemy to jako odstęp między znakami
+  // (Word: „zagęszczone/rozstrzelone”, podgląd: letter-spacing).
+  function fitSubstitutedFonts(glyphs) {
+    const acc = new Map();
+    // Rzeczywisty krok = odległość do NASTĘPNEJ litery w tym samym wierszu (obejmuje odstęp Tc
+    // i korekty w tablicy TJ — Ghostscript dosuwa nimi każdą literę). Pary ze spacją pomijamy
+    // (odstęp między słowami to nie szerokość litery).
+    for (let k = 0; k + 1 < glyphs.length; k++) {
+      const g = glyphs[k], nx = glyphs[k + 1];
+      if (!g.font?.substituted || g.isSpace || g.symbol || g.ocrLayer || !g.size) continue;
+      if (nx.isSpace || nx.fontRef !== g.fontRef || Math.abs(nx.y - g.y) > 0.2 || Math.abs(g.angle || 0) > 0.01) continue;
+      const step = nx.x - g.x;
+      // odstęp między słowami bez znaku spacji (samo przesunięcie — Ghostscript) to nie litera
+      if (step <= 0 || step > g.size * 1.6 || step > (g.adv || 0) + g.size * 0.15) continue;
+      const i = SUB_INDEX.get(g.u);
+      if (i === undefined) continue;
+      const tab = SUB_WIDTHS[(g.font.serif ? "times" : "arial") + (g.bold ? "B" : "")];
+      const key = g.fontRef + "|" + (g.bold ? 1 : 0);
+      let a = acc.get(key);
+      if (!a) acc.set(key, (a = { orig: 0, pred: 0, em: 0, n: 0 }));
+      a.orig += step;
+      // skala pozioma liczy się tylko, gdy trafi do pliku jako w:w (styleKey: odchyłka > 5%);
+      // mniejszą (np. 95,7% w DC-85) nadrabia odstęp między znakami
+      const xs = g.xScale && Math.abs(g.xScale - 1) > 0.05 ? g.xScale : 1;
+      a.pred += (tab[i] / 1000) * g.size * xs;
+      a.em += g.size;
+      a.n++;
+    }
+    const perEm = new Map();
+    for (const [k, a] of acc) {
+      if (a.n < 3 || !a.em) continue;
+      const d = (a.orig - a.pred) / a.em; // em na znak (ujemne = zagęścić)
+      if (Math.abs(d) >= 0.004 && Math.abs(d) < 0.25) perEm.set(k, d);
+    }
+    if (!perEm.size) return;
+    for (const g of glyphs) {
+      const d = perEm.get(g.fontRef + "|" + (g.bold ? 1 : 0));
+      if (d !== undefined) g.fitSpacing = Math.round(d * g.size * 20); // dwudzieste punktu (twips)
+    }
+  }
+
   function prepareGlyphs(raw, opts = {}) {
     const W = raw.width, H = raw.height;
     const fixes = opts.glyphFixes || null;
@@ -80,6 +136,11 @@
       }
       // Ligatury rozbijamy (ﬁ → fi), żeby wyszukiwanie i sprawdzanie pisowni działały.
       if (/[ﬀ-ﬆ]/.test(g.u)) g.u = g.u.normalize("NFKC");
+      // kod sterujący bez rozpoznanej litery = rysunek (pdf-extract: paint) → warstwa grafiki
+      if (g.paint && !fix) {
+        if (opts.paints) opts.paints.push({ ...g.paint, order: g.order });
+        continue;
+      }
       if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(g.u)) continue;
       out.push(g);
     }
@@ -88,7 +149,9 @@
       for (const g0 of raw.glyphs) if (g0.invisible) out.push({ ...g0, ocrLayer: true });
     }
     composeAccents(out);
-    return out.filter((g) => !g.dead);
+    const live = out.filter((g) => !g.dead);
+    fitSubstitutedFonts(live);
+    return live;
   }
 
   const BELOW_ACCENTS = new Set(["\u02db", "\u00b8"]);
@@ -169,13 +232,17 @@
       for (const j of [i - 1, i + 1]) {
         const o = rows[j];
         if (!o || o === r || !o.glyphs.length) continue;
-        const oMax = Math.max(...o.glyphs.map((g) => g.size));
+        // Rozmiar porównujemy tylko ze znakami OBOK (w poziomie): pas wiersza biegnie przez całą
+        // stronę i duży tekst w innej kolumnie na tej samej wysokości (etykieta formularza DC-85)
+        // robił z drobnego, ciasno złożonego napisu w trójkącie „indeks dolny” sąsiedniego wiersza.
+        const rx0 = Math.min(...r.glyphs.map((g) => g.x)), rx1 = Math.max(...r.glyphs.map((g) => g.x1));
+        const reach = maxSize * 1.2;
+        const nearG = o.glyphs.filter((g) => !g.isSpace && g.x1 >= rx0 - reach && g.x <= rx1 + reach);
+        if (!nearG.length) continue;
+        const oMax = Math.max(...nearG.map((g) => g.size));
         if (maxSize > oMax * 0.88) continue;
         const dy = r.y - o.y;
         if (Math.abs(dy) > oMax * 0.55) continue;
-        const rx0 = Math.min(...r.glyphs.map((g) => g.x)), rx1 = Math.max(...r.glyphs.map((g) => g.x1));
-        const near = o.glyphs.some((g) => g.x1 >= rx0 - oMax * 0.6 && g.x <= rx1 + oMax * 0.6);
-        if (!near) continue;
         for (const g of r.glyphs) g.vert = dy < 0 ? "superscript" : "subscript";
         o.glyphs.push(...r.glyphs);
         r.glyphs = [];
@@ -186,9 +253,14 @@
     for (const r of rows) {
       const big = r.glyphs.filter((g) => !g.isSpace && g.size >= r.size * 0.9);
       if (!big.length || big.length === r.glyphs.length) continue;
-      const base = median(big.map((g) => g.y));
       for (const g of r.glyphs) {
         if (g.isSpace || g.vert || g.size > r.size * 0.88) continue;
+        // linia bazowa z DUŻYCH znaków obok (w poziomie) — pas biegnie przez całą stronę, a duży
+        // napis w innej kolumnie (trójkąt w DC-85) robił z etykiety po lewej „indeks dolny”
+        const reach = r.size * 1.5;
+        const near = big.filter((b) => b.x1 >= g.x - reach && b.x <= g.x1 + reach);
+        if (!near.length) continue;
+        const base = median(near.map((b) => b.y));
         if (g.y < base - r.size * 0.12) g.vert = "superscript";
         else if (g.y > base + r.size * 0.08) g.vert = "subscript";
       }
@@ -782,10 +854,24 @@
       underline: !!g.underline,
       strike: !!g.strike,
       hScale: g.xScale && Math.abs(g.xScale - 1) > 0.05 ? Math.round(g.xScale * 100) : null,
+      spacing: g.fitSpacing && Math.abs(g.fitSpacing) >= 2 ? g.fitSpacing : null,
     };
     if (s.vert) s.size = Math.round(size * 2 / 1.0) / 2; // indeks: zachowaj prawdziwy rozmiar
-    s.key = [s.font, s.size, s.bold, s.italic, s.color, s.vert, s.underline, s.strike, s.hScale].join("|");
+    s.key = [s.font, s.size, s.bold, s.italic, s.color, s.vert, s.underline, s.strike, s.hScale, s.spacing].join("|");
     return s;
+  }
+
+  // Szerokość pierwszego słowa wiersza (do bezpiecznego zapasu przy zawijaniu).
+  function firstWordWidth(line, size) {
+    const gl = (line.parts || []).flatMap((p) => p.glyphs || []).sort((a, b) => a.x - b.x);
+    let x1 = null;
+    for (let k = 0; k < gl.length; k++) {
+      const g = gl[k];
+      if (g.isSpace && x1 !== null) break;
+      if (x1 !== null && g.x - x1 > size * 0.25) break;
+      if (!g.isSpace) x1 = Math.max(x1 ?? g.x1, g.x1);
+    }
+    return x1 === null ? size : Math.max(0, x1 - line.x0);
   }
 
   function lineStartsList(line) {
@@ -984,9 +1070,15 @@
       // minimalnie szersza czcionka zastępcza nie zawinęła ostatniego słowa
       indRight = -Math.min(28, size * 2);
     } else if (multi && align !== "center") {
-      // szerokość zawijania jak w PDF: najdłuższy wiersz + mały zapas
-      indRight = Math.max(0, box.x1 - (Math.max(...rights) + size * 0.15 + 1));
-      if (align === "both") indRight = Math.max(0, box.x1 - Math.max(...rights) - 0.3);
+      // szerokość zawijania jak w PDF: najdłuższy wiersz + zapas. Zapas możliwie duży (krój
+      // zastępczy bywa minimalnie szerszy — „ADMINISTRACYJNE” w DC-85 łamało się na kawałki),
+      // ale mniejszy niż to, co wciągnęłoby pierwsze słowo następnego wiersza do poprzedniego:
+      // w PDF wiersz i skończył się, bo x1(i) + spacja + pierwsze słowo(i+1) > szerokość.
+      const maxR = Math.max(...rights);
+      let safe = maxR + size * 1.2;
+      for (let i = 0; i + 1 < lines.length; i++) safe = Math.min(safe, lines[i].x1 + size * 0.25 + firstWordWidth(lines[i + 1], size) - 0.5);
+      indRight = Math.max(0, box.x1 - Math.max(maxR + size * 0.15 + 1, safe));
+      if (align === "both") indRight = Math.max(0, box.x1 - maxR - 0.3);
     }
     // interlinia: mediana odstępów linii bazowych
     let lineGap = null;
@@ -1278,7 +1370,8 @@
    */
   function layoutPage(raw, opts = {}) {
     const W = raw.width, H = raw.height;
-    const glyphs = prepareGlyphs(raw, opts);
+    const paints = [];
+    const glyphs = prepareGlyphs(raw, { ...opts, paints });
     let frags = buildFragments(glyphs).filter((f) => f.glyphs.length);
     frags = mergeFieldFrags(frags, annotationFrags(raw));
     const bulletShapes = shapeBullets(raw, frags);
@@ -1346,6 +1439,7 @@
     for (const sg of rules) vectors.push({ type: "line", x0: sg.x0, y0: sg.y, x1: sg.x1, y1: sg.y, w: sg.w, color: sg.color });
     for (const sg of leftovers.vSegs) vectors.push({ type: "line", x0: sg.x, y0: sg.y0, x1: sg.x, y1: sg.y1, w: sg.w, color: sg.color });
     for (const gr of raw.graphics) if (gr.cmds && !bulletShapes.has(gr) && !(gr.kind === "fill" && gr.color === "ffffff")) vectors.push({ type: "path", ...gr });
+    for (const pg of paints) vectors.push({ type: "glyph", ...pg });
 
     const atoms = [...free, ...imageAtoms, ...tables];
     const tree = flattenLayout(xyCut(atoms));

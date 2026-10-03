@@ -61,8 +61,19 @@ function patchBundle() {
   const reTab = /renderTab\((\w+)\)\{var (\w+)=this\.createElement\("span"\);if\(\2\.innerHTML="&emsp;",this\.options\.experimental\)\{\2\.className=this\.tabStopClass\(\);var (\w+)=([\w$]+)\(\1,([\w$]+)\.Paragraph\)\?\.tabs;/;
   if (!reTab.test(src)) throw new Error("łatka tabulatorów: wzorzec renderTab nie pasuje (nowa wersja docx-preview?)");
   src = src.replace(reTab, (m, T, E, R, F, D) => `renderTab(${T}){var ${E}=this.createElement("span");${E}.className="docx-tab";try{var __dwbStops=${F}(${T},${D}.Paragraph)?.tabs;__dwbStops&&__dwbStops.length&&(${E}.dataset.stops=JSON.stringify(__dwbStops.map(s=>[parseFloat(s.position),s.leader||"none",s.style||"left"])));this.defaultTabSize&&(${E}.dataset.dt=parseFloat(this.defaultTabSize))}catch(__e){}if(${E}.innerHTML="&emsp;",this.options.experimental){${E}.className+=" "+this.tabStopClass();var ${R}=${F}(${T},${D}.Paragraph)?.tabs;`);
-  fs.writeFileSync(OUT, src);
   console.log("  ✅  łatka: tabulatory z pozycjami (dane dla layoutTabStops)");
+
+  // 4) Odstępy między znakami w przebiegu (w:rPr/w:spacing — Word „Czcionka → Zaawansowane →
+  //    Odstępy: zagęszczone/rozstrzelone”): docx-preview czytał spacing tylko z akapitu.
+  //    PDF → DOCX zagęszcza tak tekst, gdy krój z PDF zastępuje Arial/Times (szerszy).
+  const reSp = /case"spacing":(\w+)\.localName=="pPr"&&this\.parseSpacing\((\w+),(\w+)\);break;/;
+  const mSp = src.match(reSp);
+  if (!mSp) throw new Error("łatka spacing przebiegu: wzorzec nie pasuje (nowa wersja docx-preview?)");
+  const XML = (src.slice(Math.max(0, mSp.index - 4000), mSp.index).match(/(\w+)\.lengthAttr\(\w+,"val",\w+\.FontSize\)/) || [])[1];
+  if (!XML) throw new Error("łatka spacing przebiegu: brak lengthAttr w pobliżu");
+  src = src.replace(reSp, (_, T, K, E) => `case"spacing":${T}.localName=="pPr"?this.parseSpacing(${K},${E}):${T}.localName=="rPr"&&(${E}["letter-spacing"]=${XML}.lengthAttr(${K},"val"));break;`);
+  fs.writeFileSync(OUT, src);
+  console.log("  ✅  łatka: odstępy między znakami w przebiegu (letter-spacing)");
 }
 
 // pdf.js (konwersja PDF → DOCX): moduł główny + worker + wasm (obrazy JPEG2000/JBIG2, profile

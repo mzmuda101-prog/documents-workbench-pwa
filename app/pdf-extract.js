@@ -53,12 +53,22 @@
     bahnschrift: "Bahnschrift", aptos: "Aptos", liberationsans: "Liberation Sans", liberationserif: "Liberation Serif",
     dejavusans: "DejaVu Sans", dejavuserif: "DejaVu Serif", opensans: "Open Sans", roboto: "Roboto", lato: "Lato",
   };
-  const STYLE_WORDS = /(bold|black|heavy|semibold|demibold|extrabold|ultrabold|medium|light|thin|book|regular|roman|italic|oblique|inclined|condensed|narrow|cond|it|bd|bi|ps|mt|psmt|std|pro|lt|ms)$/i;
+  const STYLE_WORDS = /(bold|black|heavy|semibold|demibold|extrabold|ultrabold|demi|medium|light|thin|book|regular|roman|italic|oblique|inclined|condensed|narrow|cond|it|bd|bi|ps|mt|psmt|std|pro|lt|ms)$/i;
+  // Kroje, które praktycznie każdy ma (albo podgląd ma dla nich zastępnik) — nazwa zostaje.
+  const COMMON_FAMILIES = new Set([...Object.values(FAMILY_ALIASES), "Arial Narrow", "Arial Black", "Calibri Light", "Segoe UI Semibold", "Franklin Gothic Book", "Franklin Gothic Medium", "Gill Sans MT", "Palatino Linotype", "Lucida Console", "Lucida Sans Unicode", "Microsoft Sans Serif", "Century Schoolbook", "Bookman Old Style", "Book Antiqua", "Helvetica Neue", "Menlo", "Monaco", "Noto Sans", "Noto Serif"].map((f) => f.toLowerCase()));
+
+  // Ghostscript (np. „drukuj do PDF” w starszych systemach) przemianowuje kroje na
+  // „Wt” + nazwa + [2 cyfry] + 7 losowych znaków: „WtKnollTextDemi01cPX6!Bw”, „WtTimesBold01jcnDxdw”.
+  const GHOSTSCRIPT_NAME = /^Wt([A-Z][A-Za-z]{2,}?)(?:\d\d)?[A-Za-z0-9!]{7}$/;
 
   function parseFontName(raw) {
     let name = String(raw || "").replace(/^[A-Z]{6}\+/, "").replace(/^\//, "");
+    const gs = GHOSTSCRIPT_NAME.exec(name);
+    const ghostscript = !!gs;
+    if (gs) name = gs[1];
     const lower = name.toLowerCase();
-    const bold = /bold|black|heavy|semibold|demibold|extrabold|ultrabold|,bd|-bd\b/.test(lower);
+    // „Demi” = półgruby (Knoll Text Demi, ITC … Demi) — w Wordzie to pogrubienie; „DemiLight” nie
+    const bold = /bold|black|heavy|semibold|demibold|extrabold|ultrabold|demi(?!light)|,bd|-bd\b/.test(lower);
     const italic = /italic|oblique|inclined|,it\b|-it\b/.test(lower);
     // Odetnij część stylu: po myślniku/przecinku, a potem znane końcówki doklejone bez separatora.
     let base = name.split(/[-,]/)[0] || name;
@@ -76,7 +86,7 @@
       // „TimesNewRoman” → „Times New Roman”; „WtTimesBold01jcnDxdw” zostawiamy do heurystyki.
       family = base.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/_/g, " ").trim();
     }
-    return { family, bold, italic, raw: name };
+    return { family, bold, italic, raw: name, ghostscript };
   }
 
   // --- Mini-czytnik tabel TrueType/OpenType: prawdziwa nazwa rodziny i waga z pliku czcionki.
@@ -137,8 +147,12 @@
   const BAD_FAMILY = /^(cidfont|font|f\d+|t\d+|tt\d+|unnamed|untitled|ps)/i;
 
   // Opis czcionki pdf.js (commonObjs) → nasz opis (rodzina, pogrubienie, kursywa, metryki).
-  function describeFont(fontObj, cache) {
-    const id = fontObj?.loadedName || fontObj?.name || "?";
+  // id = identyfikator zasobu kroju z listy operacji (setFont), NIE loadedName: pdf.js daje
+  // nieosadzonym krojom standardowym wspólne loadedName („Times” dla TimesNewRomanPSMT
+  // i TimesNewRomanPS-BoldMT) — z kluczem po loadedName pogrubiony dostawał opis zwykłego
+  // i pogrubienie urywało się w środku zdania (informacje_ubezpieczenie_ochronne.pdf).
+  function describeFont(fontObj, cache, fontId) {
+    const id = fontId || fontObj?.loadedName || fontObj?.name || "?";
     if (cache.has(id)) return cache.get(id);
     const parsed = parseFontName(fontObj?.name || "");
     let family = parsed.family;
@@ -162,6 +176,18 @@
     let serif = !!fontObj?.isSerifFont;
     if (sfnt?.panoseSerif >= 11 && sfnt?.panoseSerif <= 13) serif = false;
     if (!family || BAD_FAMILY.test(family)) family = mono ? "Courier New" : serif ? "Times New Roman" : "Arial";
+    // Krój spoza powszechnych, którego NIE osadzimy (osadzamy tylko TrueType — nie CFF/Type1)
+    // i nazwa z Ghostscripta: nikt go nie ma, podgląd i Word wzięłyby Times (szeryfowy, inne
+    // szerokości). Bierzemy powszechny krój tego samego rodzaju.
+    let substituted = false;
+    const trueType = data && data.length > 4 && (() => { const b = data instanceof Uint8Array ? data : new Uint8Array(data); const t = String.fromCharCode(b[0], b[1], b[2], b[3]); return t === "\0\x01\0\0" || t === "true"; })();
+    if ((parsed.ghostscript || !trueType) && !COMMON_FAMILIES.has(family.toLowerCase()) && !/symbol|wingdings|dingbats|webdings/i.test(family)) {
+      const l = family.toLowerCase();
+      if (!/times|helvetica|arial|courier/.test(l)) {
+        family = mono ? "Courier New" : serif ? "Times New Roman" : "Arial";
+        substituted = !mono; // szerokości liter dopasuje pdf-layout (fitSubstitutedFonts)
+      }
+    }
     // Czcionki bez szeryfów/szeryfowe z niestandardowych zestawów (np. „WtTimesBold01jcnDxdw” z
     // Ghostscripta) — rozpoznajemy znane rdzenie w nazwie.
     if (!FAMILY_ALIASES[family.toLowerCase().replace(/[^a-z]/g, "")]) {
@@ -174,7 +200,7 @@
     const asc = Number.isFinite(fontObj?.ascent) && fontObj.ascent > 0.3 && fontObj.ascent < 1.6 ? fontObj.ascent : 0.86;
     let desc = Number.isFinite(fontObj?.descent) ? Math.abs(fontObj.descent) : 0.22;
     if (desc > 0.6 || desc < 0.05) desc = 0.22;
-    const out = { id, family, bold, italic, mono, serif, symbolic, asc, desc, raw: parsed.raw, type3: !!fontObj?.isType3Font };
+    const out = { id, family, bold, italic, mono, serif, symbolic, asc, desc, raw: parsed.raw, type3: !!fontObj?.isType3Font, substituted };
     cache.set(id, out);
     return out;
   }
@@ -341,6 +367,7 @@
             else if (k === "LW") gs.lineWidth = v;
             else if (k === "Font" && Array.isArray(v)) {
               gs.font = fontOf(v[0]);
+              gs.fontId = v[0];
               gs.fontSize = v[1];
             }
           }
@@ -362,6 +389,7 @@
         case OPS.setFont: {
           const f = fontOf(args[0]);
           gs.font = f;
+          gs.fontId = args[0];
           gs.fontSize = args[1];
           break;
         }
@@ -406,7 +434,7 @@
           if (!font) break;
           const fontSize = gs.fontSize;
           if (!fontSize) break;
-          const desc = describeFont(font, fontCache);
+          const desc = describeFont(font, fontCache, gs.fontId);
           const fontMatrix = font.fontMatrix || [0.001, 0, 0, 0.001, 0, 0];
           const dir = fontSize < 0 ? -1 : 1;
           const size = Math.abs(fontSize);
@@ -439,6 +467,13 @@
             const p0 = apply(base, gx, ty + gs.rise);
             const p1 = apply(base, gx + adv * hs, ty + gs.rise);
             const u = g.unicode || "";
+            // Znak o kodzie sterującym, ale WIDOCZNY: albo rysunek (szare tła etykiet malowane
+            // tysiącami „\n” co 0,2 pt — formularz DC-85), albo litera z zepsutym kodem (ą/Ę
+            // w tym samym PDF). Rozstrzyga pdf-layout po rozpoznaniu kształtu (glyphFixes):
+            // litera → tekst, reszta → warstwa grafiki. Tu tylko dane do narysowania.
+            const paint = u && /^[\u0000-\u001f\u007f]+$/.test(u) && !invisible && g.fontChar && font.loadedName
+              ? { fontRef: font.loadedName, fontChar: g.fontChar, x: p0[0], y: p0[1], size: pageSize, angle, xScale: xScale / (yScale || 1), color: gs.fillPattern ? "000000" : gs.fill, alpha: gs.fillAlpha, clip: gs.clip }
+              : null;
             if (u && !(invisible && opts.skipInvisible)) {
               (annotTextId ? annotGlyphs[annotTextId] : glyphs).push({
                 u,
@@ -451,7 +486,7 @@
                 desc: desc.desc * pageSize,
                 angle,
                 font: desc,
-                fontRef: font.loadedName,
+                fontRef: gs.fontId || font.loadedName,
                 fontChar: g.fontChar,
                 code: g.originalCharCode,
                 // Kod 32 to w PDF „spacja” dla odstępu między słowami, ale czcionka z własnym
@@ -465,6 +500,7 @@
                 clip: gs.clip,
                 order: order++,
                 xScale: xScale / (yScale || 1),
+                paint,
               });
             }
             x += vertical ? -charW : charW;

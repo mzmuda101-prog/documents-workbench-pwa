@@ -96,6 +96,16 @@ async function makePdfs() {
     <path fill="#000" d="M200 50 C200 30 240 30 240 50 C240 70 200 70 200 50 Z M235 77 h3 v3 h-3 Z"/>
   </svg></body></html>`, { waitUntil: "load" });
   await page.pdf({ path: path.join(TMP, "krzywe.pdf"), width: "210mm", height: "297mm", margin: { top: 0, bottom: 0, left: 0, right: 0 } });
+  // nieosadzone Times zwykły + pogrubiony (Word „bez osadzania”): pdf.js daje obu wspólne
+  // loadedName „Times” — pogrubienie urywało się w środku zdania (informacje_ubezpieczenie…)
+  fs.writeFileSync(path.join(TMP, "times-nieosadzony.pdf"), handPdf([
+    "BT /F1 12 Tf 72 760 Td (Zwykly tekst na poczatku wiersza, ) Tj ET",
+    "BT /F2 12 Tf 72 740 Td (POGRUBIONY srodek zdania ) Tj /F1 12 Tf (i znowu zwykly koniec.) Tj ET",
+    "BT /F2 12 Tf 72 720 Td (Caly wiersz pogrubiony.) Tj ET",
+  ], {
+    F1: "<< /Type /Font /Subtype /TrueType /BaseFont /TimesNewRomanPSMT /Encoding /WinAnsiEncoding >>",
+    F2: "<< /Type /Font /Subtype /TrueType /BaseFont /TimesNewRomanPS-BoldMT /Encoding /WinAnsiEncoding >>",
+  }));
   // „skan”: zrzut strony z tekstem jako obraz, PDF z samym obrazem (bez warstwy tekstu)
   await page.setViewportSize({ width: 794, height: 1123 });
   await page.setContent(`<!doctype html><html lang="pl"><head><meta charset="utf-8"><style>body{margin:60px;font-family:Arial;font-size:22px;color:#111}h1{font-size:34px}.box{background:#f39a5b;padding:10px 16px}</style></head><body><div class="box"><b>KATEDRA AUTOMATYKI</b></div><h1>Lista obecności — lipiec</h1><p>Spóźnienia usprawiedliwione oraz nieusprawiedliwione.</p><p>Zażółć gęślą jaźń.</p></body></html>`, { waitUntil: "load" });
@@ -104,6 +114,27 @@ async function makePdfs() {
   await page.pdf({ path: path.join(TMP, "skan.pdf"), width: "210mm", height: "297mm", margin: { top: 0, bottom: 0, left: 0, right: 0 }, printBackground: true });
   await browser.close();
   fs.writeFileSync(path.join(TMP, "zepsuty.pdf"), Buffer.from("%PDF-1.7\nto nie jest prawdziwy pdf\n%%EOF"));
+}
+
+// Najprostszy PDF pisany ręcznie (kroje NIEosadzone — Chromium zawsze osadza): treść strony
+// z podanych linii, słownik krojów /F1, /F2… z podanych definicji.
+function handPdf(lines, fonts) {
+  const content = lines.join("\n");
+  const objs = [];
+  objs.push("<< /Type /Catalog /Pages 2 0 R >>");
+  objs.push("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+  const names = Object.keys(fonts);
+  const fontRefs = names.map((n, i) => `/${n} ${5 + i} 0 R`).join(" ");
+  objs.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << ${fontRefs} >> >> /Contents 4 0 R >>`);
+  objs.push(`<< /Length ${Buffer.byteLength(content, "latin1")} >>\nstream\n${content}\nendstream`);
+  for (const n of names) objs.push(fonts[n]);
+  let out = "%PDF-1.4\n";
+  const offs = [];
+  objs.forEach((o, i) => { offs.push(Buffer.byteLength(out, "latin1")); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const xref = Buffer.byteLength(out, "latin1");
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offs.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("");
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(out, "latin1");
 }
 
 const docxState = (page) => page.evaluate(async () => {
@@ -288,6 +319,21 @@ async function run() {
   });
   check("tekst jako krzywe: dziury w „o” puste (nonzero i evenodd), obrys widoczny", curves.media && curves.holeNonzero && curves.ringNonzero && curves.holeEvenOdd && curves.ringEvenOdd, JSON.stringify(curves));
   check("tekst jako krzywe: kropka nad „i”, kropka i kropka w ścieżce z krzywą nie giną", curves.iDot && curves.iStem && curves.period && curves.curveDot && curves.curve, JSON.stringify(curves));
+
+  // --- 4d. nieosadzone Times zwykły + pogrubiony: pogrubienie dokładnie tam, gdzie w PDF
+  await page.evaluate(() => { setDirtyState(false); });
+  await convert(page, path.join(TMP, "times-nieosadzony.pdf"));
+  const tb = await page.evaluate(async () => {
+    const z = await JSZip.loadAsync(originalFileBytes);
+    const doc = await z.file("word/document.xml").async("string");
+    const runs = [...doc.matchAll(/<w:r>(.*?)<\/w:r>/g)].map((m) => ({ b: m[1].includes("<w:b/>"), t: [...m[1].matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map((x) => x[1]).join("") })).filter((r) => r.t.trim());
+    const isBold = (needle) => runs.filter((r) => r.t.includes(needle)).map((r) => r.b);
+    return { zwykly: isBold("Zwykly tekst"), pogr: isBold("POGRUBIONY"), koniec: isBold("znowu zwykly"), caly: isBold("Caly wiersz"), runs: runs.map((r) => (r.b ? "**" : "") + r.t) };
+  });
+  check("nieosadzone kroje zwykły + pogrubiony: pogrubienie dokładnie tam, gdzie w PDF", tb.zwykly.join() === "false" && tb.pogr.join() === "true" && tb.koniec.join() === "false" && tb.caly.join() === "true", JSON.stringify(tb));
+  // nazwy z Ghostscripta: „Wt” + nazwa + losowy ogon; „Demi” = pogrubienie
+  const gsn = await page.evaluate(() => ["ELELGP+WtKnollTextDemi01cPX6!Bw", "WtUtSansMediumcPX6!Bw", "WtTimesBold01jcnDxdw", "NotoSansCJK-DemiLight"].map((n) => DWPdf.parseFontName(n)));
+  check("nazwy krojów z Ghostscripta: rodzina bez śmieci, „Demi” pogrubione, „DemiLight” nie", gsn[0].family === "Knoll Text" && gsn[0].bold && gsn[1].family === "Ut Sans" && !gsn[1].bold && gsn[2].bold && !gsn[3].bold, JSON.stringify(gsn.map((g) => [g.family, g.bold])));
 
   // --- 5. skan: pytanie o OCR, rozpoznanie na urządzeniu, tekst + obraz tła bez słów
   await page.evaluate(() => { setDirtyState(false); window.__conv = null; });

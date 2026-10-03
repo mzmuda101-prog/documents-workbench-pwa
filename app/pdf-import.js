@@ -276,7 +276,10 @@
   async function renderVectors(items, W, H) {
     if (!items.length) return null;
     const s = Math.min(3, 2400 / Math.max(W, H));
-    const c = OffscreenCanvasOr(Math.ceil(W * s), Math.ceil(H * s));
+    // znaki-rysunki rysujemy czcionkami pdf.js z document.fonts — kanwa „poza ekranem” w Safari
+    // potrafi ich nie widzieć, więc wtedy zwykła kanwa
+    const hasGlyphs = items.some((v) => v.type === "glyph");
+    const c = hasGlyphs ? Object.assign(document.createElement("canvas"), { width: Math.ceil(W * s), height: Math.ceil(H * s) }) : OffscreenCanvasOr(Math.ceil(W * s), Math.ceil(H * s));
     const ctx = c.getContext("2d");
     ctx.scale(s, s);
     let drawn = 0;
@@ -299,6 +302,15 @@
         ctx.moveTo(v.x0, v.y0);
         ctx.lineTo(v.x1, v.y1);
         ctx.stroke();
+        drawn++;
+      } else if (v.type === "glyph") {
+        ctx.fillStyle = "#" + v.color;
+        ctx.font = `${v.size}px "${v.fontRef}"`;
+        ctx.textBaseline = "alphabetic";
+        ctx.translate(v.x, v.y);
+        if (v.angle) ctx.rotate(v.angle);
+        if (v.xScale && Math.abs(v.xScale - 1) > 0.01) ctx.scale(v.xScale, 1);
+        ctx.fillText(v.fontChar, 0, 0);
         drawn++;
       } else if (v.type === "path" && v.cmds) {
         ctx.beginPath();
@@ -457,7 +469,8 @@
     const fixes = new Map();
     const fonts = new Map(); // fontRef → { font, suspects: Map(code → glyph), letters: Map(u → glyph) }
     for (const g of raw.glyphs) {
-      if (!g.fontRef || g.isSpace) continue;
+      // znak z kodem sterującym (paint) bywa literą z zepsutym kodem — „Ę” jako „\n” (DC-85)
+      if (!g.fontRef || (g.isSpace && !g.paint)) continue;
       let f = fonts.get(g.fontRef);
       if (!f) {
         let fontObj = null;
@@ -470,7 +483,7 @@
       const name = f.fontObj?.differences?.[g.code];
       const cp = g.u.codePointAt(0);
       const pua = cp >= 0xe000 && cp <= 0xf8ff && !g.font.symbolic;
-      if (suspiciousName(name) || pua || g.u === "�") f.suspects.set(g.code, g);
+      if (suspiciousName(name) || pua || g.u === "�" || g.paint) f.suspects.set(g.code, g);
       else if (/^\p{L}$/u.test(g.u) && !f.letters.has(g.u)) f.letters.set(g.u, g);
     }
     for (const [ref, f] of fonts) {
@@ -489,7 +502,10 @@
         let result = null;
         try {
           const U = renderMask(family, g.fontChar, 64);
-          if (U.n > 8) {
+          // pełny prostokąt (szare tło malowane znakami) to nie litera — każda litera „mieści
+          // się” w prostokącie i dostałby wtedy przypadkową literę z ogonkiem
+          const solid = U.n > 8 && U.n / ((U.x1 - U.x0 + 1) * (U.y1 - U.y0 + 1)) > 0.8;
+          if (U.n > 8 && !solid) {
             let best = null;
             for (const [u, lg] of f.letters) {
               const Lm = renderMask(family, lg.fontChar, 64);
