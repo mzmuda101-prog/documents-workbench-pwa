@@ -37,7 +37,14 @@ Siostrzana aplikacja [Sheet Workbench PWA](../sheet-workbench-pwa/README.md).
   i „str. N” tam, gdzie Word zaczyna nową stronę — wysokość strony i marginesy z pliku, zasady
   Worda („razem z następnym”, wiersze razem, wdowy/sieroty) i odstępy wierszy jak w Wordzie;
   sprawdzone z prawdziwym Wordem (`npm run test:pages`). Przybliżone przy czcionkach, których
-  przeglądarka nie ma
+  przeglądarka nie ma i dla których nie ma zamiennika (niżej)
+- **Czcionki jak w Wordzie bez Office** (iPhone, Android, Mac bez Office): brakujące Calibri,
+  Cambria, Arial, Times New Roman, Courier New i Georgia zastępują darmowe kroje o IDENTYCZNYCH
+  szerokościach liter (Carlito, Caladea, Arimo, Tinos, Cousine, Gelasio) — wiersze i strony
+  łamią się tak jak w Wordzie, nazwy krojów w pliku zostają bez zmian. Oryginał na urządzeniu
+  ma pierwszeństwo. Łacina z polskimi znakami jest zapisana do pracy offline (~460 KB, raz —
+  nie przy każdej aktualizacji), greka/cyrylica pobierają się przy pierwszym użyciu.
+  Pliki: `assets/fonts/doc` (generuje `scripts/gen-doc-fonts.py`), `npm run test:fonts`
 - **Komputer jak Word**: Ctrl + kółko (co 10%) i szczypanie na gładziku przybliżają sam
   dokument w miejscu kursora; −/+, suwak i „Dopasuj” zostają w tym samym miejscu dokumentu
 - **Widok mobilny / Widok desktopowy** (panel Widok albo stuknięcie w procent na pasku): Auto =
@@ -110,6 +117,7 @@ npm run test:caret    # poruszanie się kursorem między akapitami (Chromium + W
 npm run test:flows    # funkcje klikane jak użytkownik (Chromium + WebKit)
 npm run test:export   # eksport, statystyki, import/eksport JSON, usuwanie danych osobowych
 npm run test:keys     # klawiatura, tryb skupienia, podpowiedzi
+npm run test:fonts    # zamienniki krojów Office: szerokości jak w Wordzie, offline (Chromium + WebKit)
 npm run bench         # pomiar wydajności na dużych dokumentach (~100 i ~300 stron, CPU ×4)
 npm run test:stress   # pełny przebieg na dużym .docx (wymaga npm run serve)
 ```
@@ -149,5 +157,8 @@ Mateusz Zmuda
 ## License
 
 Source code: MIT — see [LICENSE](./LICENSE).
+
+Czcionki zastępcze w `assets/fonts/doc` mają własne licencje (SIL OFL 1.1 / Apache 2.0) —
+teksty i źródła w tym katalogu (`README.txt`).
 
 Branding, logo i zrzuty ekranu pozostają własnością autora (jak w Sheet Workbench).

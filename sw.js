@@ -1,7 +1,15 @@
-const CACHE_VERSION = "20261003-05";
+const CACHE_VERSION = "20261003-06";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
+// Zamienniki krojów Office (assets/fonts/doc, scripts/gen-doc-fonts.py). Pliki są niezmienne
+// (nowa zawartość = nowa nazwa), więc cache NIE zależy od wersji apki — nie ściągamy ich
+// ponownie po każdej aktualizacji.
+const DOC_FONT_CACHE = "docs-wb-docfonts-1";
+// Część „core” (łacina z polskimi znakami) zapisujemy z góry — dokument z Calibri otwarty
+// offline na telefonie i tak łamie się jak w Wordzie. Część „ext” (greka, cyrylica…) — przy użyciu.
+const DOC_FONT_CORE = ["carlito", "caladea", "arimo", "tinos", "cousine", "gelasio"]
+  .flatMap((f) => ["r", "b", "i", "bi"].map((s) => `./assets/fonts/doc/${f}-${s}-core-1.woff2`));
 // Spięte z CACHE_VERSION (nie osobna stała) — inaczej `npm run release` podbija tylko
 // CACHE_VERSION i ?v= w index.html, a precache celuje w adresy, o które strona już nie prosi.
 const ASSET_V = CACHE_VERSION;
@@ -105,6 +113,10 @@ function isImmutableAsset(url) {
   return url.searchParams.has("v");
 }
 
+function isDocFont(url) {
+  return /\/assets\/fonts\/doc\/[^/]+\.woff2$/i.test(url.pathname);
+}
+
 function cacheNameForUrl(url) {
   if (isHeavyAsset(url)) return HEAVY_CACHE;
   return RUNTIME_CACHE;
@@ -131,6 +143,11 @@ function precacheHeavyAssetsLater(delayMs = 8000) {
           if (await cache.match(asset)) continue;
           try { await cache.add(asset); } catch (_) { /* dogramy przy pierwszym użyciu */ }
         }
+        const fonts = await caches.open(DOC_FONT_CACHE);
+        for (const asset of DOC_FONT_CORE) {
+          if (await fonts.match(asset)) continue;
+          try { await fonts.add(asset); } catch (_) { /* dogramy przy pierwszym użyciu */ }
+        }
       } catch (_) {
         // brak miejsca / tryb prywatny — zostaje ścieżka „cache przy pierwszym użyciu"
       }
@@ -144,7 +161,7 @@ self.addEventListener("activate", (event) => {
     caches.keys().then((keys) =>
       Promise.all(
         keys
-          .filter((key) => key !== APP_CACHE && key !== HEAVY_CACHE && key !== RUNTIME_CACHE && key !== SHARE_CACHE)
+          .filter((key) => key !== APP_CACHE && key !== HEAVY_CACHE && key !== RUNTIME_CACHE && key !== SHARE_CACHE && key !== DOC_FONT_CACHE)
           .map((key) => caches.delete(key))
       )
     )
@@ -221,6 +238,17 @@ self.addEventListener("fetch", (event) => {
         });
     }));
     event.waitUntil(network.catch(() => {}));
+    return;
+  }
+
+  if (sameOrigin && isDocFont(reqUrl)) {
+    // niezmienne pliki — z cache, sieć tylko gdy pliku jeszcze nie ma
+    event.respondWith(
+      caches.open(DOC_FONT_CACHE).then((cache) => cache.match(request, { ignoreSearch: true }).then((cached) => cached || fetch(request).then((response) => {
+        if (response && response.ok) cache.put(request, response.clone()).catch(() => {});
+        return response;
+      })))
+    );
     return;
   }
 
