@@ -129,13 +129,42 @@ const dwbDrafts = (() => {
   }
 
   async function dropOwn() {
+    const id = sessionId; // karta dokumentu mogła już przejąć inny szkic (unpark) — kasujemy TEN
     clearTimeout(timer);
     timer = 0;
     if (saving) await saving.catch(() => {});
+    if (id !== sessionId) return;
     storedBytes = null;
     stamp = null;
-    await delRec(sessionId);
+    await delRec(id);
   }
+
+  // ── kilka otwartych dokumentów (open-docs.js) ──────────────────────────────
+  // Przełączenie na inną kartę: szkic bieżącego dokumentu zapisany TERAZ i odłożony (zostaje
+  // w bazie pod swoim id), sesja dostaje nowe id. Powrót na kartę = unpark (dalsze zmiany
+  // nadpisują ten sam wpis). Czysty dokument nie zostawia szkicu.
+  let heldIds = () => [];
+  async function park() {
+    clearTimeout(timer);
+    timer = 0;
+    if (saving) await saving.catch(() => {});
+    let out = null;
+    if (originalFileBytes && hasUnsavedChanges && currentFileType === "docx") {
+      await writeNow();
+      out = { id: sessionId, stamp };
+    } else await dropOwn();
+    sessionId = newDraftId();
+    storedBytes = null;
+    stamp = null;
+    return out;
+  }
+  function unpark(p) {
+    if (!p?.id) return;
+    sessionId = p.id;
+    storedBytes = null;
+    stamp = p.stamp || null;
+  }
+  const drop = (p) => (p?.id ? delRec(p.id) : Promise.resolve());
 
   // ── odzyskiwanie ───────────────────────────────────────────────────────────
   // Okna, które żyją (np. drugi plik otwarty w osobnym oknie), odpowiadają — ich szkice
@@ -149,7 +178,9 @@ const dwbDrafts = (() => {
     return new Promise((r) => setTimeout(() => { channel.removeEventListener("message", onMsg); r(ids); }, timeoutMs));
   }
   channel?.addEventListener("message", (e) => {
-    if (e.data?.type === "who" && originalFileBytes) channel.postMessage({ type: "alive", id: sessionId });
+    if (e.data?.type !== "who") return;
+    if (originalFileBytes) channel.postMessage({ type: "alive", id: sessionId });
+    for (const id of heldIds()) channel.postMessage({ type: "alive", id }); // karty w tle tego okna
   });
 
   async function recoverable() {
@@ -160,7 +191,7 @@ const dwbDrafts = (() => {
     expired.forEach((r) => delRec(r.id));
     const alive = await aliveIds();
     return recs
-      .filter((r) => !expired.includes(r) && r.id !== sessionId && !alive.has(r.id))
+      .filter((r) => !expired.includes(r) && r.id !== sessionId && !alive.has(r.id) && !heldIds().includes(r.id))
       .sort((a, b) => b.savedAt - a.savedAt);
   }
 
@@ -293,7 +324,11 @@ const dwbDrafts = (() => {
     renderRecovery();
   }
 
-  return { init, save, saveImmediately, renderRecovery, restore, recoverable, _id: () => sessionId, _flush: () => (saving || Promise.resolve()) };
+  return {
+    init, save, saveImmediately, renderRecovery, restore, recoverable, park, unpark, drop,
+    setHeldIds(fn) { heldIds = typeof fn === "function" ? fn : () => []; },
+    _id: () => sessionId, _flush: () => (saving || Promise.resolve()),
+  };
 })();
 
 document.addEventListener("DOMContentLoaded", () => dwbDrafts.init());

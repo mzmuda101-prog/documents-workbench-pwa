@@ -261,3 +261,55 @@ function applyWordLineMetrics(host) {
   });
   return fixed;
 }
+
+// Brakujący krój → właściwy RODZAJ zastępczy. docx-preview pisze „font-family: Calibri” bez
+// niczego dalej, więc gdy kroju (albo jego pogrubionej odmiany) nie ma na urządzeniu, przeglądarka
+// brała czcionkę domyślną — na Androidzie szeryfową — a odmiana pogrubiona zastępnika Calibri
+// potrafiła trafić w ZWYKŁY plik Roboto (pogrubienie znikało; zgłoszenie Mateusza z Androida,
+// 2026-10-03). Dopisujemy „sans-serif” / „serif” / „monospace”: system wybiera wtedy swoją
+// czcionkę danego rodzaju z prawdziwym pogrubieniem. Tam, gdzie krój jest, nic się nie zmienia.
+const DOC_FONT_SANS = /^(calibri( light)?|aptos( display| narrow)?|arial( narrow| black)?|arial mt|helvetica( neue)?|verdana|tahoma|segoe ui( light| semibold)?|trebuchet ms|century gothic|franklin gothic( book| medium| demi)?|candara|corbel|gill sans( mt)?|open sans|roboto|lato|bahnschrift|carlito|liberation sans|dejavu sans|noto sans|source sans pro|montserrat|lucida sans( unicode)?|microsoft sans serif|ms sans serif)$/i;
+const DOC_FONT_SERIF = /^(cambria|times new roman|times|georgia|garamond|book antiqua|palatino( linotype)?|constantia|caladea|century schoolbook|century|liberation serif|dejavu serif|noto serif|baskerville( old face)?|bookman old style|cambria math)$/i;
+const DOC_FONT_MONO = /^(consolas|courier new|courier|lucida console|menlo|monaco|liberation mono|dejavu sans mono|cascadia (code|mono))$/i;
+
+function withGenericFontFallback(value) {
+  const v = String(value || "").trim();
+  if (!v || v.includes(",") || v.includes("var(")) return null;
+  const name = v.replace(/^["']|["']$/g, "").trim();
+  const generic = DOC_FONT_SANS.test(name) ? "sans-serif" : DOC_FONT_SERIF.test(name) ? "serif" : DOC_FONT_MONO.test(name) ? "monospace" : "";
+  return generic ? `${v}, ${generic}` : null;
+}
+
+function addGenericFontFallbacks(host) {
+  if (!host) return 0;
+  let n = 0;
+  // reguły z <style> docx-preview (style akapitów/znaków, motyw); @font-face pomijamy
+  host.querySelectorAll("style").forEach((el) => {
+    let rules;
+    try { rules = el.sheet?.cssRules; } catch (_) { rules = null; }
+    if (!rules) return;
+    for (const rule of rules) {
+      if (!rule.style || rule.type !== 1) continue; // tylko CSSStyleRule
+      const ff = withGenericFontFallback(rule.style.fontFamily);
+      if (ff) { rule.style.fontFamily = ff; n++; }
+      for (let i = 0; i < rule.style.length; i++) {
+        const prop = rule.style[i];
+        if (!/^--docx-.*-font$/.test(prop)) continue;
+        const fv = withGenericFontFallback(rule.style.getPropertyValue(prop));
+        if (fv) { rule.style.setProperty(prop, fv); n++; }
+      }
+    }
+  });
+  // style w treści (fragmenty z własnym krojem)
+  host.querySelectorAll('[style*="font-family"], [style*="--docx-"]').forEach((el) => {
+    const ff = withGenericFontFallback(el.style.fontFamily);
+    if (ff) { el.style.fontFamily = ff; n++; }
+    for (let i = 0; i < el.style.length; i++) {
+      const prop = el.style[i];
+      if (!/^--docx-.*-font$/.test(prop)) continue;
+      const fv = withGenericFontFallback(el.style.getPropertyValue(prop));
+      if (fv) { el.style.setProperty(prop, fv); n++; }
+    }
+  });
+  return n;
+}

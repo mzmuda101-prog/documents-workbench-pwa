@@ -1754,13 +1754,19 @@ p.dwb-exact img { vertical-align: baseline; }
 
 /* Czcionki Office poza Windowsem: Calibri/Cambria/Aptos są tylko z Office, więc na Macu,
    iPhonie i Androidzie podgląd spadał na Times (szeryfowy). Ta sama nazwa rodziny, źródła
-   lokalne po kolei — gdzie oryginał jest zainstalowany, zostaje oryginał. */
-@font-face { font-family: "Calibri"; src: local("Calibri"), local("Carlito"), local("Carlito Regular"), local("Carlito-Regular"), local("Arial"), local("ArialMT"), local("Roboto"); }
-@font-face { font-family: "Calibri"; font-weight: bold; src: local("Calibri Bold"), local("Calibri-Bold"), local("Carlito Bold"), local("Arial Bold"), local("Arial-BoldMT"), local("Roboto Bold"), local("Roboto-Bold"); }
-@font-face { font-family: "Calibri Light"; src: local("Calibri Light"), local("Arial"), local("ArialMT"), local("Roboto Light"); }
-@font-face { font-family: "Aptos"; src: local("Aptos"), local("Arial"), local("ArialMT"), local("Roboto"); }
-@font-face { font-family: "Aptos"; font-weight: bold; src: local("Aptos Bold"), local("Aptos-Bold"), local("Arial Bold"), local("Arial-BoldMT"), local("Roboto Bold"), local("Roboto-Bold"); }
-@font-face { font-family: "Cambria"; src: local("Cambria"), local("Caladea"), local("Georgia"), local("Noto Serif"); }
+   lokalne po kolei — gdzie oryginał jest zainstalowany, zostaje oryginał.
+   Odmiana POGRUBIONA wskazuje TYLKO kroje na pewno pogrubione (osobne pliki). Dawniej było
+   tu też „Roboto Bold”: na Androidzie Roboto to jeden plik zmienny i nazwa potrafiła trafić
+   w jego zwykłą wersję — przeglądarka „miała bold”, a rysowała cienko (pogrubienia znikały).
+   Gdy żadnego nie ma, przeglądarka sięga po rodzaj zapasowy dopisany w docx-render-fixes.js
+   (sans-serif/serif) — systemowa czcionka z prawdziwym pogrubieniem. */
+@font-face { font-family: "Calibri"; src: local("Calibri"), local("Carlito"), local("Carlito Regular"), local("Carlito-Regular"), local("Arial"), local("ArialMT"); }
+@font-face { font-family: "Calibri"; font-weight: bold; src: local("Calibri Bold"), local("Calibri-Bold"), local("Carlito Bold"), local("Carlito-Bold"), local("Arial Bold"), local("Arial-BoldMT"); }
+@font-face { font-family: "Calibri Light"; src: local("Calibri Light"), local("CalibriLight"), local("Arial"), local("ArialMT"); }
+@font-face { font-family: "Aptos"; src: local("Aptos"), local("Arial"), local("ArialMT"); }
+@font-face { font-family: "Aptos"; font-weight: bold; src: local("Aptos Bold"), local("Aptos-Bold"), local("Arial Bold"), local("Arial-BoldMT"); }
+@font-face { font-family: "Cambria"; src: local("Cambria"), local("Caladea"), local("Georgia"); }
+@font-face { font-family: "Cambria"; font-weight: bold; src: local("Cambria Bold"), local("Cambria-Bold"), local("Caladea Bold"), local("Caladea-Bold"), local("Georgia Bold"), local("Georgia-Bold"); }
 
 /* ── Etap 2: formularze w okienku (link…), karta linku ── */
 .compose-pop-form { width: min(340px, calc(100vw - 16px)); padding: 8px 12px 12px; display: flex; flex-direction: column; gap: 10px; }
@@ -1892,3 +1898,49 @@ p.dwb-exact img { vertical-align: baseline; }
 .hf-note { font-size: 12px; }
 .doc-canvas.edit-mode .docx-preview-host section.docx > header, .doc-canvas.edit-mode .docx-preview-host section.docx > footer { cursor: pointer; border-radius: 4px; transition: outline-color var(--t); outline: 1px dashed transparent; outline-offset: 4px; }
 @media (hover: hover) { .doc-canvas.edit-mode .docx-preview-host section.docx > header:hover, .doc-canvas.edit-mode .docx-preview-host section.docx > footer:hover { outline-color: color-mix(in srgb, var(--accent) 45%, transparent); } }
+
+/* =====================================================================
+   KARTY OTWARTYCH DOKUMENTÓW (app/open-docs.js) — widoczne od drugiego pliku.
+   Jeden rząd; za dużo kart → przewijanie w bok z wygaszeniem krawędzi (bezpiecznik
+   przepełnienia). Kropka bursztynowa = niezapisane zmiany (jak „niezapisane” na dole).
+   ===================================================================== */
+.doc-tabs { display: flex; align-items: center; gap: 6px; margin: -6px 0 12px; min-width: 0; }
+.doc-tabs[hidden] { display: none; }
+.doc-tabs-row { display: flex; gap: 6px; flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; padding: 2px; }
+.doc-tabs-row::-webkit-scrollbar { display: none; }
+.doc-tab {
+  display: flex; align-items: center; flex: 0 0 auto; max-width: 240px; height: 34px;
+  border: 1px solid var(--border); border-radius: var(--r-full); background: var(--panel);
+  box-shadow: var(--shadow-xs); transition: background var(--t), border-color var(--t);
+}
+.doc-tab.is-active { background: var(--accent-light); border-color: var(--accent-border); }
+.doc-tab-btn {
+  display: flex; align-items: center; gap: 7px; min-width: 0; height: 100%; padding: 0 4px 0 12px;
+  border: 0; background: none; color: var(--muted-strong); font: inherit; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; border-radius: var(--r-full);
+}
+.doc-tab.is-active .doc-tab-btn { color: var(--accent); }
+.doc-tab-btn:focus-visible, .doc-tab-close:focus-visible, .doc-tab-add:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.doc-tab-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc-tab-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; display: none; }
+.doc-tab.is-dirty .doc-tab-dot { display: block; background: var(--warning); }
+.doc-tab.is-waiting .doc-tab-name { opacity: .72; }
+.doc-tab-kind { flex: none; font-size: 9.5px; font-weight: 700; letter-spacing: .04em; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--border); color: var(--muted); }
+.doc-tab-close {
+  flex: none; display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; margin-right: 4px;
+  border: 0; border-radius: var(--r-full); background: none; color: var(--muted); cursor: pointer;
+}
+.doc-tab-close:hover { background: color-mix(in srgb, var(--muted) 16%, transparent); color: var(--ink); }
+.doc-tab-add {
+  flex: none; display: flex; align-items: center; justify-content: center; width: 34px; height: 34px;
+  border: 1px dashed var(--border); border-radius: var(--r-full); background: none; color: var(--muted-strong); cursor: pointer;
+}
+.doc-tab-add:hover { color: var(--accent); border-color: var(--accent-border); }
+@media (max-width: 768px) {
+  .doc-tabs { margin: 0; padding: 6px 8px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .doc-tab { height: 32px; max-width: 200px; }
+  .doc-tab-add { width: 32px; height: 32px; }
+  /* zwinięty nagłówek (czytanie): karty chowają się razem z nim — dokument dostaje miejsce */
+  body.hero-collapsed .doc-tabs { display: none; }
+}
+@media print { .doc-tabs { display: none !important; } }

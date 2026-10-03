@@ -149,13 +149,22 @@ async function run() {
   const stillOpen = await page.evaluate(() => !!originalFileBytes);
   await page.evaluate(() => { window.confirm = window.__origConfirm; });
   check("zamknięcie z niezapisanymi zmianami: pyta, „Anuluj” zostawia dokument", dirty && stillOpen, JSON.stringify({ dirty, stillOpen }));
+  // Od kart dokumentów (open-docs.js) otwarcie NIE podmienia dokumentu: nowy wchodzi w nową
+  // kartę bez pytania, praca zostaje w karcie obok (niezapisana).
   const name0 = await page.evaluate(() => currentFileName);
-  await page.evaluate(() => { window.confirm = () => false; });
+  dialogs.length = 0;
   await page.evaluate(() => document.getElementById("loadSampleBtn").click());
-  await page.waitForTimeout(600);
-  const name1 = await page.evaluate(() => currentFileName);
-  await page.evaluate(() => { window.confirm = window.__origConfirm; });
-  check("„Przykładowy dokument” przy niezapisanych zmianach pyta, „Anuluj” zostawia pracę", name0 === name1 && name1 === "headings-sample.docx", `${name0} → ${name1}`);
+  await page.waitForFunction(() => currentFileName === "przewodnik.docx", null, { timeout: 15000 }).catch(() => {});
+  await page.evaluate(() => dwbOpenDocs._idle());
+  const tabsNow = await page.evaluate(() => ({ name: currentFileName, list: dwbOpenDocs.list() }));
+  const prevTab = tabsNow.list.find((d) => d.name === name0);
+  check("„Przykładowy dokument” przy niezapisanych zmianach: nowa karta bez pytania, praca zostaje w karcie (niezapisana)", tabsNow.name === "przewodnik.docx" && prevTab && prevTab.dirty && !prevTab.active && !dialogs.length, JSON.stringify({ name0, ...tabsNow, dialogs }));
+  if (prevTab) {
+    await page.evaluate((id) => dwbOpenDocs.switchTo(id), prevTab.id);
+    await page.waitForTimeout(400);
+  }
+  const name1 = await page.evaluate(() => ({ name: currentFileName, dirty: hasUnsavedChanges }));
+  check("powrót na kartę z pracą: ten sam dokument, dalej niezapisany", name1.name === name0 && name1.dirty, JSON.stringify(name1));
 
   // ── 6. język EN: nigdzie surowych kluczy tłumaczeń ──────────────────────────
   await page.evaluate(() => { document.querySelectorAll("details.panel").forEach((d) => { d.open = true; }); });
@@ -195,6 +204,10 @@ async function run() {
   check("tryb skupienia: włącza się przyciskiem", focus);
   const chip = await page.$("#sectionChips button:nth-child(3), #sectionChips .section-chip:nth-child(3)");
   if (chip) {
+    // od góry dokumentu — po powrocie na kartę (open-docs.js) widok wraca w miejsce pracy,
+    // które bywa dokładnie celem tego skrótu
+    await page.evaluate(() => { docViewportEl.scrollTop = 0; });
+    await page.waitForTimeout(200);
     const before = await page.evaluate(() => docViewportEl.scrollTop);
     await chip.click();
     await page.waitForTimeout(700);

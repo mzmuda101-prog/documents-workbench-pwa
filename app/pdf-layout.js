@@ -284,7 +284,7 @@
     // Wewnętrzne prostokąty „marginesu komórki” (ten sam kolor wewnątrz większego) — pomijamy.
     const fills = rects.filter((r) => r.x1 - r.x0 >= 2.5 && r.y1 - r.y0 >= 2.5);
     const fillsKept = fills.filter((r) => !fills.some((o) => o !== r && o.color === r.color && o.x0 <= r.x0 + 0.2 && o.x1 >= r.x1 - 0.2 && o.y0 <= r.y0 + 0.2 && o.y1 >= r.y1 - 0.2 && (o.x1 - o.x0) * (o.y1 - o.y0) > (r.x1 - r.x0) * (r.y1 - r.y0) + 0.5));
-    const hSegs = [], vSegs = [];
+    const hSegs = [], vSegs = [], specks = [];
     // Pasek w kolorze sąsiedniego tła (Word rysuje tak marginesy komórek) to część tła, nie linia.
     const touchesSameFill = (r) => fillsKept.some((f) => f.color === r.color && f.x0 <= r.x1 + 0.6 && f.x1 >= r.x0 - 0.6 && f.y0 <= r.y1 + 0.6 && f.y1 >= r.y0 - 0.6);
     for (const r of rects) {
@@ -293,6 +293,9 @@
       if (thin > 0.9 && touchesSameFill(r)) continue;
       if (h < 2.5 && w >= 2.5) hSegs.push({ y: (r.y0 + r.y1) / 2, x0: r.x0, x1: r.x1, w: Math.max(h, 0.25), color: r.color });
       else if (w < 2.5 && h >= 2.5) vSegs.push({ x: (r.x0 + r.x1) / 2, y0: r.y0, y1: r.y1, w: Math.max(w, 0.25), color: r.color });
+      // Kwadracik: kropka, kropka nad „i”, kropka w „ż” (tekst zamieniony na krzywe) — nie jest
+      // ani linią, ani tłem, ale widać go w PDF, więc trafia do warstwy grafiki.
+      else if (w < 2.5 && h < 2.5 && w > 0.2 && h > 0.2 && r.color !== "ffffff") specks.push(r);
     }
     for (const l of raw.lines) {
       const w = l.x1 - l.x0, h = l.y1 - l.y0;
@@ -331,7 +334,7 @@
       groups.get(r).push(it);
     });
     const tables = [];
-    const leftovers = { hSegs: [], vSegs: [], fills: [] };
+    const leftovers = { hSegs: [], vSegs: [], fills: specks };
     for (const g of groups.values()) {
       const t = buildGrid(g, frags, tol);
       if (t) tables.push(t);

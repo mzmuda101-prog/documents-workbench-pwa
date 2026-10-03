@@ -1,4 +1,4 @@
-const CACHE_VERSION = "20261003-02";
+const CACHE_VERSION = "20261003-03";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
@@ -47,6 +47,7 @@ const SHELL_ASSETS = [
   `./app/undo.js?v=${ASSET_V}`,
   `./app/compose-ui.js?v=${ASSET_V}`,
   `./app/drafts.js?v=${ASSET_V}`,
+  `./app/open-docs.js?v=${ASSET_V}`,
   `./app/view-mode.js?v=${ASSET_V}`,
   `./app/keyboard.js?v=${ASSET_V}`,
   `./app/cursor-hint.js?v=${ASSET_V}`,
@@ -168,10 +169,12 @@ const SHARE_CACHE = "docs-wb-share";
 async function receiveSharedFile(request) {
   try {
     const form = await request.formData();
-    const file = form.getAll("file").find((f) => f && typeof f === "object" && f.size >= 0);
-    if (file) {
-      const cache = await caches.open(SHARE_CACHE);
-      await cache.put("./__shared-file", new Response(file, {
+    // kilka plików naraz (zaznaczone w menedżerze plików → Udostępnij) = kilka kart
+    const files = form.getAll("file").filter((f) => f && typeof f === "object" && f.size >= 0).slice(0, 12);
+    const cache = await caches.open(SHARE_CACHE);
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      await cache.put(i ? `./__shared-file-${i}` : "./__shared-file", new Response(file, {
         headers: { "Content-Type": file.type || "application/octet-stream", "X-File-Name": encodeURIComponent(file.name || "dokument.docx") },
       }));
     }

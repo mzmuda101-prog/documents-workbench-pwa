@@ -504,12 +504,23 @@
             break;
           }
           const lw = Math.max(0.1, gs.lineWidth * Math.hypot(gs.ctm[0], gs.ctm[1]));
+          const evenOdd = paintOp === OPS.eoFill || paintOp === OPS.eoFillStroke || paintOp === OPS.closeEOFillStroke;
+          // Ścieżka złożona z krzywymi (litery zamienione na krzywe: „o” = obrys + dziura, „i” =
+          // kreska + kropka) — wypełniamy RAZEM. Każdy kontur osobno zalewał dziury w a/o/e,
+          // a prostokącik kropki/przecinka trafiał do teł i linii (i znikał).
+          let fillDone = false;
+          if (isFill && gs.fillAlpha > 0.05 && !gs.fillPattern && subpaths.length > 1 && subpaths.some((sp) => !sp.rect)) {
+            const bb = bboxOf(subpaths.flatMap((sp) => [[sp.bbox.x0, sp.bbox.y0], [sp.bbox.x1, sp.bbox.y1]]));
+            const clipped = clipBox(bb, gs.clip);
+            if (clipped) graphics.push({ ...clipped, color: gs.fill, alpha: gs.fillAlpha, kind: "fill", cmds: subpaths.flatMap((sp) => sp.cmds), evenOdd, compound: true, clip: gs.clip, order: order++ });
+            fillDone = true;
+          }
           for (const sp of subpaths) {
             const clipped = clipBox(sp.bbox, gs.clip);
             if (!clipped) continue;
-            if (isFill && gs.fillAlpha > 0.05 && !gs.fillPattern) {
+            if (isFill && !fillDone && gs.fillAlpha > 0.05 && !gs.fillPattern) {
               if (sp.rect) rects.push({ ...clipped, color: gs.fill, alpha: gs.fillAlpha, order: order++, artifact: artifactDepth > 0 });
-              else graphics.push({ ...clipped, color: gs.fill, alpha: gs.fillAlpha, kind: "fill", cmds: sp.cmds, evenOdd: paintOp === OPS.eoFill || paintOp === OPS.eoFillStroke || paintOp === OPS.closeEOFillStroke, clip: gs.clip, order: order++ });
+              else graphics.push({ ...clipped, color: gs.fill, alpha: gs.fillAlpha, kind: "fill", cmds: sp.cmds, evenOdd, clip: gs.clip, order: order++ });
             }
             if (isStroke && gs.strokeAlpha > 0.05) {
               if (sp.rect) {

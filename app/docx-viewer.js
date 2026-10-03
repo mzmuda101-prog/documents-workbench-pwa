@@ -21,6 +21,7 @@ async function renderDocxPreview(bytes, container) {
     renderFootnotes: true,
     renderEndnotes: true,
   });
+  addGenericFontFallbacks(wrapper); // brak kroju na urządzeniu → systemowy bezszeryfowy/szeryfowy z prawdziwym pogrubieniem
   fixDocxBulletRendering(wrapper);
   fixPageAnchoredDrawings(wrapper);
   applyWordLineMetrics(wrapper); // odstępy między wierszami jak w Wordzie (też granice stron)

@@ -81,6 +81,40 @@ async function run() {
   if (viewUi.opts !== "auto:true,mobile:false,desktop:false") throw new Error(`Wybór widoku w panelu: ${viewUi.opts}`);
   console.log("  ✓ Suwak + wybór widoku (Auto zaznaczone) w panelu Widok");
 
+  // Brakujący krój (Calibri/Segoe UI na telefonie): dopisany rodzaj zapasowy i PRAWDZIWE
+  // pogrubienie (Android: odmiana bold zastępnika trafiała w zwykły plik → bold znikał).
+  const fonts = await page.evaluate(async () => {
+    const z = await JSZip.loadAsync(originalFileBytes);
+    let doc = await z.file("word/document.xml").async("string");
+    const run = (font, bold, txt) => `<w:r><w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}"/>${bold ? "<w:b/>" : ""}<w:sz w:val="40"/></w:rPr><w:t>${txt}</w:t></w:r>`;
+    const para = ["Calibri", "Segoe UI", "Cambria"].map((f) => `<w:p>${run(f, false, "Wwmmaaoo")}</w:p><w:p>${run(f, true, "Wwmmaaoo")}</w:p>`).join("");
+    doc = doc.replace("<w:body>", `<w:body>${para}`);
+    z.file("word/document.xml", doc);
+    const bytes = await z.generateAsync({ type: "uint8array" });
+    await ingestFile(new File([bytes], "fonty.docx"), { silent: true });
+    await document.fonts.ready;
+    const spans = [...document.querySelectorAll(".docx-preview-host span")].filter((sp) => sp.textContent === "Wwmmaaoo").slice(0, 6);
+    const ink = (el) => {
+      const cs = getComputedStyle(el);
+      const c = document.createElement("canvas");
+      c.width = 400; c.height = 60;
+      const x = c.getContext("2d");
+      x.font = `${cs.fontWeight} 40px ${cs.fontFamily}`;
+      x.fillText(el.textContent, 4, 44);
+      const d = x.getImageData(0, 0, 400, 60).data;
+      let n = 0;
+      for (let i = 3; i < d.length; i += 4) n += d[i];
+      return n;
+    };
+    return spans.map((sp) => ({ family: getComputedStyle(sp).fontFamily, weight: getComputedStyle(sp).fontWeight, ink: ink(sp) }));
+  });
+  const expectGeneric = ["sans-serif", "sans-serif", "sans-serif", "sans-serif", "serif", "serif"];
+  if (fonts.length !== 6 || fonts.some((f, i) => !f.family.endsWith(`, ${expectGeneric[i]}`))) throw new Error(`Rodzaj zapasowy czcionki: ${JSON.stringify(fonts)}`);
+  for (let i = 0; i < 6; i += 2) {
+    if (!(fonts[i + 1].ink > fonts[i].ink * 1.12)) throw new Error(`Pogrubienie niewidoczne (${fonts[i].family}): ${fonts[i].ink} → ${fonts[i + 1].ink}`);
+  }
+  console.log("  ✓ Brakujące kroje: rodzaj zapasowy (sans-serif/serif) i widoczne pogrubienie");
+
   assertNoErrors(errors, "mobile-playwright");
   await browser.close();
   console.log("  ✓ Brak błędów JS w konsoli\n");

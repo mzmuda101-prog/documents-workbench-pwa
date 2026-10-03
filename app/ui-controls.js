@@ -251,17 +251,22 @@ async function openFilePicker() {
   if (!confirmDiscardChanges()) return;
   if (window.showOpenFilePicker) {
     try {
-      const [handle] = await window.showOpenFilePicker({
+      const handles = await window.showOpenFilePicker({
         mode: "readwrite",
         types: [{
           description: "Word / PDF",
           accept: { "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"], "application/pdf": [".pdf"] },
         }],
-        multiple: false,
+        multiple: true, // kilka plików = kilka kart (app/open-docs.js)
       });
-      const file = await handle.getFile();
-      // PDF zamienia się w nowy .docx — uchwyt do PDF-a nie może służyć do „Zapisz”
-      await ingestFile(file, /\.pdf$/i.test(file.name) ? {} : { handle });
+      const items = [];
+      for (const handle of handles) {
+        const file = await handle.getFile();
+        // PDF zamienia się w nowy .docx — uchwyt do PDF-a nie może służyć do „Zapisz”
+        items.push(/\.pdf$/i.test(file.name) ? { file } : { file, handle });
+      }
+      if (typeof openDocumentFiles === "function") await openDocumentFiles(items);
+      else await ingestFile(items[0].file, items[0].handle ? { handle: items[0].handle } : {});
       return;
     } catch (e) {
       if (e && e.name === "AbortError") return;
@@ -298,8 +303,9 @@ function wireFileDrop() {
     });
   });
   dropZone.addEventListener("drop", (e) => {
-    const file = e.dataTransfer?.files?.[0];
-    if (file) ingestDroppedFile(file, droppedFileHandle(e));
+    const files = Array.from(e.dataTransfer?.files || []);
+    if (files.length > 1 && typeof openDocumentFiles === "function") openDocumentFiles(files.map((file) => ({ file })));
+    else if (files[0]) ingestDroppedFile(files[0], droppedFileHandle(e));
   });
 }
 
@@ -445,9 +451,10 @@ if (saveBtn) saveBtn.addEventListener("click", saveDocument);
 if (saveAsBtn) saveAsBtn.addEventListener("click", saveDocumentAs);
 if (fileInput) {
   fileInput.addEventListener("change", () => {
-    const file = fileInput.files?.[0];
-    if (file) ingestFile(file);
+    const files = Array.from(fileInput.files || []);
     fileInput.value = "";
+    if (files.length > 1 && typeof openDocumentFiles === "function") openDocumentFiles(files.map((file) => ({ file })));
+    else if (files[0]) (typeof openDocumentFiles === "function" ? openDocumentFiles([{ file: files[0] }]) : ingestFile(files[0]));
   });
 }
 const frWorkbenchActive = !!document.getElementById("frScanBtn");

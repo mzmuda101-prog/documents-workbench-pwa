@@ -86,6 +86,16 @@ async function makePdfs() {
     }, off);
     await page.pdf({ path: path.join(TMP, `${name}.pdf`), width: "210mm", height: "148mm" });
   }
+  // tekst zamieniony na krzywe (zgłoszenie „10. ZAGROŻENIE ATAKIEM…”): „o” = obrys + dziura w
+  // JEDNEJ ścieżce (nonzero i evenodd), „i” = kreska + kwadracik kropki, kropka = sam kwadracik
+  await page.setContent(`<!doctype html><html><body style="margin:0"><svg width="400" height="200" style="display:block">
+    <path fill="#000" d="M50 50 a30 30 0 1 0 60 0 a30 30 0 1 0 -60 0 Z M65 50 a15 15 0 1 1 30 0 a15 15 0 1 1 -30 0 Z"/>
+    <path fill="#000" fill-rule="evenodd" d="M50 140 a30 30 0 1 0 60 0 a30 30 0 1 0 -60 0 Z M65 140 a15 15 0 1 0 30 0 a15 15 0 1 0 -30 0 Z"/>
+    <path fill="#000" d="M150 40 h3 v3 h-3 Z M150 50 h3 v30 h-3 Z"/>
+    <path fill="#000" d="M170 77 h3 v3 h-3 Z"/>
+    <path fill="#000" d="M200 50 C200 30 240 30 240 50 C240 70 200 70 200 50 Z M235 77 h3 v3 h-3 Z"/>
+  </svg></body></html>`, { waitUntil: "load" });
+  await page.pdf({ path: path.join(TMP, "krzywe.pdf"), width: "210mm", height: "297mm", margin: { top: 0, bottom: 0, left: 0, right: 0 } });
   // „skan”: zrzut strony z tekstem jako obraz, PDF z samym obrazem (bez warstwy tekstu)
   await page.setViewportSize({ width: 794, height: 1123 });
   await page.setContent(`<!doctype html><html lang="pl"><head><meta charset="utf-8"><style>body{margin:60px;font-family:Arial;font-size:22px;color:#111}h1{font-size:34px}.box{background:#f39a5b;padding:10px 16px}</style></head><body><div class="box"><b>KATEDRA AUTOMATYKI</b></div><h1>Lista obecności — lipiec</h1><p>Spóźnienia usprawiedliwione oraz nieusprawiedliwione.</p><p>Zażółć gęślą jaźń.</p></body></html>`, { waitUntil: "load" });
@@ -252,6 +262,33 @@ async function run() {
     check(`zdjęcie ${name === "styka" ? "tuż przy liście" : "lekko zachodzi na listę"}: lista obok zdjęcia, nie pod nim`, side && side.listBottom <= side.imgBottom + 4 && side.imgLeft > side.listLeft, JSON.stringify(side));
   }
 
+  // --- 4c. tekst jako krzywe: dziury w „o” zostają puste, kropki (kwadraciki) nie giną
+  await page.evaluate(() => { setDirtyState(false); });
+  await convert(page, path.join(TMP, "krzywe.pdf"));
+  const curves = await page.evaluate(async () => {
+    const z = await JSZip.loadAsync(originalFileBytes);
+    const name = Object.keys(z.files).find((f) => /^word\/media\/.+\.png$/.test(f));
+    if (!name) return { media: false };
+    const bmp = await createImageBitmap(await z.file(name).async("blob"));
+    const c = document.createElement("canvas");
+    c.width = bmp.width; c.height = bmp.height;
+    const x = c.getContext("2d");
+    x.drawImage(bmp, 0, 0);
+    // punkty SVG w px → ułamek strony A4 (595,28 × 841,89 pt, 1 px = 0,75 pt)
+    const ink = (px, py) => {
+      const d = x.getImageData(Math.round((px * 0.75 / 595.28) * c.width), Math.round((py * 0.75 / 841.89) * c.height), 1, 1).data;
+      return d[3] > 128 && d[0] < 128;
+    };
+    return {
+      media: true,
+      holeNonzero: !ink(80, 50), ringNonzero: ink(102, 50),
+      holeEvenOdd: !ink(80, 140), ringEvenOdd: ink(102, 140),
+      iDot: ink(151.5, 41.5), iStem: ink(151.5, 65), period: ink(171.5, 78.5), curveDot: ink(236.5, 78.5), curve: ink(220, 50),
+    };
+  });
+  check("tekst jako krzywe: dziury w „o” puste (nonzero i evenodd), obrys widoczny", curves.media && curves.holeNonzero && curves.ringNonzero && curves.holeEvenOdd && curves.ringEvenOdd, JSON.stringify(curves));
+  check("tekst jako krzywe: kropka nad „i”, kropka i kropka w ścieżce z krzywą nie giną", curves.iDot && curves.iStem && curves.period && curves.curveDot && curves.curve, JSON.stringify(curves));
+
   // --- 5. skan: pytanie o OCR, rozpoznanie na urządzeniu, tekst + obraz tła bez słów
   await page.evaluate(() => { setDirtyState(false); window.__conv = null; });
   const t2 = Date.now();
@@ -280,8 +317,13 @@ async function run() {
   // --- 6. opcjonalnie: próbki spoza repo
   const dir = process.env.PDF_SAMPLES;
   if (dir && fs.existsSync(dir)) {
+    // każda konwersja to nowa karta (open-docs.js) — zamknij poprzednie, limit to 12
+    page.on("dialog", (d) => d.accept());
+    const closeOthers = () => page.evaluate(() => { for (const d of dwbOpenDocs.list()) if (!d.active) dwbOpenDocs.closeTab(d.id); });
+    await closeOthers();
     for (const f of fs.readdirSync(dir).filter((n) => /\.pdf$/i.test(n))) {
       await page.evaluate(() => setDirtyState(false));
+      await closeOthers();
       try {
         const auto = setInterval(() => page.click("#pdfConvOcrYes", { timeout: 200 }).catch(() => {}), 400);
         const r = await convert(page, path.join(dir, f), { timeout: 120000 }).finally(() => clearInterval(auto));

@@ -18,12 +18,17 @@ const SHARE_KEY = "./__shared-file";
 function initFileLaunch() {
   if ("launchQueue" in window && window.LaunchParams && "files" in window.LaunchParams.prototype) {
     window.launchQueue.setConsumer(async (params) => {
-      const handle = params?.files?.find((h) => h.kind === "file");
-      if (!handle) return;
+      const handles = (params?.files || []).filter((h) => h.kind === "file");
+      if (!handles.length) return;
       if (typeof confirmDiscardChanges === "function" && !confirmDiscardChanges()) return;
       try {
-        const file = await handle.getFile();
-        await ingestFile(file, { handle });
+        const items = [];
+        for (const handle of handles) {
+          const file = await handle.getFile();
+          items.push(/\.pdf$/i.test(file.name) ? { file } : { file, handle });
+        }
+        if (typeof openDocumentFiles === "function") await openDocumentFiles(items);
+        else await ingestFile(items[0].file, items[0].handle ? { handle: items[0].handle } : {});
       } catch (e) {
         log(String(e?.message || e), "error");
         toast(t("openExternalFailed"), "error");
@@ -39,12 +44,19 @@ async function openSharedFile() {
   if (!("caches" in window)) return;
   try {
     const cache = await caches.open(SHARE_CACHE);
-    const res = await cache.match(SHARE_KEY);
-    if (!res) return;
-    const name = decodeURIComponent(res.headers.get("X-File-Name") || "") || "dokument.docx";
-    const blob = await res.blob();
-    await cache.delete(SHARE_KEY);
-    await ingestFile(new File([blob], name, { type: blob.type || "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }));
+    const items = [];
+    for (let i = 0; i < 12; i++) {
+      const key = i ? `${SHARE_KEY}-${i}` : SHARE_KEY;
+      const res = await cache.match(key);
+      if (!res) break;
+      const name = decodeURIComponent(res.headers.get("X-File-Name") || "") || "dokument.docx";
+      const blob = await res.blob();
+      await cache.delete(key);
+      items.push({ file: new File([blob], name, { type: blob.type || "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }) });
+    }
+    if (!items.length) return;
+    if (typeof openDocumentFiles === "function") await openDocumentFiles(items);
+    else await ingestFile(items[0].file);
   } catch (e) {
     log(String(e?.message || e), "error");
     toast(t("openExternalFailed"), "error");
