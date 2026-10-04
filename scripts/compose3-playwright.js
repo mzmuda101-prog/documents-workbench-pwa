@@ -16,7 +16,7 @@ const check = (name, ok, detail) => results.push({ name, ok: !!ok, detail });
 const idle = (page) => page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && !inlineLocksPending, null, { timeout: 20000 }).then(() => page.waitForTimeout(350));
 const tables = (page) => page.evaluate(() => [...document.querySelectorAll(".docx-preview-host table")].map((t) => [...t.rows].map((r) => [...r.cells].map((c) => c.textContent).join("|")).join(" / ")));
 const caret = (page) => page.evaluate(() => {
-  const q = document.activeElement?.closest?.(".docx-editable-p");
+  const q = docCaretParagraph(document.activeElement);
   if (!q) return null;
   const td = q.closest("td");
   return { text: q.textContent, inTable: !!td, r: td ? [...td.closest("table").rows].indexOf(td.parentElement) : -1, c: td ? [...td.parentElement.cells].indexOf(td) : -1 };
@@ -112,7 +112,7 @@ async function run() {
   const img = await page.evaluate(() => {
     const i = document.querySelector(".docx-preview-host img");
     const p = i?.closest("p");
-    return i && { w: i.getBoundingClientRect().width, pw: p.clientWidth, align: getComputedStyle(p).textAlign, idx: resolveParaIndex(p), caret: resolveParaIndex(document.activeElement?.closest?.(".docx-editable-p")) };
+    return i && { w: i.getBoundingClientRect().width, pw: p.clientWidth, align: getComputedStyle(p).textAlign, idx: resolveParaIndex(p), caret: resolveParaIndex(docCaretParagraph(document.activeElement)) };
   });
   check("obraz pod akapitem: na szerokość tekstu (większy zmniejszony), wyśrodkowany, kursor pod nim", img && Math.abs(img.w - img.pw) < 4 && img.align === "center" && img.caret === img.idx + 1, JSON.stringify(img));
   zip = await savedZip(page);
@@ -146,7 +146,7 @@ async function run() {
   const shot = await makeImage(page, 400, 200);
   await page.evaluate((f) => {
     const dt = new DataTransfer(); dt.items.add(f);
-    document.activeElement.closest(".docx-editable-p").dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+    docCaretParagraph(document.activeElement).dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
   }, shot);
   await page.waitForTimeout(400);
   await idle(page);

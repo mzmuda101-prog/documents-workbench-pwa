@@ -24,7 +24,7 @@
 
   function inFormField(el) {
     const tag = String(el?.tagName || "").toLowerCase();
-    if (el?.closest?.(".docx-editable-p")) return false;
+    if (el?.closest?.(".docx-editable-p, .docx-edit-root")) return false;
     return !!el && (el.isContentEditable || tag === "textarea" || tag === "select"
       || (tag === "input" && !["checkbox", "radio", "button", "range", "submit"].includes(el.type)));
   }
@@ -45,7 +45,7 @@
       // w Edycji: kursor w pierwszym widocznym akapicie
       const vp = docViewportEl.getBoundingClientRect();
       const p = [...docCanvasEl.querySelectorAll(".docx-editable-p")].find((el) => el.getBoundingClientRect().bottom > vp.top + 8);
-      if (p) { p.focus({ preventScroll: true }); return; }
+      if (p) { placeCaret(p, 0); return; }
     }
     docViewportEl.focus({ preventScroll: true });
   }
@@ -145,7 +145,7 @@
     }
     if (e.key === "Escape") {
       if (document.querySelector(".app-menu:not([hidden])")) return; // menu ⋯ ma własne Esc
-      if (a?.closest?.(".docx-editable-p")) { e.preventDefault(); docViewportEl.focus({ preventScroll: true }); return; }
+      if (a?.closest?.(".docx-editable-p, .docx-edit-root")) { e.preventDefault(); docViewportEl.focus({ preventScroll: true }); return; }
       if (inFormField(a)) return; // pola: Esc należy do nich (np. czyszczenie szukajki ustawień)
       if (!rootEl.classList.contains("sidebar-docked") && isSidebarOpen()) { e.preventDefault(); setSidebarOpen(false); panelToggle?.focus(); return; }
       if (clearSearchHighlights()) { e.preventDefault(); return; }

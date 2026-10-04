@@ -66,9 +66,11 @@ async function run() {
   check("odstępy jak w Wordzie: „1. Czytanie i edycja” ~468,0 pt od góry (±6)", /^1\. Czytanie/.test(y19.text) && Math.abs(y19.pt - 468.0) < 6, JSON.stringify(y19));
 
   const s1 = await pageStarts(page);
-  check("domyślnie włączone: 4 granice (5 stron jak w Wordzie)", s1.length === 4 && s1.map((s) => s.label).join(",") === "str. 2,str. 3,str. 4,str. 5", JSON.stringify(s1));
-  check("str. 2 zaczyna się jak w Wordzie: „3. Placeholdery”", /^3\. Placeholdery/.test(s1[0]?.text || ""), JSON.stringify(s1[0]));
-  check("str. 3 zaczyna się jak w Wordzie: „8. Przypisy, tabele i listy”", /^8\. Przypisy/.test(s1[1]?.text || ""), JSON.stringify(s1[1]));
+  check("domyślnie włączone: 4 granice (5 stron; Word od str. 4 o 2–3 linijki dalej)", s1.length === 4 && s1.map((s) => s.label).join(",") === "str. 2,str. 3,str. 4,str. 5", JSON.stringify(s1));
+  // granice zmierzone w Wordzie (AppleScript: range information → active end page number) po
+  // dopisaniu do przewodnika akapitów o zaznaczaniu i czcionkach (2026-10-04)
+  check("str. 2 zaczyna się jak w Wordzie: „2. Szukanie oraz Znajdź i zamień”", /^2\. Szukanie/.test(s1[0]?.text || ""), JSON.stringify(s1[0]));
+  check("str. 3 zaczyna się jak w Wordzie: „Kara umowna wynosi 5%…”", /^Kara umowna/.test(s1[1]?.text || ""), JSON.stringify(s1[1]));
   check("etykiety „str. N” nie są tekstem dokumentu (słowa, szukanie, zapis)", await page.evaluate(() => !document.querySelector(".docx-preview-host").textContent.includes("str. 2")));
   check("granica nie przecina tekstu (zaczyna się od początku linijki)", s1.every((s) => s.text && s.text.length > 0));
 

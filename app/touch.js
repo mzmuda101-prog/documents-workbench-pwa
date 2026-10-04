@@ -65,9 +65,9 @@
     setTimeout(queueCheck, 400);
   }
   vv?.addEventListener("resize", checkSoon);
-  document.addEventListener("focusin", (e) => { if (e.target.closest?.(".docx-editable-p")) checkSoon(); });
+  document.addEventListener("focusin", (e) => { if (docCaretParagraph(e.target)) checkSoon(); });
   docCanvasEl?.addEventListener("input", queueCheck);
-  document.addEventListener("selectionchange", () => { if (!readOnlyMode && document.activeElement?.closest?.(".docx-editable-p")) queueCheck(); });
+  document.addEventListener("selectionchange", () => { if (!readOnlyMode && docCaretParagraph(document.activeElement)) queueCheck(); });
 
   // ── 3) po zamknięciu klawiatury strona wraca na miejsce ────────────────────
   // iOS przy otwieraniu klawiatury przewija CAŁĄ stronę, żeby pokazać pole, i po jej
@@ -94,7 +94,7 @@
   // się do uchwytu (tap = rozwiń), skróty sekcji i pasek stanu chowają się na ten czas.
   let heroWasCollapsed = null;
   function editingInDoc() {
-    return !!document.activeElement?.closest?.(".docx-editable-p");
+    return !!docCaretParagraph(document.activeElement);
   }
   function syncKeyboard() {
     if (!coarse.matches || !vv) return;

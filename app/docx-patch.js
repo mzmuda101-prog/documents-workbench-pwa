@@ -152,6 +152,25 @@ function mergeParagraphInXml(xml, index, mergedRuns) {
   return { xml: new XMLSerializer().serializeToString(doc), count: 1, joinAt };
 }
 
+// Usunięcie zaznaczenia przez kilka akapitów (doc-selection.js): akapity from..to (indeksy jak
+// w podglądzie) i wszystko między nimi (tabele, obrazy) znikają, zostaje jeden akapit z treścią
+// mergedRuns — z właściwościami pierwszego (keep „first”) albo ostatniego (keep „last”: cały
+// pierwszy akapit był zaznaczony, jak usunięcie akapitu ze znacznikiem w Wordzie).
+function deleteParagraphRangeInXml(xml, edit) {
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  const first = paragraphs[edit.from];
+  const last = paragraphs[edit.to];
+  if (!first || !last || edit.to <= edit.from || first.parentNode !== last.parentNode) return { xml, count: 0 };
+  const keep = edit.keep === "last" ? last : first;
+  const drop = [];
+  for (let n = edit.keep === "last" ? first : first.nextSibling; n && n !== last; n = n.nextSibling) drop.push(n);
+  if (edit.keep !== "last") drop.push(last);
+  drop.forEach((n) => n.parentNode.removeChild(n));
+  applyRunsToParagraphXml(keep, edit.mergedRuns || []);
+  return { xml: new XMLSerializer().serializeToString(doc), count: 1 };
+}
+
 function changeListLevelInXml(xml, index, delta) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xml, "application/xml");
@@ -670,11 +689,13 @@ function applyEditToXml(xml, edit, opts = {}) {
   if (edit.op === "pageBreak") return applyPageBreakInXml(xml, edit); // docx-compose.js
   if (edit.op === "hrule") return applyHruleInXml(xml, edit);
   if (edit.op === "pageVAlign") return applyPageVAlignInXml(xml, edit); // docx-compose.js
+  if (edit.op === "pageSetup") return applyPageSetupInXml(xml, edit); // docx-compose.js
   if (edit.op === "link") return applyLinkInXml(xml, edit);
   if (edit.op === "runStyle") return applyRunStyleInXml(xml, edit);
   if (edit.op === "table") return applyTableInXml(xml, edit);
   if (edit.op === "image") return applyImageInXml(xml, edit);
   if (edit.op === "mergeParagraph") return mergeParagraphInXml(xml, edit.index, edit.mergedRuns);
+  if (edit.op === "deleteRange") return deleteParagraphRangeInXml(xml, edit); // doc-selection.js
   if (edit.op === "listLevel") return changeListLevelInXml(xml, edit.index, edit.delta);
   if (edit.op === "case" || edit.op === "trim" || edit.op === "affix") return applyParagraphTransformInXml(xml, edit, scope);
   return applyReplaceInXml(xml, edit, scope, opts);
@@ -768,6 +789,12 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
       total += res.count;
       continue;
     }
+    if (normalized.op === "noteInsert") { // doc-notes.js — nowy przypis: część footnotes/endnotes, style, odnośnik
+      const res = await applyNoteInsertInZip(zip, xml, normalized);
+      xml = res.xml;
+      total += res.count;
+      continue;
+    }
     if (normalized.op === "revisions") { // docx-revisions.js — dotyka też nagłówków, stopek, przypisów, komentarzy
       const res = await applyRevisionsInZip(zip, xml, normalized);
       xml = res.xml;
@@ -782,6 +809,8 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
     if (normalized.op === "replace" && normalized.otherParts && !opts.target) total += await replaceInOtherParts(zip, normalized);
   }
   if (typeof finalizeComposeParts === "function") xml = await finalizeComposeParts(zip, xml); // nowe linki: powiązania + styl
+  // przypis bez odnośnika w treści (odnośnik skasowany) znika z pliku — jak w Wordzie
+  if (list.length && typeof pruneOrphanNotesInZip === "function") await pruneOrphanNotesInZip(zip, xml);
   zip.file("word/document.xml", xml);
   if (coreXml !== null) zip.file("docProps/core.xml", coreXml);
   const out = await zip.generateAsync({

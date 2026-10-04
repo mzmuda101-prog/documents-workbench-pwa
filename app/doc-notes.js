@@ -180,6 +180,7 @@ const dwbNotes = (() => {
 
   function setupList(nextKey) {
     const host = hostEl();
+    refCount = bodyRefCount();
     if (!host || !parts) return;
     host.querySelectorAll("ol.dwb-notes > li[data-dwb-note]").forEach((li) => {
       const key = li.dataset.dwbNote;
@@ -334,7 +335,31 @@ const dwbNotes = (() => {
     });
   }
 
+  // Odnośnik skasowany w treści (Backspace, usunięcie zaznaczenia): w Wordzie przypis znika od
+  // razu, a dalsze numery się przesuwają — rysujemy dokument od nowa (zapis i tak usuwa przypis
+  // bez odnośnika: pruneOrphanNotesInZip). Kursor i przewinięcie wracają.
+  let refTimer = 0;
+  function bodyRefCount() {
+    return hostEl()?.querySelectorAll("section.docx > article sup[data-dwb-note]").length || 0;
+  }
+  function watchRefs() {
+    clearTimeout(refTimer);
+    if (readOnlyMode || !refCount || bodyRefCount() >= refCount) return;
+    refTimer = setTimeout(async () => {
+      if (bodyRefCount() >= refCount) return;
+      const p = typeof restoreDocCaret === "function" ? restoreDocCaret() : null;
+      const top = docViewportEl?.scrollTop || 0;
+      await mergeInlineEditsIntoBytes();
+      const caret = p?.isConnected ? { paraIndex: resolveParaIndex(p), offset: getCaretOffset(p) } : null;
+      if (caret && caret.paraIndex >= 0) pendingInlineCursor = caret;
+      await reloadFromBytes(originalFileBytes);
+      if (docViewportEl) docViewportEl.scrollTop = top;
+    }, 450);
+  }
+  let refCount = 0;
+
   function onInput(e) {
+    watchRefs();
     const p = e.target?.closest?.("p[data-note-key]");
     if (!p) return;
     ensureMark(p.dataset.noteKey);
@@ -445,7 +470,7 @@ const dwbNotes = (() => {
     docCanvasEl?.addEventListener("dblclick", onDblClick);
   });
 
-  return { prepare, stampRefs, refLabelLengths, setupList, sync, collectEdits, rebase, keydown, hasEditable: () => [...notes.values()].some((n) => !n.lock && !n.extra) };
+  return { watchRefs, prepare, stampRefs, refLabelLengths, setupList, sync, collectEdits, rebase, keydown, hasEditable: () => [...notes.values()].some((n) => !n.lock && !n.extra) };
 })();
 
 // ── zapis: zmiany przypisów do footnotes.xml / endnotes.xml (buildPatchedDocx) ──
@@ -522,4 +547,88 @@ async function finalizeNoteLinks(zip, xml, kind) {
     xml = composeSerialize(doc);
   }
   return xml;
+}
+
+// ── nowy przypis (Wstaw → Przypis dolny / końcowy, Ctrl/⌘+Alt+F / D — jak w Wordzie) ──────────
+// edit: { kind, index (akapit treści), offset (miejsce w tekście akapitu jak w pliku), id }.
+// Brakująca część footnotes.xml / endnotes.xml powstaje z separatorami (jak w nowym pliku Worda);
+// style „footnote text” / „footnote reference” (i końcowe) — dopisywane, gdy ich nie ma.
+const NOTE_CT = { footnote: "footnotes", endnote: "endnotes" };
+function noteStyleDefs(kind, normalId) {
+  const based = normalId ? `<w:basedOn w:val="${normalId}"/>` : "";
+  return {
+    text: { name: `${kind} text`, id: kind === "footnote" ? "FootnoteText" : "EndnoteText",
+      body: `${based}<w:uiPriority w:val="99"/><w:semiHidden/><w:unhideWhenUsed/><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:rPr><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr>` },
+    ref: { name: `${kind} reference`, id: kind === "footnote" ? "FootnoteReference" : "EndnoteReference",
+      body: `<w:uiPriority w:val="99"/><w:semiHidden/><w:unhideWhenUsed/><w:rPr><w:vertAlign w:val="superscript"/></w:rPr>` },
+  };
+}
+async function noteEnsureStyles(zip, kind) {
+  const xml = await composeEnsureStylesPart(zip);
+  const doc = composeParse(xml);
+  const styles = Array.from(doc.getElementsByTagNameNS(W_NS, "style"));
+  const normalId = styles.find((st) => st.getAttributeNS(W_NS, "type") === "paragraph" && /^(1|true)$/.test(st.getAttributeNS(W_NS, "default") || ""))?.getAttributeNS(W_NS, "styleId") || null;
+  const ids = new Set(styles.map((st) => st.getAttributeNS(W_NS, "styleId")));
+  const defs = noteStyleDefs(kind, normalId);
+  const out = {};
+  for (const [key, type] of [["text", "paragraph"], ["ref", "character"]]) {
+    const def = defs[key];
+    const found = styles.find((st) => st.getAttributeNS(W_NS, "type") === type && (composeDirectChild(st, "name")?.getAttributeNS(W_NS, "val") || "").trim().toLowerCase() === def.name);
+    if (found) { out[key] = found.getAttributeNS(W_NS, "styleId"); continue; }
+    let id = def.id;
+    while (ids.has(id)) id += "1";
+    ids.add(id);
+    const frag = composeParse(`<w:styles xmlns:w="${W_NS}"><w:style w:type="${type}" w:styleId="${id}"><w:name w:val="${def.name}"/>${def.body}</w:style></w:styles>`);
+    doc.documentElement.appendChild(doc.importNode(frag.documentElement.firstChild, true));
+    out[key] = id;
+  }
+  zip.file("word/styles.xml", composeSerialize(doc));
+  return out;
+}
+function noteNextId(partXml, kind) {
+  let max = 0;
+  for (const m of String(partXml || "").matchAll(new RegExp(`<w:${kind}\\b[^>]*\\bw:id="(-?\\d+)"`, "g"))) max = Math.max(max, parseInt(m[1], 10));
+  return max + 1;
+}
+async function applyNoteInsertInZip(zip, xml, edit) {
+  const kind = edit.kind === "endnote" ? "endnote" : "footnote";
+  const doc = composeParse(xml);
+  const p = collectParagraphElements(doc.documentElement, "all")[edit.index];
+  if (!p) return { xml, count: 0 };
+  const sep = (type, id, tag) => `<w:${kind} w:type="${type}" w:id="${id}"><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:${tag}/></w:r></w:p></w:${kind}>`;
+  const partXml = await composeEnsurePart(zip, NOTE_PART[kind],
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<w:${kind}s xmlns:w="${W_NS}" xmlns:r="${R_NS}">${sep("separator", -1, "separator")}${sep("continuationSeparator", 0, "continuationSeparator")}</w:${kind}s>`,
+    `application/vnd.openxmlformats-officedocument.wordprocessingml.${NOTE_CT[kind]}+xml`,
+    `http://schemas.openxmlformats.org/officeDocument/2006/relationships/${NOTE_CT[kind]}`);
+  const st = await noteEnsureStyles(zip, kind);
+  const nextId = noteNextId(partXml, kind);
+  const id = Number.isInteger(edit.id) && edit.id >= nextId ? edit.id : nextId;
+  const partDoc = composeParse(partXml);
+  const noteFrag = composeParse(`<w:${kind}s xmlns:w="${W_NS}"><w:${kind} w:id="${id}"><w:p><w:pPr><w:pStyle w:val="${st.text}"/></w:pPr><w:r><w:rPr><w:rStyle w:val="${st.ref}"/></w:rPr><w:${kind}Ref/></w:r><w:r><w:t xml:space="preserve"> </w:t></w:r></w:p></w:${kind}></w:${kind}s>`);
+  partDoc.documentElement.appendChild(partDoc.importNode(noteFrag.documentElement.firstChild, true));
+  zip.file(NOTE_PART[kind], composeSerialize(partDoc));
+  // odnośnik w treści — „wyspa” w modelu akapitu (cały fragment z pliku wraca przy zapisie)
+  const runs = extractRunsFromParagraphXml(p);
+  const total = previewRunsToPlainText(runs).length;
+  const at = Math.max(0, Math.min(total, edit.offset | 0));
+  const { before, after } = composeSliceRuns(runs, at, at);
+  const ref = `<w:r xmlns:w="${W_NS}"><w:rPr><w:rStyle w:val="${st.ref}"/></w:rPr><w:${kind}Reference w:id="${id}"/></w:r>`;
+  applyRunsToParagraphXml(p, [...before, { island: ref, text: "" }, ...after]);
+  return { xml: composeSerialize(doc), count: 1, id };
+}
+
+// Przypisy bez odnośnika w treści (odnośnik usunięty razem z tekstem) — usuwane z pliku jak
+// w Wordzie; separatory (w:type) zostają.
+async function pruneOrphanNotesInZip(zip, docXml) {
+  for (const kind of ["footnote", "endnote"]) {
+    const file = zip.file(NOTE_PART[kind]);
+    if (!file) continue;
+    const used = new Set([...String(docXml).matchAll(new RegExp(`<w:${kind}Reference\\b[^>]*\\bw:id="(-?\\d+)"`, "g"))].map((m) => m[1]));
+    const xml = await file.async("string");
+    const doc = composeParse(xml);
+    const orphans = Array.from(doc.getElementsByTagNameNS(W_NS, kind)).filter((n) => !n.getAttributeNS(W_NS, "type") && !used.has(n.getAttributeNS(W_NS, "id")));
+    if (!orphans.length) continue;
+    orphans.forEach((n) => n.parentNode.removeChild(n));
+    zip.file(NOTE_PART[kind], composeSerialize(doc));
+  }
 }

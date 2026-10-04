@@ -44,8 +44,8 @@ function parseSpanStyle(cssText) {
     if (idx < 0) return;
     const key = chunk.slice(0, idx).trim().toLowerCase();
     const val = chunk.slice(idx + 1).trim();
-    if (key === "font-weight" && (val === "bold" || parseInt(val, 10) >= 600)) style.bold = true;
-    if (key === "font-style" && val === "italic") style.italic = true;
+    if (key === "font-weight") { if (val === "bold" || parseInt(val, 10) >= 600) style.bold = true; else if (val === "normal" || parseInt(val, 10) < 600) style.bold = false; }
+    if (key === "font-style") { if (val === "italic") style.italic = true; else if (val === "normal") style.italic = false; }
     if ((key === "text-decoration" || key === "text-decoration-line") && val.includes("underline")) style.underline = true;
     if ((key === "text-decoration" || key === "text-decoration-line") && val.includes("line-through")) style.strike = true;
     if (key === "color") style.color = val;
@@ -62,10 +62,16 @@ function parseSpanStyle(cssText) {
 function runStyleToCss(run) {
   const parts = [];
   if (run.bold) parts.push("font-weight:bold");
+  else if (run.bold === false) parts.push("font-weight:normal"); // wyłączone w środku pogrubionego fragmentu
   if (run.italic) parts.push("font-style:italic");
+  else if (run.italic === false) parts.push("font-style:normal");
   if (run.underline || run.strike) parts.push(`text-decoration:${[run.underline && "underline", run.strike && "line-through"].filter(Boolean).join(" ")}`);
   if (run.color) parts.push(`color:${run.color}`);
-  if (run.fontFamily) parts.push(`font-family:"${run.fontFamily}"`);
+  if (run.fontFamily) {
+    // z rodziną ogólną (bezszeryfowy/szeryfowy) — krój spoza urządzenia nie spada na Times
+    const ff = `"${run.fontFamily}"`;
+    parts.push(`font-family:${(typeof withGenericFontFallback === "function" && withGenericFontFallback(ff)) || ff}`);
+  }
   if (run.fontSize) parts.push(`font-size:${run.fontSize}`);
   if (run.highlight) parts.push(`background-color:${run.highlight}`);
   return parts.join(";");
@@ -494,38 +500,45 @@ function accumulateElementStyle(el, style) {
   if (tag === "s" || tag === "strike") style.strike = true;
 }
 
+// Formatowanie, które dostanie tekst wpisany w miejscu kursora: jak w Wordzie — znaku PRZED
+// kursorem (na początku akapitu: pierwszego znaku za nim). Najgłębszy element wygrywa, tak samo
+// jak w CSS i przy zapisie (extractRunsFromPreviewParagraph). Dawniej przodkowie nadpisywali
+// potomków: po zmianie rozmiaru fragmentu wewnątrz tekstu z innym rozmiarem (zagnieżdżone
+// <span>) kursor „widział” rozmiar zewnętrzny i dalsze pisanie dziedziczyło zły rozmiar/krój.
 function getInheritedRunStyleAtCaret(rootEl) {
   const sel = window.getSelection();
   if (!sel?.rangeCount || !rootEl) return {};
   const range = sel.getRangeAt(0);
   if (!rootEl.contains(range.startContainer)) return {};
+  const src = caretStyleSourceNode(rootEl, range.startContainer, range.startOffset);
   const style = {};
-  let node = range.startContainer;
-  const offset = range.startOffset;
-  if (node.nodeType === Node.TEXT_NODE && offset === 0) {
-    let sib = node.previousSibling;
-    while (sib) {
-      if (sib.nodeType === 1) {
-        accumulateElementStyle(sib, style);
-        break;
-      }
-      if (sib.nodeType === Node.TEXT_NODE && sib.textContent) {
-        let p = sib.parentElement;
-        while (p && p !== rootEl) {
-          accumulateElementStyle(p, style);
-          p = p.parentElement;
-        }
-        break;
-      }
-      sib = sib.previousSibling;
-    }
-  }
-  if (node.nodeType === Node.TEXT_NODE) node = node.parentElement;
-  while (node && node !== rootEl) {
-    accumulateElementStyle(node, style);
-    node = node.parentElement;
-  }
+  const chain = [];
+  for (let el = src?.nodeType === 1 ? src : src?.parentElement; el && el !== rootEl && rootEl.contains(el); el = el.parentElement) chain.push(el);
+  for (let i = chain.length - 1; i >= 0; i--) accumulateElementStyle(chain[i], style); // od zewnątrz do środka
   return style;
+}
+
+// Węzeł tekstu, którego format „dziedziczy” kursor (container, offset) w akapicie rootEl.
+// Pomija tekst wysp (odnośnik przypisu, pole formularza) i znaki-pomocnicze kursora (U+FEFF).
+function caretStyleSourceNode(rootEl, container, offset) {
+  const real = (n) => {
+    if (!/[^\uFEFF]/.test(n.data)) return false;
+    const island = n.parentElement?.closest('[contenteditable="false"]');
+    return !(island && island !== rootEl && rootEl.contains(island));
+  };
+  if (container.nodeType === 3 && offset > 0 && real(container)) return container;
+  // pozycja między węzłami albo na początku węzła tekstu — ostatni tekst PRZED nią,
+  // a gdy go nie ma (początek akapitu) — pierwszy za nią
+  const at = document.createRange();
+  at.setStart(container, offset);
+  const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT);
+  let before = null;
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (!real(n)) continue;
+    if (n !== container && at.comparePoint(n, n.length) <= 0) { before = n; continue; }
+    return before || n;
+  }
+  return before || container;
 }
 
 function mergeRunStyles(base, extra) {
@@ -590,6 +603,105 @@ function applyRunStyleToSelection(style, rootEl) {
   sel.removeAllRanges();
   sel.addRange(range);
   return true;
+}
+
+// Formatowanie znakowe zaznaczenia (rozmiar, krój…) — także przez kilka akapitów. props: cechy
+// albo funkcja (węzeł tekstu → cechy), np. „o stopień większa” dla każdego rozmiaru osobno. Każdy fragment
+// tekstu w zaznaczeniu dostaje tę JEDNĄ cechę najgłębiej (we własnym <span> albo w <span>, który
+// zawiera tylko ten fragment), reszta jego formatu zostaje. Dawniej całe zaznaczenie szło do
+// jednego <span> z formatem z POCZĄTKU zaznaczenia: wewnętrzne fragmenty z własnym rozmiarem
+// wygrywały (rozmiar „nie zmieniał się”), a pogrubienie czy krój pierwszego słowa rozlewały się
+// na resztę. Zwraca zakres obejmujący sformatowany tekst (zaznaczenie zostaje, jak w Wordzie).
+function applyRunPropsToRange(range, props, accept = () => true) {
+  if (!range || range.collapsed) return null;
+  const root = range.commonAncestorContainer.nodeType === 1 ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
+  const nodes = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (!range.intersectsNode(n) || !n.length) continue;
+    const el = n.parentElement;
+    if (!el || el.closest('[contenteditable="false"], .docx-tab') || !accept(n)) continue;
+    let from = n === range.startContainer ? range.startOffset : 0;
+    let to = n === range.endContainer ? range.endOffset : n.length;
+    if (to <= from) continue;
+    nodes.push({ n, from, to, css: typeof props === "function" ? runStyleToCss(props(n)) : null });
+  }
+  if (!nodes.length) return null;
+  const fixedCss = typeof props === "function" ? "" : runStyleToCss(props);
+  const wrapped = nodes.map(({ n, from, to, css: own }) => {
+    const css = own ?? fixedCss;
+    let node = n;
+    if (to < node.length) node.splitText(to);
+    if (from > 0) node = node.splitText(from);
+    if (!/[^\uFEFF]/.test(node.data)) return node;
+    const parent = node.parentElement;
+    if (parent.localName === "span" && parent.childNodes.length === 1 && !parent.className && !parent.dataset.cm && !parent.dataset.ff) {
+      // fragment ma już własny <span> (fragment z pliku) — cecha trafia do niego
+      const probe = document.createElement("span");
+      probe.setAttribute("style", css);
+      for (let i = 0; i < probe.style.length; i++) {
+        const prop = probe.style[i];
+        parent.style.setProperty(prop, probe.style.getPropertyValue(prop));
+      }
+      return node;
+    }
+    const span = document.createElement("span");
+    span.setAttribute("style", css);
+    parent.insertBefore(span, node);
+    span.appendChild(node);
+    return node;
+  });
+  const out = document.createRange();
+  out.setStart(wrapped[0], 0);
+  const last = wrapped[wrapped.length - 1];
+  out.setEnd(last, last.length);
+  return out;
+}
+
+// Krój i rozmiar tekstu tak, jak go widać (styl akapitu, styl znakowy, format fragmentu) —
+// to, co Word pokazuje na wstążce. Powiększenie widoku (CSS zoom / transform) nie zmienia
+// wartości wyliczonej — oba silniki oddają rozmiar sprzed powiększenia.
+function textFormatOfElement(el) {
+  if (!el) return null;
+  const cs = getComputedStyle(el);
+  const family = String(cs.fontFamily || "").split(",")[0].trim().replace(/^["']|["']$/g, "");
+  const px = parseFloat(cs.fontSize) || 0;
+  return { family, sizePt: Math.round(px * 0.75 * 2) / 2 };
+}
+
+// Format w zakresie: { family, sizePt } — pusty („”/0) gdy w zaznaczeniu jest kilka różnych
+// (jak puste pole kroju/rozmiaru w Wordzie); families / sizes = wszystkie spotkane (do podpowiedzi).
+function textFormatOfRange(range, accept = () => true) {
+  if (!range) return null;
+  const sc = range.startContainer;
+  if (range.collapsed) {
+    const p = (sc.nodeType === 1 ? sc : sc.parentElement)?.closest?.("p");
+    const src = p ? caretStyleSourceNode(p, sc, range.startOffset) : sc;
+    const f = textFormatOfElement(src?.nodeType === 1 ? src : src?.parentElement);
+    return f && { ...f, families: [f.family], sizes: [f.sizePt] };
+  }
+  const root = range.commonAncestorContainer.nodeType === 1 ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
+  const families = new Set();
+  const sizes = new Set();
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let seen = 0;
+  for (let n = walker.nextNode(); n && seen < 4000; n = walker.nextNode()) {
+    if (!range.intersectsNode(n) || !/[^\s\uFEFF]/.test(n.data) || !accept(n)) continue;
+    if (n === range.endContainer && range.endOffset === 0) continue;
+    if (n === range.startContainer && range.startOffset >= n.length) continue;
+    const f = textFormatOfElement(n.parentElement);
+    if (!f) continue;
+    families.add(f.family);
+    sizes.add(f.sizePt);
+    seen++;
+  }
+  if (!seen) { const r = range.cloneRange(); r.collapse(true); return textFormatOfRange(r, accept); } // same spacje
+  return {
+    family: families.size === 1 ? [...families][0] : "",
+    sizePt: sizes.size === 1 ? [...sizes][0] : 0,
+    families: [...families],
+    sizes: [...sizes].sort((a, b) => a - b),
+  };
 }
 
 function fontSizePtFromStyle(style) {

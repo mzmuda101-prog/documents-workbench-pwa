@@ -128,7 +128,7 @@ function insertPlaceholderAtCaret() {
     return;
   }
   const token = formatPlaceholderToken(name);
-  const style = mergeRunStyles(getInheritedRunStyleAtCaret(p), activeTypingStyle);
+  const style = mergeRunStyles(getInheritedRunStyleAtCaret(p), currentTypingStyle());
   asUndoStep("undoOpInsert", () => {
     if (runStyleHasProps(style)) insertStyledTextAtCaret(token, style, p);
     else insertTextAtCaret(token);

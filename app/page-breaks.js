@@ -123,6 +123,59 @@ const dwbPageBreaks = (() => {
     return b;
   }
 
+  // Strony jednej kartki podglądu (section.docx): gdzie zaczyna się każda kolejna strona.
+  // Wynik w układzie kartki bez zoomu: contentTop (początek treści 1. strony), cuts — dla każdej
+  // następnej strony { y: miejsce znacznika między linijkami, top: pierwsza linijka strony },
+  // end — dół ostatniej linijki. Wspólne dla znaczników w Edycji i podglądu wydruku
+  // (print-preview.js — tam też z przypisami pod treścią: includeNotes).
+  function paginateSection(sec, { includeNotes = false } = {}) {
+    const article = sec.querySelector(":scope > article");
+    if (!article || !sec.offsetHeight) return null;
+    const secRect = sec.getBoundingClientRect();
+    const scale = secRect.height / sec.offsetHeight || 1; // zoom Widoku desktopowego (transform)
+    const cs = getComputedStyle(sec);
+    const padT = parseFloat(cs.paddingTop) || 0;
+    const padB = parseFloat(cs.paddingBottom) || 0;
+    const pageW = sec.offsetWidth;
+    const pageH = parseFloat(cs.minHeight) || pageW * Math.SQRT2; // bez rozmiaru strony: A4
+    const bodyH = pageH - padT - padB;
+    const contentTop = (article.getBoundingClientRect().top - secRect.top) / scale;
+    const out = { sec, pageW, pageH, padT, padB, bodyH, contentTop, cuts: [], end: contentTop };
+    if (!(bodyH > 40)) return out;
+    const u = lineUnits(article, secRect.top, scale);
+    if (includeNotes) sec.querySelectorAll(":scope > ol").forEach((ol) => u.push(...lineUnits(ol, secRect.top, scale)));
+    u.sort((a, b) => a.top - b.top);
+    let limit = pageH - padB; // dół treści pierwszej strony
+    let first = 0; // indeks pierwszej linijki bieżącej strony
+    for (let k = 0; k < u.length; k++) {
+      if (u[k].bottom <= limit + 1) continue;
+      if (k > first) {
+        const b = pageStartIndex(u, k, first);
+        const prevBottom = u[b - 1]?.bottom;
+        const y = prevBottom != null && prevBottom <= u[b].top ? (prevBottom + u[b].top) / 2 : u[b].top;
+        out.cuts.push({ y, top: u[b].top });
+        first = b;
+        limit = u[b].top + bodyH;
+        k = b - 1; // od nowej strony sprawdzamy jeszcze raz
+      } else {
+        // jedna rzecz wyższa niż strona (duży obraz, wysoki wiersz) — granica w środku niej
+        while (u[k].bottom > limit + 1) {
+          out.cuts.push({ y: limit, top: limit });
+          limit += bodyH;
+        }
+        first = k + 1;
+      }
+    }
+    out.end = u.length ? Math.max(...u.map((x) => x.bottom)) : contentTop;
+    return out;
+  }
+
+  // Wszystkie kartki podglądu po kolei (podgląd wydruku liczy na osobnym, niewidocznym renderze).
+  async function paginate(h, opts) {
+    await ensureKeepInfo();
+    return [...h.querySelectorAll(".docx-wrapper > section.docx")].map((sec) => paginateSection(sec, opts)).filter(Boolean);
+  }
+
   let run = 0;
   async function compute() {
     timer = 0;
@@ -136,49 +189,19 @@ const dwbPageBreaks = (() => {
     if (myRun !== run) return; // w międzyczasie zaczęło się nowsze liczenie
     clear(h);
     let page = 1;
+    const editable = !!h.querySelector(".docx-edit-root");
     h.querySelectorAll(".docx-wrapper > section.docx").forEach((sec, si) => {
       if (si > 0) page += 1; // jawny podział = nowa kartka = nowa strona
-      const article = sec.querySelector(":scope > article");
-      if (!article || !sec.offsetHeight) return;
-      const secRect = sec.getBoundingClientRect();
-      const scale = secRect.height / sec.offsetHeight || 1; // zoom Widoku desktopowego (transform)
-      const cs = getComputedStyle(sec);
-      const padT = parseFloat(cs.paddingTop) || 0;
-      const padB = parseFloat(cs.paddingBottom) || 0;
-      const pageH = parseFloat(cs.minHeight) || sec.offsetWidth * Math.SQRT2; // bez rozmiaru strony: A4
-      const bodyH = pageH - padT - padB;
-      if (!(bodyH > 40)) return;
-      const u = lineUnits(article, secRect.top, scale);
-      let limit = pageH - padB; // dół treści pierwszej strony
-      let first = 0; // indeks pierwszej linijki bieżącej strony
-      const marks = [];
-      for (let k = 0; k < u.length; k++) {
-        if (u[k].bottom <= limit + 1) continue;
-        if (k > first) {
-          const b = pageStartIndex(u, k, first);
-          const prevBottom = u[b - 1]?.bottom;
-          const y = prevBottom != null && prevBottom <= u[b].top ? (prevBottom + u[b].top) / 2 : u[b].top;
-          page += 1;
-          marks.push([y, page]);
-          first = b;
-          limit = u[b].top + bodyH;
-          k = b - 1; // od nowej strony sprawdzamy jeszcze raz
-        } else {
-          // jedna rzecz wyższa niż strona (duży obraz, wysoki wiersz) — granica w środku niej
-          while (u[k].bottom > limit + 1) {
-            page += 1;
-            marks.push([limit, page]);
-            limit += bodyH;
-          }
-          first = k + 1;
-        }
-      }
-      for (const [y, n] of marks) {
+      const res = paginateSection(sec);
+      if (!res) return;
+      for (const cut of res.cuts) {
+        page += 1;
         const el = document.createElement("div");
         el.className = "dwb-page-break";
         el.setAttribute("aria-hidden", "true");
-        el.dataset.label = t("pageBreakLabel", { n });
-        el.style.top = `${Math.round(y)}px`;
+        if (editable) el.contentEditable = "false"; // w polu edycji dokumentu — nie da się w nim pisać
+        el.dataset.label = t("pageBreakLabel", { n: page });
+        el.style.top = `${Math.round(cut.y)}px`;
         sec.appendChild(el);
       }
     });
@@ -213,5 +236,5 @@ const dwbPageBreaks = (() => {
   }
   document.fonts?.ready?.then(() => schedule(0));
 
-  return { schedule, compute, enabled };
+  return { schedule, compute, enabled, paginate };
 })();

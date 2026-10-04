@@ -75,7 +75,7 @@ async function run() {
   await page.click('.newdoc-card[data-template="blank"]');
   await page.waitForSelector(".docx-preview-host p.docx-editable-p", { timeout: 20000 });
   await idle(page);
-  const st0 = await page.evaluate(() => ({ name: currentFileName, ro: readOnlyMode, focus: !!document.activeElement?.closest?.(".docx-editable-p"), handle: !!fileHandle }));
+  const st0 = await page.evaluate(() => ({ name: currentFileName, ro: readOnlyMode, focus: !!docCaretParagraph(document.activeElement), handle: !!fileHandle }));
   check("pusty dokument: nazwa „Nowy dokument.docx”, tryb Edycja, kursor w tekście, bez uchwytu pliku", st0.name === "Nowy dokument.docx" && !st0.ro && st0.focus && !st0.handle, JSON.stringify(st0));
   const h0 = await page.evaluate(() => collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[0].getBoundingClientRect().height);
   check("pusty akapit ma wysokość (da się w niego kliknąć)", h0 >= 12, h0);
@@ -86,7 +86,7 @@ async function run() {
   await idle(page);
   let ps = await paras(page);
   check("lista „Styl” → Tytuł: akapit ma styl Tytuł, tekst zostaje", ps[0].style === "title" && ps[0].text === "Mój raport", JSON.stringify(ps[0]));
-  const focusAfterStyle = await page.evaluate(() => { const p = document.activeElement?.closest?.(".docx-editable-p"); return p ? resolveParaIndex(p) : -1; });
+  const focusAfterStyle = await page.evaluate(() => { const p = docCaretParagraph(document.activeElement); return p ? resolveParaIndex(p) : -1; });
   check("po zmianie stylu kursor wraca do tego akapitu", focusAfterStyle === 0, focusAfterStyle);
   await caretTo(page, 0, true);
   await page.keyboard.press("Enter");
@@ -170,7 +170,7 @@ async function run() {
   ps = await paras(page);
   const hr = await page.evaluate(() => { const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[2]; const cs = getComputedStyle(p); return { style: cs.borderBottomStyle, w: cs.borderBottomWidth }; });
   check("linia pozioma: akapit z dolną krawędzią + pusty akapit do pisania", ps.length === 6 && hr.style === "solid" && ps[2].text === "" && ps[3].text === "", JSON.stringify({ n: ps.length, hr }));
-  const focusHr = await page.evaluate(() => { const p = document.activeElement?.closest?.(".docx-editable-p"); return p ? resolveParaIndex(p) : -1; });
+  const focusHr = await page.evaluate(() => { const p = docCaretParagraph(document.activeElement); return p ? resolveParaIndex(p) : -1; });
   check("po linii kursor stoi w akapicie pod nią", focusHr === 3, focusHr);
   await page.keyboard.type("Pod linią");
   await page.waitForTimeout(200);
@@ -190,7 +190,7 @@ async function run() {
   await page.click(".compose-item-label:text-is('Podział strony')");
   await idle(page);
   const pages3 = await page.evaluate(() => document.querySelectorAll(".docx-preview-host section.docx").length);
-  const focusPb = await page.evaluate(() => { const p = document.activeElement?.closest?.(".docx-editable-p"); return p ? resolveParaIndex(p) : -1; });
+  const focusPb = await page.evaluate(() => { const p = docCaretParagraph(document.activeElement); return p ? resolveParaIndex(p) : -1; });
   check("podział strony na końcu: nowa strona, kursor w pustym akapicie na niej", pages3 === pagesAfter + 1 && focusPb === 7, `${pages3} / ${focusPb}`);
   await page.keyboard.type("Strona trzecia");
   await page.keyboard.press("Enter");

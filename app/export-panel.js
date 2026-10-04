@@ -157,4 +157,5 @@ function printDocument() {
 exTxtBtn?.addEventListener("click", () => runExport("txt"));
 exMdBtn?.addEventListener("click", () => runExport("md"));
 exHtmlBtn?.addEventListener("click", () => runExport("html"));
-exPrintBtn?.addEventListener("click", printDocument);
+// Drukuj / PDF: najpierw podgląd wydruku z prawdziwymi stronami (print-preview.js), jak w Wordzie
+exPrintBtn?.addEventListener("click", () => (typeof dwbPrint !== "undefined" ? dwbPrint.open() : printDocument()));

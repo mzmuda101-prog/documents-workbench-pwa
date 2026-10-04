@@ -29,6 +29,42 @@ function collectPreviewParagraphElements(host) {
   return Array.from(docxRoot.querySelectorAll("p"));
 }
 
+// ── jedno pole edycji na cały dokument ──────────────────────────────────────────
+// W Edycji edytowalny jest pojemnik CAŁEGO dokumentu (.docx-wrapper), a nie każdy akapit osobno —
+// zaznaczanie przez wiele akapitów (przeciąganie, Shift+klik, Shift+strzałki, Ctrl/⌘+A, uchwyty
+// zaznaczenia na dotyku) działa jak w Wordzie. Dawniej każdy akapit był osobnym polem edycji:
+// zaznaczenie zatrzymywało się na granicy akapitu, a Ctrl+A nie zaznaczał nic.
+// Fokus (document.activeElement) i cel zdarzeń klawiatury to teraz pojemnik — akapit z kursorem
+// wyznacza zaznaczenie (docCaretParagraph). Nieedytowalne w środku: akapity tylko do odczytu,
+// nagłówki i stopki stron, znaczniki granic stron. Tekst przypisów to osobne pola (w Wordzie też
+// osobna część — zaznaczenie nie przechodzi z treści do przypisów). Operacje na zaznaczeniu
+// kilku akapitów (usuwanie, pisanie w miejsce, wycinanie, wklejanie) — doc-selection.js.
+function docEditRoot(host = docCanvasEl?.querySelector(".docx-preview-host")) {
+  return host?.querySelector(":scope > .docx-wrapper") || host || null;
+}
+
+// Akapit z kursorem dla elementu z fokusem albo celu zdarzenia: pole przypisu to dalej akapit,
+// a w pojemniku dokumentu — akapit, w którym stoi ruchomy koniec zaznaczenia (kursor).
+function docCaretParagraph(el) {
+  if (!el?.closest) return null;
+  const direct = el.closest(".docx-editable-p");
+  if (direct) return direct;
+  if (!el.classList?.contains("docx-edit-root")) return null;
+  const sel = window.getSelection?.();
+  if (!sel?.rangeCount) return null;
+  const n = sel.focusNode;
+  const node = n?.nodeType === 1 ? n : n?.parentElement;
+  const p = node?.closest?.(".docx-editable-p");
+  return p && el.contains(p) ? p : null;
+}
+
+// Fokus do pola, w którym leży akapit (pojemnik dokumentu albo akapit przypisu).
+function focusDocParagraph(p) {
+  if (!p) return;
+  const host = p.getAttribute("contenteditable") === "true" ? p : p.closest(".docx-edit-root");
+  if (host && document.activeElement !== host) host.focus({ preventScroll: true });
+}
+
 // Akapity, których edycja w podglądzie zgubiłaby coś z pliku: zapis akapitu przepisuje jego
 // fragmenty tekstu od nowa (applyRunsToParagraphXml), więc przypis, obraz, pole, link czy
 // śledzona zmiana w środku by przepadły. Takie akapity są tylko do odczytu, z wyjaśnieniem.
@@ -95,8 +131,15 @@ function stampCommentMarks(xp, el, nextKey, noteLabels = []) {
 
 // Podział strony / kolumny W akapicie: model akapitu zna tylko złamanie wiersza — zapis zamieniłby
 // podział strony na zwykłe złamanie (a podgląd dzieli taki akapit na dwa). Tylko do odczytu.
+// Akapit z SAMYM podziałem strony (bez tekstu) — jak „Podział strony” w Wordzie: nie pisze się
+// w nim, ale usuwa się go Backspace na początku następnego / Delete na końcu poprzedniego akapitu
+// (doc-selection.js removeBreakParagraph).
 function paragraphPageBreakLock(xp) {
-  return Array.from(xp.getElementsByTagNameNS(W_NS, "br")).some((br) => /^(page|column)$/.test(br.getAttributeNS(W_NS, "type") || br.getAttribute("w:type") || "")) ? "lockPageBreak" : null;
+  const hasBreak = Array.from(xp.getElementsByTagNameNS(W_NS, "br")).some((br) => /^(page|column)$/.test(br.getAttributeNS(W_NS, "type") || br.getAttribute("w:type") || ""));
+  if (!hasBreak) return null;
+  const onlyBreak = !Array.from(xp.getElementsByTagNameNS(W_NS, "t")).some((t) => t.textContent)
+    && !["drawing", "pict", "object", "tab", "sym", "fldChar", "footnoteReference", "endnoteReference"].some((tag) => xp.getElementsByTagNameNS(W_NS, tag).length);
+  return onlyBreak ? "lockPageBreakOnly" : "lockPageBreak";
 }
 
 function paragraphNestedRunLock(xp) {
@@ -309,9 +352,12 @@ function onInlineParagraphInput() {
 }
 
 function onParagraphBeforeInput(e) {
-  if (readOnlyMode || e.isComposing) return;
+  if (readOnlyMode) return;
+  // zaznaczenie przez kilka akapitów, Backspace na granicy akapitów itp. (doc-selection.js)
+  if (typeof dwbSel !== "undefined" && dwbSel.beforeInput(e)) return;
+  if (e.isComposing) return;
   if (e.inputType !== "insertText" && e.inputType !== "insertReplacementText") return;
-  const p = e.target.closest?.(".docx-editable-p");
+  const p = docCaretParagraph(e.target);
   if (!p) return;
   const ch = e.data || "";
 
@@ -336,20 +382,200 @@ function onParagraphBeforeInput(e) {
   }
 
   const inherited = getInheritedRunStyleAtCaret(p);
-  const style = mergeRunStyles(inherited, activeTypingStyle);
+  const style = mergeRunStyles(inherited, currentTypingStyle());
   if (!runStyleHasProps(style)) return;
   e.preventDefault();
   insertStyledTextAtCaret(ch, style, p);
+  if (activeTypingStyle) typingStyleAt = caretPoint(); // kursor poszedł za wpisaną literą — format dalej obowiązuje
   onInlineParagraphInput();
 }
 
-function onFormatSelectionChange() {
-  if (readOnlyMode) return;
-  const p = document.activeElement?.closest?.(".docx-editable-p");
-  const fmtFontSize = document.getElementById("fmtFontSize");
-  if (!fmtFontSize || !p) return;
-  const pt = fontSizePtFromStyle(getInheritedRunStyleAtCaret(p));
-  if (pt) fmtFontSize.value = pt;
+// ── format „dla dalszego pisania” ────────────────────────────────────────────
+// Rozmiar/krój/kolor wybrany BEZ zaznaczenia obowiązuje tylko w tym miejscu kursora (jak
+// w Wordzie): wpisany tam tekst go dostaje, a przestawienie kursora go porzuca. Dawniej zostawał
+// na zawsze — rozmiar 9 ustawiony w jednym zdaniu „przyklejał się” do pisania w każdym innym
+// akapicie, choć lista rozmiarów pokazywała już rozmiar nowego miejsca.
+let typingStyleAt = null; // { node, offset } — miejsce, w którym obowiązuje activeTypingStyle
+
+function caretPoint() {
+  const sel = window.getSelection?.();
+  if (!sel?.rangeCount) return null;
+  const r = sel.getRangeAt(0);
+  return { node: r.startContainer, offset: r.startOffset, range: !r.collapsed };
+}
+
+function setTypingStyle(props) {
+  activeTypingStyle = mergeRunStyles(currentTypingStyle() || {}, props); // z innego miejsca — porzucony
+  typingStyleAt = caretPoint();
+}
+
+function clearTypingStyle() {
+  activeTypingStyle = null;
+  typingStyleAt = null;
+}
+
+function onTypingStyleSelectionChange() {
+  if (!activeTypingStyle || !typingStyleAt) return;
+  const now = caretPoint();
+  if (!now || !docCanvasEl?.contains(now.node)) return; // fokus w pasku/liście — kursor w tekście ten sam
+  if (now.range || now.node !== typingStyleAt.node || now.offset !== typingStyleAt.offset) clearTypingStyle();
+}
+
+// Format dla pisania w BIEŻĄCYM miejscu — sprawdzany w chwili użycia: „selectionchange” przychodzi
+// z opóźnieniem, a litera wpisana zaraz po strzałce dostawała jeszcze format starego miejsca.
+function currentTypingStyle() {
+  onTypingStyleSelectionChange();
+  return activeTypingStyle;
+}
+
+// ── krój i rozmiar w miejscu kursora (pasek formatu + pasek stanu) ─────────────
+// Jak pola kroju i rozmiaru na wstążce Worda: zawsze to, co naprawdę jest w miejscu kursora
+// (z dziedziczeniem po stylu akapitu), puste przy zaznaczeniu z kilkoma różnymi.
+// Dawniej lista rozmiarów zmieniała się tylko przy fragmencie z WŁASNYM rozmiarem — w akapicie
+// z rozmiarem ze stylu zostawała poprzednia wartość (np. 9 z innego zdania).
+const WORD_FONT_SIZES = [8, 9, 10, 10.5, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
+const COMMON_FONT_FAMILIES = ["Aptos", "Arial", "Calibri", "Calibri Light", "Cambria", "Courier New", "Garamond", "Georgia", "Segoe UI", "Tahoma", "Times New Roman", "Trebuchet MS", "Verdana"];
+
+function docPreviewHost() {
+  return docCanvasEl?.querySelector(".docx-preview-host") || null;
+}
+
+// Zakres zaznaczenia/kursora w dokumencie; gdy fokus uciekł do paska — ostatni zapamiętany.
+function docSelectionRange({ remembered = true } = {}) {
+  const host = docPreviewHost();
+  if (!host) return null;
+  const sel = window.getSelection?.();
+  if (sel?.rangeCount) {
+    const r = sel.getRangeAt(0);
+    if (host.contains(r.startContainer)) return r;
+  }
+  if (remembered && lastDocCaret?.p?.isConnected && host.contains(lastDocCaret.p)) return lastDocCaret.range;
+  return null;
+}
+
+function docSelectionIsRange() {
+  const r = docSelectionRange();
+  return !!r && !r.collapsed;
+}
+
+// Tekst treści (bez nagłówka/stopki strony i znaczków list) — liczy się do kroju/rozmiaru.
+function isDocTextNode(n) {
+  const el = n?.parentElement;
+  return !!el && !!el.closest("p") && !el.closest("header, footer, .dwb-page-break");
+}
+
+function currentTextFormat() {
+  const range = docSelectionRange();
+  if (!range) return null;
+  const fmt = textFormatOfRange(range, isDocTextNode);
+  if (!fmt) return null;
+  const pending = range.collapsed ? currentTypingStyle() : null;
+  if (pending) {
+    if (pending.fontSize) fmt.sizePt = cssFontSizeToPt(pending.fontSize) || fmt.sizePt;
+    if (pending.fontFamily) fmt.family = pending.fontFamily;
+    fmt.families = [fmt.family];
+    fmt.sizes = [fmt.sizePt];
+  }
+  return fmt;
+}
+
+function fmtPt(pt) {
+  return String(pt).replace(".", currentLang === "pl" ? "," : ".");
+}
+
+// Wyróżnienie akapitu z kursorem (dawniej :focus akapitu-pola; teraz polem jest cały dokument).
+// Przy zaznaczeniu przez kilka akapitów bez wyróżnienia — widać samo zaznaczenie, jak w Wordzie.
+let caretParaEl = null;
+function markCaretParagraph() {
+  const sel = window.getSelection?.();
+  let p = null;
+  if (sel?.rangeCount && !readOnlyMode) {
+    const r = sel.getRangeAt(0);
+    const at = (n) => (n?.nodeType === 1 ? n : n?.parentElement)?.closest?.(".docx-editable-p");
+    const a = at(r.startContainer);
+    if (a && a === at(r.endContainer) && a.closest(".docx-edit-root")) p = a;
+  }
+  if (p === caretParaEl) return;
+  caretParaEl?.classList.remove("dwb-caret-p");
+  caretParaEl = p;
+  p?.classList.add("dwb-caret-p");
+  if (p) fixHangingBox(p); // ramka akapitu z wysuniętym 1. wierszem (dawniej przy fokusie akapitu)
+}
+
+let formatSyncRaf = 0;
+function scheduleFormatSync() {
+  if (formatSyncRaf) return;
+  formatSyncRaf = requestAnimationFrame(() => { formatSyncRaf = 0; syncFormatIndicators(); });
+}
+
+function syncFormatIndicators() {
+  const fmt = originalFileBytes ? currentTextFormat() : null;
+  const sizeSel = document.getElementById("fmtFontSize");
+  const famSel = document.getElementById("fmtFontFamily");
+  if (sizeSel && document.activeElement !== sizeSel) {
+    const pt = fmt?.sizePt || 0;
+    let cur = sizeSel.querySelector('option[data-cur]');
+    if (pt && !WORD_FONT_SIZES.includes(pt)) {
+      if (!cur) { cur = document.createElement("option"); cur.dataset.cur = "1"; sizeSel.insertBefore(cur, sizeSel.querySelector('option[value="__custom"]')); }
+      cur.value = String(pt); cur.textContent = fmtPt(pt);
+    } else cur?.remove();
+    sizeSel.value = pt ? String(pt) : "";
+  }
+  if (famSel && document.activeElement !== famSel) {
+    const fam = fmt?.family || "";
+    let cur = famSel.querySelector('option[data-cur]');
+    if (fam && ![...famSel.options].some((o) => o.value === fam && !o.dataset.cur)) {
+      // tuż za pustą pozycją (pozostałe są w grupach <optgroup> — nie dzieci listy)
+      if (!cur) { cur = document.createElement("option"); cur.dataset.cur = "1"; famSel.insertBefore(cur, famSel.firstElementChild?.nextSibling || null); }
+      cur.value = fam; cur.textContent = fam;
+    } else cur?.remove();
+    famSel.value = fam;
+    famSel.style.fontFamily = fam ? `"${fam}", var(--font-ui, system-ui)` : "";
+  }
+  const status = document.getElementById("statusFont");
+  if (status) {
+    if (!fmt) { status.textContent = ""; status.hidden = true; return; }
+    const fams = fmt.families.filter(Boolean);
+    const famText = fmt.family || (fams.length > 1 ? t("fontMixed", { n: fams.length }) : fams[0] || "");
+    const sizes = fmt.sizes.filter(Boolean);
+    const sizeText = fmt.sizePt ? `${fmtPt(fmt.sizePt)} pt` : sizes.length > 1 ? `${fmtPt(sizes[0])}–${fmtPt(sizes[sizes.length - 1])} pt` : "";
+    status.textContent = [famText, sizeText].filter(Boolean).join(" · ");
+    status.hidden = !status.textContent;
+  }
+}
+
+// Lista krojów: najpierw te z dokumentu (word/fontTable.xml i użyte w podglądzie), potem popularne.
+let fontListKey = "";
+async function refreshFontFamilyList() {
+  const famSel = document.getElementById("fmtFontFamily");
+  if (!famSel || !originalFileBytes) return;
+  const docFonts = new Set();
+  try {
+    const zip = await loadDocxZipCached(originalFileBytes);
+    const xml = await zip.file("word/fontTable.xml")?.async("string");
+    if (xml) for (const m of xml.matchAll(/<w:font\b[^>]*\bw:name="([^"]+)"/g)) docFonts.add(m[1].replace(/&amp;/g, "&").replace(/&quot;/g, '"'));
+  } catch (_) { /* bez listy z pliku */ }
+  // kroje symboli i dalekowschodnie z tabeli Worda nie są do pisania tekstu
+  const skip = /^(symbol|wingdings.*|webdings|ms mincho|ms gothic|simsun|mangal|batang|mingliu.*|ms ?pmincho|yu .*|dengxian.*|times new roman cyr)$/i;
+  const docList = [...docFonts].filter((f) => !skip.test(f)).sort((a, b) => a.localeCompare(b));
+  const key = `${currentLang}|${docList.join("|")}`;
+  if (key === fontListKey) return;
+  fontListKey = key;
+  famSel.replaceChildren();
+  const blank = new Option("", "");
+  blank.hidden = true;
+  famSel.appendChild(blank);
+  const group = (label, list) => {
+    if (!list.length) return;
+    const g = document.createElement("optgroup");
+    g.label = label;
+    list.forEach((f) => { const o = new Option(f, f); o.style.fontFamily = `"${f}"`; g.appendChild(o); });
+    famSel.appendChild(g);
+  };
+  group(t("fontGroupDoc"), docList);
+  group(t("fontGroupCommon"), COMMON_FONT_FAMILIES.filter((f) => !docFonts.has(f)));
+  famSel.appendChild(new Option(t("fontOther"), "__custom"));
+  syncFormatIndicators();
 }
 
 function resolveParaIndex(p) {
@@ -397,11 +623,11 @@ document.addEventListener("selectionchange", () => {
 // Akapit z kursorem: bieżący, a gdy fokus uciekł do panelu — ostatni zapamiętany (przywrócony).
 function restoreDocCaret() {
   if (readOnlyMode) return null;
-  const active = document.activeElement?.closest?.(".docx-editable-p");
+  const active = docCaretParagraph(document.activeElement);
   if (active) return active;
   const saved = lastDocCaret;
   if (!saved || !saved.p.isConnected || !saved.p.classList.contains("docx-editable-p")) return null;
-  saved.p.focus({ preventScroll: true });
+  focusDocParagraph(saved.p);
   const sel = window.getSelection();
   sel.removeAllRanges();
   try { sel.addRange(saved.range); } catch (_) {
@@ -420,8 +646,11 @@ function asUndoStep(label, fn) {
 // wklejanego tekstu jako <p> w środku akapitu (rozjeżdżało numerację akapitów z plikiem).
 // Kolejne wiersze = łamania wiersza (jak Shift+Enter), całość = jeden krok cofania.
 function onDocPaste(e) {
-  const p = e.target?.closest?.(".docx-editable-p");
-  if (!p || readOnlyMode) return;
+  if (readOnlyMode) return;
+  // wklejenie w miejsce zaznaczenia kilku akapitów: najpierw usuwamy zaznaczenie (doc-selection.js)
+  if (typeof dwbSel !== "undefined") dwbSel.collapseForInsert();
+  const p = docCaretParagraph(e.target);
+  if (!p) return;
   // Apple Notes, Markdown, strony WWW, Google Docs, Word: struktura i proste style (paste-rich.js).
   // Zwykły tekst bez formatowania — dalej niżej, jak dawniej.
   const rich = typeof dwbPaste !== "undefined" ? dwbPaste.parse(e.clipboardData) : null;
@@ -459,7 +688,7 @@ function focusParagraphAtOffset(paraIndex, offset) {
   const host = docCanvasEl?.querySelector(".docx-preview-host");
   const el = collectPreviewParagraphElements(host)[paraIndex];
   if (!el) return;
-  el.focus();
+  focusDocParagraph(el);
   const range = document.createRange();
   const sel = window.getSelection();
   let remaining = Math.max(0, offset);
@@ -514,7 +743,7 @@ function jumpToHeading(delta) {
   if (!headings.length) return false;
   const host = docCanvasEl?.querySelector(".docx-preview-host");
   const paras = collectPreviewParagraphElements(host);
-  const active = document.activeElement?.closest?.("p");
+  const active = docCaretParagraph(document.activeElement);
   let current = active ? resolveParaIndex(active) : -1;
   if (current < 0) current = 0;
   let targetIdx = 0;
@@ -556,7 +785,7 @@ function mergeParagraphDom(prev, curr) {
 
 function placeCaret(el, offset) {
   if (!el) return;
-  el.focus({ preventScroll: true });
+  focusDocParagraph(el);
   const sel = window.getSelection();
   const range = document.createRange();
   let remaining = Math.max(0, offset);
@@ -639,6 +868,11 @@ async function handleInlineBackspace(p, paraIndex, e) {
   const host = docCanvasEl?.querySelector(".docx-preview-host");
   const paras = collectPreviewParagraphElements(host);
   const prev = paras[paraIndex - 1];
+  // poprzedni akapit to sam podział strony — Backspace go usuwa (jak w Wordzie)
+  if (prev?.dataset.lock === "lockPageBreakOnly" && typeof dwbSel !== "undefined") {
+    dwbSel.removeBreakParagraph(paraIndex - 1, p, "after");
+    return;
+  }
   // poprzedni akapit tylko do odczytu (pole, link, przypis…) — sklejenie przepisałoby go i zgubiło zawartość
   if (!prev || prev.dataset.lock) {
     if (prev) toast(t(prev.dataset.lock), "info");
@@ -777,27 +1011,71 @@ function execInlineFormat(command) {
   onInlineParagraphInput();
 }
 
+// Format znakowy dla zaznaczenia (też przez kilka akapitów) albo — bez zaznaczenia — dla dalszego
+// pisania w miejscu kursora. props: { fontSize } / { fontFamily } albo funkcja (węzeł tekstu →
+// cechy) — Powiększ/Pomniejsz czcionkę zmienia każdy rozmiar w zaznaczeniu osobno, jak Word.
+function applyRunFormat(props) {
+  if (readOnlyMode) return false;
+  restoreDocCaret(); // lista/przycisk zabrał fokus — wracamy do zaznaczenia w tekście
+  const range = docSelectionRange({ remembered: false });
+  if (!range) return false;
+  if (range.collapsed) {
+    const p = (range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement)?.closest?.(".docx-editable-p");
+    if (!p) return false;
+    setTypingStyle(typeof props === "function" ? props(null) : props);
+    syncFormatIndicators();
+    return true;
+  }
+  const editableText = (n) => !!n.parentElement?.closest(".docx-editable-p") && isDocTextNode(n);
+  const out = applyRunPropsToRange(range, props, editableText);
+  if (!out) return false;
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(out);
+  onInlineParagraphInput();
+  syncFormatIndicators();
+  return true;
+}
+
 function applyFontSizePt(pt) {
   if (readOnlyMode) return;
-  const raw = String(pt || "").trim();
-  if (!raw) {
-    if (activeTypingStyle) delete activeTypingStyle.fontSize;
-    return;
-  }
-  const sizeStyle = { fontSize: `${raw}pt` };
-  activeTypingStyle = mergeRunStyles(activeTypingStyle || {}, sizeStyle);
-  const p = restoreDocCaret(); // lista rozmiarów zabrała fokus — wracamy do zaznaczenia
-  const sel = window.getSelection();
-  if (p && sel?.rangeCount && !sel.getRangeAt(0).collapsed) {
-    const merged = mergeRunStyles(getInheritedRunStyleAtCaret(p), sizeStyle);
-    if (applyRunStyleToSelection(merged, p)) onInlineParagraphInput();
-  }
+  const n = parseFloat(String(pt || "").replace(",", "."));
+  if (!(n >= 1 && n <= 1638)) { syncFormatIndicators(); return; } // Word: 1–1638 pt
+  applyRunFormat({ fontSize: `${Math.round(n * 2) / 2}pt` });
+}
+
+function applyFontFamily(name) {
+  if (readOnlyMode) return;
+  const fam = String(name || "").trim().replace(/["';{}<>]/g, "");
+  if (!fam) { syncFormatIndicators(); return; }
+  applyRunFormat({ fontFamily: fam });
+}
+
+// Ctrl/⌘+Shift+> / < — następny / poprzedni rozmiar z listy Worda; Ctrl/⌘+] / [ — o 1 pt.
+function stepFontSize(dir, byPoint) {
+  const next = (pt) => {
+    if (byPoint) return Math.max(1, Math.min(1638, Math.round(pt) + dir));
+    if (dir > 0) return WORD_FONT_SIZES.find((s) => s > pt) || Math.min(1638, Math.ceil((pt + 1) / 10) * 10);
+    return [...WORD_FONT_SIZES].reverse().find((s) => s < pt) || Math.max(1, Math.floor(pt - 1));
+  };
+  const fmt = currentTextFormat();
+  const base = fmt?.sizePt || fmt?.sizes?.[0] || 11;
+  applyRunFormat((n) => {
+    const pt = n ? textFormatOfElement(n.parentElement)?.sizePt || base : base;
+    return { fontSize: `${next(pt)}pt` };
+  });
 }
 
 function handleFormatShortcut(e) {
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
+  // rozmiar czcionki jak w Wordzie (e.code — niezależnie od układu klawiatury)
+  if (docCaretParagraph(e.target)) {
+    const grow = e.shiftKey && e.code === "Period" ? [1, false] : e.shiftKey && e.code === "Comma" ? [-1, false]
+      : !e.shiftKey && e.code === "BracketRight" ? [1, true] : !e.shiftKey && e.code === "BracketLeft" ? [-1, true] : null;
+    if (grow) { e.preventDefault(); stepFontSize(...grow); return true; }
+  }
   const cmd = { b: "bold", i: "italic", u: "underline" }[e.key.toLowerCase()];
-  if (!cmd || !e.target.closest?.(".docx-editable-p")) return false;
+  if (!cmd || !docCaretParagraph(e.target)) return false;
   e.preventDefault();
   execInlineFormat(cmd);
   return true;
@@ -823,8 +1101,10 @@ async function onDocCanvasKeydown(e) {
   if (readOnlyMode || e.isComposing) return;
   if (handleFormatShortcut(e)) return;
   if (handleInlineHeadingNav(e)) return;
+  // Ctrl/⌘+A, Enter/Backspace/Delete/Tab przy zaznaczeniu kilku akapitów (doc-selection.js)
+  if (typeof dwbSel !== "undefined" && dwbSel.keydown(e)) return;
 
-  const p = e.target.closest?.(".docx-editable-p");
+  const p = docCaretParagraph(e.target);
   if (!p) return;
   if (p.dataset.noteKey) { dwbNotes.keydown(p, e); return; } // tekst przypisu (doc-notes.js)
 
@@ -874,7 +1154,7 @@ function fixHangingBox(p) {
   p.dataset.hang = "1";
 }
 function onHangingProbe(e) {
-  const p = e.target.closest?.("p");
+  const p = e.target.closest?.("p") || docCaretParagraph(e.target);
   if (p && docCanvasEl.contains(p)) fixHangingBox(p);
 }
 
@@ -883,6 +1163,9 @@ function bindInlineEditKeyboard() {
   inlineKeyboardBound = true;
   docCanvasEl.addEventListener("keydown", onDocCanvasKeydown);
   docCanvasEl.addEventListener("paste", onDocPaste);
+  // input/beforeinput przychodzą do POLA edycji (pojemnik dokumentu albo akapit przypisu) — delegacja
+  docCanvasEl.addEventListener("input", (e) => { if (docCaretParagraph(e.target) || e.target?.classList?.contains("docx-edit-root")) onInlineParagraphInput(); });
+  docCanvasEl.addEventListener("beforeinput", onParagraphBeforeInput);
   docCanvasEl.addEventListener("pointerover", onHangingProbe, { passive: true });
   docCanvasEl.addEventListener("focusin", onHangingProbe);
 }
@@ -891,21 +1174,29 @@ function bindInlineEditKeyboard() {
 // (przy ~6000 akapitach to ~150 ms opóźnienia widocznego Entera, paczka F).
 function prepareEditableParagraph(p) {
   if (!p) return;
-  p.contentEditable = "true";
+  // w pojemniku dokumentu akapit dziedziczy edytowalność (bez własnego pola — inaczej zaznaczenie
+  // znów kończyłoby się na nim); akapit przypisu (w nieedytowalnej liście) jest osobnym polem
+  if (p.parentElement?.isContentEditable) p.removeAttribute("contenteditable");
+  else p.contentEditable = "true";
   p.classList.add("docx-editable-p");
   p.classList.toggle("docx-editable-list", isListParagraph(p));
   p.spellcheck = true;
-  if (!p.dataset.inlineBound) {
-    p.dataset.inlineBound = "1";
-    p.addEventListener("input", onInlineParagraphInput);
-    p.addEventListener("beforeinput", onParagraphBeforeInput);
-  }
 }
 
 function syncInlineEditMode() {
   const host = docCanvasEl?.querySelector(".docx-preview-host");
   if (!host) return;
   const editable = !readOnlyMode && !!originalFileBytes;
+  const root = docEditRoot(host);
+  if (root) {
+    root.classList.toggle("docx-edit-root", editable);
+    if (editable) { root.contentEditable = "true"; root.spellcheck = true; } else root.removeAttribute("contenteditable");
+    // części, w których się nie pisze: nagłówek/stopka strony (osobne okienko), listy przypisów
+    // (ich akapity to osobne pola — doc-notes.js), znaczniki granic stron
+    root.querySelectorAll(":scope > section.docx > header, :scope > section.docx > footer, :scope > section.docx > ol, .dwb-page-break").forEach((el) => {
+      if (editable) el.contentEditable = "false"; else el.removeAttribute("contenteditable");
+    });
+  }
   const paragraphs = collectPreviewParagraphElements(host);
   paragraphs.forEach((p, i) => {
     p.dataset.paraIndex = String(i);
@@ -918,28 +1209,20 @@ function syncInlineEditMode() {
       p.dataset.hintPl = I18N.pl[p.dataset.lock];
       p.dataset.hintEn = I18N.en[p.dataset.lock];
       p.dataset.hintTouch = p.dataset.lock === "lockForm" ? "off" : "on";
+      if (p.dataset.lock === "lockPageBreakOnly") p.dataset.pbLabel = t("pageBreakOnlyLabel");
       p.dataset.lockHint = "1";
       return;
     }
     if (p.dataset.lockHint) { // blokada zdjęta (np. zmiany zaakceptowane) albo tryb Czytanie
       ["hint", "hintPl", "hintEn", "hintTouch", "lockHint"].forEach((k) => delete p.dataset[k]);
     }
-    p.contentEditable = editable ? "true" : "false";
+    p.removeAttribute("contenteditable"); // edytowalność z pojemnika dokumentu
     p.classList.toggle("docx-editable-p", editable);
     p.classList.toggle("docx-editable-list", editable && isListParagraph(p));
     p.spellcheck = editable;
-    if (editable && !p.dataset.inlineBound) {
-      p.dataset.inlineBound = "1";
-      p.addEventListener("input", onInlineParagraphInput);
-      p.addEventListener("beforeinput", onParagraphBeforeInput);
-    }
   });
   if (editable) {
     bindInlineEditKeyboard();
-    if (!docCanvasEl.dataset.formatSelBound) {
-      docCanvasEl.dataset.formatSelBound = "1";
-      document.addEventListener("selectionchange", onFormatSelectionChange);
-    }
   }
   // druga połówka akapitu z podziałem strony: nigdy edytowalna, wyjaśnienie jak przy blokadzie
   host.querySelectorAll("p[data-dwb-cont]").forEach((p) => {
@@ -977,7 +1260,7 @@ function setupInlineEditingAfterRender() {
   refreshInlineEditBaseline(bytes)
     .then(() => markLockedParagraphs(bytes))
     .finally(() => { if (seq === inlineSetupSeq) inlineLocksPending = false; }) // tylko ostatni render zdejmuje
-    .then(() => syncInlineEditMode());
+    .then(() => { syncInlineEditMode(); refreshFontFamilyList(); });
 }
 
 async function mergeInlineEditsIntoBytes() {
@@ -1011,6 +1294,23 @@ function wireFormatToolbar() {
     btn?.addEventListener("mousedown", (e) => e.preventDefault());
     btn?.addEventListener("click", () => execInlineFormat(cmd));
   });
-  document.getElementById("fmtFontSize")?.addEventListener("change", (e) => applyFontSizePt(e.target.value));
+  const askOther = (sel, key, apply) => {
+    // „Inny…” — dowolna wartość jak w polu Worda (np. 10,5 pt albo krój spoza listy)
+    const v = window.prompt(t(key), "");
+    sel.blur();
+    if (v && v.trim()) apply(v.trim()); else syncFormatIndicators();
+  };
+  const sizeSel = document.getElementById("fmtFontSize");
+  sizeSel?.addEventListener("change", (e) => {
+    if (e.target.value === "__custom") askOther(sizeSel, "fontSizeOther", applyFontSizePt);
+    else { applyFontSizePt(e.target.value); sizeSel.blur(); }
+  });
+  const famSel = document.getElementById("fmtFontFamily");
+  famSel?.addEventListener("change", (e) => {
+    if (e.target.value === "__custom") askOther(famSel, "fontFamilyOther", applyFontFamily);
+    else { applyFontFamily(e.target.value); famSel.blur(); }
+  });
+  // pasek formatu i pasek stanu nadążają za kursorem; format „dla dalszego pisania” znika po przestawieniu
+  document.addEventListener("selectionchange", () => { onTypingStyleSelectionChange(); scheduleFormatSync(); markCaretParagraph(); });
 }
 wireFormatToolbar();

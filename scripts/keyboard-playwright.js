@@ -22,7 +22,7 @@ const results = [];
 const check = (name, ok, detail) => results.push({ name, ok: !!ok, detail });
 const active = (page) => page.evaluate(() => {
   const a = document.activeElement;
-  return a ? (a.id || (a.closest(".docx-editable-p") ? "paragraph" : a.className || a.tagName)) : "";
+  return a ? (a.id || (docCaretParagraph(a) ? "paragraph" : a.className || a.tagName)) : "";
 });
 
 async function run() {

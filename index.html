@@ -74,6 +74,9 @@
             <button class="app-menu-item" id="brandRefresh" type="button">
               <span class="app-menu-item-text" data-i18n="menuRefresh">Odśwież aplikację</span><span aria-hidden="true">↻</span>
             </button>
+            <button class="app-menu-item" id="printPreviewMenuItem" type="button">
+              <span class="app-menu-item-text" data-i18n="ppMenu">Podgląd wydruku…</span><span class="app-menu-kbd">Ctrl/⌘+P</span>
+            </button>
             <button class="app-menu-item" id="focusModeMenuItem" type="button">
               <span class="app-menu-item-text" data-i18n="focusModeMenu">Tryb skupienia</span><span class="app-menu-kbd">Ctrl/⌘+Alt+F</span>
             </button>
@@ -806,19 +809,31 @@
                   <button type="button" class="tb-btn format-btn color-btn" id="fmtColorBtn" aria-haspopup="menu" aria-expanded="false" data-i18n-aria="colorLabel" aria-label="Kolor czcionki i wyróżnienie" data-hint data-hint-pl="Kolor czcionki i wyróżnienie tekstu" data-hint-en="Font color and text highlight" data-hint-delay="0.7">
                     <span class="color-btn-a" aria-hidden="true">A</span><span class="color-btn-bar" id="fmtColorBar" aria-hidden="true"></span>
                   </button>
-                  <select id="fmtFontSize" class="tb-select" data-i18n-aria="fmtFontSizeLabel" aria-label="Rozmiar czcionki">
-                    <option value="" data-i18n="fmtFontSizeInherit">Jak w akapicie</option>
-                    <option value="9">9 pt</option>
-                    <option value="10">10 pt</option>
-                    <option value="11">11 pt</option>
-                    <option value="12">12 pt</option>
-                    <option value="14">14 pt</option>
-                    <option value="16">16 pt</option>
-                    <option value="18">18 pt</option>
-                    <option value="20">20 pt</option>
-                    <option value="24">24 pt</option>
-                    <option value="28">28 pt</option>
-                    <option value="36">36 pt</option>
+                  <span class="tb-sep" aria-hidden="true"></span>
+                  <!-- krój i rozmiar w miejscu kursora (jak pola na wstążce Worda); puste = w zaznaczeniu kilka różnych -->
+                  <select id="fmtFontFamily" class="tb-select tb-select-font" data-i18n-aria="fmtFontFamilyLabel" aria-label="Czcionka" data-hint data-hint-pl="Czcionka (krój) w miejscu kursora — zmienia zaznaczenie albo dalsze pisanie" data-hint-en="Font at the cursor — changes the selection or what you type next" data-hint-delay="0.9">
+                    <option value="" hidden></option>
+                  </select>
+                  <select id="fmtFontSize" class="tb-select tb-select-size" data-i18n-aria="fmtFontSizeLabel" aria-label="Rozmiar czcionki" data-hint data-hint-pl="Rozmiar czcionki (Ctrl/⌘+Shift+&gt; / &lt; — większa / mniejsza)" data-hint-en="Font size (Ctrl/⌘+Shift+&gt; / &lt; — grow / shrink)" data-hint-delay="0.9">
+                    <option value="" hidden></option>
+                    <option value="8">8</option>
+                    <option value="9">9</option>
+                    <option value="10">10</option>
+                    <option value="10.5">10,5</option>
+                    <option value="11">11</option>
+                    <option value="12">12</option>
+                    <option value="14">14</option>
+                    <option value="16">16</option>
+                    <option value="18">18</option>
+                    <option value="20">20</option>
+                    <option value="22">22</option>
+                    <option value="24">24</option>
+                    <option value="26">26</option>
+                    <option value="28">28</option>
+                    <option value="36">36</option>
+                    <option value="48">48</option>
+                    <option value="72">72</option>
+                    <option value="__custom" data-i18n="fontSizeOtherOpt">Inny…</option>
                   </select>
                 </div>
                 <div class="zoom-group" role="group" data-i18n-aria="zoomLabel" aria-label="Powiększenie">
@@ -867,6 +882,7 @@
             <span class="status-dirty" id="statusDirty" hidden></span>
             <span id="status">Brak pliku</span>
             <span class="status-words" id="statusWords"></span>
+            <span class="status-font" id="statusFont" hidden data-hint data-hint-pl="Czcionka i rozmiar w miejscu kursora" data-hint-en="Font and size at the cursor" data-hint-delay="0.6"></span>
             <details class="log-panel">
               <summary>Log</summary>
               <div id="log"></div>
@@ -937,6 +953,8 @@
     <script defer src="app/snippets.js?v=20261004-05"></script>
     <script defer src="app/snippet-suggest.js?v=20261004-05"></script>
     <script defer src="app/doc-caret-nav.js?v=20261004-05"></script>
+    <script defer src="app/doc-selection.js?v=20261004-05"></script>
+    <script defer src="app/print-preview.js?v=20261004-05"></script>
     <script defer src="app/edit-tools.js?v=20261004-05"></script>
     <script defer src="app/mobile-doc-zoom.js?v=20261004-05"></script>
     <script defer src="app/ui-controls.js?v=20261004-05"></script>

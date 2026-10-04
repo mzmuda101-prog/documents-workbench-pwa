@@ -1,13 +1,14 @@
 // DOCX preview rendering via docx-preview (lazy-loaded global).
 
-async function renderDocxPreview(bytes, container) {
+// opts.pages: zawsze układ stron (podgląd wydruku rysuje osobny render także w Widoku mobilnym)
+async function renderDocxPreview(bytes, container, opts = {}) {
   if (!container) return;
   container.replaceChildren();
   const wrapper = document.createElement("div");
   wrapper.className = "docx-preview-host";
   container.appendChild(wrapper);
 
-  const mobileReflow = typeof shouldUseMobileReflow === "function" && shouldUseMobileReflow();
+  const mobileReflow = !opts.pages && typeof shouldUseMobileReflow === "function" && shouldUseMobileReflow();
   const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
   await window.docx.renderAsync(ab, wrapper, null, {
     className: "docx",

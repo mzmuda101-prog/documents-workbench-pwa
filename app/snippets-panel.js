@@ -187,7 +187,7 @@ function insertSnippetTriggerAtCaret() {
     return;
   }
   const trigger = formatSnippetTrigger(name);
-  const style = mergeRunStyles(getInheritedRunStyleAtCaret(p), activeTypingStyle);
+  const style = mergeRunStyles(getInheritedRunStyleAtCaret(p), currentTypingStyle());
   asUndoStep("undoOpInsert", () => {
     if (runStyleHasProps(style)) insertStyledTextAtCaret(trigger, style, p);
     else insertTextAtCaret(trigger);

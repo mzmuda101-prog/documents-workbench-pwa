@@ -70,6 +70,8 @@ const body = [
   tip("przełącz na Edycja, kliknij na końcu tego zdania i dopisz kilka słów. Potem zaznacz jedno słowo i kliknij B, I albo U. Na końcu kliknij ↶ — zmiany się cofną."),
   p(["Formatowanie z Worda zostaje: ", { t: "pogrubienie", b: true }, ", ", { t: "kursywa", i: true }, ", ", { t: "podkreślenie", u: true }, ", ", { t: "kolor", color: "C0392B" }, " i ", { t: "wyróżnienie", hl: "yellow" }, "."]),
   p("Enter dzieli akapit, Shift+Enter łamie wiersz w tym samym akapicie, Tab na liście zmienia poziom punktu. Strzałki przechodzą między akapitami, Delete na końcu akapitu dołącza następny, a kliknięcie obok tekstu stawia kursor w najbliższym wierszu."),
+  p("Zaznaczanie jak w Wordzie, także przez wiele akapitów: przeciągnij myszą (na telefonie — uchwytami), Shift+klik, Shift+strzałki albo Ctrl/⌘+A (cała treść). Pisanie, Delete, Wytnij i Wklej zastępują całe zaznaczenie, a B, I, U, kolor, krój i rozmiar zmieniają je w każdym akapicie."),
+  p("Krój i rozmiar czcionki wybierasz na pasku (Ctrl/⌘+Shift+> / < — większa / mniejsza). Pola pokazują to, co jest w miejscu kursora; przy zaznaczeniu z różnymi rozmiarami są puste, a pasek stanu na dole pokazuje np. „Arial · 9–14 pt”. Rozmiar wybrany bez zaznaczenia dotyczy tylko tekstu, który wpiszesz w tym miejscu."),
 
   h1("2. Szukanie oraz Znajdź i zamień"),
   p("Najemca płaci czynsz do dziesiątego dnia miesiąca. Najemca dba o lokal, a najemca pokrywa drobne naprawy. Najemcami mogą być też osoby prawne."),
@@ -117,12 +119,14 @@ const body = [
     { raw: '<w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:footnoteReference w:id="1"/></w:r>' },
     ". Najedź na numer przypisu, żeby zobaczyć jego treść; w Edycji dwuklik przenosi do przypisu na dole strony — jego tekst poprawisz tam jak zwykły akapit (Enter = nowy akapit przypisu), a klik w numer przypisu wraca do tekstu. Lista przypisów jest też w panelu Recenzja.",
   ]),
+  p("Nowy przypis: „＋ Wstaw → Przypis dolny” (Ctrl/⌘+Alt+F) albo „Przypis końcowy” (Ctrl/⌘+Alt+D) — numer pojawia się w miejscu kursora, a kursor przechodzi do tekstu przypisu. Numery idą po kolei w tekście, a skasowanie numeru w tekście usuwa cały przypis (jak w Wordzie)."),
   table([
     ["Funkcja", "Gdzie", "Skrót"],
     ["Szukaj", "pasek nad dokumentem", "Ctrl/⌘+F"],
     ["Cofnij / Ponów", "↶ ↷ na pasku", "Ctrl/⌘+Z / Shift+Z"],
     ["Czytanie ⇄ Edycja", "przełącznik na pasku", "Ctrl/⌘+Alt+E"],
-    ["Tryb skupienia", "przycisk ⛶", "Ctrl/⌘+Alt+F"],
+    ["Tryb skupienia", "przycisk ⛶", "Ctrl/⌘+Alt+F (poza tekstem)"],
+    ["Podgląd wydruku", "menu ⋯", "Ctrl/⌘+P"],
   ]),
   bullet("Lista punktowana — w trybie Edycja Enter dodaje kolejny punkt."),
   bullet("Tab przesuwa punkt poziom niżej, Shift+Tab wyżej."),
@@ -132,6 +136,8 @@ const body = [
   h1("9. Statystyki, eksport i metadane"),
   p("To zdanie jest celowo bardzo długie, bo panel Statystyki pokazuje najdłuższe zdania w dokumencie, a długie zdania, choć czasem potrzebne w umowach i pismach urzędowych, zwykle czyta się trudniej, więc warto je od czasu do czasu podzielić na krótsze i sprawdzić, czy wciąż mówią to samo."),
   tip("panel Statystyki pokaże liczbę słów, czas czytania i to długie zdanie (kliknij je, żeby do niego przejść). Eksport zapisze tekst jako TXT, Markdown, HTML albo PDF. W Metadanych jest autor „Jan Przykładowy” — przycisk „Usuń dane osobowe” wyczyści go przed wysłaniem pliku."),
+
+  p("„Drukuj / zapisz jako PDF” (albo Ctrl/⌘+P) otwiera Podgląd wydruku: prawdziwe kartki z marginesami, nagłówkiem i numerem na każdej stronie — dokładnie tak wyjdą z drukarki. Gdy tekst leży bliżej niż 6,35 mm od krawędzi kartki, podgląd ostrzega: wiele drukarek tam nie drukuje."),
 
   h1("10. Linki i odsyłacze"),
   p(["Spis treści na początku tego pliku to linki do rozdziałów — jak w Wordzie. Ten akapit ma też odsyłacz: szczegóły zapisu są w rozdziale ", xref("_Guide12", "12. Zapis i otwieranie plików"), "."]),
@@ -159,6 +165,7 @@ const body = [
   tip("kliknij w komórkę tabeli z rozdziału 8 — na pasku pojawi się „Tabela”; dodaj wiersz poniżej i wpisz coś, przechodząc Tabem."),
   p("Przycisk „A” na pasku to kolor czcionki (paleta jak w Wordzie, „Automatyczny”, „Więcej kolorów…”) i wyróżnienie tekstu (zakreślacz). Bez zaznaczenia kolor obowiązuje dla dalszego pisania."),
   p("Komentarz: zaznacz tekst i Ctrl/⌘+Alt+M (albo „＋ Wstaw → Komentarz”). Komentowany tekst jest podświetlony; gdy kursor w nim stoi, karta pozwala odpowiedzieć, oznaczyć jako rozwiązany albo usunąć. Wszystkie komentarze są też w panelu Recenzja."),
+  p("„＋ Wstaw → Układ strony…”: marginesy jak w Wordzie (Normalne 2,5 cm, Wąskie, Umiarkowane, Szerokie albo własne w cm), orientacja pionowa/pozioma i rozmiar papieru (A4, A5, Letter…). Zmiany widać na kartkach w Widoku desktopowym i w Podglądzie wydruku."),
   p("„＋ Wstaw → Nagłówek, stopka, numer strony…” (albo kliknięcie w nagłówek/stopkę w Edycji): tekst u góry i na dole każdej strony, numer strony („1”, „Strona 1”, „Strona 1 z 5”, „– 1 –”) i inna pierwsza strona, np. tytułowa bez numeru."),
   tip("zaznacz słowo w tym akapicie, naciśnij Ctrl/⌘+Alt+M i dodaj komentarz — potem kliknij w podświetlony tekst i odpowiedz na niego."),
 

@@ -45,10 +45,12 @@ async function run() {
     { kind: "li", level: 0, text: "raz" }, { kind: "li", level: 1, text: "dwa" },
   ]));
   check("MD: tabela z nagłówkiem, | escapowane, lista zagnieżdżona", model.includes("| A | B\\|c |") && model.includes("| --- | --- |") && model.includes("- raz\n  - dwa"), model);
-  await page.evaluate(() => { window.__printed = 0; });
+  // Druk / PDF → najpierw Podgląd wydruku z kartkami (print-preview.js; szczegóły w test:layout)
   await page.click("#exPrintBtn");
-  await page.waitForFunction(() => [...document.querySelectorAll("iframe")].some((f) => f.srcdoc.includes("docx-wrapper") || f.srcdoc.includes("<h1>")), null, { timeout: 5000 }).catch(() => {});
-  check("Druk: ukryta ramka z treścią dokumentu", await page.evaluate(() => [...document.querySelectorAll("iframe")].some((f) => f.srcdoc.includes("Umowa najmu"))));
+  await page.waitForSelector(".pp-overlay .pp-sheet", { timeout: 20000 }).catch(() => {});
+  check("Druk: podgląd wydruku z kartkami dokumentu", await page.evaluate(() => [...document.querySelectorAll(".pp-sheet")].some((s) => s.textContent.includes("Umowa najmu"))));
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => !document.querySelector(".pp-overlay"), null, { timeout: 5000 }).catch(() => {});
 
   // ── statystyki ─────────────────────────────────────────────────────────────
   await openPanel(page, "panel-stats");

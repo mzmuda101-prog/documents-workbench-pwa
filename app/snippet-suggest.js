@@ -140,13 +140,13 @@
     let values = {};
     if (fields.length) {
       values = await askSnippetFields(sn, fields);
-      if (!values) { p.focus(); if (saved) { const s = getSelection(); s.removeAllRanges(); s.addRange(saved); } return false; }
-      p.focus({ preventScroll: true });
+      if (!values) { focusDocParagraph(p); if (saved) { const s = getSelection(); s.removeAllRanges(); s.addRange(saved); } return false; }
+      focusDocParagraph(p);
       if (saved) { const s = getSelection(); s.removeAllRanges(); s.addRange(saved); }
     }
     const forms = [];
     body = fillFields(body, values, forms);
-    const style = mergeRunStyles(getInheritedRunStyleAtCaret(p), activeTypingStyle);
+    const style = mergeRunStyles(getInheritedRunStyleAtCaret(p), currentTypingStyle());
     if (forms.length) return insertWithFormFields(p, body, forms, deleteLen, trailing, style);
     const hasMark = body.includes(SNIPPET_CURSOR_MARK);
     asUndoStep("undoOpSnippet", () => {
@@ -214,13 +214,13 @@
   // dlatego krótka historia stanów tekstu przed kursorem (ostatnie zmiany z ~0,6 s).
   const recent = []; // { p, text, at }
   docCanvasEl?.addEventListener("beforeinput", (e) => {
-    const p = e.target?.closest?.(".docx-editable-p");
+    const p = docCaretParagraph(e.target);
     if (!p) return;
     recent.push({ p, text: getTextBeforeCaret(p), at: performance.now() });
     if (recent.length > 4) recent.shift();
   }, true);
   docCanvasEl?.addEventListener("input", (e) => {
-    const p = e.target?.closest?.(".docx-editable-p");
+    const p = docCaretParagraph(e.target);
     if (!p) return;
     const now = getTextBeforeCaret(p);
     if (!/[^\s!]!$/u.test(now)) return; // „słowo!” — tylko wtedy coś mogło zjeść spację

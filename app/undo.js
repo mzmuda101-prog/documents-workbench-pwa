@@ -42,6 +42,8 @@ const UNDO_OP_LABEL = {
   snippetInsert: "undoOpSnippet",
   pasteBlocks: "undoOpPaste",
   pageVAlign: "undoOpFormat",
+  pageSetup: "undoOpPageSetup",
+  noteInsert: "undoOpNote",
   tableInsert: "undoOpTable",
   table: "undoOpTable",
   imageInsert: "undoOpImage",
@@ -70,7 +72,7 @@ const dwbUndo = (() => {
   }
 
   function currentCaret() {
-    const p = document.activeElement?.closest?.(".docx-editable-p");
+    const p = docCaretParagraph(document.activeElement);
     if (!p || !docCanvasEl?.contains(p)) return null;
     return { paraIndex: resolveParaIndex(p), offset: getCaretOffset(p) };
   }
@@ -229,12 +231,14 @@ const dwbUndo = (() => {
     if (!(n > 0) && entry) drop(entry);
     return n;
   };
-  // Formatowanie zaznaczenia: osobny krok.
-  ["execInlineFormat", "applyFontSizePt"].forEach((name) => {
+  // Formatowanie zaznaczenia: osobny krok. Bez zaznaczenia (format dla dalszego pisania) nic
+  // się w dokumencie nie zmienia — kroku nie ma (dawniej pusty krok „Formatowanie”).
+  ["execInlineFormat", "applyFontSizePt", "applyFontFamily", "stepFontSize"].forEach((name) => {
     const orig = window[name];
     if (typeof orig !== "function") return;
     window[name] = function formatUndoable(...args) {
-      if (!readOnlyMode) { endBurst(); push("undoOpFormat"); endBurst(); }
+      const changes = name === "execInlineFormat" || typeof docSelectionIsRange !== "function" || docSelectionIsRange();
+      if (!readOnlyMode && changes) { endBurst(); push("undoOpFormat"); endBurst(); }
       return orig.apply(this, args);
     };
   });
@@ -242,11 +246,11 @@ const dwbUndo = (() => {
   // (preventDefault), więc łapiemy je w keydown w fazie capture; resztę — beforeinput.
   docCanvasEl?.addEventListener("keydown", (e) => {
     if (e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
-    if (!e.target.closest?.(".docx-editable-p")) return;
+    if (!docCaretParagraph(e.target)) return;
     if (["Enter", "Backspace", "Delete", "Tab"].includes(e.key)) typing();
   }, true);
   docCanvasEl?.addEventListener("beforeinput", (e) => {
-    if (!e.target.closest?.(".docx-editable-p")) return;
+    if (!docCaretParagraph(e.target)) return;
     if (e.inputType === "historyUndo" || e.inputType === "historyRedo") {
       // menu Edycja → Cofnij, potrząśnięcie iPhone'em: cofanie aplikacji, nie przeglądarki
       e.preventDefault();
@@ -294,7 +298,7 @@ const dwbUndo = (() => {
     if (!originalFileBytes) return;
     const a = document.activeElement;
     const tag = String(a?.tagName || "").toLowerCase();
-    const inDoc = !!a?.closest?.(".docx-editable-p");
+    const inDoc = !!a?.closest?.(".docx-editable-p, .docx-edit-root");
     if (!inDoc && (a?.isContentEditable || tag === "textarea" || (tag === "input" && !["checkbox", "radio", "button", "range"].includes(a.type)) || tag === "select")) return;
     e.preventDefault();
     step(isY || e.shiftKey ? "redo" : "undo");

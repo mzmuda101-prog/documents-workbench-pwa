@@ -146,7 +146,7 @@ const appFrame = (() => {
 
   // Wpisywanie w podglądzie → dotknięty akapit (delegacja, bez ruszania docx-inline-edit.js).
   docCanvasEl?.addEventListener("input", (e) => {
-    const p = e.target.closest?.(".docx-editable-p");
+    const p = docCaretParagraph(e.target);
     if (p && p.dataset.paraIndex != null) { touchedParas.add(p.dataset.paraIndex); syncSave(); }
   }, true);
 

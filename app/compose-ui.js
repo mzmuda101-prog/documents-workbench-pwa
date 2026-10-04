@@ -312,7 +312,9 @@ const composeUi = (() => {
     const el = document.createElement("div");
     el.className = "compose-pop";
     el.setAttribute("role", "menu");
-    build(el);
+    const built = build(el);
+    // okienko budowane asynchronicznie (czyta plik, np. Układ strony) — położenie po zbudowaniu
+    if (built?.then) built.then(() => { if (pop?.el === el) placePop(el, anchor); }).catch(() => {});
     // przyciski nie zabierają fokusu z dokumentu (kursor i klawiatura ekranowa zostają)
     el.addEventListener("mousedown", (e) => { if (e.target.closest("button")) e.preventDefault(); });
     el.addEventListener("keydown", (e) => {
@@ -376,6 +378,11 @@ const composeUi = (() => {
       onPick: () => openPop(insertBtn, buildPageVAlignMenu),
     });
     popItem(el, {
+      label: t("pageSetup"), desc: t("pageSetupDesc"),
+      icon: ICON('<rect x="5" y="2.5" width="14" height="19" rx="1.5"/><rect x="8" y="6" width="8" height="12" rx=".5" stroke-dasharray="2 1.6"/>'),
+      onPick: () => openPop(insertBtn, buildPageSetupMenu),
+    });
+    popItem(el, {
       label: t("insertHrule"), desc: t("insertHruleDesc"),
       icon: ICON('<line x1="3" y1="12" x2="21" y2="12"/>'),
       onPick: insertHrule,
@@ -390,6 +397,16 @@ const composeUi = (() => {
       label: t("insertComment"), desc: t("insertCommentDesc"), kbd: "Ctrl/⌘+Alt+M",
       icon: ICON('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="13" y2="13"/>'),
       onPick: () => openCommentForm(insertBtn),
+    });
+    popItem(el, {
+      label: t("insertFootnote"), desc: t("insertFootnoteDesc"), kbd: "Ctrl/⌘+Alt+F",
+      icon: ICON('<line x1="4" y1="7" x2="15" y2="7"/><path d="M17.5 4.5v4"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18.5" x2="11" y2="18.5"/><path d="M13 18.5h7" stroke-dasharray="1.5 1.5"/>'),
+      onPick: () => insertNote("footnote"),
+    });
+    popItem(el, {
+      label: t("insertEndnote"), desc: t("insertEndnoteDesc"), kbd: "Ctrl/⌘+Alt+D",
+      icon: ICON('<line x1="4" y1="6" x2="15" y2="6"/><path d="M17.5 3.5v4"/><line x1="4" y1="11" x2="20" y2="11"/><line x1="4" y1="16" x2="20" y2="16"/><path d="M4 20.5h16"/>'),
+      onPick: () => insertNote("endnote"),
     });
     popItem(el, {
       label: t("insertDate"), desc: todayText(),
@@ -893,7 +910,7 @@ const composeUi = (() => {
     return ICON(`<rect x="2.5" y="2.5" width="19" height="19" rx="2" stroke-width="1.4" opacity=".55"/>${line(10, y[0])}${line(6, y[1])}`);
   }
   function currentCellAlign() {
-    const p = docCanvasEl?.querySelector?.(".docx-editable-p:focus") || (typeof lastDocCaret !== "undefined" ? lastDocCaret?.p : null);
+    const p = docCaretParagraph(document.activeElement) || (typeof lastDocCaret !== "undefined" ? lastDocCaret?.p : null);
     const td = p?.closest?.("td, th");
     if (!td) return {};
     const va = getComputedStyle(td).verticalAlign;
@@ -980,6 +997,174 @@ const composeUi = (() => {
       const cur = doc ? composeSectionVAlign(doc, index) : "top";
       items.forEach((b) => { b.setAttribute("aria-checked", String(b.dataset.v === cur)); b.classList.toggle("is-current", b.dataset.v === cur); });
     }).catch(() => {});
+  }
+
+  // ── przypisy: Wstaw → Przypis dolny / końcowy (jak Word: Odwołania → Wstaw przypis) ──────
+  // Odnośnik w miejscu kursora (przy zaznaczeniu — za nim), numer jak w Wordzie, kursor od razu
+  // w tekście nowego przypisu na dole strony / na końcu dokumentu.
+  function modelOffsetAt(p, node, offset) {
+    const pre = document.createRange();
+    pre.selectNodeContents(p);
+    pre.setEnd(node, offset);
+    const tmp = document.createElement("p");
+    tmp.appendChild(pre.cloneContents());
+    return previewRunsToPlainText(extractRunsFromPreviewParagraph(tmp)).length;
+  }
+  async function insertNote(kind) {
+    const p = caretParagraph();
+    if (!p) return;
+    if (p.dataset.noteKey) { toast(t("noteInNote"), "info"); return; }
+    if (p.dataset.lock) { toast(t(p.dataset.lock), "info"); return; }
+    const index = resolveParaIndex(p);
+    if (index < 0) return;
+    const r = window.getSelection().getRangeAt(0);
+    const offset = p.contains(r.endContainer) ? modelOffsetAt(p, r.endContainer, r.endOffset) : 0;
+    let id = 1;
+    try {
+      await mergeInlineEditsIntoBytes();
+      const zip = await loadDocxZipCached(originalFileBytes);
+      id = noteNextId(await zip.file(NOTE_PART[kind])?.async("string"), kind);
+    } catch (_) { /* id policzy zapis */ }
+    await runFileEdit({ op: "noteInsert", kind, index, offset, id }, { paraIndex: index, offset });
+    await whenEditable();
+    const li = host()?.querySelector(`ol.dwb-notes > li[data-dwb-note="${kind}:${id}"]`);
+    const np = li && [...li.children].filter((c) => c.tagName === "P" && c.isContentEditable).pop();
+    if (np) {
+      np.scrollIntoView({ block: "center" });
+      placeCaret(np, Number.MAX_SAFE_INTEGER);
+    }
+  }
+
+  // ── układ strony: marginesy, orientacja, rozmiar (Word: Układ → Marginesy / Orientacja / Rozmiar) ──
+  // Gotowe marginesy jak w polskim Wordzie (twipy; 1 cm = 567). Zmiana dotyczy sekcji z kursorem
+  // (w dokumencie z jedną sekcją = całego), „Marginesy niestandardowe…” pozwala wybrać zakres.
+  const MARGIN_PRESETS = [
+    ["normal", "marginNormal", { top: 1418, bottom: 1418, left: 1418, right: 1418 }],
+    ["narrow", "marginNarrow", { top: 720, bottom: 720, left: 720, right: 720 }],
+    ["moderate", "marginModerate", { top: 1440, bottom: 1440, left: 1080, right: 1080 }],
+    ["wide", "marginWide", { top: 1440, bottom: 1440, left: 2880, right: 2880 }],
+  ];
+  const PAPER_SIZES = [["A4", 11906, 16838], ["A5", 8391, 11906], ["Letter", 12240, 15840], ["Legal", 12240, 20160], ["A3", 16838, 23811]];
+  const TW_PER_CM = 1440 / 2.54;
+  // martwa strefa typowej drukarki (¼ cala) — margines mniejszy = ostrzeżenie (jak Word)
+  const PRINTER_MIN_TW = 360;
+  const cmText = (tw) => (Math.round(tw / TW_PER_CM * 100) / 100).toLocaleString(currentLang === "en" ? "en-GB" : "pl-PL", { maximumFractionDigits: 2 });
+  const sameTw = (a, b) => Math.abs(a - b) <= 6;
+
+  async function pageSetupAtCaret() {
+    const p = typeof restoreDocCaret === "function" ? restoreDocCaret() : null;
+    const index = p ? Math.max(0, resolveParaIndex(p)) : 0;
+    const doc = await getDocumentXmlDom(originalFileBytes);
+    return { p, index, cur: doc ? composeSectionPageSetup(doc, index) : null };
+  }
+
+  function runPageSetup(edit, ctx) {
+    pageSetupReflowHint();
+    return runFileEdit({ op: "pageSetup", index: ctx.index, scope: "section", ...edit }, ctx.p ? caretState(ctx.p) : null);
+  }
+  // Widok mobilny przekłada tekst na szerokość ekranu — kartek i marginesów tam nie widać
+  function pageSetupReflowHint() {
+    if (typeof shouldUseMobileReflow === "function" && shouldUseMobileReflow()) toast(t("pageSetupMobileHint"), "info");
+  }
+
+  // Czy marginesy zostawiają miejsce na tekst (Word odmawia, gdy kolumna byłaby za wąska).
+  function marginsFit(m, cur) {
+    return cur.w - m.left - m.right >= 1440 && cur.h - m.top - m.bottom >= 1440;
+  }
+
+  async function buildPageSetupMenu(el) {
+    el.classList.add("compose-pop-insert");
+    await mergeInlineEditsIntoBytes().catch(() => {});
+    const ctx = await pageSetupAtCaret();
+    const cur = ctx.cur || { w: 11906, h: 16838, orient: "portrait", top: 1418, bottom: 1418, left: 1418, right: 1418, sections: 1 };
+    const mark = (b, on) => { b.setAttribute("role", "menuitemradio"); b.setAttribute("aria-checked", String(on)); b.classList.toggle("is-current", on); };
+    popCap(el, t("pageMargins"));
+    MARGIN_PRESETS.forEach(([key, label, m]) => {
+      const desc = m.left === m.top ? t("marginAll", { v: cmText(m.top) }) : t("marginTBLR", { tb: cmText(m.top), lr: cmText(m.left) });
+      const b = popItem(el, {
+        label: t(label), desc,
+        icon: ICON(`<rect x="4" y="2.5" width="16" height="19" rx="1.5"/><rect x="${4 + m.left / 720}" y="${2.5 + m.top / 720}" width="${16 - (m.left + m.right) / 720}" height="${19 - (m.top + m.bottom) / 720}" rx=".4" stroke-dasharray="1.6 1.4"/>`),
+        onPick: () => {
+          if (!marginsFit(m, cur)) { toast(t("marginTooBig"), "warning"); return; }
+          runPageSetup({ margins: m }, ctx);
+        },
+      });
+      b.dataset.preset = key;
+      mark(b, ["top", "bottom", "left", "right"].every((k) => sameTw(m[k], cur[k])));
+    });
+    const custom = popItem(el, {
+      label: t("marginCustom"),
+      desc: t("marginCurrent", { t: cmText(cur.top), b: cmText(cur.bottom), l: cmText(cur.left), r: cmText(cur.right) }),
+      icon: ICON('<rect x="4" y="2.5" width="16" height="19" rx="1.5"/><path d="M8 8h8M8 12h5M8 16h6"/>'),
+      onPick: () => openPop(insertBtn, (form) => buildMarginForm(form, ctx, cur)),
+    });
+    custom.dataset.preset = "custom";
+    popCap(el, t("pageOrient"));
+    [["portrait", "orientPortrait", '<rect x="6" y="2.5" width="12" height="19" rx="1.5"/>'], ["landscape", "orientLandscape", '<rect x="2.5" y="6" width="19" height="12" rx="1.5"/>']].forEach(([val, key, svg]) => {
+      const b = popItem(el, { label: t(key), icon: ICON(svg), onPick: () => runPageSetup({ orient: val }, ctx) });
+      b.dataset.orient = val;
+      mark(b, cur.orient === val);
+    });
+    popCap(el, t("pageSize"));
+    PAPER_SIZES.forEach(([name, w, h]) => {
+      const b = popItem(el, {
+        label: name, desc: `${cmText(w)} × ${cmText(h)} cm`,
+        icon: ICON('<path d="M7 2.5h7l4 4v15H7z"/><path d="M14 2.5v4h4"/>'),
+        onPick: () => runPageSetup({ size: { w, h } }, ctx),
+      });
+      b.dataset.size = name;
+      mark(b, sameTw(Math.min(cur.w, cur.h), w) && sameTw(Math.max(cur.w, cur.h), h));
+    });
+  }
+
+  function buildMarginForm(el, ctx, cur) {
+    el.classList.add("compose-pop-form", "compose-pop-margins");
+    el.innerHTML = `<div class="compose-cap"></div>
+      <div class="mf-grid">
+        ${["top", "bottom", "left", "right"].map((k) => `<label class="compose-field"><span></span><input type="text" class="mf-${k}" inputmode="decimal" autocomplete="off" enterkeyhint="done"></label>`).join("")}
+      </div>
+      <label class="compose-field mf-scope-field"><span></span><select class="mf-scope"></select></label>
+      <p class="compose-note mf-warn" hidden></p>
+      <div class="compose-actions"><span class="compose-actions-gap"></span><button type="button" class="btn lf-cancel"></button><button type="button" class="btn primary lf-ok"></button></div>`;
+    el.querySelector(".compose-cap").textContent = t("marginCustomTitle");
+    const keys = ["top", "bottom", "left", "right"];
+    const labels = el.querySelectorAll(".mf-grid .compose-field > span");
+    keys.forEach((k, i) => {
+      labels[i].textContent = t(`margin_${k}`);
+      const inp = el.querySelector(`.mf-${k}`);
+      inp.value = cmText(cur[k]); // przecinek po polsku; przyjmujemy też kropkę
+      if (i === 0) inp.dataset.autofocus = "1";
+    });
+    el.querySelector(".mf-scope-field > span").textContent = t("marginScope");
+    const scope = el.querySelector(".mf-scope");
+    scope.appendChild(new Option(t("marginScopeAll"), "all"));
+    if (cur.sections > 1) scope.appendChild(new Option(t("marginScopeSection"), "section"));
+    el.querySelector(".mf-scope-field").hidden = cur.sections <= 1;
+    const warn = el.querySelector(".mf-warn");
+    const read = () => Object.fromEntries(keys.map((k) => [k, Math.round(parseFloat(String(el.querySelector(`.mf-${k}`).value).replace(",", ".")) * TW_PER_CM)]));
+    const check = () => {
+      const m = read();
+      const bad = keys.some((k) => !Number.isFinite(m[k]) || m[k] < 0);
+      const tight = !bad && keys.some((k) => m[k] < PRINTER_MIN_TW);
+      warn.hidden = !(bad || tight || !marginsFit(m, cur));
+      warn.textContent = bad ? t("marginBad") : !marginsFit(m, cur) ? t("marginTooBig") : t("marginPrinterWarn");
+      warn.classList.toggle("is-error", bad || !marginsFit(m, cur));
+      return !bad && marginsFit(m, cur);
+    };
+    el.addEventListener("input", check);
+    check();
+    el.querySelector(".lf-cancel").textContent = t("linkCancel");
+    el.querySelector(".lf-cancel").addEventListener("click", () => closePop());
+    const ok = el.querySelector(".lf-ok");
+    ok.textContent = t("marginApply");
+    const submit = () => {
+      if (!check()) return;
+      closePop();
+      pageSetupReflowHint();
+      runFileEdit({ op: "pageSetup", index: ctx.index, scope: scope.value || "all", margins: read() }, ctx.p ? caretState(ctx.p) : null);
+    };
+    ok.addEventListener("click", submit);
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.closest("input")) { e.preventDefault(); submit(); } });
   }
 
   // Tab / Shift+Tab w komórce = następna / poprzednia komórka; Tab w ostatniej = nowy wiersz (jak Word).
@@ -1227,7 +1412,7 @@ const composeUi = (() => {
     const el = collectPreviewParagraphElements(host())[index];
     const r = el && formDomRange(el, start, end);
     if (!r) return;
-    el.focus({ preventScroll: true });
+    focusDocParagraph(el);
     const sel = window.getSelection();
     sel.removeAllRanges();
     sel.addRange(r);
@@ -1241,9 +1426,9 @@ const composeUi = (() => {
     const css = kind === "color" ? (value ? `#${value}` : "#000000") : (value ? (value.length === 6 && /^[0-9A-F]+$/i.test(value) ? `#${value}` : value.toLowerCase()) : "");
     if (ctx.collapsed) {
       // bez zaznaczenia — kolor dla dalszego pisania (jak w Wordzie)
-      activeTypingStyle = mergeRunStyles(activeTypingStyle || {}, { [kind]: css || undefined });
-      if (!css && activeTypingStyle) delete activeTypingStyle[kind];
       restoreDocCaret();
+      setTypingStyle({ [kind]: css || undefined }); // obowiązuje w tym miejscu kursora (docx-inline-edit.js)
+      if (!css && activeTypingStyle) delete activeTypingStyle[kind];
       return;
     }
     const edit = { op: "runStyle", index: ctx.index, start: ctx.start, end: ctx.end };
@@ -1504,10 +1689,16 @@ const composeUi = (() => {
     return { list: out, total: Math.max(1, page - 1) };
   }
 
-  function fixPreviewPageNumbers() {
+  // Fragmenty z numerem strony (styl znakowy „page number” pól PAGE / NUMPAGES) — też dla
+  // podglądu wydruku (print-preview.js), który numeruje każdą kartkę.
+  function pageNumberSelector() {
     const cls = [...docComposeStyleClasses].filter(([, k]) => k === "pagenum").map(([c]) => c);
-    if (!cls.length) return;
-    const sel = cls.map((c) => `span.${CSS.escape(c)}`).join(",");
+    return cls.map((c) => `span.${CSS.escape(c)}`).join(",");
+  }
+
+  function fixPreviewPageNumbers() {
+    const sel = pageNumberSelector();
+    if (!sel) return;
     const { list, total } = sectionPages();
     list.forEach(({ sec, first, last }) => {
       sec.querySelectorAll(":scope > header, :scope > footer").forEach((part) => {
@@ -1692,8 +1883,6 @@ const composeUi = (() => {
   colorBtn?.addEventListener("mousedown", (e) => e.preventDefault());
   colorBtn?.addEventListener("click", () => openPop(colorBtn, buildColorMenu));
   syncColorBar();
-  // kolor „do dalszego pisania” obowiązuje do kliknięcia w inne miejsce (jak w Wordzie)
-  docCanvasEl?.addEventListener("pointerdown", () => { if (activeTypingStyle) { delete activeTypingStyle.color; delete activeTypingStyle.highlight; } }, true);
   tableBtn?.addEventListener("mousedown", (e) => e.preventDefault());
   tableBtn?.addEventListener("click", () => openPop(tableBtn, buildTableMenu));
 
@@ -1721,10 +1910,12 @@ const composeUi = (() => {
 
   // Wklejony obraz (zrzut ekranu, skopiowane zdjęcie) — w miejscu kursora, jak „Wstaw → Obraz”.
   docCanvasEl?.addEventListener("paste", (e) => {
-    const p = e.target?.closest?.(".docx-editable-p");
-    if (!p || readOnlyMode) return;
+    if (readOnlyMode) return;
     const file = Array.from(e.clipboardData?.files || []).find((f) => /^image\//.test(f.type));
     if (!file) return;
+    if (typeof dwbSel !== "undefined") dwbSel.collapseForInsert(); // obraz w miejsce zaznaczenia kilku akapitów
+    const p = docCaretParagraph(e.target);
+    if (!p) return;
     e.preventDefault();
     e.stopImmediatePropagation();
     insertImageFile(file, p);
@@ -1749,7 +1940,7 @@ const composeUi = (() => {
   // Ctrl/⌘+Alt+M = komentarz (jak w Wordzie; po e.code — Alt na Macu zmienia znak)
   document.addEventListener("keydown", (e) => {
     if (!(e.ctrlKey || e.metaKey) || !e.altKey || e.shiftKey || e.code !== "KeyM") return;
-    if (readOnlyMode || !originalFileBytes || (!e.target.closest?.(".docx-editable-p") && !lastDocCaret)) return;
+    if (readOnlyMode || !originalFileBytes || (!docCaretParagraph(e.target) && !lastDocCaret)) return;
     e.preventDefault();
     e.stopPropagation();
     openCommentForm(insertBtn);
@@ -1758,11 +1949,21 @@ const composeUi = (() => {
   window.addEventListener("resize", () => closePop());
   window.visualViewport?.addEventListener("resize", () => { if (pop) placePop(pop.el, pop.anchor); });
 
+  // Ctrl/⌘+Alt+F / D = przypis dolny / końcowy (jak w Wordzie) — w Edycji z kursorem w tekście;
+  // poza tekstem Ctrl/⌘+Alt+F dalej włącza tryb skupienia (keyboard.js)
+  document.addEventListener("keydown", (e) => {
+    if (!(e.ctrlKey || e.metaKey) || !e.altKey || e.shiftKey || (e.code !== "KeyF" && e.code !== "KeyD")) return;
+    if (readOnlyMode || !originalFileBytes || !docCaretParagraph(e.target)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    insertNote(e.code === "KeyF" ? "footnote" : "endnote");
+  }, true);
+
   // Ctrl/⌘+K = link (jak w Wordzie)
   document.addEventListener("keydown", (e) => {
     if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.code !== "KeyK") return;
     if (readOnlyMode || !originalFileBytes) return;
-    if (!e.target.closest?.(".docx-editable-p") && !lastDocCaret) return;
+    if (!docCaretParagraph(e.target) && !lastDocCaret) return;
     e.preventDefault();
     e.stopPropagation();
     openLinkForm(insertBtn);
@@ -1771,7 +1972,7 @@ const composeUi = (() => {
   // Ctrl/⌘+Enter w tekście = podział strony (jak w Wordzie). Przed obsługą Entera w akapicie.
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.isComposing) return;
-    if (readOnlyMode || !e.target.closest?.(".docx-editable-p")) return;
+    if (readOnlyMode || !docCaretParagraph(e.target)) return;
     e.preventDefault();
     e.stopPropagation();
     insertPageBreak();
@@ -1799,5 +2000,5 @@ const composeUi = (() => {
     document.getElementById(id)?.addEventListener("click", openNewDialog);
   });
 
-  return { openHeaderFooterForm, fixPreviewPageNumbers, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, openLinkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
+  return { insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, openLinkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
 })();

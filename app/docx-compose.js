@@ -977,6 +977,92 @@ function applyPageVAlignInXml(xml, edit) {
   return { xml: composeSerialize(doc), count: 1 };
 }
 
+// ── op "pageSetup": marginesy, orientacja, rozmiar papieru (Word: Układ → Marginesy / Orientacja / Rozmiar)
+// Sekcja akapitu z kursorem (scope „section”, jak Word dla bieżącej sekcji) albo wszystkie
+// (scope „all” — „Zastosuj do: cały dokument”). Wartości w twipach (1 cm = 567).
+// margins: { top, bottom, left, right }; orient: "portrait" | "landscape" (zmiana obraca kartkę
+// i marginesy: górny↔lewy, dolny↔prawy — jak Word); size: { w, h } w pionie.
+const COMPOSE_SECTPR_AFTER_PGMAR = ["paperSrc", "pgBorders", "lnNumType", "pgNumType", "cols", "formProt", "vAlign", "noEndnote", "titlePg", "textDirection", "bidi", "rtlGutter", "docGrid", "printerSettings", "sectPrChange"];
+function composeAllSections(doc) {
+  const out = [];
+  collectParagraphElements(doc.documentElement, "all").forEach((p) => {
+    const pPr = composeDirectChild(p, "pPr");
+    const s = pPr && composeDirectChild(pPr, "sectPr");
+    if (s) out.push(s);
+  });
+  const body = composeDirectChild(doc.getElementsByTagNameNS(W_NS, "body")[0], "sectPr");
+  if (body) out.push(body);
+  return out;
+}
+function composeSectionAt(doc, index) {
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  for (let i = Math.max(0, index | 0); i < paragraphs.length; i++) {
+    const pPr = composeDirectChild(paragraphs[i], "pPr");
+    const s = pPr && composeDirectChild(pPr, "sectPr");
+    if (s) return s;
+  }
+  const body = doc.getElementsByTagNameNS(W_NS, "body")[0];
+  let s = composeDirectChild(body, "sectPr");
+  if (!s) { s = doc.createElementNS(W_NS, "w:sectPr"); body.appendChild(s); }
+  return s;
+}
+// Ustawienia strony sekcji (do zaznaczenia w menu); brak wpisów = A4 pionowo, marginesy 2,5 cm.
+function composeSectionPageSetup(doc, index) {
+  const sect = composeSectionAt(doc, index);
+  const pgSz = composeDirectChild(sect, "pgSz");
+  const mar = composeDirectChild(sect, "pgMar");
+  const num = (el, a, d) => { const v = parseInt(el?.getAttributeNS(W_NS, a) || "", 10); return Number.isFinite(v) ? v : d; };
+  const w = num(pgSz, "w", 11906), h = num(pgSz, "h", 16838);
+  return {
+    w, h, orient: pgSz?.getAttributeNS(W_NS, "orient") === "landscape" || w > h ? "landscape" : "portrait",
+    top: num(mar, "top", 1418), bottom: num(mar, "bottom", 1418), left: num(mar, "left", 1418), right: num(mar, "right", 1418),
+    sections: composeAllSections(doc).length || 1,
+  };
+}
+function composeEnsurePageEls(doc, sect) {
+  let pgSz = composeDirectChild(sect, "pgSz");
+  let mar = composeDirectChild(sect, "pgMar");
+  const after = () => COMPOSE_SECTPR_AFTER_PGMAR.map((n) => composeDirectChild(sect, n)).find(Boolean) || null;
+  if (!mar) {
+    mar = composeEl(doc, "pgMar", { top: "1418", right: "1418", bottom: "1418", left: "1418", header: "709", footer: "709", gutter: "0" });
+    sect.insertBefore(mar, after());
+  }
+  if (!pgSz) {
+    pgSz = composeEl(doc, "pgSz", { w: "11906", h: "16838" });
+    sect.insertBefore(pgSz, mar);
+  }
+  return { pgSz, mar };
+}
+function applyPageSetupInXml(xml, edit) {
+  const doc = composeParse(xml);
+  const targets = edit.scope === "all" ? composeAllSections(doc) : [composeSectionAt(doc, edit.index)];
+  if (!targets.length) targets.push(composeSectionAt(doc, 0));
+  const get = (el, a) => parseInt(el.getAttributeNS(W_NS, a) || "0", 10) || 0;
+  const set = (el, a, v) => el.setAttributeNS(W_NS, `w:${a}`, String(Math.max(0, Math.round(v))));
+  let count = 0;
+  for (const sect of targets) {
+    const { pgSz, mar } = composeEnsurePageEls(doc, sect);
+    let w = get(pgSz, "w") || 11906;
+    let h = get(pgSz, "h") || 16838;
+    const landscape = pgSz.getAttributeNS(W_NS, "orient") === "landscape" || w > h;
+    if (edit.size) {
+      const a = Math.min(edit.size.w, edit.size.h), b = Math.max(edit.size.w, edit.size.h);
+      [w, h] = landscape ? [b, a] : [a, b];
+    }
+    if (edit.orient && (edit.orient === "landscape") !== landscape) {
+      [w, h] = [h, w];
+      const m = { top: get(mar, "top"), bottom: get(mar, "bottom"), left: get(mar, "left"), right: get(mar, "right") };
+      set(mar, "top", m.left); set(mar, "left", m.top); set(mar, "bottom", m.right); set(mar, "right", m.bottom);
+    }
+    set(pgSz, "w", w);
+    set(pgSz, "h", h);
+    if (w > h) pgSz.setAttributeNS(W_NS, "w:orient", "landscape"); else pgSz.removeAttributeNS(W_NS, "orient");
+    if (edit.margins) ["top", "bottom", "left", "right"].forEach((k) => { if (Number.isFinite(edit.margins[k])) set(mar, k, edit.margins[k]); });
+    count++;
+  }
+  return { xml: composeSerialize(doc), count };
+}
+
 // Wyrównanie strony w pionie w sekcji akapitu (do zaznaczenia w menu).
 function composeSectionVAlign(doc, index) {
   const paragraphs = collectParagraphElements(doc.documentElement, "all");

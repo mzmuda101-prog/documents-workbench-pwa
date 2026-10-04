@@ -33,7 +33,7 @@ const selectText = (page, i, from, to) => page.evaluate(([x, a, b]) => {
   const s = formDomRange(el, a, b);
   el.focus(); getSelection().removeAllRanges(); getSelection().addRange(s);
 }, [i, from, to]);
-const focusedIndex = (page) => page.evaluate(() => { const q = document.activeElement?.closest?.(".docx-editable-p"); return q ? resolveParaIndex(q) : -1; });
+const focusedIndex = (page) => page.evaluate(() => { const q = docCaretParagraph(document.activeElement); return q ? resolveParaIndex(q) : -1; });
 const savedZip = async (page) => {
   const b64 = await page.evaluate(async () => {
     const bytes = await buildDocumentForSave();

@@ -55,7 +55,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check("komórka B2: w:vAlign center + w:jc center", /<w:vAlign w:val="center"\/>/.test(cellXml(xml, "B2")) && /<w:jc w:val="center"\/>/.test(cellXml(xml, "B2")) && !/vAlign/.test(cellXml(xml, "B1")), cellXml(xml, "B2").slice(0, 300));
   const prev = await page.evaluate(() => { const p = [...document.querySelectorAll("td p")].find((x) => x.textContent === "B2"); const td = p.closest("td"); const a = p.getBoundingClientRect(), b = td.getBoundingClientRect(); return { va: getComputedStyle(td).verticalAlign, ta: getComputedStyle(p).textAlign, mid: Math.abs((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2) }; });
   check("podgląd: tekst w środku komórki (pionowo i poziomo)", prev.va === "middle" && prev.ta === "center" && prev.mid < 4, JSON.stringify(prev));
-  const caretBack = await page.evaluate(() => document.activeElement?.textContent);
+  const caretBack = await page.evaluate(() => docCaretParagraph(document.activeElement)?.textContent);
   check("kursor wraca do tej komórki", caretBack === "B2", caretBack);
 
   // ── kolumna: dół-prawo ──

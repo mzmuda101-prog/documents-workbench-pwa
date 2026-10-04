@@ -73,7 +73,7 @@ async function run() {
   // ── Edycja: akapity ze złożoną treścią są zablokowane, zwykłe edytowalne ─────
   await page.evaluate(() => { readModeEl.checked = false; readModeEl.dispatchEvent(new Event("change", { bubbles: true })); });
   await page.waitForTimeout(400);
-  const locks = await page.evaluate(() => collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).map((p) => `${p.dataset.lock || "-"}:${p.contentEditable}`));
+  const locks = await page.evaluate(() => collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).map((p) => `${p.dataset.lock || "-"}:${p.isContentEditable}`));
   // akapit z odnośnikiem do przypisu (9) — od 2026-10-04 edytowalny, odnośnik to „wyspa” (doc-notes.js)
   check("blokady: śledzone zmiany (akapity 2, 4, 5 — też sama zmiana formatu); akapit z przypisem końcowym (9) edytowalny",
     locks[1] === "lockTracked:false" && locks[3] === "lockTracked:false" && locks[4] === "lockTracked:false" && locks[8] === "-:true", locks.join(" "));

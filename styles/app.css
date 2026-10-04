@@ -526,12 +526,19 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
 
 /* Granice stron (page-breaks.js): przerywana linia w kartce + „str. N” przy prawej krawędzi.
    Etykieta trzyma stałą wielkość na ekranie (kontra-skala do zoomu Widoku desktopowego). */
+/* Granica strony w Edycji jak w Wordzie przy „ukrytym białym obszarze” między stronami: ciągła
+   linia styku kartek, wystająca poza kartkę (wcięcia jak krawędzie dwóch arkuszy). Strony
+   z marginesami i odstępami — w Podglądzie wydruku (print-preview.js). */
 .dwb-page-break {
-  position: absolute; left: 0; right: 0; height: 0; z-index: 1; pointer-events: none;
-  border-top: 1.5px dashed color-mix(in srgb, var(--accent) 55%, #9aa4b2);
+  position: absolute; left: -12px; right: -12px; height: 0; z-index: 1; pointer-events: none;
+  border-top: 1px solid #a9b2bf;
+}
+.dwb-page-break::before {
+  content: ""; position: absolute; left: 12px; right: 12px; top: -1px; height: 1px;
+  box-shadow: 0 -2px 3px rgba(15, 23, 42, .10), 0 2px 3px rgba(15, 23, 42, .10);
 }
 .dwb-page-break::after {
-  content: attr(data-label); position: absolute; right: 6px; top: 3px;
+  content: attr(data-label); position: absolute; right: 18px; top: 3px;
   transform: scale(calc(1 / var(--doc-zoom, 1))); transform-origin: right top;
   padding: 2px 7px; border-radius: 999px; white-space: nowrap;
   font: 600 11px/1.3 var(--font); color: #fff; background: color-mix(in srgb, var(--accent) 80%, #334);
@@ -604,6 +611,9 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
 .snippet-use-btn, .snippet-del-btn { flex-shrink: 0; padding: 4px 8px; font-size: 10px; }
 
 .doc-canvas.edit-mode .docx-editable-p { cursor: text; white-space: pre-wrap; }
+/* cały dokument to jedno pole edycji (docx-inline-edit.js) — bez obrysu pola; zaznaczanie przez akapity */
+.doc-canvas.edit-mode .docx-edit-root { outline: none; }
+.doc-canvas.edit-mode .docx-edit-root [contenteditable="false"] { cursor: default; }
 .doc-canvas.edit-mode .docx-editable-p {
   outline: none; border-radius: 3px;
   transition: box-shadow var(--t), background var(--t);
@@ -617,7 +627,8 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
   }
 }
 .doc-canvas.edit-mode .docx-editable-p:focus,
-.doc-canvas.edit-mode .docx-editable-p:focus-within {
+.doc-canvas.edit-mode .docx-editable-p:focus-within,
+.doc-canvas.edit-mode .docx-edit-root:focus .docx-editable-p.dwb-caret-p {
   /* Znacznik bieżącego akapitu PRZED tekstem, nie na nim: dawniej `inset` rysował pasek na
      pierwszych 3 px akapitu — zasłaniał początkowe znaki i kursor na początku wiersza.
      Zewnętrzny cień jest rysowany tylko poza ramką elementu: pasek 3 px tuż z lewej. */
@@ -627,8 +638,10 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
 /* list markers stay outside the text highlight band */
 .doc-canvas.edit-mode .docx-editable-p.docx-list-numbered-fixed:hover,
 .doc-canvas.edit-mode .docx-editable-p.docx-list-numbered-fixed:focus-within,
+.doc-canvas.edit-mode .docx-edit-root:focus .docx-editable-p.docx-list-numbered-fixed.dwb-caret-p,
 .doc-canvas.edit-mode .docx-editable-p.docx-bullet-fixed:hover,
-.doc-canvas.edit-mode .docx-editable-p.docx-bullet-fixed:focus-within {
+.doc-canvas.edit-mode .docx-editable-p.docx-bullet-fixed:focus-within,
+.doc-canvas.edit-mode .docx-edit-root:focus .docx-editable-p.docx-bullet-fixed.dwb-caret-p {
   background: linear-gradient(
     90deg,
     transparent 2.4em,
@@ -636,7 +649,8 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
   );
 }
 .doc-canvas.edit-mode .docx-editable-p.docx-list-numbered-fixed:focus-within,
-.doc-canvas.edit-mode .docx-editable-p.docx-list-numbered-fixed:focus {
+.doc-canvas.edit-mode .docx-editable-p.docx-list-numbered-fixed:focus,
+.doc-canvas.edit-mode .docx-edit-root:focus .docx-editable-p.docx-list-numbered-fixed.dwb-caret-p {
   background: linear-gradient(
     90deg,
     transparent 2.4em,
@@ -1629,6 +1643,12 @@ textarea.ff-pop-input { min-height: 4.5em; resize: vertical; }
 .insert-btn { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px 0 8px; color: var(--accent); }
 .insert-btn span { font-size: 12.5px; }
 .tb-select-style { max-width: 124px; }
+/* krój i rozmiar w miejscu kursora (pole puste = w zaznaczeniu kilka różnych) */
+.tb-select-font { width: 136px; max-width: 136px; text-overflow: ellipsis; }
+.tb-select-size { width: 64px; font-variant-numeric: tabular-nums; }
+.status-font { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.status-font::before { content: ""; display: inline-block; width: 1px; height: 11px; margin-right: 10px; background: var(--border); vertical-align: -1px; }
+.status-font[hidden] { display: none; }
 .align-btn svg { display: block; }
 @media (max-width: 768px) {
   .format-toolbar { flex-wrap: nowrap; }
@@ -2084,3 +2104,99 @@ p.dwb-exact img { vertical-align: baseline; }
   body.hero-collapsed .doc-tabs { display: none; }
 }
 @media print { .doc-tabs { display: none !important; } }
+
+/* ── Podgląd wydruku (print-preview.js) ─────────────────────────────────────
+   Prawdziwe kartki z marginesami i nagłówkiem/stopką na każdej stronie; ten sam układ idzie
+   do druku (@media print niżej). Niewidoczny render źródłowy: .dwb-pp-src. */
+.dwb-pp-src {
+  position: fixed !important; left: -40000px; top: 0; width: 3200px; visibility: hidden; pointer-events: none;
+  min-height: 0 !important; padding: 0 !important; transform: none !important; zoom: 1 !important; --doc-zoom: 1;
+}
+.dwb-pp-src .docx-preview-host { max-width: none; }
+.pp-overlay {
+  position: fixed; inset: 0; z-index: 9000; display: flex; flex-direction: column;
+  background: var(--bg, #e9edf3); color: var(--ink);
+}
+.pp-bar {
+  position: relative; z-index: 2; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: calc(10px + env(safe-area-inset-top)) 16px 10px; border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface); box-shadow: var(--shadow-xs);
+}
+.pp-close { padding: 0 12px; font-weight: 600; }
+.pp-title { display: flex; flex-direction: column; min-width: 0; margin-right: auto; line-height: 1.2; }
+.pp-title strong { font-size: 14px; }
+.pp-count { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pp-zoom { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 11px; background: var(--field); }
+.pp-zoom .tb-btn { min-width: 30px; height: 30px; border-color: transparent; background: none; }
+.pp-zoom-val { min-width: 54px !important; font-size: 12px; font-variant-numeric: tabular-nums; }
+.pp-zone-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted-strong); cursor: pointer; user-select: none; }
+.pp-print { min-height: 34px; padding: 0 18px; }
+.pp-warn {
+  margin: 10px 16px 0; padding: 9px 12px; border-radius: var(--r-sm); font-size: 12.5px; line-height: 1.4;
+  color: var(--warning); background: var(--warning-bg); border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
+}
+.pp-warn[hidden] { display: none; }
+.pp-scroll { flex: 1; overflow: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; outline: none; }
+.pp-canvas { min-height: 0; padding: 18px 16px 40px; text-size-adjust: none; -webkit-text-size-adjust: none; }
+.pp-host { max-width: none !important; }
+.pp-pages { zoom: var(--pp-zoom, 1); }
+.doc-canvas.pp-canvas:not(.doc-reflow-mode) .docx-wrapper.pp-pages > section.docx.pp-sheet {
+  position: relative; overflow: hidden; box-sizing: border-box; margin-inline: auto !important;
+  margin-bottom: 24px !important; flex: none;
+}
+.pp-clip { position: absolute; left: 0; right: 0; overflow: hidden; }
+.pp-shift { position: absolute; left: 0; }
+.pp-shift > article, .pp-shift > ol { position: static; margin: 0; padding: 0; }
+.pp-sheet .pp-dup, .pp-sheet .pp-dup * { counter-increment: none !important; counter-reset: none !important; }
+.pp-hf { box-sizing: border-box; }
+.pp-unprintable {
+  position: absolute; inset: 0; pointer-events: none; display: none; border-style: solid;
+  border-color: color-mix(in srgb, #e5484d 16%, transparent); z-index: 3;
+  outline: 1px dashed color-mix(in srgb, #e5484d 55%, transparent); outline-offset: calc(-1 * var(--pp-zone, 24px));
+}
+.pp-show-zone .pp-unprintable { display: block; }
+.pp-page-label {
+  position: absolute; right: 8px; bottom: 6px; z-index: 4; padding: 1px 7px; border-radius: 999px;
+  font: 600 10.5px/1.4 var(--font); color: #475569; background: rgba(241, 245, 249, .92); pointer-events: none;
+}
+body.pp-open { overflow: hidden; }
+body:not(.has-document) #printPreviewMenuItem { display: none; }
+@media (max-width: 640px) {
+  /* telefon: [Wróć] [tytuł] [Drukuj] / [zoom] [strefa] — dwa rzędy */
+  .pp-bar { gap: 6px 8px; padding-inline: 10px; }
+  .pp-close { order: 0; }
+  .pp-title { order: 1; flex: 1; }
+  .pp-print { order: 2; padding: 0 12px; }
+  .pp-zoom { order: 3; }
+  .pp-zone-toggle { order: 4; }
+  .pp-zone-toggle span { font-size: 11px; }
+  .pp-canvas { padding: 10px 8px 28px; }
+}
+@media print {
+  html, body { height: auto !important; min-height: 0 !important; overflow: visible !important; background: #fff !important; }
+  body.pp-open > *:not(.pp-overlay) { display: none !important; }
+  body.pp-open .pp-overlay { position: static; display: block; background: #fff; }
+  body.pp-open .pp-bar, body.pp-open .pp-warn, body.pp-open .pp-unprintable, body.pp-open .pp-page-label { display: none !important; }
+  body.pp-open .pp-scroll { overflow: visible; }
+  body.pp-open .pp-canvas { padding: 0 !important; }
+  body.pp-open .pp-host .docx-wrapper { padding: 0 !important; }
+  body.pp-open .pp-pages { zoom: 1 !important; }
+  /* kartka o włos niższa od strony: zaokrąglenie rozmiaru (np. A4 = 1122,5 px) nie wypycha pustej strony */
+  body.pp-open .doc-canvas.pp-canvas:not(.doc-reflow-mode) .docx-wrapper.pp-pages > section.docx.pp-sheet { margin: 0 !important; box-shadow: none !important; break-after: page; break-inside: avoid; max-height: calc(100vh - 2px); }
+  body.pp-open .doc-canvas.pp-canvas .docx-wrapper.pp-pages > section.docx.pp-sheet:last-child { break-after: auto; }
+}
+
+/* Marginesy niestandardowe (compose-ui.js): cztery pola w dwóch kolumnach */
+.mf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+.compose-note.mf-warn { color: var(--warning); margin: 0; }
+.compose-note.mf-warn.is-error { color: var(--danger, #c0392b); }
+
+/* Akapit z samym podziałem strony — w Edycji podpis jak w Wordzie (···· Podział strony ····),
+   zamiast pustej ramki tylko do odczytu */
+.doc-canvas.edit-mode p.docx-locked-p[data-lock="lockPageBreakOnly"] { min-height: 1.4em; display: flex; align-items: center; outline: none !important; background: none !important; }
+.doc-canvas.edit-mode p.docx-locked-p[data-lock="lockPageBreakOnly"]:not([data-dwb-cont])::before {
+  content: "·························  " attr(data-pb-label) "  ·························";
+  flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-align: center;
+  font: 500 11px/1.4 var(--font); color: #7b8594; letter-spacing: .02em;
+}
+.doc-canvas.edit-mode p.docx-locked-p[data-lock="lockPageBreakOnly"][data-dwb-cont] { min-height: 0; }

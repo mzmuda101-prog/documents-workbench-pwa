@@ -129,7 +129,7 @@ async function run() {
   await page.keyboard.press("Escape");
   await page.waitForTimeout(100);
   sg = await suggest();
-  const stillEditing = await page.evaluate(() => !!document.activeElement?.closest?.(".docx-editable-p"));
+  const stillEditing = await page.evaluate(() => !!docCaretParagraph(document.activeElement));
   check("Esc zamyka podpowiedzi, a kursor zostaje w tekście", !sg.open && stillEditing, JSON.stringify({ sg, stillEditing }));
   await page.keyboard.type("x");
   await page.keyboard.press("Enter");

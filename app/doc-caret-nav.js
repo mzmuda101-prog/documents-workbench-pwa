@@ -39,7 +39,7 @@
   function placeAt(p, offset) {
     const len = textLength(p);
     const o = Math.max(0, Math.min(len, offset));
-    p.focus({ preventScroll: true });
+    focusDocParagraph(p);
     if (typeof placeCaret === "function") placeCaret(p, o);
     else {
       const r = document.createRange();
@@ -65,7 +65,7 @@
         if (pos) { range = document.createRange(); range.setStart(pos.offsetNode, pos.offset); }
       }
     } catch (_) { range = null; }
-    p.focus({ preventScroll: true });
+    focusDocParagraph(p);
     if (range && p.contains(range.startContainer)) {
       range.collapse(true);
       const sel = getSelection();
@@ -104,7 +104,7 @@
 
   function onKeydown(e) {
     if (readOnlyMode || e.isComposing || e.defaultPrevented) return;
-    const p = e.target.closest?.(".docx-editable-p");
+    const p = docCaretParagraph(e.target);
     if (!p) return;
     const sel = window.getSelection();
     const collapsed = !!sel?.isCollapsed;
@@ -138,6 +138,13 @@
       // jak Backspace na początku następnego akapitu (ta sama ścieżka zapisu i cofania)
       const next = neighbour(p, 1);
       const all = collectPreviewParagraphElements(host());
+      // następny to sam podział strony — Delete go usuwa (jak w Wordzie)
+      const after = all[all.indexOf(p) + 1];
+      if (after?.dataset.lock === "lockPageBreakOnly" && typeof dwbSel !== "undefined") {
+        e.preventDefault();
+        dwbSel.removeBreakParagraph(all.indexOf(after), p, "before");
+        return;
+      }
       if (!next || all.indexOf(next) !== all.indexOf(p) + 1 || typeof handleInlineBackspace !== "function") return;
       e.preventDefault();
       placeAt(next, 0);
