@@ -380,7 +380,7 @@ const composeUi = (() => {
     popItem(el, {
       label: t("pageSetup"), desc: t("pageSetupDesc"),
       icon: ICON('<rect x="5" y="2.5" width="14" height="19" rx="1.5"/><rect x="8" y="6" width="8" height="12" rx=".5" stroke-dasharray="2 1.6"/>'),
-      onPick: () => openPop(insertBtn, buildPageSetupMenu),
+      onPick: () => openPageSetup(insertBtn),
     });
     popItem(el, {
       label: t("insertHrule"), desc: t("insertHruleDesc"),
@@ -1058,12 +1058,27 @@ const composeUi = (() => {
     return { p, index, cur: doc ? composeSectionPageSetup(doc, index) : null };
   }
 
-  function runPageSetup(edit, ctx) {
+  // Wejścia: „＋ Wstaw → Układ strony…”, menu ⋯ i przycisk „Marginesy” w Podglądzie wydruku
+  // (openPageSetup — w trybie Czytanie przełącza na Edycję; after = np. przerysuj podgląd).
+  let pageSetupAnchor = null;
+  let pageSetupAfter = null;
+  async function openPageSetup(anchor, after = null) {
+    if (!originalFileBytes) return;
+    if (readOnlyMode && typeof appFrame !== "undefined") { appFrame.setReadOnly(false); await whenEditable(); }
+    pageSetupAnchor = anchor || insertBtn;
+    pageSetupAfter = after;
+    openPop(pageSetupAnchor, buildPageSetupMenu);
+  }
+  async function runPageSetup(edit, ctx) {
     pageSetupReflowHint();
-    return runFileEdit({ op: "pageSetup", index: ctx.index, scope: "section", ...edit }, ctx.p ? caretState(ctx.p) : null);
+    await runFileEdit({ op: "pageSetup", index: ctx.index, scope: "section", ...edit }, ctx.p ? caretState(ctx.p) : null);
+    const after = pageSetupAfter;
+    pageSetupAfter = null;
+    after?.();
   }
   // Widok mobilny przekłada tekst na szerokość ekranu — kartek i marginesów tam nie widać
   function pageSetupReflowHint() {
+    if (typeof dwbPrint !== "undefined" && dwbPrint.isOpen()) return; // w podglądzie wydruku widać od razu
     if (typeof shouldUseMobileReflow === "function" && shouldUseMobileReflow()) toast(t("pageSetupMobileHint"), "info");
   }
 
@@ -1096,7 +1111,7 @@ const composeUi = (() => {
       label: t("marginCustom"),
       desc: t("marginCurrent", { t: cmText(cur.top), b: cmText(cur.bottom), l: cmText(cur.left), r: cmText(cur.right) }),
       icon: ICON('<rect x="4" y="2.5" width="16" height="19" rx="1.5"/><path d="M8 8h8M8 12h5M8 16h6"/>'),
-      onPick: () => openPop(insertBtn, (form) => buildMarginForm(form, ctx, cur)),
+      onPick: () => openPop(pageSetupAnchor || insertBtn, (form) => buildMarginForm(form, ctx, cur)),
     });
     custom.dataset.preset = "custom";
     popCap(el, t("pageOrient"));
@@ -1161,7 +1176,9 @@ const composeUi = (() => {
       if (!check()) return;
       closePop();
       pageSetupReflowHint();
-      runFileEdit({ op: "pageSetup", index: ctx.index, scope: scope.value || "all", margins: read() }, ctx.p ? caretState(ctx.p) : null);
+      const after = pageSetupAfter;
+      pageSetupAfter = null;
+      runFileEdit({ op: "pageSetup", index: ctx.index, scope: scope.value || "all", margins: read() }, ctx.p ? caretState(ctx.p) : null).then(() => after?.());
     };
     ok.addEventListener("click", submit);
     el.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.closest("input")) { e.preventDefault(); submit(); } });
@@ -1996,9 +2013,11 @@ const composeUi = (() => {
     if (card) { createNew(card.dataset.template); return; }
     if (e.target === dialog) dialog.close(); // klik w tło
   });
+  // menu ⋯ → Marginesy i układ strony (po zamknięciu menu, z kotwicą „＋ Wstaw” na pasku)
+  document.getElementById("pageSetupMenuItem")?.addEventListener("click", () => setTimeout(() => openPageSetup(insertBtn), 60));
   ["emptyNewBtn", "newDocBtn", "newDocMenuItem"].forEach((id) => {
     document.getElementById(id)?.addEventListener("click", openNewDialog);
   });
 
-  return { insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, openLinkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
+  return { openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, openLinkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
 })();

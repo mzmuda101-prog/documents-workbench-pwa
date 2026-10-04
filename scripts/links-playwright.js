@@ -53,6 +53,9 @@ async function run() {
   });
 
   // ── spis treści → rozdział, „Wróć” ─────────────────────────────────────────
+  // miejsce sprzed skoku = po przewinięciu do linku (clickLink przewija go na środek)
+  await page.evaluate(() => document.querySelector('.docx-preview-host a[href="#_Toc3"]').scrollIntoView({ block: "center" }));
+  await page.waitForTimeout(150);
   const top0 = await page.evaluate(() => docViewportEl.scrollTop);
   await clickLink(page, '.docx-preview-host a[href="#_Toc3"]');
   check("spis treści: klik przewija do rozdziału „Zagrożenia bombowe”", await inView(page, "Zagrożenia bombowe"));
@@ -60,7 +63,9 @@ async function run() {
   const back = await page.evaluate(() => { const b = document.querySelector(".link-back"); return b && !b.hidden ? b.textContent : null; });
   check("pojawia się „↩ Wróć”", /Wróć/.test(back || ""), back);
   await page.keyboard.press("Alt+ArrowLeft");
-  await page.waitForTimeout(900);
+  // płynne przewijanie z powrotem — dłuższe, gdy strony mają przerwy z marginesami
+  await page.waitForFunction((t0) => Math.abs(docViewportEl.scrollTop - t0) < 30, top0, { timeout: 4000 }).catch(() => {});
+  await page.waitForTimeout(150);
   const top1 = await page.evaluate(() => docViewportEl.scrollTop);
   check("Alt+← wraca do miejsca sprzed skoku i chowa „Wróć”", Math.abs(top1 - top0) < 30 && await page.evaluate(() => document.querySelector(".link-back").hidden), `${top0} → ${top1}`);
 

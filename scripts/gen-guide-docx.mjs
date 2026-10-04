@@ -165,7 +165,7 @@ const body = [
   tip("kliknij w komórkę tabeli z rozdziału 8 — na pasku pojawi się „Tabela”; dodaj wiersz poniżej i wpisz coś, przechodząc Tabem."),
   p("Przycisk „A” na pasku to kolor czcionki (paleta jak w Wordzie, „Automatyczny”, „Więcej kolorów…”) i wyróżnienie tekstu (zakreślacz). Bez zaznaczenia kolor obowiązuje dla dalszego pisania."),
   p("Komentarz: zaznacz tekst i Ctrl/⌘+Alt+M (albo „＋ Wstaw → Komentarz”). Komentowany tekst jest podświetlony; gdy kursor w nim stoi, karta pozwala odpowiedzieć, oznaczyć jako rozwiązany albo usunąć. Wszystkie komentarze są też w panelu Recenzja."),
-  p("„＋ Wstaw → Układ strony…”: marginesy jak w Wordzie (Normalne 2,5 cm, Wąskie, Umiarkowane, Szerokie albo własne w cm), orientacja pionowa/pozioma i rozmiar papieru (A4, A5, Letter…). Zmiany widać na kartkach w Widoku desktopowym i w Podglądzie wydruku."),
+  p("„＋ Wstaw → Układ strony…”: marginesy jak w Wordzie (Normalne 2,5 cm, Wąskie, Umiarkowane, Szerokie albo własne w cm), orientacja pionowa/pozioma i rozmiar papieru (A4, A5, Letter…). Zmiany widać na kartkach w Widoku desktopowym i w Podglądzie wydruku. Marginesy i układ strony są też w menu ⋯ i pod przyciskiem „Marginesy” w Podglądzie wydruku. W Widoku desktopowym strony mają dolny i górny margines oraz przerwę między kartkami — dwuklik w przerwę ukrywa biały obszar (sama kreska), opcja też w panelu Widok."),
   p("„＋ Wstaw → Nagłówek, stopka, numer strony…” (albo kliknięcie w nagłówek/stopkę w Edycji): tekst u góry i na dole każdej strony, numer strony („1”, „Strona 1”, „Strona 1 z 5”, „– 1 –”) i inna pierwsza strona, np. tytułowa bez numeru."),
   tip("zaznacz słowo w tym akapicie, naciśnij Ctrl/⌘+Alt+M i dodaj komentarz — potem kliknij w podświetlony tekst i odpowiedz na niego."),
 

@@ -231,6 +231,7 @@ const dwbPrint = (() => {
           <button type="button" class="tb-btn pp-zoom-val" data-act="fit"></button>
           <button type="button" class="tb-btn" data-act="in">+</button>
         </div>
+        <button type="button" class="tb-btn pp-margins" data-act="margins"></button>
         <label class="pp-zone-toggle"><input type="checkbox" data-act="zone"><span></span></label>
         <button type="button" class="btn primary pp-print" data-act="print"></button>
       </div>
@@ -248,6 +249,7 @@ const dwbPrint = (() => {
     overlay.querySelector(".pp-zone-toggle").dataset.hintPl = I18N.pl.ppZoneHint.replace("{mm}", "6,35");
     overlay.querySelector(".pp-zone-toggle").dataset.hintEn = I18N.en.ppZoneHint.replace("{mm}", "6.35");
     overlay.querySelector(".pp-print").textContent = t("ppPrint");
+    overlay.querySelector(".pp-margins").textContent = t("ppMargins");
     const host = overlay.querySelector(".pp-host");
     styles.forEach((s) => host.insertBefore(s, host.firstChild));
     const pages = overlay.querySelector(".pp-pages");
@@ -268,6 +270,10 @@ const dwbPrint = (() => {
       const act = e.target.closest("[data-act]")?.dataset.act;
       if (act === "close") close();
       else if (act === "print") print();
+      else if (act === "margins" && typeof composeUi !== "undefined") {
+        // marginesy jak w Wordzie przy drukowaniu — po zmianie kartki układają się od nowa
+        composeUi.openPageSetup(e.target.closest("[data-act]"), () => { if (overlay) open(); });
+      }
       else if (act === "fit") { state.fit = true; applyZoom(); }
       else if (act === "in" || act === "out") {
         state.fit = false;
@@ -321,7 +327,7 @@ const dwbPrint = (() => {
 
   // Esc zamyka podgląd — też gdy fokus wyszedł poza okno (np. po zamknięciu okna druku)
   document.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape" || !overlay) return;
+    if (e.key !== "Escape" || !overlay || document.querySelector(".compose-pop")) return; // najpierw okienko marginesów
     e.preventDefault();
     e.stopPropagation();
     close();

@@ -34,6 +34,7 @@ async function run() {
   await page.waitForFunction(() => !readOnlyMode && document.querySelector(".docx-edit-root"), null, { timeout: 10000 });
   await sleep(500);
 
+  const undo = async () => { await page.evaluate(() => dwbUndo.undo()); await idle(); };
   const idle = async () => {
     await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 20000 });
     await sleep(500);
@@ -132,9 +133,65 @@ async function run() {
     const pages = (pdf.toString("latin1").match(/\/Type\s*\/Page[^s]/g) || []).length;
     check("druk (PDF): tyle stron, ile kartek w podglądzie", pages === pp.sheets, `${pages} vs ${pp.sheets}`);
   }
+  // Marginesy prosto z podglądu (jak w Wordzie przy drukowaniu) — kartki układają się od nowa
+  await page.click(".pp-margins");
+  await page.waitForSelector('.compose-pop [data-preset="normal"]');
+  await sleep(150);
+  await page.click('.compose-pop [data-preset="normal"]');
+  await page.waitForFunction(() => document.querySelector(".pp-overlay") && !document.querySelector(".pp-warn:not([hidden])"), null, { timeout: 20000 }).catch(() => {});
+  await sleep(400);
+  const ppAfter = await page.evaluate(() => ({ warn: !document.querySelector(".pp-warn").hidden, pad: getComputedStyle(document.querySelector(".pp-sheet")).paddingTop }));
+  check("podgląd → Marginesy → Normalne: kartki od nowa, bez ostrzeżenia (2,5 cm)", !ppAfter.warn && Math.abs(parseFloat(ppAfter.pad) - 94.53) < 0.1, JSON.stringify(ppAfter));
   await page.keyboard.press("Escape");
   await sleep(200);
   check("Esc zamyka podgląd", !(await page.evaluate(() => !!document.querySelector(".pp-overlay"))));
+  // menu ⋯ → Marginesy i układ strony (także z trybu Czytanie)
+  await page.evaluate(() => appFrame.setReadOnly(true));
+  await sleep(300);
+  await page.click("#appMenuBtn");
+  await page.click("#pageSetupMenuItem");
+  await page.waitForSelector('.compose-pop [data-preset="narrow"]', { timeout: 5000 }).catch(() => {});
+  check("menu ⋯ → Marginesy i układ strony: okienko z marginesami (z Czytania przełącza na Edycję)", await page.evaluate(() => !!document.querySelector('.compose-pop [data-preset="narrow"]') && !readOnlyMode));
+  await page.keyboard.press("Escape");
+  await sleep(200);
+
+  // ── odstępy między stronami w Edycji (domyślnie) i „Ukryj biały obszar” ──
+  await page.evaluate(() => applyDocumentEdit({ op: "pageSetup", index: 0, scope: "all", margins: { top: 1134, bottom: 1134, left: 1418, right: 1418 } }));
+  await idle();
+  // dużo tekstu → kilka stron
+  await page.evaluate(async () => {
+    const ps = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"));
+    const p = ps[1];
+    p.textContent = "Długi akapit testowy. ".repeat(30);
+    for (let i = 0; i < 40; i++) { focusParagraphAtOffset(1, 0); await handleInlineEnter(collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[1], 1, { preventDefault() {}, shiftKey: false }); }
+  });
+  await page.evaluate(() => waitInlineStructuralIdle());
+  await page.evaluate(() => dwbPageBreaks.compute());
+  await sleep(600);
+  const gapInfo = await page.evaluate(() => {
+    const sec = document.querySelector("#docCanvas section.docx");
+    const sr = sec.getBoundingClientRect();
+    const sc = sr.height / sec.offsetHeight;
+    const padT = parseFloat(getComputedStyle(sec).paddingTop);
+    const bands = [...sec.querySelectorAll(".dwb-page-gap-band")];
+    const firsts = [...sec.querySelectorAll(".dwb-page-gap")].map((g) => {
+      const n = g.nextElementSibling;
+      const r = document.createRange(); r.selectNodeContents(n);
+      const rr = [...r.getClientRects()].find((x) => x.height) || n.getBoundingClientRect();
+      return (rr.top - sr.top) / sc;
+    });
+    return { n: bands.length, padT, diffs: bands.map((b, i) => Math.round(firsts[i] - (parseFloat(b.style.top) + parseFloat(b.style.height)) - padT)), labels: bands.map((b) => b.dataset.label).join(","), paras: collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).length };
+  });
+  check("odstępy między stronami: przerwa + górny margines (pierwsza linijka strony = góra kartki + margines)", gapInfo.n >= 1 && gapInfo.diffs.every((d) => Math.abs(d) <= 2) && /str\. 2/.test(gapInfo.labels), JSON.stringify(gapInfo));
+  const fileParas = await page.evaluate(async () => (await extractParagraphTextsFromDocx(await buildDocumentForSave())).length);
+  check("odstępy to tylko wygląd: liczba akapitów podglądu = pliku", fileParas === gapInfo.paras, `${fileParas} vs ${gapInfo.paras}`);
+  await page.dblclick(".dwb-page-gap-band", { force: true });
+  await sleep(500);
+  const hidden = await page.evaluate(() => ({ gaps: document.querySelectorAll(".dwb-page-gap, .dwb-page-gap-band").length, seams: document.querySelectorAll(".dwb-page-break").length, box: document.getElementById("hideWhiteSpace").checked }));
+  check("dwuklik w przerwę = Ukryj biały obszar (kreska, opcja w panelu zaznaczona)", hidden.gaps === 0 && hidden.seams >= 1 && hidden.box, JSON.stringify(hidden));
+  await page.evaluate(() => dwbPageBreaks.setGaps(true));
+  await sleep(300);
+  await undo();
 
   // ── przypisy ──
   await page.evaluate(() => focusParagraphAtOffset(2, 4));

@@ -855,8 +855,12 @@ async function handleInlineEnter(p, paraIndex, e) {
 }
 
 async function handleInlineBackspace(p, paraIndex, e) {
-  if (getCaretOffset(p) !== 0) return;
   const sel = window.getSelection();
+  // Zaznaczenie (np. od początku akapitu myszą) — Backspace kasuje ZAZNACZENIE, nie znak akapitu.
+  // Dawniej liczył się tylko początek zaznaczenia: „kursor na początku” → sklejenie z poprzednim
+  // akapitem, a zaznaczony tekst zostawał (zgłoszenie 2026-10-04; zaznaczanie od końca działało).
+  if (sel?.rangeCount && !sel.isCollapsed && !e.fromDelete) return;
+  if (getCaretOffset(p) !== 0) return;
   // Backspace na początku punktu listy najpierw zdejmuje numerację (jak w Wordzie); kolejny skleja
   if (isListParagraph(p) && sel?.isCollapsed && !e.fromDelete && typeof composeUi !== "undefined") {
     e.preventDefault();

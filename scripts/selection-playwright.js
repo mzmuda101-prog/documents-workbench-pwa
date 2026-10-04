@@ -130,6 +130,20 @@ async function run() {
   check("trzykrotne kliknięcie + pisanie: zastąpiony tekst akapitu, liczba akapitów ta sama", now.length === 14 && now[iAlfa] === "Nowy" && now[iBeta] === orig[iBeta], JSON.stringify(now.slice(0, 4)));
   await undo();
 
+  // ── zaznaczenie myszą OD POCZĄTKU akapitu + Backspace (zgłoszenie): kasuje zaznaczenie,
+  //    a nie znak akapitu (dawniej sklejało z poprzednim akapitem i zostawiało tekst) ──
+  const bb = await page.evaluate((i) => { const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[i]; p.scrollIntoView({ block: "center" }); const tn = document.createTreeWalker(p, NodeFilter.SHOW_TEXT).nextNode(); const r = document.createRange(); r.setStart(tn, 0); r.setEnd(tn, 1); const a = r.getBoundingClientRect(); r.setStart(tn, 10); r.setEnd(tn, 11); const b = r.getBoundingClientRect(); return { x0: a.left + 0.5, x1: b.left, y: a.top + a.height / 2 }; }, iBeta);
+  await page.mouse.click(bb.x0, bb.y);
+  await page.mouse.move(bb.x0, bb.y);
+  await page.mouse.down();
+  await page.mouse.move(bb.x1, bb.y, { steps: 8 });
+  await page.mouse.up();
+  await page.keyboard.press("Backspace");
+  await idle();
+  now = await texts();
+  check("zaznaczenie od początku akapitu + Backspace kasuje zaznaczenie (akapity nie sklejone)", now.length === 14 && now[iBeta] === " akapit zwykłego tekstu." && now[iAlfa] === orig[iAlfa], JSON.stringify(now.slice(1, 3)));
+  await undo();
+
   // ── tabela w środku zaznaczenia znika w całości ──
   const iDelta = await idx("Delta"), iEps = await idx("Epsilon");
   await select(iDelta, 5, iEps, 9);

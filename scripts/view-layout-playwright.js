@@ -247,7 +247,8 @@ async function run() {
   const c0 = await look(dp);
   check("komputer, Auto → Widok desktopowy, 100%", c0.layout === "desktop" && !c0.reflow && c0.zoom === 1 && c0.label === "100%", JSON.stringify(c0));
   // Ctrl + kółko (jak w Wordzie): przybliża dokument, nie aplikację; tekst pod kursorem zostaje pod kursorem
-  await dp.evaluate(() => { document.getElementById("docViewport").scrollTop = 900; });
+  // punkt pomiaru nad TEKSTEM (przy 900 wypadał w marginesie między stronami — tam nie ma znaku)
+  await dp.evaluate(() => { document.getElementById("docViewport").scrollTop = 600; });
   await dp.waitForTimeout(250);
   const box = await dp.locator("#docViewport").boundingBox();
   const cx = Math.round(box.x + box.width / 2);
