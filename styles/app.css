@@ -575,6 +575,19 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
   box-sizing: border-box;
 }
 
+/* Wyrównanie strony w pionie (sectPr w:vAlign — łatka nr 8 docx-preview), strony w Widoku desktopowym */
+.doc-canvas:not(.doc-reflow-mode) section.docx[data-dwb-v-align="center"] > article { margin-top: auto; margin-bottom: auto; }
+.doc-canvas:not(.doc-reflow-mode) section.docx[data-dwb-v-align="bottom"] > article { margin-top: auto; margin-bottom: 0; }
+.doc-canvas:not(.doc-reflow-mode) section.docx[data-dwb-v-align]:not([style*="min-height"]) { min-height: 11in; } /* brak w:pgSz = Letter (jak Word) */
+.doc-canvas:not(.doc-reflow-mode) section.docx[data-dwb-v-align="both"] > article:not([style*="column-count"]) { flex: 1 0 auto; display: flex; flex-direction: column; justify-content: space-between; }
+
+/* Menu tabeli: wyrównanie w komórce (siatka 3×3 jak w Wordzie) */
+.compose-cellalign-scope { margin: 2px 8px 6px; }
+.compose-cellalign-scope button { padding: 5px 6px; font-size: 12px; }
+.compose-cellalign { display: grid; grid-template-columns: repeat(3, 36px); gap: 4px; padding: 0 8px 6px; }
+.compose-cellalign .compose-align { width: 36px; height: 32px; }
+.compose-item.is-current .compose-item-label { font-weight: 700; color: var(--accent); }
+
 /* Lista z wcięciem wiszącym (docx-render-fixes.js): tekst na lewym wcięciu, numer w wysunięciu */
 .docx-preview-host p.dwb-list-hang { text-indent: 0 !important; position: relative; }
 .docx-preview-host p.dwb-list-hang::before { position: absolute; left: calc(-1 * var(--dwb-hang, 18pt)); white-space: pre; }

@@ -38,6 +38,10 @@ Siostrzana aplikacja [Sheet Workbench PWA](../sheet-workbench-pwa/README.md).
   Worda („razem z następnym”, wiersze razem, wdowy/sieroty) i odstępy wierszy jak w Wordzie;
   sprawdzone z prawdziwym Wordem (`npm run test:pages`). Przybliżone przy czcionkach, których
   przeglądarka nie ma i dla których nie ma zamiennika (niżej)
+- **Wyrównanie jak w Wordzie** — w komórce tabeli (menu Tabela → „Wyrównanie w komórce”: siatka
+  3×3 poziomo + pionowo, zakres komórka / wiersz / kolumna / tabela; `w:jc` + `w:vAlign`) i strony
+  w pionie (Wstaw → „Wyrównanie strony w pionie”: góra / środek / wyjustuj / dół, sekcja z kursorem;
+  podgląd w Widoku desktopowym). `npm run test:align`
 - **Wklejanie z zachowaniem stylów** (`app/paste-rich.js`): z Notatek Apple, stron WWW, Google
   Docs, Worda (HTML) i z Markdownu (Obsidian, Bear…): akapity, nagłówki, listy punktowane i
   numerowane z poziomami, listy kontrolne jako pola wyboru Worda, cytaty, kod, tabele, linia;

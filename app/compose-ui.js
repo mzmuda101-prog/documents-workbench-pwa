@@ -371,6 +371,11 @@ const composeUi = (() => {
       onPick: () => openHeaderFooterForm(),
     });
     popItem(el, {
+      label: t("pageVAlign"), desc: t("pageVAlignDesc"),
+      icon: ICON('<rect x="5" y="2.5" width="14" height="19" rx="1.5"/><line x1="8" y1="10.5" x2="16" y2="10.5"/><line x1="8" y1="13.5" x2="14" y2="13.5"/><polyline points="12 4 12 7"/><polyline points="12 17 12 20"/>'),
+      onPick: () => openPop(insertBtn, buildPageVAlignMenu),
+    });
+    popItem(el, {
       label: t("insertHrule"), desc: t("insertHruleDesc"),
       icon: ICON('<line x1="3" y1="12" x2="21" y2="12"/>'),
       onPick: insertHrule,
@@ -872,10 +877,109 @@ const composeUi = (() => {
     [["tableDelRow", "delRow"], ["tableDelCol", "delCol"], ["tableDelTable", "delTable"]].forEach(([key, action]) => {
       popItem(el, { label: t(key), icon: ICON('<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>'), onPick: () => tableAction(action) });
     });
+    buildCellAlign(el);
     const hint = document.createElement("p");
     hint.className = "compose-note compose-note-pad";
     hint.textContent = t("tableTabHint");
     el.appendChild(hint);
+  }
+
+  // ── wyrównanie w komórce (Word: Układ tabeli → Wyrównanie): siatka 3×3 + zakres ──────────
+  const CELL_V = ["top", "center", "bottom"];
+  const CELL_H = ["left", "center", "right"];
+  function cellAlignIcon(h, v) {
+    const y = { top: [6, 10], center: [10, 14], bottom: [14, 18] }[v];
+    const line = (len, yy) => { const x0 = h === "left" ? 5 : h === "right" ? 19 - len : 12 - len / 2; return `<line x1="${x0}" y1="${yy}" x2="${x0 + len}" y2="${yy}"/>`; };
+    return ICON(`<rect x="2.5" y="2.5" width="19" height="19" rx="2" stroke-width="1.4" opacity=".55"/>${line(10, y[0])}${line(6, y[1])}`);
+  }
+  function currentCellAlign() {
+    const p = docCanvasEl?.querySelector?.(".docx-editable-p:focus") || (typeof lastDocCaret !== "undefined" ? lastDocCaret?.p : null);
+    const td = p?.closest?.("td, th");
+    if (!td) return {};
+    const va = getComputedStyle(td).verticalAlign;
+    const ta = getComputedStyle(p).textAlign;
+    return { v: va === "middle" ? "center" : va === "bottom" ? "bottom" : "top", h: ta === "center" ? "center" : ta === "right" || ta === "end" ? "right" : "left" };
+  }
+  function buildCellAlign(el) {
+    popCap(el, t("tableAlignGroup"));
+    let scope = "cell";
+    const seg = document.createElement("div");
+    seg.className = "seg compose-cellalign-scope";
+    seg.setAttribute("role", "group");
+    seg.setAttribute("aria-label", t("tableAlignScope"));
+    [["cell", "tableScopeCell"], ["row", "tableScopeRow"], ["col", "tableScopeCol"], ["table", "tableScopeTable"]].forEach(([v, key]) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.dataset.v = v;
+      b.textContent = t(key);
+      b.classList.toggle("is-on", v === scope);
+      b.setAttribute("aria-pressed", String(v === scope));
+      b.addEventListener("click", () => {
+        scope = v;
+        seg.querySelectorAll("button").forEach((x) => { x.classList.toggle("is-on", x === b); x.setAttribute("aria-pressed", String(x === b)); });
+      });
+      seg.appendChild(b);
+    });
+    el.appendChild(seg);
+    const cur = currentCellAlign();
+    const grid = document.createElement("div");
+    grid.className = "compose-cellalign";
+    grid.setAttribute("role", "group");
+    CELL_V.forEach((v) => CELL_H.forEach((h) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "tb-btn compose-align";
+      const on = cur.v === v && cur.h === h;
+      b.classList.toggle("is-on", on);
+      b.setAttribute("aria-pressed", String(on));
+      const label = `${t(`cellAlignV_${v}`)}, ${t(`cellAlignH_${h}`)}`;
+      b.setAttribute("aria-label", label);
+      b.dataset.hint = label;
+      b.dataset.hintDelay = "0.3";
+      b.innerHTML = cellAlignIcon(h, v);
+      b.addEventListener("click", () => { closePop(); tableAlign(h, v, scope); });
+      grid.appendChild(b);
+    }));
+    el.appendChild(grid);
+  }
+  async function tableAlign(h, v, scope) {
+    const p = caretParagraph();
+    const cell = cellOf(p);
+    if (!cell) { toast(t("tableNoCaret"), "info"); return; }
+    const index = resolveParaIndex(p);
+    const top = docViewportEl?.scrollTop || 0;
+    await applyDocumentEdit({ op: "table", index, action: "align", h, v, scope }).catch((err) => log(`Tabela: ${err.message || err}`, "error"));
+    if (docViewportEl) docViewportEl.scrollTop = top;
+    await whenEditable();
+    if (!readOnlyMode) focusCell(cell.ti, cell.r, cell.c);
+  }
+
+  // ── wyrównanie strony w pionie (Word: Ustawienia strony → Układ → Wyrównanie w pionie) ───
+  const PAGE_VALIGN = [
+    ["top", "pageVAlignTop", '<rect x="5" y="2.5" width="14" height="19" rx="1.5" opacity=".55"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="9" x2="14" y2="9"/>'],
+    ["center", "pageVAlignCenter", '<rect x="5" y="2.5" width="14" height="19" rx="1.5" opacity=".55"/><line x1="8" y1="10.5" x2="16" y2="10.5"/><line x1="8" y1="13.5" x2="14" y2="13.5"/>'],
+    ["both", "pageVAlignBoth", '<rect x="5" y="2.5" width="14" height="19" rx="1.5" opacity=".55"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="18" x2="14" y2="18"/>'],
+    ["bottom", "pageVAlignBottom", '<rect x="5" y="2.5" width="14" height="19" rx="1.5" opacity=".55"/><line x1="8" y1="15" x2="16" y2="15"/><line x1="8" y1="18" x2="14" y2="18"/>'],
+  ];
+  function buildPageVAlignMenu(el) {
+    popCap(el, t("pageVAlign"));
+    const p = typeof restoreDocCaret === "function" ? restoreDocCaret() : null;
+    const index = p ? resolveParaIndex(p) : 0;
+    const items = PAGE_VALIGN.map(([val, key, svg]) => {
+      const b = popItem(el, { label: t(key), icon: ICON(svg), onPick: () => runFileEdit({ op: "pageVAlign", index: Math.max(0, index), val }, p ? { paraIndex: index, offset: 0 } : null) });
+      b.setAttribute("role", "menuitemradio");
+      b.dataset.v = val;
+      return b;
+    });
+    const note = document.createElement("p");
+    note.className = "compose-note compose-note-pad";
+    note.textContent = t("pageVAlignNote");
+    el.appendChild(note);
+    // zaznaczenie obecnego ustawienia sekcji (z pliku)
+    getDocumentXmlDom(originalFileBytes).then((doc) => {
+      const cur = doc ? composeSectionVAlign(doc, index) : "top";
+      items.forEach((b) => { b.setAttribute("aria-checked", String(b.dataset.v === cur)); b.classList.toggle("is-current", b.dataset.v === cur); });
+    }).catch(() => {});
   }
 
   // Tab / Shift+Tab w komórce = następna / poprzednia komórka; Tab w ostatniej = nowy wiersz (jak Word).

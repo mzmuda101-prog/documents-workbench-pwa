@@ -110,8 +110,19 @@ function patchBundle() {
   if (!mParser) throw new Error("łatka tblInd: brak globalXmlParser w parseIndentation");
   const XP = mParser[1];
   src = src.replace(reTblInd, (_, el, st) => `case"ind":this.parseIndentation(${el},${st});break;case"tblInd":{var __ty=${XP}.attr(${el},"type");if(!__ty||__ty==="dxa"){var __w=${XP}.lengthAttr(${el},"w");__w&&(${st}["margin-inline-start"]=__w)}}break;`);
-  fs.writeFileSync(OUT, src);
   console.log("  ✅  łatka: wcięcie tabeli (w:tblInd)");
+
+  // 8) Wyrównanie strony w pionie (sectPr w:vAlign: top / center / both / bottom — Word:
+  //    Ustawienia strony → Układ). docx-preview go nie czytał; strona dostaje data-dwb-v-align,
+  //    resztę robi CSS (styles/app.css).
+  const reTitlePg = /case"titlePg":(\w+)\.titlePage=(\w+)\.boolAttr\((\w+),"val",!0\);break;/;
+  if (!reTitlePg.test(src)) throw new Error("łatka vAlign strony: wzorzec titlePg nie pasuje (nowa wersja docx-preview?)");
+  src = src.replace(reTitlePg, (m, sec, xml, el) => `${m}case"vAlign":${sec}.vAlign=${xml}.attr(${el},"val");break;`);
+  const rePage = /createPageElement\((\w+),(\w+)\)\{var (\w+)=this\.createElement\("section",\{className:\1\}\);/;
+  if (!rePage.test(src)) throw new Error("łatka vAlign strony: wzorzec createPageElement nie pasuje");
+  src = src.replace(rePage, (m, cls, props, el) => `${m}${props}&&${props}.vAlign&&${props}.vAlign!=="top"&&(${el}.dataset.dwbVAlign=${props}.vAlign);`);
+  fs.writeFileSync(OUT, src);
+  console.log("  ✅  łatka: wyrównanie strony w pionie (sectPr w:vAlign)");
 }
 
 // pdf.js (konwersja PDF → DOCX): moduł główny + worker + wasm (obrazy JPEG2000/JBIG2, profile

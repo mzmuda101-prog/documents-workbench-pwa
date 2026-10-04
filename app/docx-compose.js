@@ -955,6 +955,40 @@ async function applySnippetInsertInZip(zip, xml, edit) {
   return { xml: composeSerialize(doc), count: 1 };
 }
 
+// ── op "pageVAlign": wyrównanie strony w pionie (Word: Ustawienia strony → Układ) ─────────
+// Sekcja akapitu z kursorem: w:vAlign top (domyślne — bez wpisu) / center / both / bottom.
+function applyPageVAlignInXml(xml, edit) {
+  const doc = composeParse(xml);
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  if (!["top", "center", "both", "bottom"].includes(edit.val)) return { xml, count: 0 };
+  let sect = null;
+  for (let i = Math.max(0, edit.index | 0); i < paragraphs.length && !sect; i++) {
+    const pPr = composeDirectChild(paragraphs[i], "pPr");
+    sect = pPr && composeDirectChild(pPr, "sectPr");
+  }
+  if (!sect) sect = composeDirectChild(doc.getElementsByTagNameNS(W_NS, "body")[0], "sectPr");
+  if (!sect) return { xml, count: 0 };
+  const old = composeDirectChild(sect, "vAlign");
+  if (old) sect.removeChild(old);
+  if (edit.val !== "top") {
+    const after = ["noEndnote", "titlePg", "textDirection", "bidi", "rtlGutter", "docGrid", "printerSettings", "sectPrChange"].map((n) => composeDirectChild(sect, n)).find(Boolean);
+    sect.insertBefore(composeEl(doc, "vAlign", { val: edit.val }), after || null);
+  }
+  return { xml: composeSerialize(doc), count: 1 };
+}
+
+// Wyrównanie strony w pionie w sekcji akapitu (do zaznaczenia w menu).
+function composeSectionVAlign(doc, index) {
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  let sect = null;
+  for (let i = Math.max(0, index | 0); i < paragraphs.length && !sect; i++) {
+    const pPr = composeDirectChild(paragraphs[i], "pPr");
+    sect = pPr && composeDirectChild(pPr, "sectPr");
+  }
+  if (!sect) sect = composeDirectChild(doc.getElementsByTagNameNS(W_NS, "body")[0], "sectPr");
+  return composeDirectChild(sect, "vAlign")?.getAttributeNS(W_NS, "val") || "top";
+}
+
 // ── op "pasteBlocks": wklejka ze strukturą (paste-rich.js) ─────────────────────
 // Plan wklejki — ten sam w zapisie i przy ustawianiu kursora (paste-rich.js): pozycje kolejnych
 // elementów względem akapitu z kursorem. Zwykły akapit wklejki dokleja się do tekstu przed
@@ -1397,6 +1431,33 @@ function applyTableInXml(xml, edit) {
       } else if (composeCells(r).length > 1) r.removeChild(c);
     });
     if (gridCols[gridCol]) gridEl.removeChild(gridCols[gridCol]);
+  } else if (a === "align") {
+    // Wyrównanie w komórce jak w Wordzie (Układ tabeli → Wyrównanie): poziomo = akapity komórki
+    // (w:jc), pionowo = komórka (w:vAlign). Zakres: komórka / wiersz / kolumna / tabela.
+    const col = composeGridStart(tc);
+    const targets = edit.scope === "row" ? composeCells(tr)
+      : edit.scope === "col" ? rows.map((r) => composeCellAtCol(r, col)).filter((c) => c && composeGridStart(c) <= col && col < composeGridStart(c) + composeSpan(c))
+      : edit.scope === "table" ? rows.flatMap((r) => composeCells(r))
+      : [tc];
+    const TCPR_ORDER = ["cnfStyle", "tcW", "gridSpan", "hMerge", "vMerge", "tcBorders", "shd", "noWrap", "tcMar", "textDirection", "tcFitText", "vAlign", "hideMark", "headers", "cellIns", "cellDel", "cellMerge", "tcPrChange"];
+    targets.forEach((cell) => {
+      if (["top", "center", "bottom"].includes(edit.v)) {
+        let tcPr = composeDirectChild(cell, "tcPr");
+        if (!tcPr) { tcPr = composeEl(doc, "tcPr"); cell.insertBefore(tcPr, cell.firstChild); }
+        const old = composeDirectChild(tcPr, "vAlign");
+        if (old) tcPr.removeChild(old);
+        if (edit.v !== "top") { // „góra” = domyślne w Wordzie — bez wpisu
+          const el = composeEl(doc, "vAlign", { val: edit.v });
+          const after = TCPR_ORDER.slice(TCPR_ORDER.indexOf("vAlign") + 1).map((n) => composeDirectChild(tcPr, n)).find(Boolean);
+          tcPr.insertBefore(el, after || null);
+        }
+      }
+      if (["left", "center", "right", "both"].includes(edit.h)) {
+        Array.from(cell.childNodes).filter((n) => n.localName === "p" && n.namespaceURI === W_NS).forEach((p) => {
+          composeSetPPrChild(composeEnsurePPr(p), "jc", { val: edit.h });
+        });
+      }
+    });
   } else if (a === "delTable") {
     const parent = tbl.parentNode;
     // tabela w komórce — komórka musi kończyć się akapitem
