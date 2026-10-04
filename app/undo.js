@@ -39,6 +39,8 @@ const UNDO_OP_LABEL = {
   list: "undoOpList",
   toc: "undoOpToc",
   formInsert: "undoOpFormInsert",
+  snippetInsert: "undoOpSnippet",
+  pasteBlocks: "undoOpPaste",
   tableInsert: "undoOpTable",
   table: "undoOpTable",
   imageInsert: "undoOpImage",

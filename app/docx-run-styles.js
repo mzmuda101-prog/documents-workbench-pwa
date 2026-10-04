@@ -46,7 +46,8 @@ function parseSpanStyle(cssText) {
     const val = chunk.slice(idx + 1).trim();
     if (key === "font-weight" && (val === "bold" || parseInt(val, 10) >= 600)) style.bold = true;
     if (key === "font-style" && val === "italic") style.italic = true;
-    if (key === "text-decoration" && val.includes("underline")) style.underline = true;
+    if ((key === "text-decoration" || key === "text-decoration-line") && val.includes("underline")) style.underline = true;
+    if ((key === "text-decoration" || key === "text-decoration-line") && val.includes("line-through")) style.strike = true;
     if (key === "color") style.color = val;
     if (key === "background-color" || key === "background") { const h = normHighlight(val); if (h) style.highlight = h; }
     if (key === "font-family") style.fontFamily = val.replace(/^["']|["']$/g, "").split(",")[0].trim();
@@ -62,7 +63,7 @@ function runStyleToCss(run) {
   const parts = [];
   if (run.bold) parts.push("font-weight:bold");
   if (run.italic) parts.push("font-style:italic");
-  if (run.underline) parts.push("text-decoration:underline");
+  if (run.underline || run.strike) parts.push(`text-decoration:${[run.underline && "underline", run.strike && "line-through"].filter(Boolean).join(" ")}`);
   if (run.color) parts.push(`color:${run.color}`);
   if (run.fontFamily) parts.push(`font-family:"${run.fontFamily}"`);
   if (run.fontSize) parts.push(`font-size:${run.fontSize}`);
@@ -74,6 +75,7 @@ function runsStyleEqual(a, b) {
   return !!a.bold === !!b.bold
     && !!a.italic === !!b.italic
     && !!a.underline === !!b.underline
+    && !!a.strike === !!b.strike
     && (parseCssColorToWordHex(a.color) || "") === (parseCssColorToWordHex(b.color) || "") // „rgb(5, 99, 193)” z podglądu = „#0563C1” z pliku
     && (a.fontFamily || "") === (b.fontFamily || "")
     && (a.fontSize || "") === (b.fontSize || "")
@@ -147,6 +149,7 @@ function extractRunsFromPreviewParagraph(pEl) {
     if (tag === "b" || tag === "strong") style.bold = true;
     if (tag === "i" || tag === "em") style.italic = true;
     if (tag === "u") style.underline = true;
+    if (tag === "s" || tag === "strike") style.strike = true;
     // link (w:hyperlink): podgląd rysuje <a>. data-dwb-link = odwołanie z pliku („#zakładka”
     // albo „rel:rIdN”, nadane przy oznaczaniu akapitów), nowy link ma sam adres.
     if (tag === "a" && !node.classList.contains("doc-xref")) style.link = node.dataset.dwbLink || node.getAttribute("href") || "";
@@ -260,6 +263,8 @@ function extractRunsFromParagraphXml(pEl) {
       if (Array.from(rPr.childNodes).some((n) => n.localName === "b")) style.bold = true;
       if (Array.from(rPr.childNodes).some((n) => n.localName === "i")) style.italic = true;
       if (Array.from(rPr.childNodes).some((n) => n.localName === "u")) style.underline = true;
+      const strikeEl = Array.from(rPr.childNodes).find((n) => n.localName === "strike");
+      if (strikeEl && !/^(0|false|off)$/i.test(getWVal(strikeEl) || "")) style.strike = true;
       const colorEl = Array.from(rPr.childNodes).find((n) => n.localName === "color");
       const hex = colorEl ? getWVal(colorEl) : null;
       if (hex) style.color = `#${hex.replace(/^#/, "")}`;
@@ -311,6 +316,12 @@ function createRunElement(doc, run) {
     const i = doc.createElementNS(W_NS, "i");
     setWVal(i, "1");
     rPr.appendChild(i);
+    hasPr = true;
+  }
+  if (run.strike) {
+    const st = doc.createElementNS(W_NS, "strike");
+    setWVal(st, "1");
+    rPr.appendChild(st);
     hasPr = true;
   }
   if (run.underline) {
@@ -366,7 +377,7 @@ function createRunElement(doc, run) {
   }
   if (hasPr) {
     // kolejność dzieci w:rPr wg schematu Worda (dawniej u przed color, rFonts po color)
-    const order = ["rStyle", "rFonts", "b", "bCs", "i", "iCs", "color", "sz", "szCs", "highlight", "u", "shd"];
+    const order = ["rStyle", "rFonts", "b", "bCs", "i", "iCs", "strike", "color", "sz", "szCs", "highlight", "u", "shd"];
     Array.from(rPr.childNodes).sort((x, y) => order.indexOf(x.localName) - order.indexOf(y.localName)).forEach((n) => rPr.appendChild(n));
     r.appendChild(rPr);
   }
@@ -470,7 +481,7 @@ function applyRunsToPreviewParagraph(pEl, runs) {
 const docLinkHrefs = new Map();
 
 function runStyleHasProps(style) {
-  return !!(style?.bold || style?.italic || style?.underline || style?.color || style?.fontFamily || style?.fontSize || style?.highlight);
+  return !!(style?.bold || style?.italic || style?.underline || style?.strike || style?.color || style?.fontFamily || style?.fontSize || style?.highlight);
 }
 
 function accumulateElementStyle(el, style) {
@@ -480,6 +491,7 @@ function accumulateElementStyle(el, style) {
   if (tag === "b" || tag === "strong") style.bold = true;
   if (tag === "i" || tag === "em") style.italic = true;
   if (tag === "u") style.underline = true;
+  if (tag === "s" || tag === "strike") style.strike = true;
 }
 
 function getInheritedRunStyleAtCaret(rootEl) {

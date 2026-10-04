@@ -422,6 +422,14 @@ function asUndoStep(label, fn) {
 function onDocPaste(e) {
   const p = e.target?.closest?.(".docx-editable-p");
   if (!p || readOnlyMode) return;
+  // Apple Notes, Markdown, strony WWW, Google Docs, Word: struktura i proste style (paste-rich.js).
+  // Zwykły tekst bez formatowania — dalej niżej, jak dawniej.
+  const rich = typeof dwbPaste !== "undefined" ? dwbPaste.parse(e.clipboardData) : null;
+  if (rich) {
+    e.preventDefault();
+    dwbPaste.apply(p, rich).catch((err) => log(`Wklejanie: ${err.message || err}`, "error"));
+    return;
+  }
   const text = e.clipboardData?.getData("text/plain");
   if (text == null) return;
   e.preventDefault();

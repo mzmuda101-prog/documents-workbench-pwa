@@ -883,8 +883,8 @@ function composeSdtXml(edit, phStyleId) {
   let pr = "";
   let content = "";
   if (edit.kind === "checkbox") {
-    pr = `<w14:checkbox><w14:checked w14:val="0"/><w14:checkedState w14:val="2612" w14:font="MS Gothic"/><w14:uncheckedState w14:val="2610" w14:font="MS Gothic"/></w14:checkbox>`;
-    content = `<w:r><w:rPr><w:rFonts w:ascii="MS Gothic" w:eastAsia="MS Gothic" w:hAnsi="MS Gothic" w:hint="eastAsia"/></w:rPr><w:t>☐</w:t></w:r>`;
+    pr = `<w14:checkbox><w14:checked w14:val="${edit.checked ? 1 : 0}"/><w14:checkedState w14:val="2612" w14:font="MS Gothic"/><w14:uncheckedState w14:val="2610" w14:font="MS Gothic"/></w14:checkbox>`;
+    content = `<w:r><w:rPr><w:rFonts w:ascii="MS Gothic" w:eastAsia="MS Gothic" w:hAnsi="MS Gothic" w:hint="eastAsia"/></w:rPr><w:t>${edit.checked ? "☒" : "☐"}</w:t></w:r>`;
     return `<w:sdt xmlns:w="${W_NS}" xmlns:w14="${COMPOSE_W14}"><w:sdtPr>${label}<w:id w:val="${id}"/>${pr}</w:sdtPr><w:sdtContent>${content}</w:sdtContent></w:sdt>`;
   }
   if (edit.kind === "date") {
@@ -917,6 +917,254 @@ async function applyFormInsertInZip(zip, xml, edit) {
   const island = { island: new XMLSerializer().serializeToString(sdtEl), text: ffText(ffKid(sdtEl, "sdtContent")) };
   applyRunsToParagraphXml(p, [...before, island, ...after]);
   return { xml: composeSerialize(doc), count: 1 };
+}
+
+// ── op "snippetInsert": snippet z polami formularza Worda (snippet-suggest.js) ─────────
+// edit: { index, offset, deleteLen (wpisany „!nazwa” od offset), parts: [{ text } | { field:
+// { kind, options, label } }], style (wygląd tekstu w miejscu kursora), lang }. Tekst → fragmenty
+// (łamania wierszy z „\n”), pole → kontrolka jak z „Wstaw → pole formularza” (wyspa).
+async function applySnippetInsertInZip(zip, xml, edit) {
+  const doc = composeParse(xml);
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  const p = paragraphs[edit.index];
+  if (!p || !Array.isArray(edit.parts)) return { xml, count: 0 };
+  const needPh = edit.parts.some((x) => x.field && x.field.kind !== "checkbox");
+  const phId = needPh ? await composeEnsureCharStyle(zip, "Placeholder Text", "PlaceholderText",
+    `<w:uiPriority w:val="99"/><w:semiHidden/><w:rPr><w:color w:val="666666"/></w:rPr>`) : "PlaceholderText";
+  const runs = extractRunsFromParagraphXml(p);
+  const total = previewRunsToPlainText(runs).length;
+  const at = Math.max(0, Math.min(total, edit.offset | 0));
+  const { before } = composeSliceRuns(runs, at, at);
+  const { after } = composeSliceRuns(runs, Math.min(total, at + Math.max(0, edit.deleteLen | 0)), Math.min(total, at + Math.max(0, edit.deleteLen | 0)));
+  const style = edit.style || {};
+  const mid = [];
+  edit.parts.forEach((part) => {
+    if (part.field) {
+      const kind = ["text", "date", "dropdown", "checkbox"].includes(part.field.kind) ? part.field.kind : "text";
+      const sdtEl = composeParse(composeSdtXml({ kind, options: part.field.options, label: part.field.label, lang: edit.lang }, phId)).documentElement;
+      mid.push({ island: new XMLSerializer().serializeToString(sdtEl), text: ffText(ffKid(sdtEl, "sdtContent")) });
+      return;
+    }
+    const text = String(part.text || "").split(edit.cursorMark || "\uE000").join("");
+    text.split("\n").forEach((line, i) => {
+      if (i) mid.push({ break: true });
+      if (line) mid.push({ text: line, ...style });
+    });
+  });
+  applyRunsToParagraphXml(p, [...before, ...mid, ...after]);
+  return { xml: composeSerialize(doc), count: 1 };
+}
+
+// ── op "pasteBlocks": wklejka ze strukturą (paste-rich.js) ─────────────────────
+// Plan wklejki — ten sam w zapisie i przy ustawianiu kursora (paste-rich.js): pozycje kolejnych
+// elementów względem akapitu z kursorem. Zwykły akapit wklejki dokleja się do tekstu przed
+// kursorem; nagłówek/punkt listy/cytat na początku pustego miejsca zamienia ten akapit; tekst za
+// kursorem dołącza do ostatniego akapitu wklejki (po tabeli — nowy akapit).
+const COMPOSE_PASTE_TEXT = ["p", "h", "li", "quote", "code"];
+function composePastePlan(blocks, beforeEmpty) {
+  const items = []; // { block | null (sam tekst przed kursorem), merge: true = z tekstem przed kursorem }
+  blocks.forEach((b, i) => {
+    if (i === 0) {
+      if (b.type === "p") { items.push({ block: b, merge: true }); return; }
+      if (!beforeEmpty) items.push({ block: null, merge: true });
+    }
+    items.push({ block: b, merge: false });
+  });
+  const lastText = [...items].reverse().find((it) => !it.block || COMPOSE_PASTE_TEXT.includes(it.block.type) || it.block.type === "hr");
+  const last = items[items.length - 1];
+  const tailItem = last.block && (last.block.type === "table" || last.block.type === "hr");
+  if (tailItem) items.push({ block: null, tail: true });
+  const paras = (it) => (it.block?.type === "table" ? it.block.rows.reduce((n, r) => n + r.length, 0) : 1);
+  let off = 0;
+  let lastParaOffset = 0;
+  let lastTextLen = 0;
+  items.forEach((it) => {
+    if (it.block?.type === "table") { off += paras(it); return; }
+    lastParaOffset = off;
+    lastTextLen = it.block ? previewRunsToPlainText(it.block.runs || []).length + (it.block.type === "li" && it.block.checked !== undefined ? 2 : 0) : 0;
+    off += 1;
+  });
+  return { items, lastParaOffset, lastTextLen, lastIsFirst: items.length === 1 && items[0].merge, lastText };
+}
+
+function composePasteListLevels(group) {
+  // rodzaj każdego poziomu z pierwszego punktu na tym poziomie (numerowana / punktowana)
+  const kinds = [];
+  group.forEach((b) => { if (kinds[b.level] == null) kinds[b.level] = b.ordered ? "n" : "b"; });
+  for (let i = 0; i < 9; i++) if (kinds[i] == null) kinds[i] = kinds[i - 1] || "b";
+  return kinds;
+}
+
+async function applyPasteBlocksInZip(zip, xml, edit) {
+  const doc = composeParse(xml);
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  const p = paragraphs[edit.index];
+  const blocks = (edit.blocks || []).filter((b) => b && (b.type === "table" ? b.rows?.length : true));
+  if (!p || !blocks.length) return { xml, count: 0 };
+  const cache = new Map();
+  const runs = extractRunsFromParagraphXml(p);
+  const total = previewRunsToPlainText(runs).length;
+  const at = Math.max(0, Math.min(total, edit.offset | 0));
+  const { before } = composeSliceRuns(runs, at, at);
+  const { after } = composeSliceRuns(runs, at, at);
+  const plan = composePastePlan(blocks, !previewRunsToPlainText(before).length);
+
+  // wzór zwykłego akapitu: akapit z kursorem bez stylu nagłówka, listy, sekcji, podziału strony
+  const origPPr = composeDirectChild(p, "pPr");
+  const plainPPr = () => {
+    const np = origPPr ? origPPr.cloneNode(true) : null;
+    if (np) ["pStyle", "numPr", "sectPr", "pageBreakBefore", "outlineLvl", "pBdr", "keepNext"].forEach((k) => composeSetPPrChild(np, k, null));
+    return np;
+  };
+  // listy: kolejne punkty (bez list kontrolnych) = jedna lista z numeracją od 1
+  let numDoc = null;
+  let numIdx = null;
+  const numPath = "word/numbering.xml";
+  const listNum = new Map(); // blok → numId
+  const groups = [];
+  let g = null;
+  blocks.forEach((b) => {
+    if (b.type !== "li" || b.checked !== undefined) { g = null; return; }
+    // punktowana zaraz po numerowanej (albo odwrotnie) na pierwszym poziomie = nowa lista
+    const top = g && g.find((x) => !x.level);
+    if (g && !b.level && top && !!top.ordered !== !!b.ordered) g = null;
+    if (!g) groups.push((g = []));
+    g.push(b);
+  });
+  if (groups.length) {
+    const numXml = zip.file(numPath) ? await zip.file(numPath).async("string") : null;
+    numDoc = composeParse(numXml || `<w:numbering xmlns:w="${W_NS}"/>`);
+    numIdx = composeNumberingIndex(numDoc);
+    const root = numDoc.documentElement;
+    for (const group of groups) {
+      const kinds = composePasteListLevels(group);
+      const name = `DWB Paste ${kinds.join("")}`;
+      let absId = Array.from(numIdx.abstracts.entries()).find(([, a]) => a.name === name)?.[0];
+      if (absId == null) {
+        absId = String(Array.from(numIdx.abstracts.keys()).reduce((m, k) => Math.max(m, parseInt(k, 10) || 0), -1) + 1);
+        const nsid = Math.floor(Math.random() * 0xffffffff).toString(16).toUpperCase().padStart(8, "0");
+        let lvls = "";
+        kinds.forEach((k, i) => {
+          const ind = `<w:pPr><w:ind w:left="${720 * (i + 1)}" w:hanging="360"/></w:pPr>`;
+          if (k === "b") lvls += `<w:lvl w:ilvl="${i}"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="${COMPOSE_BULLETS[i % 3]}"/><w:lvlJc w:val="left"/>${ind}<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:hint="default"/></w:rPr></w:lvl>`;
+          else { const [fmt, text] = COMPOSE_NUMFMT[i % 3]; lvls += `<w:lvl w:ilvl="${i}"><w:start w:val="1"/><w:numFmt w:val="${fmt}"/><w:lvlText w:val="${text.replace("L", i + 1)}"/><w:lvlJc w:val="left"/>${ind}</w:lvl>`; }
+        });
+        const frag = composeParse(`<w:numbering xmlns:w="${W_NS}"><w:abstractNum w:abstractNumId="${absId}"><w:nsid w:val="${nsid}"/><w:multiLevelType w:val="hybridMultilevel"/><w:name w:val="${name}"/>${lvls}</w:abstractNum></w:numbering>`);
+        root.insertBefore(numDoc.importNode(frag.documentElement.firstChild, true), composeDirectChild(root, "num"));
+        numIdx.abstracts.set(absId, { el: null, name });
+      }
+      const numId = String(Array.from(numIdx.nums.keys()).reduce((m, k) => Math.max(m, parseInt(k, 10) || 0), 0) + 1);
+      const num = composeEl(numDoc, "num", { numId });
+      num.appendChild(composeEl(numDoc, "abstractNumId", { val: absId }));
+      const ov = composeEl(numDoc, "lvlOverride", { ilvl: 0 });
+      ov.appendChild(composeEl(numDoc, "startOverride", { val: 1 }));
+      num.appendChild(ov);
+      root.appendChild(num);
+      numIdx.nums.set(numId, absId);
+      group.forEach((b) => listNum.set(b, numId));
+    }
+  }
+
+  const styleOf = async (b) => {
+    if (b.type === "h") return composeEnsureStyle(zip, `h${Math.max(1, Math.min(3, b.level || 1))}`, cache);
+    if (b.type === "quote") return composeEnsureStyle(zip, "quote", cache);
+    return null;
+  };
+  const tableStyle = blocks.some((b) => b.type === "table") ? await composeEnsureTableStyle(zip) : null;
+
+  const nodes = []; // elementy w kolejności
+  let reused = false;
+  for (const it of plan.items) {
+    const b = it.block;
+    if (b?.type === "table") {
+      const cols = Math.max(...b.rows.map((r) => r.length));
+      const totalW = composeTextWidthTwips(doc, p);
+      const colW = Math.floor(totalW / cols);
+      const tbl = composeEl(doc, "tbl");
+      tbl.appendChild(composeParse(`<w:tblPr xmlns:w="${W_NS}"><w:tblStyle w:val="${tableStyle}"/><w:tblW w:w="${colW * cols}" w:type="dxa"/><w:tblLook w:val="04A0" w:firstRow="1" w:lastRow="0" w:firstColumn="1" w:lastColumn="0" w:noHBand="0" w:noVBand="1"/></w:tblPr>`).documentElement);
+      const grid = composeEl(doc, "tblGrid");
+      for (let c = 0; c < cols; c++) grid.appendChild(composeEl(doc, "gridCol", { w: colW }));
+      tbl.appendChild(grid);
+      b.rows.forEach((row) => {
+        const tr = composeEl(doc, "tr");
+        for (let c = 0; c < cols; c++) {
+          const tc = composeEl(doc, "tc");
+          const tcPr = composeEl(doc, "tcPr");
+          tcPr.appendChild(composeEl(doc, "tcW", { w: colW, type: "dxa" }));
+          tc.appendChild(tcPr);
+          const cp = composeEl(doc, "p");
+          applyRunsToParagraphXml(cp, row[c] || []);
+          tc.appendChild(cp);
+          tr.appendChild(tc);
+        }
+        tbl.appendChild(tr);
+      });
+      nodes.push(tbl);
+      continue;
+    }
+    // akapit: pierwszy z tekstem przed kursorem (albo zamieniony) = ten sam element w:p
+    const reuse = !reused && (it.merge || plan.items.indexOf(it) === 0 || (plan.items[0].block?.type === "table" && !reused));
+    const el = reuse ? p : composeEl(doc, "p");
+    if (reuse) reused = true;
+    if (!reuse || (b && !it.merge)) {
+      // nowy akapit albo akapit zamieniony w nagłówek / punkt listy / cytat
+      const old = composeDirectChild(el, "pPr");
+      const sect = old && composeDirectChild(old, "sectPr");
+      if (old) el.removeChild(old);
+      const pPr = plainPPr();
+      if (pPr) el.insertBefore(pPr, el.firstChild);
+      if (sect) composeSetPPrChild(composeEnsurePPr(el), "sectPr", sect);
+    }
+    let content = [];
+    if (it.merge) content = [...before];
+    if (b) {
+      const pPr = composeEnsurePPr(el);
+      const sid = await styleOf(b);
+      if (sid) composeSetPPrChild(pPr, "pStyle", { val: sid });
+      if (b.type === "li" && b.checked === undefined) {
+        const numPr = composeEl(doc, "numPr");
+        numPr.appendChild(composeEl(doc, "ilvl", { val: Math.max(0, Math.min(8, b.level | 0)) }));
+        numPr.appendChild(composeEl(doc, "numId", { val: listNum.get(b) }));
+        composeSetPPrChild(pPr, "numPr", numPr);
+      }
+      if (b.type === "li" && b.checked !== undefined) {
+        // lista kontrolna: prawdziwe pole wyboru Worda (klikane w aplikacji i w Wordzie)
+        if (b.level) composeSetPPrChild(pPr, "ind", { left: 360 * b.level });
+        const sdtEl = composeParse(composeSdtXml({ kind: "checkbox", checked: !!b.checked, lang: edit.lang }, "PlaceholderText")).documentElement;
+        content.push({ island: new XMLSerializer().serializeToString(sdtEl), text: b.checked ? "☒" : "☐" }, { text: " " });
+      }
+      if (b.type === "hr") {
+        const pBdr = composeEl(doc, "pBdr");
+        pBdr.appendChild(composeEl(doc, "bottom", { val: "single", sz: 8, space: 1, color: "auto" }));
+        composeSetPPrChild(pPr, "pBdr", pBdr);
+      }
+      if (!pPr.firstChild) el.removeChild(pPr);
+      content.push(...(b.runs || []));
+    }
+    nodes.push({ el, content });
+  }
+  // tekst za kursorem → ostatni akapit
+  const lastPara = [...nodes].reverse().find((n) => n.el);
+  lastPara.content.push(...after);
+  // na miejsce akapitu z kursorem, w kolejności
+  const parent = p.parentNode;
+  const anchor = p.nextSibling;
+  parent.removeChild(p);
+  nodes.forEach((n) => {
+    const node = n.el || n;
+    parent.insertBefore(node, anchor);
+    if (n.el) applyRunsToParagraphXml(n.el, n.content);
+  });
+  // znacznik końca sekcji należy do ostatniego akapitu
+  if (lastPara.el !== p) composeMoveSectPr(p, lastPara.el);
+  if (numDoc) {
+    await composeEnsurePart(zip, numPath, composeSerialize(numDoc),
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml",
+      "http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering");
+    zip.file(numPath, composeSerialize(numDoc));
+  }
+  if (cache.stylesDirty) zip.file("word/styles.xml", cache.stylesXml);
+  return { xml: composeSerialize(doc), count: blocks.length };
 }
 
 // ── tabele ───────────────────────────────────────────────────────────────────

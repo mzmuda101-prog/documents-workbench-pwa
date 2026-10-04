@@ -740,8 +740,14 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
       total += res.count;
       continue;
     }
-    if (normalized.op === "formInsert") { // docx-compose.js — styl „Tekst zastępczy”
-      const res = await applyFormInsertInZip(zip, xml, normalized);
+    if (normalized.op === "pasteBlocks") { // docx-compose.js — wklejka ze strukturą (paste-rich.js)
+      const res = await applyPasteBlocksInZip(zip, xml, normalized);
+      xml = res.xml;
+      total += res.count;
+      continue;
+    }
+    if (normalized.op === "formInsert" || normalized.op === "snippetInsert") { // docx-compose.js — styl „Tekst zastępczy”
+      const res = normalized.op === "formInsert" ? await applyFormInsertInZip(zip, xml, normalized) : await applySnippetInsertInZip(zip, xml, normalized);
       xml = res.xml;
       total += res.count;
       continue;

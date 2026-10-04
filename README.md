@@ -38,6 +38,17 @@ Siostrzana aplikacja [Sheet Workbench PWA](../sheet-workbench-pwa/README.md).
   Worda („razem z następnym”, wiersze razem, wdowy/sieroty) i odstępy wierszy jak w Wordzie;
   sprawdzone z prawdziwym Wordem (`npm run test:pages`). Przybliżone przy czcionkach, których
   przeglądarka nie ma i dla których nie ma zamiennika (niżej)
+- **Wklejanie z zachowaniem stylów** (`app/paste-rich.js`): z Notatek Apple, stron WWW, Google
+  Docs, Worda (HTML) i z Markdownu (Obsidian, Bear…): akapity, nagłówki, listy punktowane i
+  numerowane z poziomami, listy kontrolne jako pola wyboru Worda, cytaty, kod, tabele, linia;
+  pogrubienie, kursywa, podkreślenie, przekreślenie, wyróżnienie, linki (tylko http/https/mailto/tel).
+  Kroje, rozmiary i kolory ze źródła NIE — tekst przyjmuje styl dokumentu. Jedno zdanie wkleja się
+  w miejscu kursora; więcej — jedną operacją (jeden krok Cofnij). Zwykły tekst jak dawniej.
+  `npm run test:paste`
+- **Pola w snippetach**: `{{termin:data}}` (kalendarz), `{{status:lista=A|B}}`, `{{uwagi:długi}}`,
+  `{{ilość:liczba}}`, `{{zgoda:zaznacz}}` / `taknie` — okienko przy wstawianiu, do dokumentu idzie
+  wartość; przedrostek `formularz-` wstawia prawdziwe pole formularza Worda. „＋ Pole” w panelu
+  buduje zapis. `npm run test:snfields`
 - **Przypisy dolne i końcowe** (`app/doc-notes.js`): numer jak w Wordzie (ciągły przez cały
   dokument, format z ustawień pliku — 1, i, a, *), dymek z treścią przypisu po najechaniu na
   odnośnik (na dotyku przytrzymanie), klik (Czytanie) / dwuklik (Edycja) → skok do przypisu i
@@ -124,6 +135,8 @@ npm run test:caret    # poruszanie się kursorem między akapitami (Chromium + W
 npm run test:flows    # funkcje klikane jak użytkownik (Chromium + WebKit)
 npm run test:export   # eksport, statystyki, import/eksport JSON, usuwanie danych osobowych
 npm run test:keys     # klawiatura, tryb skupienia, podpowiedzi
+npm run test:paste    # wklejanie z Notatek / Markdown / HTML (Chromium + WebKit)
+npm run test:snfields # pola w snippetach: kalendarz, lista, pola formularza Worda (Chromium + WebKit)
 npm run test:notes    # przypisy: numery, dymek, skok, edycja treści i przypisów, zapis (Chromium + WebKit)
 npm run test:fonts    # zamienniki krojów Office: szerokości jak w Wordzie, offline (Chromium + WebKit)
 npm run bench         # pomiar wydajności na dużych dokumentach (~100 i ~300 stron, CPU ×4)

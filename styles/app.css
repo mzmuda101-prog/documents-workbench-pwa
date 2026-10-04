@@ -1597,6 +1597,10 @@ textarea.ff-pop-input { min-height: 4.5em; resize: vertical; }
 .sn-dialog::backdrop { background: rgba(8, 14, 28, 0.35); }
 .sn-dialog form { display: flex; flex-direction: column; gap: 10px; }
 .sn-dialog h3 { margin: 0; font-size: 15px; }
+.sn-dialog textarea, .sn-dialog select, .sn-dialog input[type="date"] { font: inherit; }
+.sn-dialog .field-check { flex-direction: row; align-items: flex-start; gap: 8px; }
+.sn-dialog .field-check input { margin-top: 2px; flex: none; width: auto; padding: 0; }
+.sn-dialog [hidden] { display: none !important; }
 
 /* =====================================================================
    TWORZENIE DOKUMENTU (Etap 1 — compose-ui.js)

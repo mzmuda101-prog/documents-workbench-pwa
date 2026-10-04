@@ -81,11 +81,17 @@ async function run() {
     const ev = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
     document.activeElement.dispatchEvent(ev);
   });
+  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 15000 });
   await page.waitForTimeout(700);
   f = await fileParas();
   const pasted = f.map((p) => p.text).join("¶");
-  check("wklejenie: czysty tekst w pliku, wiersze jako łamania, bez obcych stylów", /Wklejony tekst/.test(f[3].text) && /drugi akapit/.test(f[3].text) && /<w:br\/>/.test(f[3].xml) && !/Comic|alert|color/.test(f[3].xml) && f.length === parasBefore, `${parasBefore} → ${f.length} akapitów; ${f[3].xml.slice(-300)}`);
+  // od 2026-10-04 (paste-rich.js): pogrubienie zostaje, akapity ze schowka = akapity; kroje,
+  // kolory i skrypty ze źródła dalej NIE przechodzą
+  check("wklejenie HTML: pogrubienie zostaje, akapity jako akapity, bez obcych krojów/kolorów/skryptów",
+    /Wklejony tekst$/.test(f[3].text) && /<w:b w:val="1"\/><\/w:rPr><w:t>Wklejony/.test(f[3].xml) && f[4]?.text === "drugi akapit" && !/Comic|alert|color/.test(f[3].xml + f[4]?.xml) && f.length === parasBefore + 1,
+    `${parasBefore} → ${f.length} akapitów; ${f[3].xml.slice(-300)}`);
   await page.click("#undoBtn");
+  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 15000 });
   await page.waitForTimeout(700);
   f = await fileParas();
   check("↶ cofa samo wklejenie", !/Wklejony/.test(f[3].text) && /elektroniczną\.$/.test(f[3].text), f[3].text.slice(-40));

@@ -72,10 +72,85 @@ function resolveSnippetBody(body, opts = {}, depth = 0) {
 
 function resolveSnippetMapBodies(map) {
   const out = {};
+  // „Rozwiń w dokumencie” (cały plik naraz) nie pyta o pola — pole z typem zostaje zwykłym
+  // {{pole}} do wypełnienia później w panelu Placeholdery
   Object.entries(map || {}).forEach(([name, body]) => {
-    if (body) out[name] = resolveSnippetBody(body);
+    if (body) out[name] = plainSnippetFields(resolveSnippetBody(body));
   });
   return out;
+}
+
+// ── pola snippetu z typem ────────────────────────────────────────────────────
+//   {{imie}}                         tekst (jak dawniej)
+//   {{uwagi:długi}}                  tekst wielowierszowy
+//   {{ilość:liczba}}                 liczba
+//   {{termin:data}}                  kalendarz → 04.10.2026  (data=długa → 4 października 2026, data=iso)
+//   {{status:lista=Nowy|W toku}}     lista wyboru
+//   {{zgoda:zaznacz}}                pole wyboru → ☒ / ☐   ({{zgoda:taknie}} → Tak / Nie)
+//   {{podpis:formularz-lista=A|B}}   PRAWDZIWE pole formularza Worda (też formularz-data,
+//                                    formularz-tekst, formularz-zaznacz) — wypełnia się w dokumencie
+const SNIPPET_FIELD_RE = /\{\{\s*([\p{L}\p{N}_.-]+)\s*(?::\s*([^{}]*?))?\s*\}\}/gu;
+const SNIPPET_FIELD_KINDS = {
+  tekst: "text", text: "text",
+  "długi": "long", dlugi: "long", long: "long",
+  liczba: "number", number: "number",
+  data: "date", date: "date",
+  lista: "list", list: "list",
+  zaznacz: "check", check: "check", checkbox: "check",
+  taknie: "yesno", "tak/nie": "yesno", yesno: "yesno",
+};
+
+function parseSnippetFieldSpec(spec) {
+  let raw = String(spec || "").trim();
+  const form = /^(formularz|form)-/i.test(raw);
+  if (form) raw = raw.replace(/^(formularz|form)-/i, "");
+  const eq = raw.indexOf("=");
+  const typeName = (eq >= 0 ? raw.slice(0, eq) : raw).trim().toLowerCase();
+  const arg = eq >= 0 ? raw.slice(eq + 1).trim() : "";
+  const kind = SNIPPET_FIELD_KINDS[typeName] || "text";
+  const options = kind === "list" ? arg.split("|").map((x) => x.trim()).filter(Boolean) : [];
+  return { kind, form, options, format: kind === "date" ? arg.toLowerCase() : "" };
+}
+
+// Pola w treści snippetu w kolejności, każda nazwa raz (pole formularza — każde wystąpienie osobno).
+function scanSnippetFields(body) {
+  const out = [];
+  const seen = new Set();
+  const re = new RegExp(SNIPPET_FIELD_RE.source, "gu");
+  let m;
+  while ((m = re.exec(String(body || "")))) {
+    const f = { name: m[1], token: m[0], ...parseSnippetFieldSpec(m[2]) };
+    if (f.form) { out.push(f); continue; }
+    if (seen.has(f.name)) continue;
+    seen.add(f.name);
+    out.push(f);
+  }
+  return out;
+}
+
+// Pole z typem → zwykłe {{pole}} (placeholder) — gdy nie ma kogo zapytać.
+function plainSnippetFields(text) {
+  return String(text || "").replace(new RegExp(SNIPPET_FIELD_RE.source, "gu"), (tok, name, spec) => (spec ? `{{${name}}}` : tok));
+}
+
+// Wartość z okienka → tekst w dokumencie.
+function formatSnippetFieldValue(field, value) {
+  if (field.kind === "date") {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+    if (!m) return String(value || "");
+    if (field.format === "iso") return value;
+    if (/^(długa|dluga|long)$/.test(field.format)) {
+      const locale = (typeof currentLang !== "undefined" && currentLang === "en") ? "en-GB" : "pl-PL";
+      return new Date(+m[1], +m[2] - 1, +m[3]).toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric" });
+    }
+    return `${m[3]}.${m[2]}.${m[1]}`;
+  }
+  if (field.kind === "check") return value ? "☒" : "☐";
+  if (field.kind === "yesno") {
+    const en = typeof currentLang !== "undefined" && currentLang === "en";
+    return value ? (en ? "Yes" : "Tak") : (en ? "No" : "Nie");
+  }
+  return String(value ?? "");
 }
 
 function loadSnippets() {

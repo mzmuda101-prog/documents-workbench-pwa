@@ -12,6 +12,13 @@
   const TRIGGER_BEFORE_CARET_RE = /(?<![\p{L}\p{N}_!])!([\p{L}\p{N}_-]*)$/u;
 
   // ── pytanie o pola {{…}} ────────────────────────────────────────────────────
+  // Każde pole dostaje kontrolkę swojego rodzaju (snippets.js parseSnippetFieldSpec): kalendarz,
+  // lista wyboru, pole wielowierszowe, liczba, pole wyboru. Pola „formularz-…” nie są tu pytane —
+  // wstawiają się jako prawdziwe pola formularza Worda. Wynik: { nazwa: tekst do wstawienia }.
+  function todayIso() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
   function askSnippetFields(sn, fields) {
     return new Promise((resolve) => {
       const remembered = loadSnippetFieldValues();
@@ -22,20 +29,38 @@
       const title = document.createElement("h3");
       title.textContent = t("snippetsFieldsTitle", { name: formatSnippetTrigger(sn.name) });
       form.append(title);
-      const inputs = fields.map((name, i) => {
+      const controls = fields.map((f, i) => {
         const label = document.createElement("label");
-        label.className = "field";
+        label.className = f.kind === "check" || f.kind === "yesno" ? "field field-check" : "field";
         const span = document.createElement("span");
-        span.textContent = typeof placeholderFieldLabel === "function" ? placeholderFieldLabel(name) : name;
-        const input = document.createElement("input");
-        input.type = "text";
-        input.autocomplete = "off";
-        input.value = remembered[name] || "";
-        input.dataset.name = name;
+        span.textContent = typeof placeholderFieldLabel === "function" ? placeholderFieldLabel(f.name) : f.name;
+        const prev = remembered[f.name];
+        let input;
+        if (f.kind === "long") {
+          input = document.createElement("textarea");
+          input.rows = 3;
+          input.value = prev || "";
+        } else if (f.kind === "list") {
+          input = document.createElement("select");
+          f.options.forEach((o) => input.append(new Option(o, o)));
+          if (prev && f.options.includes(prev)) input.value = prev;
+        } else if (f.kind === "check" || f.kind === "yesno") {
+          input = document.createElement("input");
+          input.type = "checkbox";
+          input.checked = prev === "1";
+        } else {
+          input = document.createElement("input");
+          input.type = f.kind === "date" ? "date" : "text";
+          if (f.kind === "number") input.inputMode = "decimal";
+          input.autocomplete = "off";
+          input.value = f.kind === "date" ? (/^\d{4}-\d{2}-\d{2}$/.test(prev || "") ? prev : todayIso()) : prev || "";
+        }
+        input.dataset.name = f.name;
         if (!i) input.autofocus = true;
-        label.append(span, input);
+        if (input.type === "checkbox") label.append(input, span);
+        else label.append(span, input);
         form.append(label);
-        return input;
+        return { f, input };
       });
       const hint = document.createElement("p");
       hint.className = "hint";
@@ -55,17 +80,35 @@
       form.addEventListener("submit", (e) => {
         e.preventDefault();
         const values = {};
-        inputs.forEach((inp) => { if (inp.value.trim()) values[inp.dataset.name] = inp.value.trim(); });
-        saveSnippetFieldValues(values);
+        const remember = {};
+        controls.forEach(({ f, input }) => {
+          if (input.type === "checkbox") {
+            values[f.name] = formatSnippetFieldValue(f, input.checked);
+            remember[f.name] = input.checked ? "1" : "0";
+            return;
+          }
+          const v = f.kind === "long" ? input.value.replace(/\s+$/, "") : input.value.trim();
+          if (!v) return; // puste — zostaje {{pole}} do wypełnienia później
+          values[f.name] = formatSnippetFieldValue(f, v);
+          remember[f.name] = v;
+        });
+        saveSnippetFieldValues(remember);
         finish(values);
       });
       dlg.showModal();
-      inputs[0]?.focus();
+      controls[0]?.input.focus();
     });
   }
 
-  function fillFields(text, values) {
-    return text.replace(new RegExp(PLACEHOLDER_TOKEN_RE.source, "g"), (tok, name) => (values[name] != null ? values[name] : tok));
+  // Wartości w miejsce pól; pole formularza → znacznik (kolejny znak z obszaru prywatnego), z
+  // którego zapis robi prawdziwe pole Worda. Niewypełnione pole zostaje jako {{pole}}.
+  const FORM_MARK_BASE = 0xE100;
+  function fillFields(text, values, forms) {
+    return text.replace(new RegExp(SNIPPET_FIELD_RE.source, "gu"), (tok, name, spec) => {
+      const f = { name, ...parseSnippetFieldSpec(spec) };
+      if (f.form) { forms.push(f); return String.fromCharCode(FORM_MARK_BASE + forms.length - 1); }
+      return values[name] != null ? values[name] : `{{${name}}}`;
+    });
   }
 
   // Kursor tam, gdzie był {cursor} — znacznik usuwamy i stawiamy w jego miejscu zaznaczenie.
@@ -92,16 +135,19 @@
   async function expandSnippetAtCaret(p, sn, deleteLen = 0, trailing = "", lead = "") {
     if (!p || !sn) return false;
     let body = lead + resolveSnippetBody(sn.body, { cursorMark: true });
-    const fields = [...new Set(scanPlaceholdersInText(body).map((h) => h.name))];
+    const fields = scanSnippetFields(body).filter((f) => !f.form);
+    const saved = window.getSelection()?.rangeCount ? window.getSelection().getRangeAt(0).cloneRange() : null;
+    let values = {};
     if (fields.length) {
-      const saved = window.getSelection()?.rangeCount ? window.getSelection().getRangeAt(0).cloneRange() : null;
-      const values = await askSnippetFields(sn, fields);
+      values = await askSnippetFields(sn, fields);
       if (!values) { p.focus(); if (saved) { const s = getSelection(); s.removeAllRanges(); s.addRange(saved); } return false; }
-      body = fillFields(body, values);
       p.focus({ preventScroll: true });
       if (saved) { const s = getSelection(); s.removeAllRanges(); s.addRange(saved); }
     }
+    const forms = [];
+    body = fillFields(body, values, forms);
     const style = mergeRunStyles(getInheritedRunStyleAtCaret(p), activeTypingStyle);
+    if (forms.length) return insertWithFormFields(p, body, forms, deleteLen, trailing, style);
     const hasMark = body.includes(SNIPPET_CURSOR_MARK);
     asUndoStep("undoOpSnippet", () => {
       if (deleteLen > 0) replaceTextEndingBeforeCaret(p, deleteLen, body + trailing, style);
@@ -113,6 +159,48 @@
     return true;
   }
   window.expandSnippetAtCaret = expandSnippetAtCaret;
+
+  // Snippet z polami formularza Worda: wstawienie idzie operacją na pliku (op „snippetInsert”,
+  // docx-compose.js) — pola to prawdziwe kontrolki, całość = jeden krok cofania.
+  async function insertWithFormFields(p, body, forms, deleteLen, trailing, style) {
+    const index = resolveParaIndex(p);
+    const sel = window.getSelection();
+    if (index < 0 || !sel?.rangeCount) return false;
+    const pre = document.createRange();
+    pre.selectNodeContents(p);
+    pre.setEnd(sel.getRangeAt(0).startContainer, sel.getRangeAt(0).startOffset);
+    const box = document.createElement("p");
+    box.append(pre.cloneContents());
+    const offset = previewRunsToPlainText(extractRunsFromPreviewParagraph(box)).length;
+    const parts = [];
+    let buf = "";
+    for (const ch of body + trailing) {
+      const k = ch.charCodeAt(0) - FORM_MARK_BASE;
+      if (k >= 0 && k < forms.length) {
+        if (buf) parts.push({ text: buf });
+        buf = "";
+        const f = forms[k];
+        parts.push({ field: { kind: f.kind === "list" ? "dropdown" : f.kind === "check" || f.kind === "yesno" ? "checkbox" : f.kind === "date" ? "date" : "text", options: f.options, label: f.name } });
+      } else buf += ch;
+    }
+    if (buf) parts.push({ text: buf });
+    const keep = {};
+    ["bold", "italic", "underline", "color", "fontFamily", "fontSize", "highlight"].forEach((k) => { if (style?.[k]) keep[k] = style[k]; });
+    // kursor po wstawieniu: w miejscu {cursor} albo za wstawioną treścią (pole liczy się tekstem
+    // zastępczym, tak jak w pliku)
+    const ph = (typeof COMPOSE_PH !== "undefined" && COMPOSE_PH[currentLang === "en" ? "en" : "pl"]) || {};
+    let pos = Math.max(0, offset - deleteLen);
+    let cursorAt = -1;
+    for (const part of parts) {
+      if (part.field) { pos += part.field.kind === "checkbox" ? 1 : String(ph[part.field.kind] || "").length; continue; }
+      const k = part.text.indexOf(SNIPPET_CURSOR_MARK);
+      if (k >= 0 && cursorAt < 0) cursorAt = pos + k;
+      pos += part.text.split(SNIPPET_CURSOR_MARK).join("").length;
+    }
+    pendingInlineCursor = { paraIndex: index, offset: cursorAt >= 0 ? cursorAt : pos };
+    await applyDocumentEdit({ op: "snippetInsert", index, offset: Math.max(0, offset - deleteLen), deleteLen, parts, style: keep, lang: currentLang, cursorMark: SNIPPET_CURSOR_MARK });
+    return true;
+  }
 
   // ── iOS: spacja zjedzona przed „!” ─────────────────────────────────────────
   // Klawiatura iPhone'a po słowie z paska podpowiedzi sama dokleja spację, a gdy wpiszesz

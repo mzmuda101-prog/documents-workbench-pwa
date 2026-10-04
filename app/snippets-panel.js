@@ -232,3 +232,82 @@ snImportBtn?.addEventListener("click", async () => {
   renderSnippetList();
   toast(t("snImported", res), "success");
 });
+
+// ── „＋ Pole” — budowanie pola z typem bez pamiętania składni ─────────────────
+// Wynik (snippets.js): {{termin:data}}, {{status:lista=A|B}}, {{podpis:formularz-lista=A|B}}…
+(() => {
+  const btn = document.getElementById("snAddFieldBtn");
+  if (!btn || !snBodyEl) return;
+  const TYPES = [
+    ["tekst", "snippetsFieldTypeText", true],
+    ["długi", "snippetsFieldTypeLong", false],
+    ["liczba", "snippetsFieldTypeNumber", false],
+    ["data", "snippetsFieldTypeDate", true],
+    ["lista", "snippetsFieldTypeList", true],
+    ["zaznacz", "snippetsFieldTypeCheck", true],
+    ["taknie", "snippetsFieldTypeYesNo", false],
+  ];
+  btn.addEventListener("click", () => {
+    // kursor w treści snippetu — tam trafi pole
+    const selStart = snBodyEl.selectionStart ?? snBodyEl.value.length;
+    const selEnd = snBodyEl.selectionEnd ?? selStart;
+    const dlg = document.createElement("dialog");
+    dlg.className = "sn-dialog";
+    dlg.innerHTML = `<form method="dialog">
+      <h3></h3>
+      <label class="field"><span data-k="snippetsFieldName"></span><input class="sf-name" type="text" autocomplete="off" /></label>
+      <label class="field"><span data-k="snippetsFieldType"></span><select class="sf-type"></select></label>
+      <label class="field sf-opts-wrap"><span data-k="snippetsFieldOptions"></span><textarea class="sf-opts" rows="4"></textarea></label>
+      <label class="field sf-fmt-wrap"><span data-k="snippetsFieldDateFormat"></span><select class="sf-fmt"><option value=""></option><option value="długa"></option><option value="iso"></option></select></label>
+      <label class="field field-check sf-form-wrap"><input class="sf-form" type="checkbox" /><span data-k="snippetsFieldForm"></span></label>
+      <p class="hint sf-form-hint"></p>
+      <div class="btn-row"><button type="button" class="btn sf-cancel"></button><button type="submit" class="btn primary sf-ok"></button></div>
+    </form>`;
+    dlg.querySelector("h3").textContent = t("snippetsFieldTitle");
+    dlg.querySelectorAll("[data-k]").forEach((el) => { el.textContent = t(el.dataset.k); });
+    const typeEl = dlg.querySelector(".sf-type");
+    TYPES.forEach(([v, key]) => typeEl.append(new Option(t(key), v)));
+    const fmt = dlg.querySelector(".sf-fmt");
+    ["snippetsFieldDateShort", "snippetsFieldDateLong", "snippetsFieldDateIso"].forEach((k, i) => { fmt.options[i].textContent = t(k); });
+    dlg.querySelector(".sf-form-hint").textContent = t("snippetsFieldFormHint");
+    dlg.querySelector(".sf-cancel").textContent = t("cancel");
+    dlg.querySelector(".sf-ok").textContent = t("snippetsFieldAdd");
+    const formEl = dlg.querySelector(".sf-form");
+    const sync = () => {
+      const type = typeEl.value;
+      const formOk = TYPES.find(([v]) => v === type)[2];
+      if (!formOk) formEl.checked = false;
+      dlg.querySelector(".sf-opts-wrap").hidden = type !== "lista";
+      dlg.querySelector(".sf-fmt-wrap").hidden = type !== "data" || formEl.checked; // pole Worda ma własny format
+      dlg.querySelector(".sf-form-wrap").hidden = !formOk;
+    };
+    typeEl.addEventListener("change", sync);
+    formEl.addEventListener("change", sync);
+    sync();
+    document.body.append(dlg);
+    const close = () => { dlg.close(); dlg.remove(); snBodyEl.focus(); };
+    dlg.querySelector(".sf-cancel").addEventListener("click", close);
+    dlg.addEventListener("cancel", (e) => { e.preventDefault(); close(); });
+    dlg.querySelector("form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const name = dlg.querySelector(".sf-name").value.trim().replace(/\s+/g, "_").replace(/[^\p{L}\p{N}_.-]/gu, "");
+      if (!name) { toast(t("snippetsFieldNameMissing"), "info"); dlg.querySelector(".sf-name").focus(); return; }
+      const type = typeEl.value;
+      let spec = type === "tekst" && !formEl.checked ? "" : type;
+      if (type === "lista") {
+        const items = dlg.querySelector(".sf-opts").value.split(/\r?\n/).map((x) => x.trim().replace(/[|{}]/g, "")).filter(Boolean);
+        if (!items.length) { toast(t("snippetsFieldListMissing"), "info"); dlg.querySelector(".sf-opts").focus(); return; }
+        spec += `=${items.join("|")}`;
+      }
+      if (type === "data" && fmt.value && !formEl.checked) spec += `=${fmt.value}`;
+      if (formEl.checked) spec = `formularz-${spec}`;
+      const token = spec ? `{{${name}:${spec}}}` : `{{${name}}}`;
+      const v = snBodyEl.value;
+      snBodyEl.value = v.slice(0, selStart) + token + v.slice(selEnd);
+      close();
+      snBodyEl.setSelectionRange(selStart + token.length, selStart + token.length);
+    });
+    dlg.showModal();
+    dlg.querySelector(".sf-name").focus();
+  });
+})();
