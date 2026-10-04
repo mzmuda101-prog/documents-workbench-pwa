@@ -43,6 +43,21 @@ async function loadHeadingsDoc(page, name = "Umowa-najmu.docx") {
   await page.waitForTimeout(300);
 }
 
+// Czekanie na WARUNEK, nie na zegar: runner w tłoku (JOBS=4) skraca waitForTimeout ×0,5, a płynne
+// przewijanie (skok do sekcji), przejście panelu (--t-slow) i rAF-y apki (zwijanie nagłówka,
+// syncDocViewportHeight) trwają tyle, ile trwają. Timeout = margines; check niżej i tak mierzy.
+// Predykaty TYLKO jako funkcje — string idzie przez eval, a CSP apki (bez 'unsafe-eval') go blokuje.
+const frames = (page, n = 3) => page.evaluate((n) => new Promise((resolve) => {
+  const step = () => (n-- > 0 ? requestAnimationFrame(step) : resolve());
+  step();
+}), n);
+const isCollapsed = () => document.body.classList.contains("hero-collapsed");
+const isExpanded = () => !document.body.classList.contains("hero-collapsed");
+const pageOver = () => document.documentElement.scrollHeight - window.innerHeight;
+const pageFits = () => document.documentElement.scrollHeight - window.innerHeight <= 0;
+const until = (page, fn, arg) => page.waitForFunction(fn, arg, { timeout: 3000 })
+  .catch((e) => { if (!(e instanceof pw.errors.TimeoutError)) throw e; }); // timeout → rozstrzyga check
+
 async function desktop(browser) {
   const { context, page, errors } = await newPage(browser, { width: 1280, height: 860 });
 
@@ -88,13 +103,20 @@ async function desktop(browser) {
   const chips = await page.evaluate(() => [...document.querySelectorAll(".section-chip")].map((c) => c.textContent));
   check("skróty sekcji z nagłówków pliku (EN/PL/outlineLvl/basedOn)", chips.length === 8 && chips.includes("§3 Czynsz i opłaty") && chips.includes("§1 Strony umowy"), chips.join(" | "));
   await page.locator(".section-chip", { hasText: "§6 Wypowiedzenie" }).click();
-  await page.waitForTimeout(900);
-  const jump = await page.evaluate(() => {
+  const jumpState = () => {
     const vp = document.getElementById("docViewport");
     const h = [...document.querySelectorAll(".docx-preview-host p")].find((p) => p.textContent.includes("§6 Wypowiedzenie"));
     const top = h.getBoundingClientRect().top - vp.getBoundingClientRect().top;
     return { top: Math.round(top), cur: document.querySelector(".section-chip.is-current")?.textContent };
+  };
+  // scrollTo({ behavior: "smooth" }) — w tłoku dłużej niż sztywne 450 ms
+  await until(page, () => {
+    const vp = document.getElementById("docViewport");
+    const h = [...document.querySelectorAll(".docx-preview-host p")].find((p) => p.textContent.includes("§6 Wypowiedzenie"));
+    const top = h.getBoundingClientRect().top - vp.getBoundingClientRect().top;
+    return top >= -2 && top < 120 && document.querySelector(".section-chip.is-current")?.textContent === "§6 Wypowiedzenie";
   });
+  const jump = await page.evaluate(jumpState);
   check("klik w skrót = skok do sekcji + podświetlenie", jump.top >= -2 && jump.top < 120 && jump.cur === "§6 Wypowiedzenie", JSON.stringify(jump));
 
   // szukanie na pasku (moduł ładuje się leniwie przy pierwszym Enter)
@@ -117,7 +139,7 @@ async function desktop(browser) {
   await para.click();
   await page.keyboard.press("End");
   await page.keyboard.type(" (poprawka)");
-  await page.waitForTimeout(200);
+  await until(page, () => document.getElementById("heroSaveCount").textContent === "1");
   const dirty = await page.evaluate(() => ({ dirty: document.getElementById("heroSaveBtn").classList.contains("is-dirty"), count: document.getElementById("heroSaveCount").textContent, label: document.getElementById("heroSaveBtn").getAttribute("aria-label"), status: document.getElementById("statusDirty").hidden ? "" : document.getElementById("statusDirty").textContent }));
   check("po edycji „Zapisz” niebieski z liczbą zmian (1) + pigułka w pasku stanu", dirty.dirty && dirty.count === "1" && /1 zmiana/.test(dirty.label) && /niezapisane: 1 zmiana/.test(dirty.status), JSON.stringify(dirty));
 
@@ -157,7 +179,8 @@ async function desktop(browser) {
 
   // « chowa panel; zapamiętane
   await page.click("#sidebarCloseBtn");
-  await page.waitForTimeout(450); // przejście marginesu (--t-slow)
+  // przejście marginesu (--t-slow 250 ms; sztywne 450 ms ×0,5 kończyło się przed nim)
+  await until(page, () => document.querySelector(".main").getBoundingClientRect().left < 60);
   const closed = await page.evaluate(() => ({ open: document.documentElement.classList.contains("sidebar-open"), saved: localStorage.getItem("dwb-panel-docked-open-v1"), mainLeft: Math.round(document.querySelector(".main").getBoundingClientRect().left) }));
   check("« chowa panel (dokument zajmuje miejsce), wybór zapamiętany", !closed.open && closed.saved === "0" && closed.mainLeft < 60, JSON.stringify(closed));
 
@@ -180,18 +203,18 @@ async function phone(browser) {
   const { context, page, errors } = await newPage(browser, { width: 390, height: 844 });
   await page.goto(APP_URL, { waitUntil: "load" }).catch(() => {});
   await page.evaluate(() => document.getElementById("heroSplash")?.remove());
-  await page.waitForTimeout(500);
-  const emptyOver = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+  await until(page, pageFits);
+  const emptyOver = await page.evaluate(pageOver);
   check("telefon, pusty start: strona mieści się w oknie (bez paska przewijania)", emptyOver <= 0, `wystaje o ${emptyOver}px`);
   await loadHeadingsDoc(page);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   check("telefon: nic nie wychodzi poza ekran w bok", !overflow);
   await page.evaluate(() => { document.getElementById("docViewport").scrollTop = 500; });
-  await page.waitForTimeout(300);
-  const collapsed = await page.evaluate(() => document.body.classList.contains("hero-collapsed"));
+  await until(page, isCollapsed);
+  const collapsed = await page.evaluate(isCollapsed);
   await page.evaluate(() => { document.getElementById("docViewport").scrollTop = 0; });
-  await page.waitForTimeout(300);
-  const stillCollapsed = await page.evaluate(() => document.body.classList.contains("hero-collapsed"));
+  await frames(page); // scroll → rAF w apce musiał się odbyć, inaczej „NIE rozwija” sprawdzałoby nic
+  const stillCollapsed = await page.evaluate(isCollapsed);
   check("telefon: nagłówek zwija się przy przewijaniu, samo dojechanie do góry go NIE rozwija", collapsed && stillCollapsed, JSON.stringify({ collapsed, stillCollapsed }));
 
   // pociągnięcie palcem na samej górze: 40 px za mało, 100 px rozwija (jak Sheet)
@@ -207,17 +230,21 @@ async function phone(browser) {
   const small = await pull(40);
   check("telefon: krótkie pociągnięcie (40 px) — uchwyt reaguje, nagłówek dalej schowany", small.pulling && small.collapsed, JSON.stringify(small));
   const big = await pull(100);
-  await page.waitForTimeout(300);
   check("telefon: pociągnięcie „na siłę” (100 px) na górze rozwija nagłówek", !big.collapsed, JSON.stringify(big));
-  const fits = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+  // nagłówek wrócił → wysokość dokumentu przelicza się w następnej klatce
+  await until(page, pageFits);
+  const fits = await page.evaluate(pageOver);
   check("telefon: strona mieści się w oknie (brak przewijania całej strony)", fits <= 0, `wystaje o ${fits}px`);
   const css = await page.evaluate(() => ({ ob: getComputedStyle(document.getElementById("docViewport")).overscrollBehaviorY }));
   check("telefon: pociągnięcie dokumentu nie przechodzi na stronę (overscroll-behavior: contain — bez odświeżenia strony w Safari)", css.ob === "contain", JSON.stringify(css));
   await page.evaluate(() => { document.getElementById("docViewport").scrollTop = 500; });
-  await page.waitForTimeout(300);
+  // tap dopiero PO zwinięciu — tap w rozwinięty nagłówek go zwija (przełącznik)
+  await until(page, isCollapsed);
+  const beforeTap = await page.evaluate(isCollapsed);
   await page.click("#heroGrip");
-  await page.waitForTimeout(200);
-  check("telefon: tap w uchwyt rozwija nagłówek", await page.evaluate(() => !document.body.classList.contains("hero-collapsed")));
+  await until(page, isExpanded);
+  const afterTap = await page.evaluate(isCollapsed);
+  check("telefon: tap w uchwyt rozwija nagłówek", beforeTap && !afterTap, JSON.stringify({ beforeTap, afterTap }));
   if (errors.length) check("telefon: brak błędów w konsoli", false, errors.slice(0, 3).join(" | "));
   await context.close();
 }
