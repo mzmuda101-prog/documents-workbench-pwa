@@ -740,17 +740,97 @@ function fillFormFields(values) {
     await refreshFormScan();
     const vals = typeof values === "function" ? values() : values;
     if (!vals) return 0;
-    const top = docViewportEl?.scrollTop || 0;
+    const light = await fillFormFieldsInPlace(vals);
+    if (light !== null) return light;
     quietRenderOnce = true;
-    const n = await applyDocumentEdit({ op: "formFill", values: vals });
+    const n = await applyDocumentEdit({ op: "formFill", values: vals }); // miejsce na ekranie trzyma reloadFromBytes
     quietRenderOnce = false;
-    if (docViewportEl) docViewportEl.scrollTop = top; // klik w pole w połowie dokumentu — nie skacz na górę
     await refreshFormScan();
     return n;
   });
   formFillQueue = job.catch(() => 0);
   return job;
 }
+
+// Lekka ścieżka (2026-10-04): klik w ☐ / wybór z listy / data dawniej = przerysowanie CAŁEGO
+// dokumentu (przy ~300 stronach kilka sekund, mignięcie, utracone miejsce). Zmiana dotyczy tylko
+// tekstu pola, więc: plik przez kolejkę zmian bez przerysowania (jak Enter/Backspace —
+// applyInlineStructuralEdit, ten sam krok Cofnij), a w podglądzie podmieniamy sam tekst pól,
+// które się zmieniły (też pól powiązanych z tym samym źródłem danych). Gdy coś nie pasuje
+// (tekst zastępczy, pole blokowe, brak opakowania w podglądzie) — null = pełne przerysowanie.
+const FORM_LIGHT_KINDS = new Set(["checkbox", "dropdown", "combo", "date", "text"]);
+function formLightOk(f, host) {
+  if (!f || !FORM_LIGHT_KINDS.has(f.kind) || f.placeholder || f.level === "block" || f.locked) return false;
+  const p = collectPreviewParagraphElements(host)[f.paraIndex];
+  return !!p?.querySelector(`.ff-field[data-ff="${CSS.escape(f.key)}"]`);
+}
+function formSetWrapText(w, text) {
+  const nodes = [];
+  const walker = document.createTreeWalker(w, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) nodes.push(n);
+  if (!nodes.length) { w.appendChild(document.createTextNode(text)); return; }
+  nodes[0].nodeValue = text; // formatowanie pierwszego fragmentu pola zostaje
+  nodes.slice(1).forEach((n) => { n.nodeValue = ""; });
+}
+async function fillFormFieldsInPlace(vals) {
+  const host = docCanvasEl?.querySelector(".docx-preview-host");
+  if (!host || inlineLocksPending || typeof applyInlineStructuralEdit !== "function" || formScan?.bytes !== originalFileBytes) return null;
+  const before = new Map(formScan.fields.map((f) => [f.key, f]));
+  if (!Object.keys(vals).every((k) => formLightOk(before.get(k), host))) return null;
+  const domIdx = new Set(Object.keys(vals).map((k) => before.get(k).paraIndex));
+  if (domIdx.has(undefined)) return null;
+  asUndoStep(UNDO_FORM_LABEL, () => {}); // migawka PRZED zmianą (bajty sprzed tej operacji w kolejce)
+  // wpisany tekst najpierw do pliku (jak przy każdej zmianie z panelu — plik = to, co widać)
+  await mergeInlineEditsIntoBytes();
+  const n = await applyInlineStructuralEdit({ op: "formFill", values: vals });
+  await waitInlineStructuralIdle();
+  if (!n) return 0;
+  const bytes = originalFileBytes;
+  let after;
+  try { after = { bytes, ...(await scanFormFields(bytes)) }; } catch (_) { after = null; }
+  const doc = await getDocumentXmlDom(bytes).catch(() => null);
+  if (!after || !doc || bytes !== originalFileBytes) { quietRenderOnce = true; await reloadFromBytes(originalFileBytes); return n; }
+  const previews = collectPreviewParagraphElements(host);
+  const changed = after.fields.filter((f) => {
+    const old = before.get(f.key);
+    return !old || old.display !== f.display || old.value !== f.value || old.placeholder !== f.placeholder;
+  });
+  // każda zmiana (też w polach powiązanych) musi dać się pokazać w miejscu — inaczej pełne przerysowanie
+  if (!changed.every((f) => formLightOk(f, host) && formLightOk(before.get(f.key), host))) {
+    quietRenderOnce = true;
+    await reloadFromBytes(originalFileBytes);
+    return n;
+  }
+  const touched = new Set();
+  changed.forEach((f) => {
+    const p = previews[f.paraIndex];
+    const w = p.querySelector(`.ff-field[data-ff="${CSS.escape(f.key)}"]`);
+    if (!w.classList.contains("ff-glyph")) formSetWrapText(w, f.display || "");
+    touched.add(p);
+  });
+  // XML kontrolek-wysp (akapit edytowalny z polem) — z NOWEGO pliku, inaczej pisanie w tym akapicie
+  // zapisałoby kontrolkę ze starą wartością
+  Array.from(doc.getElementsByTagNameNS(W_NS, "sdt")).forEach((sdt, i) => {
+    if (docIslandXml.has(`s${i}`) && formIslandSdt(sdt)) docIslandXml.set(`s${i}`, new XMLSerializer().serializeToString(sdt));
+  });
+  formScan = after;
+  paintFormFields(); // znaczki (☐ / ☒ starych pól), aria, podpowiedzi
+  // podgląd tych akapitów = plik: poza zbiorem „zmienionych” i z nową kopią do szybkiego Cofnij —
+  // chyba że ktoś w tym akapicie pisał (niezapisane pisanie zostaje do zapisu)
+  flushInlineDirty();
+  touched.forEach((p) => {
+    const i = previews.indexOf(p);
+    if (!p.dataset.lock && !runsEqual(extractRunsFromPreviewParagraph(p), baselineParagraphRuns[i])) return;
+    inlineDirtyParas.delete(p);
+    const frag = document.createDocumentFragment();
+    p.childNodes.forEach((c) => frag.appendChild(c.cloneNode(true)));
+    pristineParas.set(p, frag);
+  });
+  await refreshFormScan(); // liczniki, panel Formularz (nowa wersja pliku)
+  if (typeof dwbPageBreaks !== "undefined") dwbPageBreaks.schedule(200); // dłuższy tekst pola może przesunąć stronę
+  return n;
+}
+const UNDO_FORM_LABEL = "undoOpForm";
 
 function toggleFormCheckbox(key) {
   return fillFormFields(() => {

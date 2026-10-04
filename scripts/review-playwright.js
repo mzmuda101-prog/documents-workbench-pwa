@@ -82,7 +82,7 @@ async function run() {
   await page.waitForTimeout(300);
   await page.mouse.click(cmPt.x, cmPt.y);
   await page.waitForTimeout(250);
-  const roCard = await page.evaluate(() => { const c = document.querySelector(".comment-card"); return c ? { text: c.textContent, buttons: c.querySelectorAll("button").length, ro: readOnlyMode } : null; });
+  const roCard = await page.evaluate(() => { const c = document.querySelector(".comment-card"); return c ? { text: c.querySelector(".cc-list").textContent + c.querySelector(".cc-ro-note").textContent, buttons: c.querySelectorAll("button:not(.cc-more)").length, ro: readOnlyMode } : null; });
   check("Czytanie: klik w komentowany tekst pokazuje komentarz bez przycisków zmian", roCard && roCard.ro && /5% to nie za dużo/.test(roCard.text) && roCard.buttons === 0 && /trybie Edycja/.test(roCard.text), JSON.stringify(roCard));
   await page.keyboard.press("Escape");
   await page.waitForTimeout(100);

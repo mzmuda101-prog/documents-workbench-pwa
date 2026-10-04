@@ -195,11 +195,9 @@ const dwbSel = (() => {
       if (!rerender || inlineStructuralPending) return;
       const p = restoreDocCaret();
       const caret = p ? { paraIndex: resolveParaIndex(p), offset: getCaretOffset(p) } : null;
-      const top = docViewportEl?.scrollTop || 0;
       await mergeInlineEditsIntoBytes();
       if (caret) pendingInlineCursor = caret;
       await reloadFromBytes(originalFileBytes);
-      if (docViewportEl) docViewportEl.scrollTop = top;
     }).catch((err) => log(`Usuwanie zaznaczenia: ${err.message || err}`, "error"));
   }
 

@@ -20,6 +20,7 @@ const composeUi = (() => {
   const alignBtn = document.getElementById("fmtAlignBtn");
   const listBtn = document.getElementById("fmtListBtn");
   const tableBtn = document.getElementById("tableToolsBtn");
+  const layoutBtn = document.getElementById("pageLayoutBtn");
   const colorBtn = document.getElementById("fmtColorBtn");
   const colorBar = document.getElementById("fmtColorBar");
   const dialog = document.getElementById("newDocDialog");
@@ -63,9 +64,8 @@ const composeUi = (() => {
     return { paraIndex: resolveParaIndex(p), offset: getCaretOffset(p) };
   }
 
-  // Zmiana w pliku + przerysowanie; kursor i miejsce przewinięcia wracają.
+  // Zmiana w pliku + przerysowanie; kursor wraca, miejsce na ekranie trzyma reloadFromBytes.
   async function runFileEdit(edit, caret) {
-    const top = docViewportEl?.scrollTop || 0;
     if (caret) pendingInlineCursor = caret;
     try {
       await applyDocumentEdit(edit);
@@ -73,7 +73,6 @@ const composeUi = (() => {
       log(`Wstaw/format: ${err.message || err}`, "error");
       toast(t("saveFailed"), "error");
     }
-    if (docViewportEl) docViewportEl.scrollTop = top;
   }
 
   function textAround(p) {
@@ -373,16 +372,6 @@ const composeUi = (() => {
       onPick: () => openHeaderFooterForm(),
     });
     popItem(el, {
-      label: t("pageVAlign"), desc: t("pageVAlignDesc"),
-      icon: ICON('<rect x="5" y="2.5" width="14" height="19" rx="1.5"/><line x1="8" y1="10.5" x2="16" y2="10.5"/><line x1="8" y1="13.5" x2="14" y2="13.5"/><polyline points="12 4 12 7"/><polyline points="12 17 12 20"/>'),
-      onPick: () => openPop(insertBtn, buildPageVAlignMenu),
-    });
-    popItem(el, {
-      label: t("pageSetup"), desc: t("pageSetupDesc"),
-      icon: ICON('<rect x="5" y="2.5" width="14" height="19" rx="1.5"/><rect x="8" y="6" width="8" height="12" rx=".5" stroke-dasharray="2 1.6"/>'),
-      onPick: () => openPageSetup(insertBtn),
-    });
-    popItem(el, {
       label: t("insertHrule"), desc: t("insertHruleDesc"),
       icon: ICON('<line x1="3" y1="12" x2="21" y2="12"/>'),
       onPick: insertHrule,
@@ -564,6 +553,20 @@ const composeUi = (() => {
     return (s?.headings || []).filter((h) => h.source !== "guess" && Number.isFinite(h.paraIndex));
   }
 
+  // Obrazy jako cele linku „W dokumencie” (Word: Link → Miejsce w tym dokumencie → zakładka przy
+  // rysunku; odsyłacz do rysunku). Zakładka trafia do akapitu z obrazem — klik w link skacze do
+  // obrazu, a najechanie pokazuje jego podgląd bez skoku (doc-links.js).
+  function linkImages() {
+    const paras = collectPreviewParagraphElements(host());
+    const out = [];
+    paras.forEach((p, i) => {
+      const img = p.querySelector("img");
+      if (!img) return;
+      out.push({ paraIndex: i, label: typeof docImageLabel === "function" ? docImageLabel(p, out.length + 1) : t("linkImageN", { n: out.length + 1 }), image: true });
+    });
+    return out;
+  }
+
   // „#zakładka” → akapit-cel (indeks), żeby okienko pokazało wybrany nagłówek
   function linkTargetParaIndex(link) {
     if (!link.startsWith("#") || typeof linkTargetEl !== "function") return -1;
@@ -583,7 +586,7 @@ const composeUi = (() => {
   function linkShownTarget(link) {
     if (link.startsWith("#")) {
       const p = typeof linkTargetEl === "function" ? linkTargetEl(link.slice(1))?.closest?.("p") : null;
-      const label = (p?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 50);
+      const label = (p?.querySelector("img") && typeof docImageLabel === "function" ? docImageLabel(p) : (p?.textContent || "")).replace(/\s+/g, " ").trim().slice(0, 50);
       return label ? t("linkToPlace", { label }) : t("linkTabDoc");
     }
     return link.startsWith("rel:") ? (docLinkHrefs.get(link) || "") : link;
@@ -599,7 +602,7 @@ const composeUi = (() => {
       el.classList.add("compose-pop-form");
       el.setAttribute("role", "dialog");
       el.setAttribute("aria-label", t("linkTitle"));
-      const heads = linkHeadings();
+      const heads = [...linkHeadings(), ...linkImages()];
       const targetIdx = linkTargetParaIndex(ctx.link);
       const docMode = ctx.link.startsWith("#");
       const url = ctx.link && !docMode ? linkShownTarget(ctx.link) : "";
@@ -629,12 +632,15 @@ const composeUi = (() => {
       textIn.value = ctx.text;
       urlIn.value = url;
       urlIn.placeholder = t("linkUrlPlaceholder");
+      const groups = {};
       heads.forEach((h) => {
+        const key = h.image ? "linkGroupImages" : "linkGroupHeadings";
+        if (!groups[key]) { groups[key] = document.createElement("optgroup"); groups[key].label = t(key); sel.appendChild(groups[key]); }
         const o = document.createElement("option");
         o.value = String(h.paraIndex);
-        o.textContent = `${"  ".repeat(Math.max(0, (h.level || 1) - 1))}${h.label}`.slice(0, 80);
+        o.textContent = `${h.image ? "" : "  ".repeat(Math.max(0, (h.level || 1) - 1))}${h.label}`.slice(0, 80);
         if (h.paraIndex === targetIdx) o.selected = true;
-        sel.appendChild(o);
+        groups[key].appendChild(o);
       });
       const none = el.querySelector(".lf-none");
       none.textContent = t("linkNoHeadings");
@@ -858,9 +864,7 @@ const composeUi = (() => {
     if (!cell) { toast(t("tableNoCaret"), "info"); return; }
     const index = resolveParaIndex(p);
     const firstIdx = firstParaIndexIn(cell.table);
-    const top = docViewportEl?.scrollTop || 0;
     await applyDocumentEdit({ op: "table", index, action }).catch((err) => log(`Tabela: ${err.message || err}`, "error"));
-    if (docViewportEl) docViewportEl.scrollTop = top;
     await whenEditable();
     if (readOnlyMode) return;
     const { ti, r, c } = cell;
@@ -964,9 +968,7 @@ const composeUi = (() => {
     const cell = cellOf(p);
     if (!cell) { toast(t("tableNoCaret"), "info"); return; }
     const index = resolveParaIndex(p);
-    const top = docViewportEl?.scrollTop || 0;
     await applyDocumentEdit({ op: "table", index, action: "align", h, v, scope }).catch((err) => log(`Tabela: ${err.message || err}`, "error"));
-    if (docViewportEl) docViewportEl.scrollTop = top;
     await whenEditable();
     if (!readOnlyMode) focusCell(cell.ti, cell.r, cell.c);
   }
@@ -982,6 +984,7 @@ const composeUi = (() => {
     popCap(el, t("pageVAlign"));
     const p = typeof restoreDocCaret === "function" ? restoreDocCaret() : null;
     const index = p ? resolveParaIndex(p) : 0;
+    el.classList.add("compose-pop-valign");
     const items = PAGE_VALIGN.map(([val, key, svg]) => {
       const b = popItem(el, { label: t(key), icon: ICON(svg), onPick: () => runFileEdit({ op: "pageVAlign", index: Math.max(0, index), val }, p ? { paraIndex: index, offset: 0 } : null) });
       b.setAttribute("role", "menuitemradio");
@@ -1064,8 +1067,14 @@ const composeUi = (() => {
   let pageSetupAfter = null;
   async function openPageSetup(anchor, after = null) {
     if (!originalFileBytes) return;
-    if (readOnlyMode && typeof appFrame !== "undefined") { appFrame.setReadOnly(false); await whenEditable(); }
-    pageSetupAnchor = anchor || insertBtn;
+    if (readOnlyMode && typeof appFrame !== "undefined") {
+      appFrame.setReadOnly(false);
+      await whenEditable();
+      // przełączenie trybu poprawia przewinięcie (tekst zostaje w miejscu) — zdarzenie „scroll”
+      // przychodzi klatkę później i zamknęłoby świeżo otwarte okienko
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    }
+    pageSetupAnchor = anchor || (layoutBtn && !layoutBtn.closest(".hidden") ? layoutBtn : insertBtn);
     pageSetupAfter = after;
     openPop(pageSetupAnchor, buildPageSetupMenu);
   }
@@ -1130,6 +1139,8 @@ const composeUi = (() => {
       b.dataset.size = name;
       mark(b, sameTw(Math.min(cur.w, cur.h), w) && sameTw(Math.max(cur.w, cur.h), h));
     });
+    // Word: Ustawienia strony → Układ → Wyrównanie w pionie — w tym samym okienku (dawniej w „Wstaw”)
+    buildPageVAlignMenu(el);
   }
 
   function buildMarginForm(el, ctx, cur) {
@@ -1284,6 +1295,11 @@ const composeUi = (() => {
     const w = p?.offsetWidth;
     return w ? p.getBoundingClientRect().width / w || 1 : 1;
   }
+  // Szerokość tekstu akapitu (układ, bez zoomu) — 100% suwaka, jak w op „image” (docx-compose.js).
+  function imageTextWidth(p) {
+    const cs = getComputedStyle(p);
+    return p.clientWidth - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0);
+  }
   function showImageCard(img) {
     const p = img.closest("p");
     if (!p) return;
@@ -1307,35 +1323,68 @@ const composeUi = (() => {
     range.value = String(Math.round(pct0 / 5) * 5);
     range.setAttribute("aria-label", t("imageSize"));
     val.textContent = `${range.value}%`;
-    const baseW = img.getBoundingClientRect().width / (pct0 / 100);
-    range.addEventListener("input", () => {
-      val.textContent = `${range.value}%`;
-      img.style.width = `${(baseW / docZoomScale(img)) * range.value / 100}px`; // podgląd na żywo
-      img.style.height = "auto";
+    // Suwak (zgłoszenie: „miga, skacze”): karta stała w miejscu, dopóki trzymasz suwak — dawniej
+    // jechała za zmieniającym się obrazem, suwak uciekał spod palca/myszy i sam zmieniał wartość
+    // (sprzężenie zwrotne). Podgląd na żywo liczony z szerokości tekstu (tak jak plik), więc po
+    // zapisie obraz nie „dociąga” o kilka pikseli. Zapis: po puszczeniu suwaka, a ze strzałek —
+    // gdy przestaniesz naciskać (jedno przerysowanie zamiast jednego na krok).
+    let dragging = false;
+    let commitTimer = 0;
+    const commit = () => {
+      clearTimeout(commitTimer);
+      if (!imgCard || imgCard.el !== el || +range.value === imgCard.savedPct) return;
+      imgCard.savedPct = +range.value;
+      imageEdit(imgCard.index, { action: "size", widthPct: +range.value });
+    };
+    const release = () => {
+      if (!dragging) return;
+      dragging = false;
+      window.removeEventListener("pointerup", release, true);
+      window.removeEventListener("pointercancel", release, true);
+      commit();
       placeImageCard();
+    };
+    range.addEventListener("pointerdown", () => {
+      dragging = true;
+      // puszczenie także poza suwakiem (przeciągnięcie za kartę)
+      window.addEventListener("pointerup", release, true);
+      window.addEventListener("pointercancel", release, true);
     });
-    range.addEventListener("change", () => imageEdit(index, { action: "size", widthPct: +range.value }));
+    range.addEventListener("lostpointercapture", release);
+    range.addEventListener("input", () => {
+      if (!imgCard || imgCard.el !== el) return;
+      val.textContent = `${range.value}%`;
+      const im = imgCard.img;
+      im.style.width = `${imageTextWidth(imgCard.p) * range.value / 100}px`; // podgląd na żywo
+      im.style.height = "auto";
+    });
+    range.addEventListener("change", () => {
+      if (dragging) return; // zapis przy puszczeniu
+      clearTimeout(commitTimer);
+      commitTimer = setTimeout(commit, 450); // strzałki / Page Up/Down
+    });
+    range.addEventListener("blur", () => { if (commitTimer) commit(); });
     const hint = (b, key) => { b.setAttribute("aria-label", t(key)); b.dataset.hint = ""; b.dataset.hintPl = I18N.pl[key]; b.dataset.hintEn = I18N.en[key]; b.dataset.hintDelay = "0.4"; };
     el.querySelectorAll("[data-align]").forEach((b) => {
       hint(b, ALIGN_KEYS[b.dataset.align]);
       b.innerHTML = alignSvg(b.dataset.align);
-      b.addEventListener("click", () => imageEdit(index, { action: "align", align: b.dataset.align }));
+      b.addEventListener("click", () => imageEdit(imgCard.index, { action: "align", align: b.dataset.align }));
     });
     const alt = el.querySelector(".ic-alt");
     hint(alt, "imageAlt");
     alt.innerHTML = '<span class="ic-alt-text">ALT</span>';
-    alt.addEventListener("click", () => openAltForm(index, img));
+    alt.addEventListener("click", () => openAltForm(imgCard.index, imgCard.img));
     const del = el.querySelector(".ic-del");
     hint(del, "imageDelete");
     del.innerHTML = ICON('<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>');
-    del.addEventListener("click", () => { hideImageCard(); imageEdit(index, { action: "delete" }, false); });
+    del.addEventListener("click", () => { const i = imgCard.index; hideImageCard(); imageEdit(i, { action: "delete" }, false); });
     el.addEventListener("mousedown", (e) => { if (e.target.closest("button")) e.preventDefault(); });
     document.body.appendChild(el);
-    imgCard = { el, img, p, index };
+    imgCard = { el, img, p, index, savedPct: +range.value, isDragging: () => dragging };
     placeImageCard();
   }
   function placeImageCard() {
-    if (!imgCard) return;
+    if (!imgCard || imgCard.busy || imgCard.isDragging?.()) return; // przy przesuwaniu suwaka karta stoi
     const vv = window.visualViewport;
     const r = imgCard.img.getBoundingClientRect();
     const vp = docViewportEl?.getBoundingClientRect();
@@ -1351,14 +1400,25 @@ const composeUi = (() => {
     imgCard.el.style.left = `${left + (vv ? vv.offsetLeft : 0)}px`;
     imgCard.el.style.top = `${top + (vv ? vv.offsetTop : 0)}px`;
   }
+  // Zmiana obrazu w pliku + przerysowanie. Karta zostaje TA SAMA (bez znikania i ponownego
+  // „wjazdu”) i po przerysowaniu przypina się do nowego elementu obrazu.
   async function imageEdit(index, edit, reselect = true) {
-    const top = docViewportEl?.scrollTop || 0;
+    if (imgCard && reselect) imgCard.busy = true;
     await applyDocumentEdit({ op: "image", index, ...edit }).catch((err) => log(`Obraz: ${err.message || err}`, "error"));
-    if (docViewportEl) docViewportEl.scrollTop = top;
     if (!reselect) return;
     await whenEditable();
     const img = collectPreviewParagraphElements(host())[index]?.querySelector("img");
-    if (img && !readOnlyMode) showImageCard(img);
+    if (!img || readOnlyMode) { hideImageCard(); return; }
+    if (imgCard?.el.isConnected && imgCard.index === index) {
+      imgCard.img.classList.remove("img-selected");
+      img.classList.add("img-selected");
+      imgCard.img = img;
+      imgCard.p = img.closest("p");
+      imgCard.busy = false;
+      placeImageCard();
+      return;
+    }
+    showImageCard(img);
   }
   function openAltForm(index, img) {
     openPop(imgCard?.el.querySelector(".ic-alt") || insertBtn, (el) => {
@@ -1450,9 +1510,7 @@ const composeUi = (() => {
     }
     const edit = { op: "runStyle", index: ctx.index, start: ctx.start, end: ctx.end };
     edit[kind] = kind === "color" ? (value ? `#${value}` : "auto") : css;
-    const top = docViewportEl?.scrollTop || 0;
     await applyDocumentEdit(edit).catch((err) => log(`Kolor: ${err.message || err}`, "error"));
-    if (docViewportEl) docViewportEl.scrollTop = top;
     await whenEditable();
     if (!readOnlyMode) reselect(ctx.index, ctx.start, ctx.end); // zaznaczenie zostaje — można dodać wyróżnienie
   }
@@ -1575,40 +1633,253 @@ const composeUi = (() => {
     return hit;
   }
 
+  // ── treść komentarza z formatowaniem (jak w Wordzie: B, I, U, przekreślenie; kolor i
+  // wyróżnienie z pliku zostają) ↔ model { text, b, i, u, s, color, hl } (docx-revisions.js) ──
+  const HL_CSS = Object.fromEntries(HIGHLIGHTS.map(([name, hex]) => [name, `#${hex}`]));
+  function richRunEl(run) {
+    let node = document.createTextNode(run.text);
+    const wrap = (tag) => { const el = document.createElement(tag); el.appendChild(node); node = el; };
+    if (run.b) wrap("b");
+    if (run.i) wrap("i");
+    if (run.u) wrap("u");
+    if (run.s) wrap("s");
+    if (run.color || run.hl) {
+      wrap("span");
+      if (run.color) { node.dataset.color = run.color; node.style.color = `#${run.color}`; }
+      if (run.hl) { node.dataset.hl = run.hl; node.style.backgroundColor = HL_CSS[run.hl] || run.hl; }
+    }
+    return node;
+  }
+  function richToDom(paras, box) {
+    box.textContent = "";
+    (paras?.length ? paras : [[]]).forEach((runs) => {
+      const p = document.createElement("div");
+      runs.forEach((r) => { if (r.text) p.appendChild(richRunEl(r)); });
+      if (!p.firstChild) p.appendChild(document.createElement("br"));
+      box.appendChild(p);
+    });
+  }
+  // DOM edytora → akapity. Blok (div/p) i <br> = nowy akapit (Enter w komentarzu Worda), <br>
+  // zamykający blok to tylko wypełniacz pustego wiersza. Formatowanie z najbliższego przodka,
+  // który je określa (Chrome/Safari: <b>/<i>/<u>/<strike>, „odpogrubienie” = font-weight: normal).
+  const RICH_BLOCK = /^(DIV|P|LI|H[1-6]|BLOCKQUOTE)$/;
+  function richFmtOf(node, root) {
+    const f = {};
+    const seen = new Set();
+    const set = (k, v) => { if (!seen.has(k)) { seen.add(k); if (v) f[k] = v; } };
+    for (let el = node.parentElement; el && el !== root; el = el.parentElement) {
+      const tag = el.tagName;
+      const st = el.style;
+      if (st.fontWeight) set("b", st.fontWeight === "bold" || parseInt(st.fontWeight, 10) >= 600);
+      if (tag === "B" || tag === "STRONG") set("b", true);
+      if (st.fontStyle) set("i", st.fontStyle === "italic");
+      if (tag === "I" || tag === "EM") set("i", true);
+      const deco = st.textDecorationLine || st.textDecoration || "";
+      if (/underline/.test(deco) || tag === "U") set("u", true);
+      if (/line-through/.test(deco) || tag === "S" || tag === "STRIKE" || tag === "DEL") set("s", true);
+      if (el.dataset.color) set("color", el.dataset.color);
+      if (el.dataset.hl) set("hl", el.dataset.hl);
+    }
+    return f;
+  }
+  function domToRich(root) {
+    const paras = [[]];
+    const cur = () => paras[paras.length - 1];
+    const walk = (node) => {
+      if (node.nodeType === 3) {
+        const text = node.nodeValue.replace(/\u00a0/g, " ").replace(/[\r\n]+/g, " ");
+        if (!text) return;
+        const f = richFmtOf(node, root);
+        const last = cur()[cur().length - 1];
+        if (last && ["b", "i", "u", "s", "color", "hl"].every((k) => (last[k] || false) === (f[k] || false))) last.text += text;
+        else cur().push({ ...f, text });
+        return;
+      }
+      if (node.nodeType !== 1) return;
+      if (node.tagName === "BR") {
+        const block = node.parentElement;
+        if (block !== root && RICH_BLOCK.test(block.tagName) && node === block.lastChild) return; // wypełniacz
+        paras.push([]);
+        return;
+      }
+      const isBlock = node !== root && RICH_BLOCK.test(node.tagName);
+      if (isBlock && cur().length) paras.push([]); // blok zaczyna wiersz
+      node.childNodes.forEach(walk);
+      if (isBlock) paras.push([]); // i go kończy (pusty blok = pusty wiersz)
+    };
+    walk(root);
+    while (paras.length > 1 && !paras[paras.length - 1].length) paras.pop();
+    while (paras.length > 1 && !paras[0].length) paras.shift();
+    return paras;
+  }
+  // Schowek → akapity komentarza. Bloki z paste-rich.js (ten sam odczyt co wklejanie do
+  // dokumentu): nagłówek = pogrubiony akapit, punkt listy = „• ” / „1. ”, tabela = wiersze z
+  // tabulatorami, kod i link = sam tekst. null = nic do wklejenia.
+  function clipboardToRich(cd) {
+    const text = cd?.getData("text/plain") || "";
+    const blocks = typeof dwbPaste !== "undefined" ? dwbPaste.parse(cd) : null;
+    if (!blocks) return text ? text.replace(/\r\n?/g, "\n").split("\n").map((line) => (line ? [{ text: line }] : [])) : null;
+    const paras = [];
+    const counters = [];
+    const conv = (r, extra = {}) => ({ text: r.text, b: !!(r.bold || extra.b), i: !!r.italic, u: !!r.underline, s: !!r.strike, ...(r.highlight ? { hl: r.highlight } : {}) });
+    const pushRuns = (runs, prefix = "", extra = {}) => {
+      let cur = prefix ? [{ text: prefix }] : [];
+      runs.forEach((r) => {
+        if (r.break) { paras.push(cur); cur = []; return; }
+        if (r.text) cur.push(conv(r, extra));
+      });
+      paras.push(cur);
+    };
+    blocks.forEach((b) => {
+      if (b.type !== "li") counters.length = 0;
+      if (b.type === "hr") return;
+      if (b.type === "table") { b.rows.forEach((row) => paras.push([{ text: row.map((cell) => cell.map((r) => (r.break ? " " : r.text)).join("")).join("\t") }])); return; }
+      if (b.type === "li") {
+        const lvl = b.level || 0;
+        counters.length = lvl + 1;
+        counters[lvl] = (counters[lvl] || 0) + 1;
+        const mark = b.checked !== undefined ? (b.checked ? "☒ " : "☐ ") : b.ordered ? `${counters[lvl]}. ` : "• ";
+        pushRuns(b.runs, "\t".repeat(lvl) + mark);
+        return;
+      }
+      pushRuns(b.runs, "", b.type === "h" ? { b: true } : {});
+    });
+    return paras.map((runs) => runs.filter((r) => r.text)).filter((runs, i, all) => runs.length || (i && i < all.length - 1));
+  }
+
+  const richPlain = (paras) => paras.map((runs) => runs.map((r) => r.text).join("")).join("\n");
+
+  // Przewijany obszar (lista w karcie, edytor): wygaszenie krawędzi + „Więcej ↓”, gdy treść
+  // wychodzi poza widoczną część — długi komentarz nie może udawać krótkiego.
+  function attachMoreBelow(scroller, host) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "cc-more";
+    more.tabIndex = -1;
+    more.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg><span></span>';
+    more.querySelector("span").textContent = t("commentMore");
+    more.setAttribute("aria-hidden", "true");
+    more.addEventListener("mousedown", (e) => e.preventDefault());
+    more.addEventListener("click", () => scroller.scrollBy({ top: Math.max(40, scroller.clientHeight * 0.8), behavior: "smooth" }));
+    host.appendChild(more);
+    const sync = () => {
+      const max = scroller.scrollHeight - scroller.clientHeight;
+      scroller.classList.toggle("more-t", max > 1 && scroller.scrollTop > 2);
+      const below = max > 1 && scroller.scrollTop < max - 2;
+      scroller.classList.toggle("more-b", below);
+      more.hidden = !below;
+    };
+    scroller.addEventListener("scroll", sync, { passive: true });
+    if (typeof ResizeObserver === "function") new ResizeObserver(sync).observe(scroller);
+    if (typeof MutationObserver === "function") new MutationObserver(sync).observe(scroller, { childList: true, subtree: true, characterData: true });
+    sync();
+    return sync;
+  }
+
+  // Skala karty i edytora komentarza = przybliżenie dokumentu (dostępność: przy 150% komentarz też
+  // 150%), nigdy mniej niż zwykły rozmiar (dopasowana do ekranu strona bywa pomniejszona).
+  function commentZoom() {
+    const z = typeof getDocZoom === "function" ? getDocZoom() : 1;
+    return Math.max(1, Math.min(2.5, Number.isFinite(z) ? z : 1));
+  }
+
+  // Formatowanie treści komentarza — te same przyciski B / I / U z paska Edycji i te same skróty
+  // (prośba Mateusza: bez osobnych przycisków w okienku). Gdy kursor stoi w treści komentarza,
+  // przyciski paska działają na komentarz, nie na dokument.
+  const RICH_KEYS = { KeyB: "bold", KeyI: "italic", KeyU: "underline" };
+  const RICH_BTNS = { fmtBold: "bold", fmtItalic: "italic", fmtUnderline: "underline" };
+  function runRich(cmd) {
+    try { document.execCommand("styleWithCSS", false, false); } catch (_) { /* Safari bez tej opcji */ }
+    document.execCommand(cmd, false, null);
+  }
+  const activeCommentEditor = () => {
+    const ed = pop?.el.querySelector(".cf-rich");
+    return ed && (document.activeElement === ed || ed.contains(document.activeElement)) ? ed : null;
+  };
+  // capture na dokumencie — przed obsługą przycisków w docx-inline-edit.js (format dokumentu)
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest?.("#fmtBold, #fmtItalic, #fmtUnderline");
+    if (!b || !activeCommentEditor()) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    runRich(RICH_BTNS[b.id]);
+  }, true);
   function openCommentForm(anchor, opts = {}) {
     if (readOnlyMode) return;
-    const ctx = opts.replyTo ? null : selectionInParagraph();
-    if (!opts.replyTo && !ctx) return;
+    const editing = !!opts.editId;
+    const ctx = opts.replyTo || editing ? null : selectionInParagraph();
+    if (!opts.replyTo && !editing && !ctx) return;
     hideCommentCard();
     closePop();
+    const capKey = editing ? "commentEditTitle" : opts.replyTo ? "commentReply" : "insertComment";
     openPop(anchor || insertBtn, (el) => {
-      el.classList.add("compose-pop-form");
+      el.classList.add("compose-pop-form", "compose-pop-comment");
+      el.style.setProperty("--cc-z", String(commentZoom()));
       el.setAttribute("role", "dialog");
-      el.setAttribute("aria-label", t(opts.replyTo ? "commentReply" : "insertComment"));
+      el.setAttribute("aria-label", t(capKey));
       el.innerHTML = `<div class="compose-cap"></div>
-        <label class="compose-field"><span></span><textarea rows="3" class="cf-text" data-autofocus="1"></textarea></label>
-        <label class="compose-field"><span></span><input type="text" class="cf-author" autocomplete="name" enterkeyhint="done"></label>
+        <div class="compose-field cf-field"><span class="cf-label"></span>
+          <div class="cf-wrap"><div class="cf-rich" contenteditable="true" role="textbox" aria-multiline="true" spellcheck="true" data-autofocus="1"></div></div>
+          <span class="compose-note cf-fmt-hint"></span>
+        </div>
+        <label class="compose-field cf-author-field"><span></span><input type="text" class="cf-author" autocomplete="name" enterkeyhint="done"></label>
         <div class="compose-actions"><span class="compose-actions-gap"></span><button type="button" class="btn lf-cancel"></button><button type="button" class="btn primary lf-ok"></button></div>`;
-      el.querySelector(".compose-cap").textContent = t(opts.replyTo ? "commentReply" : "insertComment");
-      const [l1, l2] = el.querySelectorAll(".compose-field > span");
-      l1.textContent = t(opts.replyTo ? "commentReplyText" : "commentText");
-      l2.textContent = t("commentAuthor");
-      const ta = el.querySelector(".cf-text");
+      el.querySelector(".compose-cap").textContent = t(capKey);
+      const label = el.querySelector(".cf-label");
+      label.id = `cfLabel${Date.now()}`;
+      label.textContent = t(opts.replyTo ? "commentReplyText" : "commentText");
+      const ed = el.querySelector(".cf-rich");
+      ed.setAttribute("aria-labelledby", label.id);
+      richToDom(editing ? opts.rich : null, ed);
       const au = el.querySelector(".cf-author");
+      el.querySelector(".cf-author-field > span").textContent = t("commentAuthor");
+      el.querySelector(".cf-author-field").hidden = editing; // edycja nie zmienia podpisu
       au.value = authorName();
       au.placeholder = t("commentAuthorPh");
+      el.querySelector(".cf-fmt-hint").textContent = t("commentFmtHint");
+      ed.addEventListener("keydown", (e) => {
+        const mod = e.ctrlKey || e.metaKey;
+        if (mod && !e.altKey && !e.shiftKey && RICH_KEYS[e.code]) { e.preventDefault(); e.stopPropagation(); runRich(RICH_KEYS[e.code]); return; }
+        if (mod && e.key === "Enter") { e.preventDefault(); e.stopPropagation(); submit(); }
+      });
+      // wklejanie z formatowaniem, które komentarz Worda zapisuje (B / I / U / przekreślenie /
+      // wyróżnienie) — z Worda, Notatek, stron WWW, Markdownu; kroje, rozmiary, obrazy i linki — nie
+      ed.addEventListener("paste", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const paras = clipboardToRich(e.clipboardData);
+        if (!paras) return;
+        if (paras.length === 1 && paras[0].every((r) => !["b", "i", "u", "s", "hl"].some((k) => r[k]))) {
+          document.execCommand("insertText", false, paras[0].map((r) => r.text).join(""));
+          return;
+        }
+        const box = document.createElement("div");
+        paras.forEach((runs, i) => {
+          if (i) box.appendChild(document.createElement("br"));
+          runs.forEach((r) => box.appendChild(richRunEl(r)));
+        });
+        document.execCommand("insertHTML", false, box.innerHTML); // HTML zbudowany z modelu (tekst w węzłach tekstowych)
+      });
+      ed.addEventListener("drop", (e) => e.preventDefault());
+      attachMoreBelow(ed, el.querySelector(".cf-wrap"));
       el.querySelector(".lf-cancel").textContent = t("linkCancel");
       el.querySelector(".lf-cancel").addEventListener("click", () => closePop());
-      el.querySelector(".lf-ok").textContent = t(opts.replyTo ? "commentReplyBtn" : "commentAddBtn");
-      el.querySelector(".lf-ok").addEventListener("click", async () => {
-        const text = ta.value.trim();
+      el.querySelector(".lf-ok").textContent = t(editing ? "linkSave" : opts.replyTo ? "commentReplyBtn" : "commentAddBtn");
+      const submit = async () => {
+        const rich = domToRich(ed);
+        const text = richPlain(rich).trim();
         const author = au.value.trim();
-        if (!text) { ta.focus(); return; }
+        if (!text) { ed.focus(); return; }
+        if (editing) {
+          closePop();
+          await runFileEdit({ op: "commentEdit", id: opts.editId, rich }, opts.caret || null);
+          return;
+        }
         if (!author) { toast(t("commentNeedAuthor"), "info"); au.focus(); return; }
         try { localStorage.setItem(AUTHOR_KEY, author); } catch (_) { /* prywatne */ }
         closePop();
         if (opts.replyTo) {
-          await runFileEdit({ op: "commentReply", id: opts.replyTo, text, author, initials: initialsOf(author) }, null);
+          await runFileEdit({ op: "commentReply", id: opts.replyTo, rich, author, initials: initialsOf(author) }, opts.caret || null);
           return;
         }
         let { start, end } = ctx;
@@ -1617,10 +1888,18 @@ const composeUi = (() => {
           while (start > 0 && /\S/.test(full[start - 1])) start--;
           while (end < full.length && /\S/.test(full[end])) end++;
         }
-        await runFileEdit({ op: "commentAdd", index: ctx.index, start, end, text, author, initials: initialsOf(author) }, { paraIndex: ctx.index, offset: end });
-      });
+        await runFileEdit({ op: "commentAdd", index: ctx.index, start, end, rich, author, initials: initialsOf(author) }, { paraIndex: ctx.index, offset: end });
+      };
+      el.querySelector(".lf-ok").addEventListener("click", submit);
+      au.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } });
+      if (editing) { // kursor na końcu treści
+        const r = document.createRange();
+        r.selectNodeContents(ed);
+        r.collapse(false);
+        setTimeout(() => { if (document.activeElement === ed) { const s = window.getSelection(); s.removeAllRanges(); s.addRange(r); } }, 0);
+      }
     });
-    if (!authorName()) setTimeout(() => pop?.el.querySelector(".cf-text")?.focus(), 0);
+    if (!authorName() && !editing) setTimeout(() => pop?.el.querySelector(".cf-rich")?.focus(), 0);
   }
 
   // Karta komentarza: NAD wierszem z kursorem (pod nim bywa karta linku), tylko gdy kursor stoi
@@ -1636,62 +1915,119 @@ const composeUi = (() => {
   function showCommentCard(hit, ro = false) {
     const c = commentData.byId.get(hit.id);
     if (!c) return;
-    if (cCard?.id === hit.id && cCard.done === c.done && cCard.ro === ro) { placeCommentCard(); return; }
+    const sig = `${c.done}|${ro}|${commentData.bytes?.byteLength}`;
+    if (cCard?.id === hit.id && cCard.sig === sig) { placeCommentCard(); return; }
     hideCommentCard();
     const el = document.createElement("div");
     el.className = `comment-card${c.done ? " is-done" : ""}`;
     el.setAttribute("role", "region");
     el.setAttribute("aria-label", t("commentCard"));
+    el.style.setProperty("--cc-z", String(commentZoom()));
+    const caretNow = () => { const p = activeParagraph() || lastP; return p?.isConnected ? caretState(p) : null; };
     const entry = (x) => {
       const box = document.createElement("div");
       box.className = "cc-entry";
       const head = document.createElement("div");
       head.className = "cc-head";
-      head.textContent = [x.author, fmtDate(x.date)].filter(Boolean).join(" · ");
+      const who = document.createElement("span");
+      who.className = "cc-who";
+      who.textContent = [x.author, fmtDate(x.date)].filter(Boolean).join(" · ");
+      head.appendChild(who);
+      if (!ro) {
+        const ed = document.createElement("button");
+        ed.type = "button";
+        ed.className = "tb-btn cc-edit";
+        ed.innerHTML = ICON('<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>');
+        const key = x.editable === false ? "commentEditBlocked" : "commentEdit";
+        ed.setAttribute("aria-label", t(key));
+        ed.dataset.hint = "";
+        ed.dataset.hintPl = I18N.pl[key];
+        ed.dataset.hintEn = I18N.en[key];
+        ed.dataset.hintDelay = "0.3";
+        if (x.editable === false) ed.setAttribute("aria-disabled", "true");
+        ed.addEventListener("click", () => {
+          if (x.editable === false) { toast(t("commentEditBlocked"), "info"); return; }
+          openCommentForm(ed, { editId: x.id, rich: x.rich?.length ? x.rich : [[{ text: x.text }]], caret: caretNow() });
+        });
+        head.appendChild(ed);
+      }
       const body = document.createElement("div");
       body.className = "cc-text";
-      body.textContent = x.text;
+      if (x.rich?.length) {
+        x.rich.forEach((runs) => {
+          const p = document.createElement("div");
+          p.className = "cc-p";
+          runs.forEach((r) => p.appendChild(richRunEl(r)));
+          if (!runs.length) p.appendChild(document.createElement("br"));
+          body.appendChild(p);
+        });
+      } else body.textContent = x.text;
       box.append(head, body);
       return box;
     };
     const list = document.createElement("div");
     list.className = "cc-list";
+    list.tabIndex = 0; // przewijanie strzałkami
     list.append(entry(c), ...c.replies.map(entry));
+    const listWrap = document.createElement("div");
+    listWrap.className = "cc-list-wrap";
+    listWrap.appendChild(list);
     const actions = document.createElement("div");
     actions.className = "cc-actions";
     const mk = (key, fn, cls = "") => { const b = document.createElement("button"); b.type = "button"; b.className = `btn ${cls}`.trim(); b.textContent = t(key); b.addEventListener("click", fn); return b; };
     actions.append(
-      mk("commentReply", () => openCommentForm(actions.firstChild, { replyTo: c.id })),
-      mk(c.done ? "commentReopen" : "commentResolve", () => runFileEdit({ op: "commentDone", id: c.id, done: !c.done }, null)),
-      mk("commentDelete", () => { hideCommentCard(); applyDocumentEdit({ op: "revisions", action: "removeComments", ids: [c.id, ...c.replies.map((r) => r.id)] }); }, "cc-del"),
+      mk("commentReply", () => openCommentForm(actions.firstChild, { replyTo: c.id, caret: caretNow() })),
+      mk(c.done ? "commentReopen" : "commentResolve", () => runFileEdit({ op: "commentDone", id: c.id, done: !c.done }, caretNow())),
+      mk("commentDelete", () => { hideCommentCard(); runFileEdit({ op: "revisions", action: "removeComments", ids: [c.id, ...c.replies.map((r) => r.id)] }, caretNow()); }, "cc-del"),
     );
     if (c.done) { const badge = document.createElement("div"); badge.className = "cc-done"; badge.textContent = t("commentResolved"); el.appendChild(badge); }
     if (ro) {
       const note = document.createElement("div");
       note.className = "cc-ro-note";
       note.textContent = t("commentReadOnlyNote");
-      el.append(list, note);
-    } else el.append(list, actions);
+      el.append(listWrap, note);
+    } else el.append(listWrap, actions);
     el.addEventListener("mousedown", (e) => { if (e.target.closest("button")) e.preventDefault(); });
     document.body.appendChild(el);
-    cCard = { el, id: hit.id, done: c.done, ro };
+    attachMoreBelow(list, listWrap);
+    cCard = { el, id: hit.id, sig, ro, range: hit.range };
     placeCommentCard();
   }
   function placeCommentCard() {
     if (!cCard) return;
+    cCard.el.style.setProperty("--cc-z", String(commentZoom()));
     const sel = window.getSelection();
     if (!sel?.rangeCount) return;
     const rects = sel.getRangeAt(0).getClientRects();
-    const r = rects[0] || sel.getRangeAt(0).getBoundingClientRect();
+    let r = rects[0] || sel.getRangeAt(0).getBoundingClientRect();
+    // kursor tuż przy znaczniku (wyspa bez szerokości) — przeglądarka daje pusty prostokąt (0,0);
+    // wtedy kotwicą jest komentowany tekst (dawniej karta chowała się jak „poza ekranem”)
+    if ((!r || (!r.width && !r.height && !r.top && !r.left)) && cCard.range?.startContainer?.isConnected) {
+      r = cCard.range.getClientRects()[0] || cCard.range.getBoundingClientRect();
+    }
     const vv = window.visualViewport;
     const vp = docViewportEl?.getBoundingClientRect();
     if (!r || (vp && (r.bottom < vp.top || r.top > vp.bottom))) { cCard.el.style.visibility = "hidden"; return; }
     cCard.el.style.visibility = "";
     const viewW = vv ? vv.width : window.innerWidth;
-    const w = cCard.el.offsetWidth; const h = cCard.el.offsetHeight;
+    const viewH = vv ? vv.height : window.innerHeight;
+    // nad wierszem; brak miejsca — pod nim (z zapasem na kartę linku); długi komentarz, który nie
+    // mieści się nigdzie — tam, gdzie więcej miejsca, niższy (treść przewija się z „Więcej ↓”)
+    const minTop = Math.max(8, vp?.top ?? 8);
+    const above = r.top - 8 - minTop;
+    const below = viewH - 8 - (r.bottom + 40);
+    cCard.el.style.maxHeight = "";
+    const w = cCard.el.offsetWidth; let h = cCard.el.offsetHeight;
     const left = Math.max(8, Math.min(r.left - 16, viewW - w - 8));
-    let top = r.top - h - 8;
-    if (top < (vp?.top ?? 8)) top = r.bottom + 40; // brak miejsca nad wierszem — pod nim (z zapasem na kartę linku)
+    let top;
+    if (h <= above) top = r.top - h - 8;
+    else if (h <= below) top = r.bottom + 40;
+    else {
+      const up = above >= below;
+      cCard.el.style.maxHeight = `${Math.max(120, up ? above : below)}px`;
+      h = cCard.el.offsetHeight;
+      top = up ? Math.max(minTop, r.top - h - 8) : r.bottom + 40;
+    }
     cCard.el.style.left = `${left + (vv ? vv.offsetLeft : 0)}px`;
     cCard.el.style.top = `${top + (vv ? vv.offsetTop : 0)}px`;
   }
@@ -1972,12 +2308,19 @@ const composeUi = (() => {
   // klik obok / przewinięcie / zmiana rozmiaru — okienko znika
   document.addEventListener("pointerdown", (e) => {
     if (!pop || pop.el.contains(e.target) || pop.anchor.contains(e.target)) return;
+    if (e.target.closest?.("#fmtBold, #fmtItalic, #fmtUnderline") && activeCommentEditor()) return; // B / I / U dla komentarza
     closePop();
   }, true);
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && pop) { e.preventDefault(); e.stopPropagation(); closePop(true); }
   }, true);
   docViewportEl?.addEventListener("scroll", () => { closePop(); placeLinkCard(); placeImageCard(); placeCommentCard(); }, { passive: true });
+  // zoom dokumentu (przyciski, suwak, dwa palce): karta i edytor komentarza w tej samej skali
+  docCanvasEl?.addEventListener("dwb-zoom", () => {
+    if (pop?.el.classList.contains("compose-pop-comment")) pop.el.style.setProperty("--cc-z", String(commentZoom()));
+    placeCommentCard();
+    placeImageCard();
+  });
   // Edycja: klik w nagłówek / stopkę strony w podglądzie = okienko nagłówka i stopki (jak dwuklik w Wordzie)
   docCanvasEl?.addEventListener("click", (e) => {
     if (readOnlyMode || !e.target.closest?.(".docx-preview-host section.docx > header, .docx-preview-host section.docx > footer")) return;
@@ -1993,7 +2336,15 @@ const composeUi = (() => {
     e.stopPropagation();
     openCommentForm(insertBtn);
   }, true);
-  bar?.addEventListener("scroll", () => closePop(), { passive: true });
+  // przewinięcie rzędu paska: okienko jedzie za swoim przyciskiem; znika, gdy przycisk schowa się
+  // pod krawędzią (okienko komentarza zostaje zawsze — B / I / U są w tym rzędzie)
+  bar?.addEventListener("scroll", () => {
+    if (!pop) return;
+    const a = pop.anchor.getBoundingClientRect();
+    const b = bar.getBoundingClientRect();
+    const visible = bar.contains(pop.anchor) ? a.right > b.left + 4 && a.left < b.right - 4 : true;
+    if (visible || pop.el.classList.contains("compose-pop-comment")) placePop(pop.el, pop.anchor); else closePop();
+  }, { passive: true });
   window.addEventListener("resize", () => closePop());
   window.visualViewport?.addEventListener("resize", () => { if (pop) placePop(pop.el, pop.anchor); });
 
@@ -2045,7 +2396,10 @@ const composeUi = (() => {
     if (e.target === dialog) dialog.close(); // klik w tło
   });
   // menu ⋯ → Marginesy i układ strony (po zamknięciu menu, z kotwicą „＋ Wstaw” na pasku)
-  document.getElementById("pageSetupMenuItem")?.addEventListener("click", () => setTimeout(() => openPageSetup(insertBtn), 60));
+  document.getElementById("pageSetupMenuItem")?.addEventListener("click", () => setTimeout(() => openPageSetup(), 60));
+  // „Układ” na pasku Edycji (jak karta Układ w Wordzie): marginesy, orientacja, rozmiar, wyrównanie w pionie
+  layoutBtn?.addEventListener("mousedown", (e) => e.preventDefault()); // kursor zostaje w tekście
+  layoutBtn?.addEventListener("click", () => { if (pop?.anchor === layoutBtn) closePop(); else openPageSetup(layoutBtn); });
   ["emptyNewBtn", "newDocBtn", "newDocMenuItem"].forEach((id) => {
     document.getElementById(id)?.addEventListener("click", openNewDialog);
   });

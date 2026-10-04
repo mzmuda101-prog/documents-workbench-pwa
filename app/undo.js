@@ -52,6 +52,7 @@ const UNDO_OP_LABEL = {
   commentAdd: "undoOpComment",
   commentReply: "undoOpComment",
   commentDone: "undoOpComment",
+  commentEdit: "undoOpComment",
   headerFooter: "undoOpHeaderFooter",
 };
 
@@ -84,6 +85,7 @@ const dwbUndo = (() => {
       inline: typeof collectInlineParagraphEdits === "function" ? collectInlineParagraphEdits() : [],
       caret: currentCaret(),
       scrollTop: docViewportEl?.scrollTop || 0,
+      anchor: typeof captureDocScrollAnchor === "function" ? captureDocScrollAnchor() : null, // akapit u góry (scrollTop zależy od odstępów stron)
     };
   }
 
@@ -140,7 +142,7 @@ const dwbUndo = (() => {
     // treść akapitów zamiast rysować cały dokument (przy ~300 stronach 5 s → ułamek).
     if (bytes === originalFileBytes && typeof restoreInlineParagraphs === "function" && restoreInlineParagraphs(state.inline)) {
       if (state.caret && !readOnlyMode) focusParagraphAtOffset(state.caret.paraIndex, state.caret.offset);
-      if (docViewportEl) docViewportEl.scrollTop = state.scrollTop;
+      if (!restoreDocScrollAnchor(state.anchor) && docViewportEl) docViewportEl.scrollTop = state.scrollTop;
       return;
     }
     let target = bytes;
@@ -150,8 +152,8 @@ const dwbUndo = (() => {
     pendingDocEdits = [];
     // syncInlineEditMode (po odświeżeniu bazy) ustawi kursor tam, gdzie był
     if (state.caret && !readOnlyMode) pendingInlineCursor = state.caret;
-    await reloadFromBytes(target);
-    if (docViewportEl) docViewportEl.scrollTop = state.scrollTop;
+    await reloadFromBytes(target, { anchor: state.anchor });
+    if (!state.anchor && docViewportEl) docViewportEl.scrollTop = state.scrollTop;
   }
 
   function changesSinceSave() {

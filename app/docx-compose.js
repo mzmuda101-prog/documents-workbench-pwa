@@ -1718,34 +1718,98 @@ async function composeCommentsExDoc(zip) {
   return composeParse(xml);
 }
 
-function composeCommentEl(cDoc, { id, author, initials, text, paraIds }) {
+// Treść komentarza: rich = akapity → fragmenty { text, b, i, u, s, color, hl } (jak revCommentRich),
+// inaczej zwykły tekst (wiersze = akapity). Formatowanie jak w Wordzie: pogrubienie, kursywa,
+// przekreślenie, kolor, wyróżnienie, podkreślenie — w:rPr w kolejności schematu.
+function composeCommentRichOf(rich, text) {
+  if (Array.isArray(rich) && rich.length) return rich.map((p) => (Array.isArray(p) ? p : []));
+  return String(text || "").replace(/\r\n?/g, "\n").split("\n").map((line) => (line ? [{ text: line }] : []));
+}
+function composeCommentRun(cDoc, run) {
+  const r = cDoc.createElementNS(W_NS, "w:r");
+  const props = [];
+  if (run.b) props.push(["b"]);
+  if (run.i) props.push(["i"]);
+  if (run.s) props.push(["strike"]);
+  if (/^[0-9A-F]{6}$/i.test(run.color || "")) props.push(["color", String(run.color).toUpperCase()]);
+  if (run.hl && /^[A-Za-z]+$/.test(run.hl)) props.push(["highlight", run.hl]);
+  if (run.u) props.push(["u", "single"]);
+  if (props.length) {
+    const rPr = cDoc.createElementNS(W_NS, "w:rPr");
+    props.forEach(([name, val]) => {
+      const el = cDoc.createElementNS(W_NS, `w:${name}`);
+      if (val) el.setAttributeNS(W_NS, "w:val", val);
+      rPr.appendChild(el);
+    });
+    r.appendChild(rPr);
+  }
+  String(run.text || "").split("\t").forEach((part, k) => {
+    if (k) r.appendChild(cDoc.createElementNS(W_NS, "w:tab"));
+    if (!part) return;
+    const t = cDoc.createElementNS(W_NS, "w:t");
+    t.setAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:space", "preserve");
+    t.textContent = sanitizeXmlText(part);
+    r.appendChild(t);
+  });
+  return r;
+}
+// Akapity komentarza; pierwszy z fragmentem-znacznikiem (annotationRef — „dymek” w Wordzie),
+// ostatni z paraId (commentsExtended: odpowiedzi i „rozwiązany” wiążą się po nim).
+// opts.pPr / opts.refRun — kopiowane z edytowanego komentarza (styl akapitu, styl znacznika).
+function composeCommentParas(cDoc, paras, lastParaId, opts = {}) {
+  return paras.map((runs, i) => {
+    const p = cDoc.createElementNS(W_NS, "w:p");
+    if (i === paras.length - 1) { p.setAttributeNS(COMPOSE_W14, "w14:paraId", lastParaId); p.setAttributeNS(COMPOSE_W14, "w14:textId", opts.textId || "77777777"); }
+    if (opts.pPr) p.appendChild(opts.pPr.cloneNode(true));
+    if (i === 0) {
+      if (opts.refRun) p.appendChild(opts.refRun.cloneNode(true));
+      else {
+        const r = cDoc.createElementNS(W_NS, "w:r");
+        r.appendChild(cDoc.createElementNS(W_NS, "w:annotationRef"));
+        p.appendChild(r);
+      }
+    }
+    runs.forEach((run) => { if (run?.text) p.appendChild(composeCommentRun(cDoc, run)); });
+    return p;
+  });
+}
+
+function composeCommentEl(cDoc, { id, author, initials, text, rich, paraIds }) {
   const c = cDoc.createElementNS(W_NS, "w:comment");
   c.setAttributeNS(W_NS, "w:id", String(id));
   c.setAttributeNS(W_NS, "w:author", author || "Autor");
   c.setAttributeNS(W_NS, "w:date", new Date().toISOString().replace(/\.\d+Z$/, "Z"));
   if (initials) c.setAttributeNS(W_NS, "w:initials", initials);
-  const lines = String(text || "").replace(/\r\n?/g, "\n").split("\n");
-  let lastParaId = "";
-  lines.forEach((line, i) => {
-    const p = cDoc.createElementNS(W_NS, "w:p");
-    if (i === lines.length - 1) { lastParaId = composeParaId(paraIds); p.setAttributeNS(COMPOSE_W14, "w14:paraId", lastParaId); p.setAttributeNS(COMPOSE_W14, "w14:textId", "77777777"); }
-    if (i === 0) { // znacznik komentarza w dymku Worda
-      const r = cDoc.createElementNS(W_NS, "w:r");
-      r.appendChild(cDoc.createElementNS(W_NS, "w:annotationRef"));
-      p.appendChild(r);
-    }
-    if (line) {
-      const r = cDoc.createElementNS(W_NS, "w:r");
-      const t = cDoc.createElementNS(W_NS, "w:t");
-      t.setAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:space", "preserve");
-      t.textContent = sanitizeXmlText(line);
-      r.appendChild(t);
-      p.appendChild(r);
-    }
-    c.appendChild(p);
-  });
+  const lastParaId = composeParaId(paraIds);
+  composeCommentParas(cDoc, composeCommentRichOf(rich, text), lastParaId).forEach((p) => c.appendChild(p));
   cDoc.documentElement.appendChild(c);
   return lastParaId;
+}
+
+const composeRichText = (paras) => paras.map((runs) => runs.map((r) => r?.text || "").join("")).join("\n");
+
+// op "commentEdit": { id, rich | text } — nowa treść komentarza (albo odpowiedzi). Autor, data,
+// znaczniki w treści i powiązania (paraId ostatniego akapitu) zostają. Komentarza z czymś, czego
+// model nie zapisze (link, pole, wzmianka, inny krój…), nie ruszamy — revCommentRich.editable.
+async function applyCommentEditInZip(zip, xml, edit) {
+  if (!zip.file("word/comments.xml")) return { xml, count: 0 };
+  const paras = composeCommentRichOf(edit.rich, edit.text);
+  if (!composeRichText(paras).trim()) return { xml, count: 0 };
+  const cDoc = await composeCommentsParts(zip);
+  const info = composeCommentInfo(cDoc);
+  const c = info.comments.find((x) => x.getAttributeNS(W_NS, "id") === String(edit.id));
+  if (!c || (typeof revCommentRich === "function" && !revCommentRich(c).editable)) return { xml, count: 0 };
+  const old = Array.from(c.getElementsByTagNameNS(W_NS, "p"));
+  const last = old[old.length - 1];
+  const lastParaId = (last && last.getAttributeNS(COMPOSE_W14, "paraId")) || composeParaId(info.paraIds);
+  const textId = last?.getAttributeNS(COMPOSE_W14, "textId") || undefined;
+  const pPr = old[0] ? Array.from(old[0].childNodes).find((n) => n.nodeType === 1 && n.localName === "pPr") : null;
+  const refRun = c.getElementsByTagNameNS(W_NS, "annotationRef")[0]?.parentNode || null;
+  const fresh = composeCommentParas(cDoc, paras, lastParaId, { pPr, refRun: refRun?.localName === "r" ? refRun : null, textId });
+  old.forEach((p) => p.parentNode.removeChild(p));
+  fresh.forEach((p) => c.appendChild(p));
+  zip.file("word/comments.xml", composeSerialize(cDoc));
+  return { xml, count: 1 };
 }
 
 function composeCommentInfo(cDoc) {
@@ -1776,15 +1840,15 @@ function composeCommentEx(exDoc, paraId) {
   return ex;
 }
 
-// op "commentAdd": { index, start, end, text, author, initials }
+// op "commentAdd": { index, start, end, text | rich, author, initials }
 async function applyCommentAddInZip(zip, xml, edit) {
   const doc = composeParse(xml);
   const p = collectParagraphElements(doc.documentElement, "all")[edit.index];
-  if (!p || !String(edit.text || "").trim()) return { xml, count: 0 };
+  if (!p || !composeRichText(composeCommentRichOf(edit.rich, edit.text)).trim()) return { xml, count: 0 };
   const cDoc = await composeCommentsParts(zip);
   const info = composeCommentInfo(cDoc);
   const id = info.nextId;
-  const paraId = composeCommentEl(cDoc, { id, author: edit.author, initials: edit.initials, text: edit.text, paraIds: info.paraIds });
+  const paraId = composeCommentEl(cDoc, { id, author: edit.author, initials: edit.initials, text: edit.text, rich: edit.rich, paraIds: info.paraIds });
   const runs = extractRunsFromParagraphXml(p);
   const total = previewRunsToPlainText(runs).length;
   const start = Math.max(0, Math.min(total, edit.start | 0));
@@ -1823,9 +1887,9 @@ async function applyCommentThreadInZip(zip, xml, edit) {
     zip.file("word/commentsExtended.xml", composeSerialize(exDoc));
     return { xml, count: 1 };
   }
-  if (!String(edit.text || "").trim()) return { xml, count: 0 };
+  if (!composeRichText(composeCommentRichOf(edit.rich, edit.text)).trim()) return { xml, count: 0 };
   const id = info.nextId;
-  const pid = composeCommentEl(cDoc, { id, author: edit.author, initials: edit.initials, text: edit.text, paraIds: info.paraIds });
+  const pid = composeCommentEl(cDoc, { id, author: edit.author, initials: edit.initials, text: edit.text, rich: edit.rich, paraIds: info.paraIds });
   const ex = composeCommentEx(exDoc, pid);
   ex.setAttributeNS(COMPOSE_W15, "w15:paraIdParent", parentPid);
   // znaczniki odpowiedzi tuż przy znacznikach komentarza nadrzędnego (tak robi Word)

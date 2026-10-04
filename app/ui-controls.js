@@ -470,7 +470,7 @@ if (zoomLevelEl) zoomLevelEl.addEventListener("input", typeof onZoomSliderInput 
 if (readModeEl) {
   readModeEl.addEventListener("change", () => {
     readOnlyMode = readModeEl.checked;
-    syncInlineEditMode();
+    keepDocTextInPlace(syncInlineEditMode); // pasek Edycji znika / wraca nad dokumentem
   });
   docCanvasEl?.classList.add("read-only");
 }

@@ -89,8 +89,8 @@ async function run() {
   // ── komentarze ─────────────────────────────────────────────────────────────
   await select(page, 0, 9, 11); // „ma” w „Nowe Ala ma kota”
   await page.keyboard.press(`${MOD}+Alt+KeyM`);
-  check("Ctrl/⌘+Alt+M: okienko komentarza", await page.evaluate(() => !!document.querySelector(".compose-pop-form .cf-text")));
-  await page.fill(".cf-text", "Czy na pewno?");
+  check("Ctrl/⌘+Alt+M: okienko komentarza", await page.evaluate(() => !!document.querySelector(".compose-pop-form .cf-rich")));
+  await page.fill(".cf-rich", "Czy na pewno?");
   await page.click(".compose-pop-form .lf-ok");
   await page.waitForTimeout(200);
   check("bez imienia — prośba o imię (podpis komentarza w Wordzie)", await page.evaluate(() => !!document.querySelector(".compose-pop-form")));
@@ -113,7 +113,7 @@ async function run() {
   check("ruch kursora pokazuje kartę z powrotem", !!(await page.$(".comment-card")));
   await page.click(".comment-card .btn:has-text('Odpowiedz')");
   check("odpowiedź: imię zapamiętane", (await page.inputValue(".cf-author")) === "Jan Test");
-  await page.fill(".cf-text", "Tak.");
+  await page.fill(".cf-rich", "Tak.");
   await page.click(".compose-pop-form .lf-ok");
   await idle(page);
   await page.evaluate(() => focusParagraphAtOffset(0, 10));

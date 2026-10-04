@@ -49,16 +49,21 @@ async function run() {
   const sectPrs = async () => ((await (await zipOf()).file("word/document.xml").async("string")).match(/<w:sectPr[\s\S]*?<\/w:sectPr>/g) || []);
   const openLayout = async () => {
     await page.evaluate(() => focusParagraphAtOffset(1, 2));
-    await page.click("#insertMenuBtn");
-    await page.click(".compose-pop .compose-item:has-text('Układ strony')");
+    await page.click("#pageLayoutBtn");
     await page.waitForSelector('.compose-pop [data-preset="normal"]');
     await sleep(150);
   };
 
   // ── marginesy: gotowe ──
   await openLayout();
-  const menu = await page.evaluate(() => [...document.querySelectorAll(".compose-pop .compose-item")].filter((b) => b.getAttribute("aria-checked") === "true").map((b) => b.dataset.preset || b.dataset.orient || b.dataset.size));
-  check("Układ strony: zaznaczone obecne ustawienia (Normalne, pionowa, A4)", JSON.stringify(menu) === JSON.stringify(["normal", "portrait", "A4"]), JSON.stringify(menu));
+  const menu = await page.evaluate(() => [...document.querySelectorAll(".compose-pop .compose-item")].filter((b) => b.getAttribute("aria-checked") === "true").map((b) => b.dataset.preset || b.dataset.orient || b.dataset.size || b.dataset.v));
+  check("„Układ” na pasku: zaznaczone obecne ustawienia (Normalne, pionowa, A4, do góry)", JSON.stringify(menu) === JSON.stringify(["normal", "portrait", "A4", "top"]), JSON.stringify(menu));
+  await page.keyboard.press("Escape");
+  await page.click("#insertMenuBtn");
+  const insertItems = await page.evaluate(() => [...document.querySelectorAll(".compose-pop-insert .compose-item-label")].map((x) => x.textContent));
+  check("„＋ Wstaw” bez marginesów i układu strony (to nic nie wstawia)", insertItems.length > 5 && !insertItems.some((x) => /Układ strony|pionie|Marginesy/.test(x)), JSON.stringify(insertItems));
+  await page.keyboard.press("Escape");
+  await openLayout();
   await page.click('.compose-pop [data-preset="narrow"]');
   await idle();
   let sp = await sectPrs();

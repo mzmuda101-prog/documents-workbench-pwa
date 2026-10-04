@@ -616,6 +616,31 @@ function paragraphHasProtectedContent(p) {
   return TRANSFORM_SKIP_TAGS.some((tag) => p.getElementsByTagNameNS(W_NS, tag).length);
 }
 
+// Ten sam tekst co do długości (wielkość liter): znak po znaku do istniejących <w:t> — formatowanie,
+// znaczniki komentarzy i zakładki zostają dokładnie na miejscu (też przy łamaniu wiersza).
+function setParagraphTextSameLength(p, raw, next) {
+  if (next.length !== raw.length) return false;
+  let pos = 0;
+  const runs = p.getElementsByTagNameNS(W_NS, "r");
+  for (let r = 0; r < runs.length; r++) {
+    Array.from(runs[r].childNodes).forEach((c) => {
+      if (c.nodeType !== 1 || c.namespaceURI !== W_NS) return;
+      if (c.localName === "t") {
+        const len = (c.textContent || "").length;
+        c.textContent = next.slice(pos, pos + len);
+        if (/^\s|\s$/.test(c.textContent)) c.setAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:space", "preserve");
+        pos += len;
+      } else if (c.localName === "br") pos += 1;
+    });
+  }
+  return pos === next.length;
+}
+// Akapit bez niczego poza zwykłym tekstem — tylko taki wolno przepisać jednym fragmentem.
+function paragraphIsPlainText(p) {
+  return Array.from(p.childNodes).every((n) => n.nodeType !== 1 || (n.namespaceURI === W_NS && (n.localName === "pPr" || n.localName === "proofErr"
+    || (n.localName === "r" && Array.from(n.childNodes).every((c) => c.nodeType !== 1 || ["t", "br"].includes(c.localName))))));
+}
+
 function applyParagraphTransformInXml(xml, edit, scope) {
   const fn = buildParagraphTransformFn(edit);
   const parser = new DOMParser();
@@ -628,7 +653,13 @@ function applyParagraphTransformInXml(xml, edit, scope) {
     let next;
     try { next = fn(raw); } catch { return; }
     if (typeof next !== "string" || next === raw) return;
-    setParagraphText(p, next);
+    // Dawniej zawsze setParagraphText — jeden goły fragment: „WIELKIE LITERY” / „Przytnij” gubiły
+    // pogrubienie, kursywę, kolor, zakładki i odwołanie komentarza (komentarz zostawał bez kotwicy).
+    // Teraz tekst wraca do istniejących fragmentów; gdy się nie da — akapit bez formatowania albo pominięty.
+    if (!setParagraphTextSameLength(p, raw, next) && !setParagraphTextPreservingRuns(p, next)) {
+      if (!paragraphIsPlainText(p)) return;
+      setParagraphText(p, next);
+    }
     count++;
   });
   if (!count) return { xml, count: 0 };
@@ -705,12 +736,17 @@ function recordPendingEdit(edit) {
   pendingDocEdits.push({ ...edit, ts: Date.now() });
 }
 
+function commentRefIds(xml) {
+  return new Set([...String(xml).matchAll(/<w:commentReference\b[^>]*\bw:id="(-?\d+)"/g)].map((m) => m[1]));
+}
+
 async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
   if (!window.JSZip) throw new Error("JSZip missing");
   const zip = await window.JSZip.loadAsync(bytes);
   const docFile = zip.file("word/document.xml");
   if (!docFile) throw new Error("word/document.xml missing");
   let xml = await docFile.async("string");
+  const commentRefsBefore = commentRefIds(xml);
   let total = 0;
   let coreXml = null;
   const list = edits || [];
@@ -747,8 +783,10 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
       total += res.count;
       continue;
     }
-    if (normalized.op === "commentAdd" || normalized.op === "commentReply" || normalized.op === "commentDone") { // docx-compose.js
-      const res = normalized.op === "commentAdd" ? await applyCommentAddInZip(zip, xml, normalized) : await applyCommentThreadInZip(zip, xml, normalized);
+    if (normalized.op === "commentAdd" || normalized.op === "commentReply" || normalized.op === "commentDone" || normalized.op === "commentEdit") { // docx-compose.js
+      const res = normalized.op === "commentAdd" ? await applyCommentAddInZip(zip, xml, normalized)
+        : normalized.op === "commentEdit" ? await applyCommentEditInZip(zip, xml, normalized)
+        : await applyCommentThreadInZip(zip, xml, normalized);
       xml = res.xml;
       total += res.count;
       continue;
@@ -811,6 +849,13 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
   if (typeof finalizeComposeParts === "function") xml = await finalizeComposeParts(zip, xml); // nowe linki: powiązania + styl
   // przypis bez odnośnika w treści (odnośnik skasowany) znika z pliku — jak w Wordzie
   if (list.length && typeof pruneOrphanNotesInZip === "function") await pruneOrphanNotesInZip(zip, xml);
+  // komentarz, któremu ta zmiana skasowała odwołanie w treści (np. zaznacz wszystko + Delete) — też
+  // znika, razem z resztką zakresu i wpisami w commentsExtended (dawniej zostawał bez kotwicy)
+  if (list.length && commentRefsBefore.size && typeof applyRevisionsInZip === "function") {
+    const after = commentRefIds(xml);
+    const lost = [...commentRefsBefore].filter((id) => !after.has(id));
+    if (lost.length) xml = (await applyRevisionsInZip(zip, xml, { op: "revisions", action: "removeComments", ids: lost })).xml;
+  }
   zip.file("word/document.xml", xml);
   if (coreXml !== null) zip.file("docProps/core.xml", coreXml);
   const out = await zip.generateAsync({

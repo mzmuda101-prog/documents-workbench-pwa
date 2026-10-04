@@ -121,10 +121,46 @@ async function loadSampleDocument(name = "sample") {
   }
 }
 
-async function reloadFromBytes(bytes) {
+// Przerysowanie po zmianie w pliku (komentarz, tabela, kolor, Cofnij…): na ekranie zostaje to samo
+// miejsce — akapit u góry obszaru dokumentu, nie surowe scrollTop. Świeży render nie ma jeszcze
+// odstępów między stronami (page-breaks.js dokłada je ~200 ms później), więc ta sama liczba
+// pikseli pokazywała tekst o sumę odstępów niżej, a page-breaks zakotwiczał już przesunięty widok
+// (zgłoszenie Mateusza: po dodaniu komentarza strona „podjeżdża” i trzeba wrócić).
+// opts.anchor — miejsce zapamiętane wcześniej (np. stan Cofnij); null = bez przywracania.
+let renderScrollAnchor = null; // { anchor, until } — dla pierwszego przeliczenia odstępów stron
+async function reloadFromBytes(bytes, opts = {}) {
   originalFileBytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const shown = !!docCanvasEl?.querySelector(".docx-preview-host p");
+  const anchor = opts.anchor !== undefined ? opts.anchor : shown ? captureDocScrollAnchor() : null;
   await renderCurrentDocument();
+  if (!anchor || !restoreDocScrollAnchor(anchor)) return;
+  renderScrollAnchor = { anchor, until: performance.now() + 2500 };
 }
+
+// Zmiana ramy nad dokumentem (pasek formatowania Edycji znika / wraca przy Czytanie ⇄ Edycja):
+// tekst zostaje w tym samym miejscu ekranu — przesunięcie obszaru oddaje przewinięcie.
+function keepDocTextInPlace(fn) {
+  const vp = docViewportEl;
+  const a = vp && vp.scrollTop > 0 ? captureDocScrollAnchor() : null;
+  const p = a ? docBodyParagraphs(docCanvasEl)[a.index] : null;
+  const before = p ? p.getBoundingClientRect().top : 0;
+  fn();
+  if (!p?.isConnected) return;
+  const d = p.getBoundingClientRect().top - before;
+  if (Math.abs(d) > 0.5) vp.scrollTop += d;
+}
+
+// page-breaks.js: odstępy stron po przerysowaniu mają zostawić na miejscu akapit sprzed
+// przerysowania (nie ten, który chwilowo — bez odstępów — wypadł u góry). Raz; własne
+// przewinięcie użytkownika kasuje zapamiętane miejsce.
+function takeRenderScrollAnchor() {
+  const r = renderScrollAnchor;
+  renderScrollAnchor = null;
+  return r && performance.now() < r.until ? r.anchor : null;
+}
+["wheel", "touchstart", "keydown", "pointerdown"].forEach((type) => {
+  docViewportEl?.addEventListener(type, () => { renderScrollAnchor = null; }, { passive: true, capture: true });
+});
 
 // Ciche przerysowanie (np. po kliknięciu pola formularza): nakładka „Renderowanie…” tylko,
 // gdy trwa to dłużej — przy małym dokumencie to ~10 ms i rozmyty ekran byłby samym mignięciem.

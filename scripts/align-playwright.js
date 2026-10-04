@@ -90,9 +90,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   // ── strona w pionie ──
   await caretIn("Strona tytułowa");
-  await page.click("#insertMenuBtn");
-  await page.waitForSelector(".compose-pop .compose-item");
-  await page.evaluate(() => [...document.querySelectorAll(".compose-pop .compose-item")].find((b) => /pionie/.test(b.textContent)).click());
+  await page.click("#pageLayoutBtn"); // „Układ” na pasku (wyrównanie w pionie — razem z marginesami)
   await page.waitForSelector(".compose-pop .compose-item[data-v='center']");
   await sleep(200);
   const curTop = await page.evaluate(() => document.querySelector(".compose-pop .compose-item[data-v='top']")?.getAttribute("aria-checked"));

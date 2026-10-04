@@ -354,12 +354,10 @@ const dwbNotes = (() => {
     refTimer = setTimeout(async () => {
       if (bodyRefCount() >= refCount) return;
       const p = typeof restoreDocCaret === "function" ? restoreDocCaret() : null;
-      const top = docViewportEl?.scrollTop || 0;
       await mergeInlineEditsIntoBytes();
       const caret = p?.isConnected ? { paraIndex: resolveParaIndex(p), offset: getCaretOffset(p) } : null;
       if (caret && caret.paraIndex >= 0) pendingInlineCursor = caret;
       await reloadFromBytes(originalFileBytes);
-      if (docViewportEl) docViewportEl.scrollTop = top;
     }, 450);
   }
   let refCount = 0;

@@ -280,8 +280,10 @@ const dwbPageBreaks = (() => {
         && (sec.style.getPropertyValue("--dwb-sec-min") || "") === (minH ? `${minH}px` : "");
     }) && h.querySelectorAll(".dwb-page-gap, .dwb-page-gap-band, .dwb-page-break").length === want.reduce((n, w) => n + w.items.reduce((m, x) => m + (x.kind === "gap" ? 2 : 1), 0), 0);
     if (same) return;
-    // zmiana: akapit widoczny u góry zostaje na swoim miejscu na ekranie (jak zakotwiczenie przewijania)
-    const anchor = viewportAnchor(h);
+    // zmiana: akapit widoczny u góry zostaje na swoim miejscu na ekranie (jak zakotwiczenie przewijania);
+    // tuż po przerysowaniu — akapit sprzed przerysowania (document.js, reloadFromBytes)
+    const pending = typeof takeRenderScrollAnchor === "function" ? takeRenderScrollAnchor() : null;
+    const anchor = pending ? null : viewportAnchor(h);
     clear(h);
     const bandBg = canvasBackground();
     const hint = (el) => {
@@ -326,7 +328,8 @@ const dwbPageBreaks = (() => {
         sec.style.setProperty("--dwb-sec-min", `${minH}px`);
       }
     });
-    if (anchor && docViewportEl) {
+    if (pending) restoreDocScrollAnchor(pending);
+    else if (anchor && docViewportEl) {
       const d = anchor.el.getBoundingClientRect().top - anchor.top;
       if (Math.abs(d) > 0.5) docViewportEl.scrollTop += d;
     }

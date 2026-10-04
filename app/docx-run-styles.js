@@ -221,6 +221,9 @@ function paragraphXmlParts(pEl) {
     if (child.nodeType !== 1 || child.namespaceURI !== W_NS) continue;
     if (child.localName === "r") parts.push(child);
     else if (child.localName === "commentRangeStart" || child.localName === "commentRangeEnd") parts.push(child); // znaczniki komentarza
+    // zakładki (cel linku „W dokumencie”, odsyłacza „Rysunek 1”, spisu treści) — w swoim miejscu
+    // tekstu; dawniej zostawały przed przepisanym tekstem i zakładka kurczyła się do pustego punktu
+    else if (child.localName === "bookmarkStart" || child.localName === "bookmarkEnd") parts.push(child);
     else if (child.localName === "hyperlink") {
       for (let j = 0; j < child.childNodes.length; j++) {
         const sub = child.childNodes[j];
@@ -417,6 +420,7 @@ function applyRunsToParagraphXml(pEl, runs) {
     if (n.namespaceURI !== W_NS) return;
     if (n.localName === "sdt" && typeof formIslandSdt === "function" && formIslandSdt(n)) pEl.removeChild(n);
     else if (n.localName === "commentRangeStart" || n.localName === "commentRangeEnd") pEl.removeChild(n);
+    else if (n.localName === "bookmarkStart" || n.localName === "bookmarkEnd") pEl.removeChild(n);
   });
   clearParagraphRuns(pEl);
   const doc = pEl.ownerDocument;
@@ -425,7 +429,7 @@ function applyRunsToParagraphXml(pEl, runs) {
     if (run.island) {
       hl = null;
       const frag = new DOMParser().parseFromString(run.island, "application/xml").documentElement;
-      if (frag && frag.namespaceURI === W_NS && ["sdt", "r", "commentRangeStart", "commentRangeEnd"].includes(frag.localName)) pEl.appendChild(doc.importNode(frag, true));
+      if (frag && frag.namespaceURI === W_NS && ["sdt", "r", "commentRangeStart", "commentRangeEnd", "bookmarkStart", "bookmarkEnd"].includes(frag.localName)) pEl.appendChild(doc.importNode(frag, true));
       return;
     }
     if (run.break) {

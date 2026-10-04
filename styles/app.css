@@ -1955,6 +1955,17 @@ p.dwb-exact img { vertical-align: baseline; }
 .link-card .tb-btn { min-width: 32px; height: 32px; border-color: transparent; background: none; }
 .link-card .tb-btn:hover { background: var(--accent-light); }
 @media print { .link-card, .compose-pop { display: none !important; } }
+/* podgląd obrazu przy linku do obrazu (doc-links.js) — bez skoku w dokumencie */
+.link-peek {
+  position: fixed; z-index: 8960; display: flex; flex-direction: column; gap: 6px; max-width: min(300px, calc(100vw - 16px));
+  padding: 8px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
+  box-shadow: 0 10px 28px rgba(8, 14, 28, 0.2); animation: compose-pop-in 120ms ease-out; pointer-events: none;
+}
+.link-peek img { display: block; max-width: 100%; max-height: min(220px, 40vh); width: auto; height: auto; object-fit: contain; border-radius: 6px; background: #fff; align-self: center; }
+.link-peek-cap { font-size: 12.5px; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
+.link-peek-tip { font-size: 11.5px; color: var(--muted); }
+.doc-canvas.read-only a[data-dwb-img-link] { cursor: zoom-in; }
+@media print { .link-peek { display: none !important; } }
 .compose-row { display: flex; gap: 6px; padding: 2px 4px 6px; }
 .compose-row-btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 10px; border-radius: 10px; min-height: 0; font-size: 13px; }
 @media (pointer: coarse) { .compose-row-btn { min-height: 44px; } }
@@ -2031,16 +2042,47 @@ p.dwb-exact img { vertical-align: baseline; }
 ::highlight(dwb-comment-done) { background-color: rgba(140, 150, 165, 0.18); }
 .cm-mark { display: inline; }
 .comment-card {
-  position: fixed; z-index: 8950; width: min(320px, calc(100vw - 16px)); max-height: min(50vh, 360px); display: flex; flex-direction: column;
+  /* --cc-z = przybliżenie dokumentu (min. 1) — komentarz rośnie razem z tekstem (dostępność) */
+  position: fixed; z-index: 8950; width: min(calc(320px * var(--cc-z, 1)), calc(100vw - 16px)); max-height: min(60vh, calc(360px * var(--cc-z, 1))); display: flex; flex-direction: column;
   border: 1px solid var(--border); border-left: 4px solid #f0b400; border-radius: 12px; background: var(--surface);
   box-shadow: 0 10px 28px rgba(8, 14, 28, 0.2); animation: compose-pop-in 120ms ease-out;
 }
 .comment-card.is-done { border-left-color: var(--muted); }
 .cc-done { padding: 6px 12px 0; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
-.cc-list { overflow-y: auto; padding: 8px 12px 4px; display: flex; flex-direction: column; gap: 8px; }
+.cc-list-wrap { position: relative; min-height: 0; flex: 1 1 auto; display: flex; flex-direction: column; }
+.cc-list { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 8px 12px 4px; display: flex; flex-direction: column; gap: 8px; scrollbar-width: thin; }
+.cc-list:focus-visible { outline: 2px solid var(--border-focus); outline-offset: -2px; border-radius: 8px; }
 .cc-entry + .cc-entry { padding-top: 8px; border-top: 1px solid var(--border-subtle); }
-.cc-head { font-size: 12px; font-weight: 700; color: var(--ink-2); }
-.cc-text { font-size: 13.5px; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.cc-head { display: flex; align-items: center; gap: 6px; font-size: calc(12px * var(--cc-z, 1)); font-weight: 700; color: var(--ink-2); }
+.cc-who { flex: 1 1 auto; min-width: 0; }
+.cc-edit { flex: none; width: 26px; height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 7px; color: var(--muted-strong); }
+.cc-edit svg { width: 14px; height: 14px; }
+.cc-edit[aria-disabled="true"] { opacity: .4; }
+@media (pointer: coarse) { .cc-edit { width: 36px; height: 36px; } }
+.cc-text { font-size: calc(13.5px * var(--cc-z, 1)); line-height: 1.4; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.cc-p { min-height: 1.4em; }
+/* długi komentarz: wygaszenie krawędzi + „Więcej ↓”, tylko gdy faktycznie jest co przewinąć */
+.cc-list.more-b, .cf-rich.more-b { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 34px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 34px), transparent); }
+.cc-list.more-t.more-b, .cf-rich.more-t.more-b { -webkit-mask-image: linear-gradient(to bottom, transparent, #000 18px, #000 calc(100% - 34px), transparent); mask-image: linear-gradient(to bottom, transparent, #000 18px, #000 calc(100% - 34px), transparent); }
+.cc-list.more-t:not(.more-b), .cf-rich.more-t:not(.more-b) { -webkit-mask-image: linear-gradient(to bottom, transparent, #000 18px); mask-image: linear-gradient(to bottom, transparent, #000 18px); }
+.cc-more {
+  position: absolute; left: 50%; bottom: 2px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 9px 2px 7px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--muted-strong);
+  font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 8px rgba(8, 14, 28, 0.14);
+}
+.cc-more[hidden] { display: none; }
+.cc-more:hover { color: var(--ink); border-color: var(--border-focus); }
+/* edytor komentarza (B / I / U — przyciski paska Edycji i Ctrl/⌘+B/I/U) */
+.compose-pop-comment { width: min(calc(360px * var(--cc-z, 1)), calc(100vw - 16px)); }
+.cf-wrap { position: relative; }
+.cf-fmt-hint { font-size: 11.5px; font-weight: 400; }
+.cf-rich {
+  padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--field); color: var(--ink);
+  font: inherit; font-size: calc(14px * var(--cc-z, 1)); font-weight: 400; line-height: 1.4; min-height: 96px; max-height: min(40vh, calc(240px * var(--cc-z, 1)));
+  overflow-y: auto; overscroll-behavior: contain; white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; scrollbar-width: thin;
+}
+.cf-rich:focus { outline: none; border-color: var(--border-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+@media (pointer: coarse) { .cf-rich { font-size: max(16px, calc(14px * var(--cc-z, 1))); } } /* iOS: bez przybliżania */
 .cc-actions { display: flex; gap: 6px; padding: 6px 10px 10px; flex-wrap: wrap; }
 .cc-actions .btn { padding: 5px 10px; border-radius: 9px; min-height: 0; font-size: 12.5px; }
 .cc-actions .cc-del { margin-left: auto; color: var(--danger, #c0392b); }

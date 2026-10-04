@@ -88,6 +88,27 @@ Siostrzana aplikacja [Sheet Workbench PWA](../sheet-workbench-pwa/README.md).
   wszystkie” (lub tylko wybranego autora), „Usuń wszystkie komentarze”; komunikat i licznik po
   otwarciu pliku. Akapity z przypisem, obrazem, polem, linkiem lub śledzoną zmianą są w trybie
   Edycja tylko do odczytu (edycja tutaj by je zgubiła) — z wyjaśnieniem po najechaniu
+- **Komentarze jak w Wordzie** (`app/compose-ui.js`, op `commentEdit`): edycja treści komentarza i
+  każdej odpowiedzi (ołówek w karcie; komentarz z linkiem/polem/wzmianką — tylko w Wordzie, żeby
+  nic nie zginęło), pogrubienie / kursywa / podkreślenie przyciskami B I U z paska i Ctrl/⌘+B/I/U,
+  wklejanie z formatowaniem (Word, Notatki, WWW, Markdown → B/I/U/przekreślenie/wyróżnienie; bez
+  krojów, rozmiarów, kolorów źródła, obrazów i linków); długi komentarz: wygaszenie + „Więcej ↓”;
+  karta i edytor rosną razem z przybliżeniem dokumentu (min. zwykły rozmiar). `npm run test:comments`
+- **Nic nie skacze ani nie ginie** (2026-10-04): po dodaniu komentarza / odpowiedzi / zmianie
+  tabeli, koloru, Cofnij… tekst zostaje w tym samym miejscu ekranu (kotwica = akapit, nie piksele —
+  odstępy stron dochodzą po przerysowaniu), też przy Czytanie ⇄ Edycja; zakładki (cele linków,
+  odsyłaczy, spisu treści) zostają wokół swojego tekstu przy pisaniu; „Wielkie litery / Przytnij /
+  Prefiks” nie gubią formatowania ani komentarzy; skasowany tekst z komentarzem usuwa i komentarz
+  (bez sierot w comments.xml). `npm run test:integrity`
+- **Pola formularza bez przerysowania**: klik w ☐, wybór z listy, data — zmienia się tylko pole
+  (też pola powiązane), czas nie rośnie z długością dokumentu; pole z tekstem zastępczym — dalej
+  pełne przerysowanie (styl). `npm run test:forms`
+- **Obrazy**: suwak rozmiaru stabilny (karta nie jedzie za obrazem pod kursorem, jeden zapis po
+  puszczeniu, strzałki = jeden zapis po przerwie); link do obrazu (Ctrl/⌘+K → Miejsce w dokumencie →
+  Obrazy) jak w Wordzie — zakładka przy obrazie, najechanie (dotyk: przytrzymanie) pokazuje podgląd
+  obrazu bez przewijania, klik skacze z „↩ Wróć”. `npm run test:image`
+- **„Układ” na pasku Edycji**: marginesy, orientacja, rozmiar papieru, wyrównanie strony w pionie
+  (dawniej w „＋ Wstaw”, które teraz tylko wstawia)
 
 - **Znajdź i zamień v2**: wielkość liter, całe słowa, wyrażenia regularne z `$1` w zamianie,
   „tylko nagłówki sekcji”, „Zamień wszystkie” także w nagłówkach/stopkach/przypisach, podświetlenie
@@ -133,6 +154,9 @@ npm run test:touch    # lekcje z iPhone'a (dotyk)
 npm run test:enter    # szybkie pisanie wokół Enter/Backspace: zapis = podgląd
 npm run test:undo     # Cofnij / Ponów (Chromium + WebKit)
 npm run test:pinch    # przybliżanie dwoma palcami (Chromium + WebKit)
+npm run test:comments # komentarze: edycja, B/I/U, wklejanie, „Więcej”, zoom, bez skoku przewijania
+npm run test:integrity # zakładki/komentarze/formatowanie po zwykłych operacjach (Chromium + WebKit)
+npm run test:image    # suwak rozmiaru obrazu, link do obrazu z podglądem (Chromium + WebKit)
 npm run test:review   # recenzja: skan, Akceptuj/Odrzuć, komentarze, blokady akapitów, mapowanie akapitów
 npm run test:guide    # przewodnik: każda wskazówka „Spróbuj” działa jak opisano
 npm run test:caret    # poruszanie się kursorem między akapitami (Chromium + WebKit)

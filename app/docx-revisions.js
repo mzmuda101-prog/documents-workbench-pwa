@@ -71,6 +71,58 @@ function revPartLabel(name) {
   return "other";
 }
 
+// ── treść komentarza z formatowaniem ─────────────────────────────────────────
+// Word (też nowe komentarze M365) pozwala w komentarzu na pogrubienie, kursywę, podkreślenie,
+// przekreślenie, kolor i wyróżnienie. Model: akapity → fragmenty { text, b, i, u, s, color, hl }.
+// editable = komentarz składa się TYLKO z tego, co model zapisze z powrotem — inaczej edycja
+// w aplikacji zgubiłaby coś z pliku (link, pole, wzmianka, obraz, inny krój/rozmiar…).
+const REV_CM_RPR_OK = new Set(["b", "bCs", "i", "iCs", "u", "strike", "color", "highlight", "lang", "noProof"]);
+const REV_CM_P_SKIP = new Set(["pPr", "proofErr"]);
+function revOnOff(el) {
+  const v = el.getAttributeNS(W_NS, "val") ?? el.getAttribute("w:val");
+  return !(v === "0" || v === "false" || v === "off");
+}
+function revCommentRich(comment) {
+  // bezpośrednio w komentarzu tylko akapity (tabela, kontrolka… = nie do edycji)
+  let editable = revChildren(comment).every((n) => n.namespaceURI === W_NS && n.localName === "p");
+  const paras = revKids(comment, "p").map((p) => {
+    const runs = [];
+    Array.from(p.childNodes).forEach((n) => {
+      if (n.nodeType !== 1) return;
+      if (n.namespaceURI === W_NS && REV_CM_P_SKIP.has(n.localName)) return;
+      if (!(n.namespaceURI === W_NS && n.localName === "r")) { editable = false; return; }
+      const fmt = {};
+      let marker = false;
+      Array.from(n.childNodes).forEach((k) => {
+        if (k.nodeType !== 1) return;
+        const name = k.namespaceURI === W_NS ? k.localName : "";
+        if (name === "rPr") {
+          Array.from(k.childNodes).forEach((pr) => {
+            if (pr.nodeType !== 1) return;
+            const pn = pr.namespaceURI === W_NS ? pr.localName : "";
+            if (pn === "rStyle") return; // styl znacznika komentarza (annotationRef) — sprawdzany niżej
+            if (!REV_CM_RPR_OK.has(pn)) { editable = false; return; }
+            const val = pr.getAttributeNS(W_NS, "val") || pr.getAttribute("w:val") || "";
+            if (pn === "b" && revOnOff(pr)) fmt.b = true;
+            else if (pn === "i" && revOnOff(pr)) fmt.i = true;
+            else if (pn === "strike" && revOnOff(pr)) fmt.s = true;
+            else if (pn === "u" && val && val !== "none") fmt.u = true;
+            else if (pn === "color" && /^[0-9A-Fa-f]{6}$/.test(val)) fmt.color = val.toUpperCase();
+            else if (pn === "highlight" && val && val !== "none") fmt.hl = val;
+          });
+          if (revKids(k, "rStyle").length && !revKids(n, "annotationRef").length) editable = false;
+        } else if (name === "t") runs.push({ ...fmt, text: k.textContent || "" });
+        else if (name === "tab") runs.push({ ...fmt, text: "\t" });
+        else if (name === "annotationRef") marker = true;
+        else if (name !== "lastRenderedPageBreak") editable = false;
+      });
+      if (marker && !runs.length) return;
+    });
+    return runs.filter((r) => r.text);
+  });
+  return { paras, editable };
+}
+
 // ── odczyt ───────────────────────────────────────────────────────────────────
 async function scanDocxRevisions(bytes) {
   const zip = await loadDocxZipCached(bytes);
@@ -147,7 +199,8 @@ async function scanDocxRevisions(bytes) {
       const paras = revKids(c, "p");
       const lastParaId = paras.length ? (paras[paras.length - 1].getAttributeNS(W14_NS, "paraId") || paras[paras.length - 1].getAttribute("w14:paraId")) : "";
       const a = anchors.get(id) || {};
-      const item = { id, author: revAttr(c, "author") || "?", initials: revAttr(c, "initials"), date: revAttr(c, "date"), text: paras.map(revParaText).join("\n").trim(), anchor: (a.text || "").trim(), paraIndex: a.paraIndex ?? null, replies: [], done: false, parentId: null };
+      const rich = revCommentRich(c);
+      const item = { id, author: revAttr(c, "author") || "?", initials: revAttr(c, "initials"), date: revAttr(c, "date"), text: paras.map(revParaText).join("\n").trim(), rich: rich.paras, editable: rich.editable, anchor: (a.text || "").trim(), paraIndex: a.paraIndex ?? null, replies: [], done: false, parentId: null };
       if (lastParaId) byParaId.set(lastParaId.toUpperCase(), item);
       result.comments.push(item);
     });

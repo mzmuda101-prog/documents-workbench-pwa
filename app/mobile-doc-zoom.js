@@ -354,10 +354,16 @@ let _refitRaf = 0;
 function ensureMobileReflowObserver() {
   if (!docViewportEl || _docReflowObserver) return;
   let boxRaf = 0;
+  let reflowRaf = 0;
   _docReflowObserver = new ResizeObserver(() => {
     if (shouldUseMobileReflow()) {
-      const host = docCanvasEl?.querySelector(".docx-preview-host");
-      if (host) applyMobileReflowLayout(host);
+      // w następnej klatce — przebudowa w środku obserwatora wracała jako kolejna zmiana rozmiaru
+      // („ResizeObserver loop completed with undelivered notifications” w Safari, np. po wczytaniu obrazu)
+      if (!reflowRaf) reflowRaf = requestAnimationFrame(() => {
+        reflowRaf = 0;
+        const host = docCanvasEl?.querySelector(".docx-preview-host");
+        if (host && shouldUseMobileReflow()) applyMobileReflowLayout(host);
+      });
       return;
     }
     // inna szerokość obszaru → płótno i obszar przewijania od nowa (w następnej klatce — patrz wyżej)

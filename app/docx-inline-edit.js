@@ -80,6 +80,8 @@ const INLINE_LOCK_TAGS = [
 // Znaczniki komentarza głębiej niż w akapicie (np. w linku) — zapis akapitu by je zgubił.
 function paragraphCommentLock(xp) {
   const deep = ["commentRangeStart", "commentRangeEnd"].some((tag) => Array.from(xp.getElementsByTagNameNS(W_NS, tag)).some((m) => m.parentNode !== xp))
+    // zakładka w linku — zapis akapitu buduje linki od nowa (zgubiłby ją)
+    || ["bookmarkStart", "bookmarkEnd"].some((tag) => Array.from(xp.getElementsByTagNameNS(W_NS, tag)).some((m) => m.parentNode?.localName === "hyperlink"))
     || Array.from(xp.getElementsByTagNameNS(W_NS, "commentReference")).some((m) => m.parentNode?.parentNode !== xp);
   return deep ? "lockField" : null;
 }
@@ -104,7 +106,8 @@ function stampCommentMarks(xp, el, nextKey, noteLabels = []) {
       const span = document.createElement("span");
       span.dataset.cm = key;
       span.dataset.cmId = n.getAttributeNS(W_NS, "id") || n.getElementsByTagNameNS(W_NS, "commentReference")[0]?.getAttributeNS(W_NS, "id") || "";
-      span.dataset.cmKind = n.localName === "r" ? "ref" : n.localName === "commentRangeStart" ? "start" : "end";
+      span.dataset.cmKind = n.localName === "r" ? "ref" : n.localName === "commentRangeStart" ? "start" : n.localName === "commentRangeEnd" ? "end"
+        : n.localName === "bookmarkStart" ? "bm-start" : "bm-end"; // zakładka — osobne numery id niż komentarze
       span.contentEditable = "false";
       span.className = "cm-mark";
       if (!groups.has(offset)) groups.set(offset, []);

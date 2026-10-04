@@ -1,6 +1,6 @@
 // Core runtime: DOM refs, shared state, and base UI helpers.
 
-const APP_BUILD_VERSION = "20261004-10";
+const APP_BUILD_VERSION = "20261005-01";
 
 const IS_LOW_POWER = (() => {
   try {
@@ -169,6 +169,7 @@ function applyZoom() {
   docCanvasEl.style.setProperty("--dwb-ik", zoom > 1 ? String(Math.round((1 / Math.sqrt(zoom)) * 1000) / 1000) : "1");
   if (zoomValueEl) zoomValueEl.textContent = `${Math.round(zoom * 100)}%`;
   if (typeof updateZoomShellHeight === "function") updateZoomShellHeight(zoom);
+  docCanvasEl.dispatchEvent(new CustomEvent("dwb-zoom")); // np. karta komentarza rośnie razem z tekstem
 }
 
 function syncDocumentShellClass() {

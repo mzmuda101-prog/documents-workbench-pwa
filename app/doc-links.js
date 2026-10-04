@@ -106,10 +106,11 @@ async function paintDocLinks() {
       range.insertNode(a);
     } catch (_) { /* zakres przez granice elementów — zostaje zwykły tekst */ }
   });
-  // podpowiedzi: dokąd prowadzi link
+  // podpowiedzi: dokąd prowadzi link (link do obrazu — zamiast napisu podgląd obrazu, niżej)
   host.querySelectorAll("a[href]").forEach((a) => {
-    if (a.dataset.hintPl) return;
+    if (a.dataset.hintPl || a.dataset.dwbImgLink) return;
     const href = a.getAttribute("href") || "";
+    if (href.startsWith("#") && linkTargetImage(href.slice(1))) { a.dataset.dwbImgLink = "1"; return; }
     a.dataset.hint = "";
     if (href.startsWith("#")) {
       const target = linkTargetEl(href.slice(1));
@@ -132,6 +133,88 @@ function linkTargetEl(id) {
   let decoded = id;
   try { decoded = decodeURIComponent(id); } catch (_) { /* zostaje surowe */ }
   return host.querySelector(`[id="${CSS.escape(decoded)}"]`);
+}
+
+// ── link do obrazu: podgląd bez skoku ────────────────────────────────────────
+// Word: link „Miejsce w tym dokumencie” do zakładki przy rysunku albo odsyłacz \h do podpisu
+// („Rysunek 2”) — klik przenosi do obrazu. U nas dodatkowo: najechanie myszą (na dotyku
+// przytrzymanie palca) pokazuje obraz w okienku przy linku — bez zmiany miejsca w dokumencie.
+// Klik dalej skacze do obrazu z „↩ Wróć”.
+
+// Podpis obrazu: akapit pod nim (styl Legenda / „Rysunek 1…”), inaczej tekst alternatywny, inaczej „Obraz N”.
+const DOC_CAPTION_RE = /^(rys(unek|\.)?|ilustracja|zdj(ęcie|\.)|fot(\.|ografia)?|wykres|schemat|fig(ure|\.)?|image|picture|chart)\s*\d/i;
+function docImageCaption(p) {
+  for (const sib of [p.nextElementSibling, p.previousElementSibling]) {
+    if (sib?.tagName !== "P" || sib.querySelector("img")) continue;
+    const text = (sib.textContent || "").replace(/\s+/g, " ").trim();
+    const styled = Array.from(sib.classList).some((c) => /caption|legenda/i.test(c));
+    if (text && text.length <= 160 && (styled || DOC_CAPTION_RE.test(text))) return text;
+  }
+  return "";
+}
+function docImageLabel(p, n) {
+  const img = p?.querySelector?.("img");
+  const own = (p?.textContent || "").replace(/\s+/g, " ").trim();
+  return docImageCaption(p) || own || (img?.getAttribute("alt") || "").trim() || (n ? t("linkImageN", { n }) : t("linkGroupImages"));
+}
+// Obraz, do którego prowadzi zakładka: w akapicie-celu albo obraz, którego podpisem jest cel
+// (odsyłacz Worda do „Rysunek 2” wskazuje podpis pod obrazem).
+function linkTargetImage(id) {
+  const p = linkTargetEl(id)?.closest?.("p");
+  if (!p) return null;
+  const own = p.querySelector("img");
+  if (own) return { img: own, p };
+  const text = (p.textContent || "").replace(/\s+/g, " ").trim();
+  for (const sib of [p.previousElementSibling, p.nextElementSibling]) {
+    const img = sib?.tagName === "P" ? sib.querySelector("img") : null;
+    if (img && text && docImageCaption(sib) === text) return { img, p: sib };
+  }
+  return null;
+}
+
+const linkPeek = { el: null, a: null, timer: 0, touchTimer: 0, touchShown: false };
+function hideLinkPeek() {
+  clearTimeout(linkPeek.timer);
+  linkPeek.el?.remove();
+  linkPeek.el = null;
+  linkPeek.a = null;
+}
+function showLinkPeek(a, touch = false) {
+  const hit = linkTargetImage((a.getAttribute("href") || "").slice(1));
+  if (!hit) return false;
+  if (linkPeek.a === a && linkPeek.el) return true;
+  hideLinkPeek();
+  const el = document.createElement("div");
+  el.className = "link-peek";
+  el.setAttribute("role", "tooltip");
+  const img = document.createElement("img");
+  img.src = hit.img.currentSrc || hit.img.src;
+  img.alt = hit.img.getAttribute("alt") || "";
+  const cap = document.createElement("div");
+  cap.className = "link-peek-cap";
+  cap.textContent = docImageLabel(hit.p);
+  const tip = document.createElement("div");
+  tip.className = "link-peek-tip";
+  tip.textContent = t(touch ? "linkPeekGoTouch" : "linkPeekGo");
+  el.append(img, cap, tip);
+  document.body.appendChild(el);
+  linkPeek.el = el;
+  linkPeek.a = a;
+  const place = () => {
+    if (linkPeek.el !== el) return;
+    const vv = window.visualViewport;
+    const r = a.getBoundingClientRect();
+    const viewW = vv ? vv.width : window.innerWidth;
+    const viewH = vv ? vv.height : window.innerHeight;
+    const w = el.offsetWidth; const h = el.offsetHeight;
+    const left = Math.max(8, Math.min(r.left, viewW - w - 8));
+    const top = r.bottom + 8 + h <= viewH - 8 ? r.bottom + 8 : Math.max(8, r.top - h - 8);
+    el.style.left = `${left + (vv ? vv.offsetLeft : 0)}px`;
+    el.style.top = `${top + (vv ? vv.offsetTop : 0)}px`;
+  };
+  place();
+  if (!img.complete) img.addEventListener("load", place, { once: true });
+  return true;
 }
 
 // ── skok + „Wróć” ────────────────────────────────────────────────────────────
@@ -175,6 +258,8 @@ function jumpToLinkTarget(id) {
 function onDocLinkClick(e) {
   const a = e.target.closest?.("a[href]");
   if (!a || !docCanvasEl.contains(a) || e.button > 0) return;
+  hideLinkPeek();
+  if (linkPeek.touchShown) { linkPeek.touchShown = false; e.preventDefault(); return; } // przytrzymanie = sam podgląd
   const sel = window.getSelection();
   if (sel && !sel.isCollapsed && a.contains(sel.anchorNode)) return; // zaznaczanie tekstu linku
   e.preventDefault(); // nigdy nie zastępuj aplikacji stroną z linku
@@ -189,6 +274,38 @@ function onDocLinkClick(e) {
 
 document.addEventListener("DOMContentLoaded", () => {
   docCanvasEl?.addEventListener("click", onDocLinkClick);
+  // podgląd obrazu przy linku: mysz — po chwili bezruchu na linku; dotyk — przytrzymanie palca
+  const imgLinkAt = (e) => { const a = e.target.closest?.("a[data-dwb-img-link]"); return a && docCanvasEl.contains(a) ? a : null; };
+  docCanvasEl?.addEventListener("pointerover", (e) => {
+    if (e.pointerType === "touch") return;
+    const a = imgLinkAt(e);
+    if (!a || linkPeek.a === a) return;
+    clearTimeout(linkPeek.timer);
+    linkPeek.timer = setTimeout(() => showLinkPeek(a), 220);
+  });
+  docCanvasEl?.addEventListener("pointerout", (e) => {
+    if (e.pointerType === "touch") return;
+    const a = imgLinkAt(e);
+    if (a && !a.contains(e.relatedTarget)) hideLinkPeek();
+  });
+  docCanvasEl?.addEventListener("pointerdown", (e) => {
+    clearTimeout(linkPeek.touchTimer);
+    if (e.pointerType !== "touch") { hideLinkPeek(); return; }
+    const a = imgLinkAt(e);
+    if (linkPeek.el && linkPeek.a !== a) hideLinkPeek();
+    if (!a) return;
+    linkPeek.touchShown = false;
+    linkPeek.touchTimer = setTimeout(() => { if (showLinkPeek(a, true)) linkPeek.touchShown = true; }, 450);
+  });
+  ["pointerup", "pointercancel", "pointermove"].forEach((type) => docCanvasEl?.addEventListener(type, (e) => {
+    if (e.pointerType !== "touch" || (type === "pointermove" && Math.hypot(e.movementX || 0, e.movementY || 0) < 6)) return;
+    clearTimeout(linkPeek.touchTimer);
+  }));
+  // przytrzymanie na linku: bez systemowego menu (Kopiuj / Otwórz link) zamiast podglądu
+  docCanvasEl?.addEventListener("contextmenu", (e) => { if (linkPeek.touchShown || (e.pointerType === "touch" && imgLinkAt(e))) e.preventDefault(); });
+  docViewportEl?.addEventListener("scroll", hideLinkPeek, { passive: true });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && linkPeek.el) hideLinkPeek(); });
+  document.addEventListener("pointerdown", (e) => { if (linkPeek.el && !docCanvasEl?.contains(e.target)) hideLinkPeek(); }, true);
   // Alt+← jak w Wordzie — tylko gdy jest dokąd wracać (inaczej przeglądarka cofnęłaby stronę)
   document.addEventListener("keydown", (e) => {
     if (e.altKey && !e.ctrlKey && !e.metaKey && e.key === "ArrowLeft" && linkGoBack()) e.preventDefault();
