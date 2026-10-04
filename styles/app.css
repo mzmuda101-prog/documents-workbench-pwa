@@ -2048,7 +2048,7 @@ p.dwb-exact img { vertical-align: baseline; }
 .cm-mark { display: inline; }
 .comment-card {
   /* --cc-z = przybliżenie dokumentu (min. 1) — komentarz rośnie razem z tekstem (dostępność) */
-  position: fixed; z-index: 8950; width: min(calc(320px * var(--cc-z, 1)), calc(100vw - 16px)); max-height: 60vh; /* właściwa granica z JS: telefon 50%, komputer 60% widocznej wysokości (COMMENT_CARD_MIN) */ display: flex; flex-direction: column;
+  position: fixed; z-index: 8950; width: min(calc(320px * var(--cc-z, 1)), calc(100vw - 16px)); max-height: 65vh; /* właściwa granica z JS: telefon 50%, komputer 65% widocznej wysokości (COMMENT_CARD_MIN) */ display: flex; flex-direction: column;
   border: 1px solid var(--border); border-left: 4px solid #f0b400; border-radius: 12px; background: var(--surface);
   box-shadow: 0 10px 28px rgba(8, 14, 28, 0.2); animation: compose-pop-in 120ms ease-out;
 }

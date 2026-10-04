@@ -165,7 +165,7 @@ async function run() {
   const more = await page.evaluate(() => ({ cls: document.querySelector(".comment-card .cc-list").classList.contains("more-b"), btn: !document.querySelector(".comment-card .cc-more").hidden }));
   check("karta: długi komentarz ma wygaszenie i „Więcej ↓”", more.cls && more.btn, JSON.stringify(more));
   const cardH = await page.evaluate(() => ({ h: document.querySelector(".comment-card").getBoundingClientRect().height, vh: (window.visualViewport?.height || innerHeight) }));
-  check("karta: najwyżej 60% widocznej wysokości okna (komputer)", cardH.h <= cardH.vh * 0.6 + 1, JSON.stringify(cardH));
+  check("karta: najwyżej 65% widocznej wysokości okna (komputer)", cardH.h <= cardH.vh * 0.65 + 1, JSON.stringify(cardH));
   await page.click(".comment-card .cc-more");
   await page.waitForTimeout(500);
   check("„Więcej” przewija treść karty", await page.evaluate(() => document.querySelector(".comment-card .cc-list").scrollTop > 20));
