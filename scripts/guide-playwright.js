@@ -69,8 +69,8 @@ async function run() {
   check("tabela i listy są", r.tables === 1 && r.lists >= 4, `${r.tables} tab, ${r.lists} list`);
   // Etap 2: linki i proste pola formularza w zdaniu nie blokują akapitu (model akapitu je zachowuje)
   // od 2026-10-04 akapit z odnośnikiem do przypisu też edytowalny (odnośnik = „wyspa”, doc-notes.js)
-  check("zablokowane: zmiana, odsyłacz (linki, pola w zdaniu i przypisy edytowalne)",
-    !r.locked.lockLink && !r.locked.lockForm && !r.locked.lockNote && r.locked.lockField === 1 && r.locked.lockTracked === 1 && Object.keys(r.locked).length === 2, JSON.stringify(r.locked));
+  check("zablokowane: zmiana, odsyłacz, obraz (linki, pola w zdaniu i przypisy edytowalne)",
+    !r.locked.lockLink && !r.locked.lockForm && !r.locked.lockNote && r.locked.lockField === 1 && r.locked.lockTracked === 1 && r.locked.lockObject === 1 && Object.keys(r.locked).length === 3, JSON.stringify(r.locked));
   check("formularz: tekst, lista, data, pole wyboru", r.forms === "text,dropdown,date,checkbox", r.forms);
   check("spis treści: 14 linków do rozdziałów + odsyłacz do „Zapisu”", r.toc === 14 && r.xref === "#_Guide12", `${r.toc} ${r.xref}`);
 
@@ -94,6 +94,48 @@ async function run() {
   await clickIn(`.ff-field[data-ff="${ck}"]`);
   await page.waitForFunction(() => formScan?.bytes === originalFileBytes, null, { timeout: 10000 });
   check("formularz: klik w ☐ zaznacza pole", await page.evaluate((k) => formScan.fields.find((f) => f.key === k).value === true, ck));
+
+  // rozdział 10: najechanie na „Rysunek 1” = podgląd obrazu bez przewijania, klik = skok do obrazu
+  await page.evaluate(() => document.querySelector(".docx-preview-host a[data-dwb-img-link]").scrollIntoView({ block: "center" }));
+  await page.waitForTimeout(300);
+  const st0 = await page.evaluate(() => docViewportEl.scrollTop);
+  await page.hover(".docx-preview-host a[data-dwb-img-link]");
+  await page.waitForTimeout(600);
+  const peek = await page.evaluate(() => ({ cap: document.querySelector(".link-peek .link-peek-cap")?.textContent, ok: !!document.querySelector(".link-peek img")?.naturalWidth, st: docViewportEl.scrollTop }));
+  check("rozdz. 10: najechanie na „Rysunek 1” pokazuje obraz z podpisem, dokument stoi", peek.ok && /^Rysunek 1\./.test(peek.cap || "") && peek.st === st0, JSON.stringify(peek));
+  await page.click(".docx-preview-host a[data-dwb-img-link]");
+  await page.waitForTimeout(900);
+  check("rozdz. 10: klik w „Rysunek 1” przenosi do obrazu, jest „↩ Wróć”", await page.evaluate(() => { const i = document.querySelector(".docx-preview-host img").getBoundingClientRect(); const vp = docViewportEl.getBoundingClientRect(); return i.top >= vp.top - 2 && i.bottom <= vp.bottom + 2 && !document.querySelector(".link-back")?.hidden; }));
+  // Edycja: klik w obraz = karta z suwakiem
+  await page.evaluate(() => appFrame.setReadOnly(false));
+  await page.waitForFunction(() => !inlineLocksPending, null, { timeout: 10000 });
+  await page.waitForTimeout(400);
+  await page.evaluate(() => document.querySelector(".docx-preview-host img").scrollIntoView({ block: "center" }));
+  await page.click(".docx-preview-host img");
+  check("rozdz. 10: w Edycji klik w obraz pokazuje kartę z suwakiem", await page.evaluate(() => !!document.querySelector(".image-card input[type=range]")));
+  await page.keyboard.press("Escape");
+  // rozdział 13: komentarz z pogrubieniem przyciskiem B z paska, ołówek, „Układ” → „Wąskie”
+  await page.evaluate(() => { const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).find((x) => /^Przycisk „A” na pasku/.test(x.textContent)); p.scrollIntoView({ block: "center" }); const r = formDomRange(p, 10, 11); p.closest(".docx-edit-root").focus({ preventScroll: true }); getSelection().removeAllRanges(); getSelection().addRange(r); });
+  await page.waitForTimeout(400); // przewinięcie do akapitu (scroll zamyka okienka)
+  await page.keyboard.press("Control+Alt+KeyM");
+  await page.keyboard.type("Ważne: ");
+  await page.click("#fmtBold");
+  await page.keyboard.type("pogrubione");
+  await page.fill(".cf-author", "Ola");
+  await page.click(".compose-pop-form .lf-ok");
+  await page.waitForFunction(() => !inlineLocksPending && document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 10000 });
+  await page.waitForTimeout(500);
+  const cx = await page.evaluate(async () => (await (await JSZip.loadAsync(originalFileBytes)).file("word/comments.xml").async("string")));
+  check("rozdz. 13: komentarz z pogrubieniem przyciskiem B z paska", /<w:b\/><\/w:rPr><w:t xml:space="preserve">pogrubione/.test(cx), cx.slice(-400));
+  await page.evaluate(() => { const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).find((x) => /^Przycisk „A” na pasku/.test(x.textContent)); const r = formDomRange(p, 11, 11); p.closest(".docx-edit-root").focus({ preventScroll: true }); getSelection().removeAllRanges(); getSelection().addRange(r); });
+  await page.waitForTimeout(400);
+  check("rozdz. 13: karta komentarza z ołówkiem (poprawianie treści)", await page.evaluate(() => !!document.querySelector(".comment-card .cc-edit")));
+  await page.click("#pageLayoutBtn");
+  await page.click('.compose-pop [data-preset="narrow"]');
+  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 10000 });
+  await page.waitForTimeout(500);
+  const sp = await page.evaluate(async () => (await (await JSZip.loadAsync(originalFileBytes)).file("word/document.xml").async("string")).match(/<w:pgMar [^>]*>/)?.[0]);
+  check("rozdz. 13: „Układ” → „Wąskie” zmienia marginesy", /w:left="720"/.test(sp || ""), sp);
   assertNoErrors(errors, "guide");
   await browser.close();
   let failed = 0;

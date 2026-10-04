@@ -8,7 +8,8 @@
  * wielkość liter), śledzone zmiany + komentarz (Recenzja), przypis, tabelę, listy,
  * długie zdanie (Statystyki) i metadane z autorem („Usuń dane osobowe”), klikalny spis treści
  * (linki do zakładek przy nagłówkach) i odsyłacz REF \h (Linki), pola formularza Worda —
- * tekst z tekstem zastępczym, lista, data, pole wyboru (Formularz).
+ * tekst z tekstem zastępczym, lista, data, pole wyboru (Formularz), obraz z podpisem i link do
+ * niego (podgląd obrazu po najechaniu, suwak rozmiaru).
  *
  *   node scripts/gen-guide-docx.mjs
  */
@@ -51,6 +52,12 @@ const sdtText = (alias) => ({ raw: `<w:sdt><w:sdtPr><w:alias w:val="${alias}"/><
 const sdtList = (alias, items, current) => ({ raw: `<w:sdt><w:sdtPr><w:alias w:val="${alias}"/><w:id w:val="${++sdtId}"/><w:dropDownList w:lastValue="${esc(current)}">${items.map((i) => `<w:listItem w:displayText="${esc(i)}" w:value="${esc(i)}"/>`).join("")}</w:dropDownList></w:sdtPr><w:sdtContent><w:r><w:t>${esc(current)}</w:t></w:r></w:sdtContent></w:sdt>` });
 const sdtDate = (alias) => ({ raw: `<w:sdt><w:sdtPr><w:alias w:val="${alias}"/><w:id w:val="${++sdtId}"/><w:showingPlcHdr/><w:date><w:dateFormat w:val="d MMMM yyyy"/><w:lid w:val="pl-PL"/><w:storeMappedDataAs w:val="dateTime"/><w:calendar w:val="gregorian"/></w:date></w:sdtPr><w:sdtContent><w:r><w:rPr><w:rStyle w:val="PlaceholderText"/></w:rPr><w:t>Wybierz datę.</w:t></w:r></w:sdtContent></w:sdt>` });
 const sdtCheck = (alias) => ({ raw: `<w:sdt><w:sdtPr><w:alias w:val="${alias}"/><w:id w:val="${++sdtId}"/><w14:checkbox><w14:checked w14:val="0"/><w14:checkedState w14:val="2612" w14:font="MS Gothic"/><w14:uncheckedState w14:val="2610" w14:font="MS Gothic"/></w14:checkbox></w:sdtPr><w:sdtContent><w:r><w:rPr><w:rFonts w:ascii="MS Gothic" w:eastAsia="MS Gothic" w:hAnsi="MS Gothic" w:hint="eastAsia"/></w:rPr><w:t>☐</w:t></w:r></w:sdtContent></w:sdt>` });
+// obraz w zdaniu (Wstaw → Obraz w Wordzie): rysunek inline, rId do word/media; cx/cy w EMU
+const image = (rId, cx, cy, name, descr) => ({ raw: `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="1" name="${esc(name)}" descr="${esc(descr)}"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="1" name="${esc(name)}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${rId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>` });
+// link do miejsca w dokumencie (Wstaw → Link → Miejsce w tym dokumencie)
+const anchorLink = (bookmark, text) => ({ raw: `<w:hyperlink w:anchor="${bookmark}" w:history="1"><w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t xml:space="preserve">${esc(text)}</w:t></w:r></w:hyperlink>` });
+// podpis rysunku (styl Legenda) z zakładką — cel linku / odsyłacza, jak przy „Wstaw podpis” w Wordzie
+const caption = (bookmark, id, text) => `<w:p><w:pPr><w:pStyle w:val="Caption"/><w:jc w:val="center"/></w:pPr><w:bookmarkStart w:id="${id}" w:name="${bookmark}"/>${run(text)}<w:bookmarkEnd w:id="${id}"/></w:p>`;
 const h2 = (t) => p(t, "Heading2");
 const tip = (t) => p([{ t: "Spróbuj: ", b: true, color: "1F5FBF" }, t], "Tip");
 const bullet = (runs) => p(runs, "ListParagraph", '<w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr>');
@@ -142,6 +149,12 @@ const body = [
   h1("10. Linki i odsyłacze"),
   p(["Spis treści na początku tego pliku to linki do rozdziałów — jak w Wordzie. Ten akapit ma też odsyłacz: szczegóły zapisu są w rozdziale ", xref("_Guide12", "12. Zapis i otwieranie plików"), "."]),
   tip("kliknij odsyłacz w zdaniu wyżej — dokument przeskoczy do rozdziału o zapisie. Na dole pojawi się „↩ Wróć” (albo Alt+←): wróci dokładnie tutaj. Link do strony WWW otworzy się w nowej karcie, a aplikacja zostanie otwarta."),
+  p(["Celem linku może być też obraz — jak w Wordzie (Link → Miejsce w tym dokumencie). Przykład: ", anchorLink("_RefRysunek1", "Rysunek 1"), " pokazuje ikonę aplikacji, która stoi kilka akapitów niżej."]),
+  tip("najedź myszą na „Rysunek 1” w zdaniu wyżej (na telefonie przytrzymaj na nim palec) — obraz pokaże się w okienku, a dokument się nie przesunie. Kliknięcie (stuknięcie) przeniesie do obrazu, „↩ Wróć” wraca tutaj."),
+  p("Obraz w dokumencie zmieniasz w trybie Edycja: kliknięcie obrazu pokazuje kartę z suwakiem szerokości (procent szerokości tekstu), wyrównaniem, tekstem alternatywnym i usuwaniem."),
+  tip("przełącz na Edycja, kliknij obraz poniżej i przeciągnij suwak — karta stoi w miejscu, obraz zmienia się na żywo, a jeden ↶ cofa całą zmianę."),
+  p([image("rIdImg1", 1800000, 1800000, "Ikona aplikacji", "Ikona Documents Workbench: kartka z zagiętym rogiem na niebieskim tle")], null, '<w:jc w:val="center"/>'),
+  caption("_RefRysunek1", 201, "Rysunek 1. Ikona aplikacji Documents Workbench"),
 
   h1("11. Na telefonie i tablecie"),
   bullet("Dwa palce przybliżają i oddalają tekst — procent widać na żywo."),
@@ -167,7 +180,7 @@ const body = [
   p("Komentarz: zaznacz tekst i Ctrl/⌘+Alt+M (albo „＋ Wstaw → Komentarz”). Pogrubienie, kursywę i podkreślenie w treści komentarza robią te same przyciski B I U na pasku (i Ctrl/⌘+B, I, U); wklejony tekst zachowuje takie formatowanie. Komentowany tekst jest podświetlony; gdy kursor w nim stoi, karta pozwala odpowiedzieć, poprawić treść (ołówek przy komentarzu i przy każdej odpowiedzi), oznaczyć jako rozwiązany albo usunąć. Długi komentarz ma na dole „Więcej ↓”, a karta rośnie razem z przybliżeniem dokumentu. Wszystkie komentarze są też w panelu Recenzja."),
   p("Przycisk „Układ” na pasku (jak karta Układ w Wordzie): marginesy jak w Wordzie (Normalne 2,5 cm, Wąskie, Umiarkowane, Szerokie albo własne w cm), orientacja pionowa/pozioma i rozmiar papieru (A4, A5, Letter…) oraz wyrównanie strony w pionie (np. strona tytułowa na środku). Zmiany widać na kartkach w Widoku desktopowym i w Podglądzie wydruku. Marginesy i układ strony są też w menu ⋯ i pod przyciskiem „Marginesy” w Podglądzie wydruku. W Widoku desktopowym strony mają dolny i górny margines oraz przerwę między kartkami — dwuklik w przerwę ukrywa biały obszar (sama kreska), opcja też w panelu Widok."),
   p("„＋ Wstaw → Nagłówek, stopka, numer strony…” (albo kliknięcie w nagłówek/stopkę w Edycji): tekst u góry i na dole każdej strony, numer strony („1”, „Strona 1”, „Strona 1 z 5”, „– 1 –”) i inna pierwsza strona, np. tytułowa bez numeru."),
-  tip("zaznacz słowo w tym akapicie, naciśnij Ctrl/⌘+Alt+M i dodaj komentarz — potem kliknij w podświetlony tekst i odpowiedz na niego."),
+  tip("zaznacz słowo w tym akapicie i naciśnij Ctrl/⌘+Alt+M; w okienku kliknij B na pasku i dopisz pogrubione słowo, potem „Dodaj komentarz”. Kliknij w podświetlony tekst — ołówkiem poprawisz treść, możesz też odpowiedzieć. Na koniec „Układ” na pasku → „Wąskie”: w Widoku desktopowym kartki od razu mają węższe marginesy (↶ cofa)."),
 
   h1("14. PDF → Word (.docx)"),
   p("Otwórz plik .pdf tak jak .docx (Otwórz, przeciągnięcie do okna, „Otwórz za pomocą”) — aplikacja zamieni go w edytowalny dokument Worda. Wszystko dzieje się na tym urządzeniu: plik nigdzie nie jest wysyłany, działa też bez internetu. Okienko pokazuje postęp strona po stronie; „Anuluj” przerywa w każdej chwili."),
@@ -206,6 +219,7 @@ const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
   </w:tblBorders><w:tblCellMar><w:left w:w="100" w:type="dxa"/><w:right w:w="100" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>
   <w:style w:type="paragraph" w:customStyle="1" w:styleId="TOCHeading"><w:name w:val="TOC Heading"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="240" w:after="80"/></w:pPr><w:rPr><w:b/><w:color w:val="1F3B63"/><w:sz w:val="24"/></w:rPr></w:style>
   <w:style w:type="paragraph" w:styleId="TOC1"><w:name w:val="toc 1"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="20"/><w:ind w:left="240"/></w:pPr></w:style>
+  <w:style w:type="paragraph" w:styleId="Caption"><w:name w:val="caption"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="200"/></w:pPr><w:rPr><w:i/><w:color w:val="44546A"/><w:sz w:val="18"/></w:rPr></w:style>
   <w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:rPr><w:color w:val="1F5FBF"/><w:u w:val="single"/></w:rPr></w:style>
   <w:style w:type="character" w:styleId="PlaceholderText"><w:name w:val="Placeholder Text"/><w:rPr><w:color w:val="808080"/></w:rPr></w:style>
   <w:style w:type="character" w:styleId="FootnoteReference"><w:name w:val="footnote reference"/><w:rPr><w:vertAlign w:val="superscript"/></w:rPr></w:style>
@@ -251,6 +265,7 @@ const CONTENT_TYPES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
   <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="png" ContentType="image/png"/>
   <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
   <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
   <Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>
@@ -269,6 +284,7 @@ const DOC_RELS = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
   <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>
   <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments" Target="comments.xml"/>
   <Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes" Target="footnotes.xml"/>
+  <Relationship Id="rIdImg1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/>
 </Relationships>`;
 
 const zip = new JSZip();
@@ -281,5 +297,6 @@ zip.file("word/numbering.xml", NUMBERING);
 zip.file("word/comments.xml", COMMENTS);
 zip.file("word/footnotes.xml", FOOTNOTES);
 zip.file("docProps/core.xml", CORE);
+zip.file("word/media/image1.png", fs.readFileSync(path.join(__dirname, "..", "assets", "images", "icon-192.png")));
 fs.writeFileSync(OUT, await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }));
 console.log(`✅ ${path.relative(process.cwd(), OUT)}`);

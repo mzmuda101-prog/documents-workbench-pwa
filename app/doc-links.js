@@ -172,9 +172,10 @@ function linkTargetImage(id) {
   return null;
 }
 
-const linkPeek = { el: null, a: null, timer: 0, touchTimer: 0, touchShown: false };
+const linkPeek = { el: null, a: null, timer: 0, touchTimer: 0, touchShown: false, pending: null };
 function hideLinkPeek() {
   clearTimeout(linkPeek.timer);
+  linkPeek.pending = null; // przerwane czekanie (przewinięcie, klik) — następny ruch zaczyna od nowa
   linkPeek.el?.remove();
   linkPeek.el = null;
   linkPeek.a = null;
@@ -276,13 +277,18 @@ document.addEventListener("DOMContentLoaded", () => {
   docCanvasEl?.addEventListener("click", onDocLinkClick);
   // podgląd obrazu przy linku: mysz — po chwili bezruchu na linku; dotyk — przytrzymanie palca
   const imgLinkAt = (e) => { const a = e.target.closest?.("a[data-dwb-img-link]"); return a && docCanvasEl.contains(a) ? a : null; };
-  docCanvasEl?.addEventListener("pointerover", (e) => {
+  // też „move”: link, który podjechał pod stojący kursor przy przewijaniu kółkiem, nie dostaje
+  // „over” — pierwszy ruch myszy nad nim ma pokazać podgląd
+  const peekSoon = (e) => {
     if (e.pointerType === "touch") return;
     const a = imgLinkAt(e);
-    if (!a || linkPeek.a === a) return;
+    if (!a || linkPeek.a === a || linkPeek.pending === a) return;
+    linkPeek.pending = a;
     clearTimeout(linkPeek.timer);
-    linkPeek.timer = setTimeout(() => showLinkPeek(a), 220);
-  });
+    linkPeek.timer = setTimeout(() => { linkPeek.pending = null; showLinkPeek(a); }, 220);
+  };
+  docCanvasEl?.addEventListener("pointerover", peekSoon);
+  docCanvasEl?.addEventListener("pointermove", peekSoon, { passive: true });
   docCanvasEl?.addEventListener("pointerout", (e) => {
     if (e.pointerType === "touch") return;
     const a = imgLinkAt(e);

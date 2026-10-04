@@ -55,7 +55,7 @@ async function run() {
   const idle = () => page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && !inlineLocksPending && !inlineStructuralPending, null, { timeout: 20000 }).then(() => page.waitForTimeout(450));
   await idle();
   const base = await audit(page);
-  check("przewodnik: 14 zakładek rozdziałów, komentarz, przypis, kontrolki (warunek testu)", base.bmCount === 14 && base.comments === 1 && base.fn === 1 && base.sdt === 4 && !base.orphans, JSON.stringify(base));
+  check("przewodnik: 14 zakładek rozdziałów + podpis rysunku, komentarz, przypis, kontrolki (warunek testu)", base.bmCount === 15 && base.comments === 1 && base.fn === 1 && base.sdt === 4 && !base.orphans, JSON.stringify(base));
   const head = await page.evaluate(() => collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).findIndex((p) => !p.dataset.lock && p.querySelector('span[data-cm-kind="bm-start"]')));
   const caret = (off) => page.evaluate(([i, o]) => placeCaret(collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[i], o), [head, off]);
 
@@ -93,7 +93,7 @@ async function run() {
   check("zaznacz wszystko + Delete: komentarz i przypis znikają razem z tekstem (bez sierot w comments.xml)", a.comments === 0 && a.fn === 0 && !a.orphans, JSON.stringify(a));
   await page.keyboard.press(`${MOD}+KeyZ`); await idle();
   a = await audit(page);
-  check("Cofnij przywraca komentarz, przypis i zakładki", a.comments === 1 && a.fn === 1 && a.bmCount === 14 && !a.orphans, JSON.stringify({ c: a.comments, fn: a.fn, bm: a.bmCount, o: a.orphans }));
+  check("Cofnij przywraca komentarz, przypis i zakładki", a.comments === 1 && a.fn === 1 && a.bmCount === 15 && !a.orphans, JSON.stringify({ c: a.comments, fn: a.fn, bm: a.bmCount, o: a.orphans }));
 
   check("brak błędów strony", !errors.length, errors.join(" | "));
   await browser.close();

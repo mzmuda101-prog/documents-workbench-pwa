@@ -1295,10 +1295,27 @@ const composeUi = (() => {
     const w = p?.offsetWidth;
     return w ? p.getBoundingClientRect().width / w || 1 : 1;
   }
-  // Szerokość tekstu akapitu (układ, bez zoomu) — 100% suwaka, jak w op „image” (docx-compose.js).
+  // Szerokość tekstu akapitu (układ, bez zoomu) — zapas, zanim przyjdzie szerokość z pliku.
   function imageTextWidth(p) {
     const cs = getComputedStyle(p);
     return p.clientWidth - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0);
+  }
+  // 100% suwaka = szerokość tekstu STRONY z pliku (papier − marginesy sekcji), tak jak liczy zapis
+  // (composeTextWidthTwips) i Word. W Widoku mobilnym akapit ma szerokość ekranu, więc pomiar
+  // z ekranu dawał inny procent niż plik: „25%” pokazywało obraz na ~44% ekranu, a po puszczeniu
+  // suwaka obraz „dociągał” (sprawdzone na symulatorze iPhone'a).
+  async function pageTextPx(index) {
+    if (!originalFileBytes || typeof composeTextWidthTwips !== "function") return 0;
+    const doc = await getDocumentXmlDom(originalFileBytes).catch(() => null);
+    const p = doc ? collectParagraphElements(doc.documentElement, "all")[index] : null;
+    return p ? composeTextWidthTwips(doc, p) / 15 : 0; // 1440 tw = 96 px
+  }
+  // Szerokość obrazu w dokumencie (z pliku: docx-preview daje ją w pt), nie przycięta do ekranu.
+  function imageDocWidthPx(img) {
+    const w = img.style.width || "";
+    const n = parseFloat(w);
+    if (!n) return img.offsetWidth;
+    return /pt$/.test(w) ? n * 96 / 72 : /cm$/.test(w) ? n * 96 / 2.54 : n;
   }
   function showImageCard(img) {
     const p = img.closest("p");
@@ -1355,7 +1372,7 @@ const composeUi = (() => {
       if (!imgCard || imgCard.el !== el) return;
       val.textContent = `${range.value}%`;
       const im = imgCard.img;
-      im.style.width = `${imageTextWidth(imgCard.p) * range.value / 100}px`; // podgląd na żywo
+      im.style.width = `${(imgCard.textPx || imageTextWidth(imgCard.p)) * range.value / 100}px`; // podgląd na żywo (jak w pliku)
       im.style.height = "auto";
     });
     range.addEventListener("change", () => {
@@ -1380,8 +1397,17 @@ const composeUi = (() => {
     del.addEventListener("click", () => { const i = imgCard.index; hideImageCard(); imageEdit(i, { action: "delete" }, false); });
     el.addEventListener("mousedown", (e) => { if (e.target.closest("button")) e.preventDefault(); });
     document.body.appendChild(el);
-    imgCard = { el, img, p, index, savedPct: +range.value, isDragging: () => dragging };
+    imgCard = { el, img, p, index, savedPct: +range.value, isDragging: () => dragging, textPx: 0 };
     placeImageCard();
+    // procent względem strony z pliku (Widok mobilny ≠ szerokość ekranu)
+    pageTextPx(index).then((tp) => {
+      if (!tp || imgCard?.el !== el || dragging) return;
+      imgCard.textPx = tp;
+      const pct = Math.max(10, Math.min(100, Math.round(imageDocWidthPx(img) / tp * 100 / 5) * 5));
+      range.value = String(pct);
+      val.textContent = `${pct}%`;
+      imgCard.savedPct = pct;
+    });
   }
   function placeImageCard() {
     if (!imgCard || imgCard.busy || imgCard.isDragging?.()) return; // przy przesuwaniu suwaka karta stoi
@@ -1786,6 +1812,36 @@ const composeUi = (() => {
   // Formatowanie treści komentarza — te same przyciski B / I / U z paska Edycji i te same skróty
   // (prośba Mateusza: bez osobnych przycisków w okienku). Gdy kursor stoi w treści komentarza,
   // przyciski paska działają na komentarz, nie na dokument.
+  // Akapit, przy którym otwarto okienko komentarza, wraca po zmianie w to samo miejsce EKRANU
+  // (nie obszaru dokumentu — po schowaniu klawiatury wraca rząd skrótów i obszar zaczyna się niżej). Na telefonie w międzyczasie wysuwa się i chowa klawiatura,
+  // zwija i rozwija nagłówek — sama kotwica przerysowania tego nie widzi (zgłoszenie: „po dodaniu
+  // komentarza muszę szukać, gdzie byłem”).
+  function paragraphSpot(index) {
+    const p = index >= 0 ? collectPreviewParagraphElements(host())[index] : null;
+    return p && docViewportEl ? { index, off: p.getBoundingClientRect().top } : null;
+  }
+  function restoreParagraphSpot(spot) {
+    if (!spot || !docViewportEl) return;
+    const apply = () => {
+      const p = collectPreviewParagraphElements(host())[spot.index];
+      if (!p) return;
+      const vp = docViewportEl.getBoundingClientRect();
+      // na ekranie tam, gdzie był — o ile mieści się w obszarze dokumentu
+      const want = Math.max(vp.top, Math.min(spot.off, vp.bottom - 40));
+      const d = p.getBoundingClientRect().top - want;
+      if (Math.abs(d) > 1) docViewportEl.scrollTop += d;
+      placeCommentCard();
+    };
+    apply();
+    // klawiatura chowa się z animacją (obszar dokumentu rośnie) — jeszcze raz, gdy się ustatkuje
+    const vv = window.visualViewport;
+    if (!vv) return;
+    let t = 0;
+    const onResize = () => { clearTimeout(t); t = setTimeout(apply, 120); };
+    vv.addEventListener("resize", onResize);
+    setTimeout(() => { vv.removeEventListener("resize", onResize); clearTimeout(t); }, 1500);
+  }
+
   const RICH_KEYS = { KeyB: "bold", KeyI: "italic", KeyU: "underline" };
   const RICH_BTNS = { fmtBold: "bold", fmtItalic: "italic", fmtUnderline: "underline" };
   function runRich(cmd) {
@@ -1812,6 +1868,8 @@ const composeUi = (() => {
     hideCommentCard();
     closePop();
     const capKey = editing ? "commentEditTitle" : opts.replyTo ? "commentReply" : "insertComment";
+    const spotIndex = ctx ? ctx.index : opts.caret?.paraIndex ?? -1;
+    const spot = paragraphSpot(spotIndex);
     openPop(anchor || insertBtn, (el) => {
       el.classList.add("compose-pop-form", "compose-pop-comment");
       el.style.setProperty("--cc-z", String(commentZoom()));
@@ -1873,6 +1931,8 @@ const composeUi = (() => {
         if (editing) {
           closePop();
           await runFileEdit({ op: "commentEdit", id: opts.editId, rich }, opts.caret || null);
+          await whenEditable();
+          restoreParagraphSpot(spot);
           return;
         }
         if (!author) { toast(t("commentNeedAuthor"), "info"); au.focus(); return; }
@@ -1880,6 +1940,8 @@ const composeUi = (() => {
         closePop();
         if (opts.replyTo) {
           await runFileEdit({ op: "commentReply", id: opts.replyTo, rich, author, initials: initialsOf(author) }, opts.caret || null);
+          await whenEditable();
+          restoreParagraphSpot(spot);
           return;
         }
         let { start, end } = ctx;
@@ -1889,6 +1951,8 @@ const composeUi = (() => {
           while (end < full.length && /\S/.test(full[end])) end++;
         }
         await runFileEdit({ op: "commentAdd", index: ctx.index, start, end, rich, author, initials: initialsOf(author) }, { paraIndex: ctx.index, offset: end });
+        await whenEditable();
+        restoreParagraphSpot(spot);
       };
       el.querySelector(".lf-ok").addEventListener("click", submit);
       au.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submit(); } });
@@ -1993,6 +2057,12 @@ const composeUi = (() => {
     cCard = { el, id: hit.id, sig, ro, range: hit.range };
     placeCommentCard();
   }
+  const coarsePointer = () => !!window.matchMedia?.("(pointer: coarse)").matches;
+  // Najmniejsza wysokość karty komentarza, gdy brakuje miejsca (Mateusz 2026-10-05: jedna linijka to
+  // za mało; telefon 5–6 linijek, komputer więcej i zależnie od ekranu). Do strojenia:
+  // lines = linijki treści przy zwykłej wielkości, screen = część widocznej wysokości ekranu,
+  // chrome = autor, odstępy i przyciski (px).
+  const COMMENT_CARD_MIN = { touch: { lines: 6, screen: 0.38, chrome: 82 }, desktop: { lines: 8, screen: 0.40, chrome: 66 } };
   function placeCommentCard() {
     if (!cCard) return;
     cCard.el.style.setProperty("--cc-z", String(commentZoom()));
@@ -2024,9 +2094,15 @@ const composeUi = (() => {
     else if (h <= below) top = r.bottom + 40;
     else {
       const up = above >= below;
-      cCard.el.style.maxHeight = `${Math.max(120, up ? above : below)}px`;
+      // minimum: linijki treści w skali tekstu komentarza (przy przybliżeniu 150% wyższe) albo część
+      // widocznego ekranu (większy ekran = wyższa karta) — co większe; progi w COMMENT_CARD_MIN
+      const z = commentZoom();
+      const m = COMMENT_CARD_MIN[coarsePointer() ? "touch" : "desktop"];
+      const minH = Math.max(Math.round((22 + m.lines * 19) * z) + m.chrome, Math.round(viewH * m.screen));
+      cCard.el.style.maxHeight = `${Math.max(Math.min(minH, viewH - 16), up ? above : below)}px`;
       h = cCard.el.offsetHeight;
       top = up ? Math.max(minTop, r.top - h - 8) : r.bottom + 40;
+      top = Math.max(minTop, Math.min(top, viewH - h - 8)); // cała karta na ekranie (najwyżej zachodzi na wiersz)
     }
     cCard.el.style.left = `${left + (vv ? vv.offsetLeft : 0)}px`;
     cCard.el.style.top = `${top + (vv ? vv.offsetTop : 0)}px`;
@@ -2246,6 +2322,15 @@ const composeUi = (() => {
   tableBtn?.addEventListener("click", () => openPop(tableBtn, buildTableMenu));
 
   // Obraz: klik w Edycji pokazuje kartę; klik obok / Esc / tryb Czytanie chowa.
+  // Klik/stuknięcie w obraz NIE stawia kursora (obraz się zaznacza, jak w Wordzie) — na iPhonie
+  // kursor wysuwał klawiaturę, która zasłaniała kartę z suwakiem. Przez mousedown, NIE pointerdown
+  // (w Safari/iOS preventDefault na pointerdown kasuje kliknięcie).
+  docCanvasEl?.addEventListener("mousedown", (e) => {
+    const img = e.target.closest?.(".docx-preview-host img");
+    if (!img || readOnlyMode || !collectPreviewParagraphElements(host()).includes(img.closest("p"))) return;
+    e.preventDefault();
+    if (document.activeElement?.closest?.(".docx-edit-root")) document.activeElement.blur(); // klawiatura ekranowa chowa się
+  });
   docCanvasEl?.addEventListener("click", (e) => {
     const img = e.target.closest?.(".docx-preview-host img");
     if (!img || readOnlyMode || !collectPreviewParagraphElements(host()).includes(img.closest("p"))) return;
@@ -2346,7 +2431,9 @@ const composeUi = (() => {
     if (visible || pop.el.classList.contains("compose-pop-comment")) placePop(pop.el, pop.anchor); else closePop();
   }, { passive: true });
   window.addEventListener("resize", () => closePop());
-  window.visualViewport?.addEventListener("resize", () => { if (pop) placePop(pop.el, pop.anchor); });
+  // klawiatura ekranowa wysuwa się / chowa: okienko i karty liczą miejsce od nowa (karta ułożona
+  // przy klawiaturze była ściśnięta do jednej linijki i taka zostawała)
+  window.visualViewport?.addEventListener("resize", () => { if (pop) placePop(pop.el, pop.anchor); placeCommentCard(); placeLinkCard(); placeImageCard(); });
 
   // Ctrl/⌘+Alt+F / D = przypis dolny / końcowy (jak w Wordzie) — w Edycji z kursorem w tekście;
   // poza tekstem Ctrl/⌘+Alt+F dalej włącza tryb skupienia (keyboard.js)

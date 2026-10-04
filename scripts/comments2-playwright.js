@@ -113,6 +113,22 @@ async function run() {
   const ex = await z.file("word/commentsExtended.xml").async("string");
   check("plik: odpowiedź powiązana z komentarzem (paraIdParent) i rozwiązany (done=1) po edycjach", /w15:paraIdParent/.test(ex) && /w15:done="1"/.test(ex), ex);
 
+  // ── telefon: w trakcie pisania komentarza dokument się przesuwa (klawiatura, nagłówek) — po dodaniu
+  // akapit wraca w to samo miejsce ekranu, w którym był przy otwieraniu okienka ────────────────
+  await select(page, 20, 24);
+  const ySpot = await paraY(page);
+  await page.keyboard.press(`${MOD}+Alt+KeyM`);
+  await page.waitForSelector(".compose-pop-comment .cf-rich");
+  await page.keyboard.type("Przesunięcie w trakcie");
+  // jak na telefonie: rama nad dokumentem zmienia wysokość (klawiatura chowa / pokazuje skróty sekcji, nagłówek)
+  const stripWas = await page.evaluate(() => { const st = document.getElementById("sectionStrip"); const was = st.hidden; st.hidden = !was; return was; });
+  await page.waitForTimeout(100);
+  await page.evaluate(() => document.querySelector(".compose-pop-form .lf-ok").click());
+  await idle(page);
+  check("po dodaniu komentarza akapit wraca tam, gdzie był przy otwieraniu okienka (nawet gdy dokument się przesunął)", Math.abs((await paraY(page)) - ySpot) <= 2, `${ySpot} → ${await paraY(page)}`);
+  await page.evaluate((was) => { document.getElementById("sectionStrip").hidden = was; }, stripWas);
+  await page.waitForTimeout(200);
+
   // ── wklejanie z formatowaniem do komentarza ─────────────────────────────────
   await select(page, 3, 6);
   await page.keyboard.press(`${MOD}+Alt+KeyM`);

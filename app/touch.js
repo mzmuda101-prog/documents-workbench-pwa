@@ -93,8 +93,11 @@
   // strona wraca na górę, a kursor dosuwa przewijanie WEWNĄTRZ dokumentu. Nagłówek zwija
   // się do uchwytu (tap = rozwiń), skróty sekcji i pasek stanu chowają się na ten czas.
   let heroWasCollapsed = null;
+  // też okienko nad dokumentem (komentarz, link…): pisanie w nim to dalej praca nad dokumentem —
+  // układ stoi (dawniej przejście z tekstu do okienka komentarza pokazywało z powrotem skróty
+  // sekcji i dokument zjeżdżał o ich wysokość; pole imienia przesuwało całą stronę)
   function editingInDoc() {
-    return !!docCaretParagraph(document.activeElement);
+    return !!docCaretParagraph(document.activeElement) || !!document.activeElement?.closest?.(".compose-pop");
   }
   function syncKeyboard() {
     if (!coarse.matches || !vv) return;

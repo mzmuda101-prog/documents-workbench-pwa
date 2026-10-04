@@ -168,6 +168,32 @@ async function run() {
   await tp.waitForTimeout(900);
   check("dotyk: stuknięcie skacze do obrazu z „Wróć”", !!(await tp.$(".link-back:not([hidden])")));
 
+  // Widok mobilny (telefon): procent suwaka = procent szerokości tekstu STRONY w pliku, bez dociągania
+  const filePct = (pg) => pg.evaluate(async () => {
+    const d = await getDocumentXmlDom(await buildDocumentForSave());
+    const cx = +d.getElementsByTagNameNS("http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing", "extent")[0].getAttribute("cx");
+    const s = d.getElementsByTagNameNS(W_NS, "pgSz")[0]; const m = d.getElementsByTagNameNS(W_NS, "pgMar")[0];
+    return cx / ((+s.getAttributeNS(W_NS, "w") - +m.getAttributeNS(W_NS, "left") - +m.getAttributeNS(W_NS, "right")) * 635) * 100;
+  });
+  await tp.evaluate(() => appFrame.setReadOnly(false));
+  await tp.waitForFunction(() => !inlineLocksPending, null, { timeout: 10000 });
+  await tp.evaluate(() => document.querySelector(".docx-preview-host img").scrollIntoView({ block: "center" }));
+  await tp.waitForTimeout(300);
+  await tp.tap(".docx-preview-host img");
+  await tp.waitForSelector(".image-card");
+  await tp.waitForTimeout(500);
+  const mob = await tp.evaluate(() => ({ reflow: shouldUseMobileReflow(), val: +document.querySelector(".image-card input").value, kb: document.activeElement?.closest?.(".docx-edit-root") ? "fokus w tekście" : "" }));
+  const fp0 = await filePct(tp);
+  check("telefon (Widok mobilny): suwak pokazuje procent z pliku, stuknięcie obrazu nie stawia kursora (bez klawiatury)", mob.reflow && Math.abs(mob.val - fp0) <= 5 && !mob.kb, JSON.stringify({ ...mob, fp0 }));
+  const live = await tp.evaluate(() => { const r = document.querySelector(".image-card input"); r.value = "30"; r.dispatchEvent(new Event("input")); return document.querySelector(".docx-preview-host img").offsetWidth; });
+  await tp.evaluate(() => document.querySelector(".image-card input").dispatchEvent(new Event("change")));
+  await tp.waitForTimeout(700);
+  await tp.waitForFunction(() => !inlineLocksPending && document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 10000 });
+  await tp.waitForTimeout(400);
+  const after30 = await tp.evaluate(() => document.querySelector(".docx-preview-host img").offsetWidth);
+  const fp1 = await filePct(tp);
+  check("telefon: 30% na suwaku = 30% w pliku, obraz po zapisie tej samej szerokości co podczas przesuwania", Math.abs(fp1 - 30) < 1 && Math.abs(after30 - live) <= 2, JSON.stringify({ fp1, live, after30 }));
+
   check("brak błędów strony", !errors.length, errors.join(" | "));
   await browser.close();
 }
