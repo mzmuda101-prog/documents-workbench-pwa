@@ -49,6 +49,10 @@ const FIXTURE_HTML = `<!doctype html><html lang="pl"><head><meta charset="utf-8"
 <div class="toc"><span>Zakres prac</span><span class="d">${".".repeat(300)}</span><span>7</span></div>
 <div class="cols"><div>${[1, 2, 3, 4, 5].map((i) => `<p>Kolumna A${i}: lewa kolumna tekstu, wiersz ${i}.</p>`).join("")}</div>
 <div>${[1, 2, 3, 4, 5].map((i) => `<p>Kolumna B${i}: prawa kolumna tekstu, wiersz ${i}.</p>`).join("")}</div></div>
+<h2>Wprowadzenie</h2>
+<ol><li>Krok pierwszy<ul><li>szczegół kroku</li></ul></li><li>Krok drugi</li><li>Krok trzeci</li></ol>
+<h2>Zakres prac</h2>
+<p>Zakres obejmuje montaż i odbiór.</p>
 </body></html>`;
 
 const BIG_HTML = `<!doctype html><html lang="pl"><head><meta charset="utf-8"><style>
@@ -141,6 +145,7 @@ const docxState = (page) => page.evaluate(async () => {
   const z = await JSZip.loadAsync(originalFileBytes);
   const doc = await z.file("word/document.xml").async("string");
   const rels = await z.file("word/_rels/document.xml.rels").async("string");
+  const numbering = z.file("word/numbering.xml") ? await z.file("word/numbering.xml").async("string") : "";
   const files = Object.keys(z.files);
   const footerName = files.find((f) => /^word\/footer\d+\.xml$/.test(f));
   const footer = footerName ? await z.file(footerName).async("string") : "";
@@ -161,7 +166,14 @@ const docxState = (page) => page.evaluate(async () => {
     dotTab: /w:leader="dot"/.test(doc),
     sup: /<w:vertAlign w:val="superscript"\/>/.test(doc),
     hanging: /w:hanging="/.test(doc),
-    bulletTab: /•<\/w:t><\/w:r><w:r>(<w:rPr>.*?<\/w:rPr>)?<w:tab\/>/.test(doc),
+    // lista Worda (pdf-convert.js assignLists): numPr w akapicie, punktor w numbering.xml, w tekście bez „•”
+    listDbg: (doc.match(/<w:p>(?:(?!<\/w:p>).)*(?:Krok|szczegół)(?:(?!<\/w:p>).)*<\/w:p>/g) || []).map((x) => `${(x.match(/<w:numPr>.*?<\/w:numPr>/) || ["-"])[0]} ${(x.match(/<w:t[^>]*>[^<]*/g) || []).map((y) => y.replace(/<w:t[^>]*>/, "")).join("|")}`).join(" ## ") + " || " + numbering.replace(/<w:rPr>.*?<\/w:rPr>/g, "").slice(-700),
+    tocLinks: (doc.match(/<w:hyperlink w:anchor="_Toc\d+"/g) || []).length,
+    tocBookmarks: /<w:bookmarkStart w:id="\d+" w:name="_Toc1"\/>(?:(?!<\/w:p>).)*Wprowadzenie/.test(doc),
+    tocHeading: /<w:pStyle w:val="TOCHeading"\/>(?:(?!<\/w:p>).)*Spis treści/.test(doc),
+    numberedLevels: /<w:numFmt w:val="decimal"\/><w:lvlText w:val="%1\."\/>/.test(numbering) && /<w:lvl w:ilvl="1"><w:start w:val="1"\/><w:numFmt w:val="bullet"\/>/.test(numbering) && /<w:ilvl w:val="1"\/>/.test(doc)
+      && !(doc.match(/<w:p>(?:(?!<\/w:p>).)*(?:Krok|szczegół)(?:(?!<\/w:p>).)*<\/w:p>/g) || []).some((x) => /<w:t[^>]*>\s*(\d+\.|◦|•)/.test(x)),
+    wordList: /<w:numPr><w:ilvl w:val="0"\/><w:numId w:val="\d+"\/><\/w:numPr>/.test(doc) && /<w:numFmt w:val="bullet"\/><w:lvlText w:val="•"\/>/.test(numbering) && /numbering\.xml/.test(rels) && !/>•<\/w:t>/.test(doc),
   };
 });
 
@@ -214,7 +226,9 @@ async function run() {
   check("stopka nie została w treści", !st.paras.some((p) => /^Strona \d+ z \d+$/.test(p.trim())), "");
   check("spis treści: tabulator z kropkami", st.dotTab, "");
   check("indeks górny (m²)", st.sup, "");
-  check("lista: punktor + tabulator + wcięcie wiszące", st.bulletTab && st.hanging, "");
+  check("spis treści: wpisy = linki do zakładek przy rozdziałach, „Spis treści” jako nagłówek spisu", st.tocLinks === 2 && st.tocBookmarks && st.tocHeading, JSON.stringify({ links: st.tocLinks, bm: st.tocBookmarks, head: st.tocHeading }));
+  check("lista numerowana z zagnieżdżonym punktorem = numeracja Worda z poziomami (bez „1.” w tekście)", st.numberedLevels, st.listDbg);
+  check("lista: prawdziwa lista Worda (punktor w definicji listy, nie w tekście) + wcięcie wiszące", st.wordList && st.hanging, "");
   const ia = st.paras.findIndex((p) => p.includes("Kolumna A5")), ib = st.paras.findIndex((p) => p.includes("Kolumna B1"));
   check("dwie kolumny czytane po kolei (cała lewa, potem prawa)", ia >= 0 && ib > ia, `A5@${ia} B1@${ib}`);
   const prev = await page.evaluate(() => ({

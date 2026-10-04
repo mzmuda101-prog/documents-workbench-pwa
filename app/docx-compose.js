@@ -806,11 +806,11 @@ async function applyTocInZip(zip, xml, edit) {
     const text = getParagraphText(p).replace(/\s+/g, " ").trim();
     if (level >= 1 && level <= 3 && text) heads.push({ p, i, level, text });
   });
-  // tabulator do prawego marginesu z kropkami
+  // tabulator do prawego marginesu z kropkami — marginesy SEKCJI, w której stoi spis (dawniej
+  // zawsze ostatniej sekcji dokumentu: spis na pionowej stronie przed sekcją poziomą wyjeżdżał
+  // numerami stron za margines)
   const sect = composeDirectChild(body, "sectPr");
-  const pgW = parseInt(sect && composeDirectChild(sect, "pgSz")?.getAttributeNS(W_NS, "w"), 10) || 11906;
-  const mar = sect && composeDirectChild(sect, "pgMar");
-  const tabPos = Math.max(2000, pgW - (parseInt(mar?.getAttributeNS(W_NS, "left"), 10) || 1418) - (parseInt(mar?.getAttributeNS(W_NS, "right"), 10) || 1418));
+  const tabPos = Math.max(2000, composeTextWidthTwips(doc, paragraphs[existing ? existing[0] : edit.index] || null));
   const run = (inner) => { const r = composeEl(doc, "r"); inner.forEach((c) => r.appendChild(c)); return r; };
   const text = (s) => { const t = composeEl(doc, "t"); t.setAttribute("xml:space", "preserve"); t.textContent = s; return t; };
   const fld = (type) => run([composeEl(doc, "fldChar", { fldCharType: type })]);

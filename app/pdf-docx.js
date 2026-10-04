@@ -63,6 +63,8 @@
       this.bodyFont = opts.bodyFont || "Calibri";
       this.bodySize = opts.bodySize || 11;
       this.lang = opts.lang || "pl-PL";
+      this.listDefs = opts.listDefs || [];
+      this.bookmarkId = 0;
       this.suspect = 0;
     }
 
@@ -147,14 +149,46 @@
       return `<w:r>${this.runProps(t)}<w:t xml:space="preserve">${esc(text)}</w:t></w:r>`;
     }
 
+    // ---------------- listy (numbering.xml)
+    numberingXml() {
+      let abs = "", nums = "";
+      for (const d of this.listDefs) {
+        abs += `<w:abstractNum w:abstractNumId="${d.id}"><w:multiLevelType w:val="${d.levels.length > 1 ? "hybridMultilevel" : "singleLevel"}"/>`;
+        d.levels.forEach((lv, i) => {
+          const rPr = [];
+          // krój symboli (Symbol, Wingdings) z Unicode'owym „•” Word na Windows pokazuje różnie —
+          // wtedy znak w kroju tekstu (prywatne kody U+F0xx zostają w swoim kroju)
+          const symbolic = /symbol|wingding|webding|dingbat/i.test(lv.font || "") && !/[\uF000-\uF0FF]/.test(lv.text);
+          if (lv.font && !symbolic) rPr.push(`<w:rFonts w:ascii="${esc(lv.font)}" w:hAnsi="${esc(lv.font)}" w:cs="${esc(lv.font)}" w:hint="default"/>`);
+          if (lv.size) rPr.push(`<w:sz w:val="${Math.round(lv.size * 2)}"/><w:szCs w:val="${Math.round(lv.size * 2)}"/>`);
+          abs += `<w:lvl w:ilvl="${i}"><w:start w:val="${lv.start}"/><w:numFmt w:val="${lv.fmt}"/><w:lvlText w:val="${esc(lv.text)}"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="${TW(lv.left)}" w:hanging="${TW(lv.hanging)}"/></w:pPr>${rPr.length ? `<w:rPr>${rPr.join("")}</w:rPr>` : ""}</w:lvl>`;
+        });
+        abs += "</w:abstractNum>";
+        nums += `<w:num w:numId="${d.id}"><w:abstractNumId w:val="${d.id}"/></w:num>`;
+      }
+      return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">${abs}${nums}</w:numbering>`;
+    }
+
     // ---------------- akapity
     paraXml(b, ctx) {
       const L = lineHeightFor(b);
       const before = Math.max(0, ctx.spaceBefore || 0);
       const pPr = [];
-      if (b.headingLevel) pPr.push(`<w:pStyle w:val="Heading${b.headingLevel}"/>`);
+      const style = b.headingLevel ? `Heading${b.headingLevel}` : b.titleRole || (b.tocHeading ? "TOCHeading" : b.tocLink ? `TOC${b.tocLevel || 1}` : null);
+      if (style) pPr.push(`<w:pStyle w:val="${style}"/>`);
       if (ctx.pageBreakBefore) pPr.push("<w:pageBreakBefore/>");
       pPr.push("<w:widowControl w:val=\"0\"/>");
+      // lista Worda (pdf-convert.js assignLists): numer/punktor robi Word — bez znacznika w tekście
+      let tokens = b.tokens;
+      if (b.numbering) {
+        pPr.push(`<w:numPr><w:ilvl w:val="${b.numbering.ilvl}"/><w:numId w:val="${b.numbering.numId}"/></w:numPr>`);
+        const k = tokens.findIndex((t) => t.type === "text");
+        if (k >= 0 && tokens[k].text === b.listMarker) {
+          tokens = tokens.slice();
+          tokens.splice(k, tokens[k + 1]?.type === "tab" ? 2 : 1);
+        }
+      }
       if (b.tabs && b.tabs.length) {
         pPr.push("<w:tabs>" + b.tabs.map((t) => `<w:tab w:val="${t.align === "right" ? "right" : "left"}"${t.leader ? ` w:leader="${t.leader}"` : ""} w:pos="${Math.max(0, TW(t.pos))}"/>`).join("") + "</w:tabs>");
       }
@@ -168,10 +202,17 @@
       if (b.align && b.align !== "left") pPr.push(`<w:jc w:val="${b.align}"/>`);
       // znacznik akapitu ma rozmiar tekstu (inaczej pusty koniec akapitu zmienia wysokość wiersza)
       // Kolejność w pPr jest ścisła (schemat OOXML): … jc, rPr, sectPr — Word inaczej zgłasza błąd.
-      const firstText = b.tokens.find((t) => t.type === "text");
+      const firstText = tokens.find((t) => t.type === "text");
       if (firstText) pPr.push(this.runProps({ font: firstText.font, size: firstText.size }));
       if (ctx.sectPr) pPr.push(ctx.sectPr);
-      return `<w:p><w:pPr>${pPr.join("")}</w:pPr>${ctx.anchors || ""}${this.runsXml(b.tokens)}</w:p>`;
+      let runs = this.runsXml(tokens);
+      // spis treści: cały wpis to link do zakładki przy nagłówku (jak w Wordzie)
+      if (b.tocLink) runs = `<w:hyperlink w:anchor="${b.tocLink}" w:history="1">${runs}</w:hyperlink>`;
+      if (b.bookmark) {
+        const id = this.bookmarkId++;
+        runs = `<w:bookmarkStart w:id="${id}" w:name="${b.bookmark}"/>${runs}<w:bookmarkEnd w:id="${id}"/>`;
+      }
+      return `<w:p><w:pPr>${pPr.join("")}</w:pPr>${ctx.anchors || ""}${runs}</w:p>`;
     }
 
     emptyPara(ctx, heightPt) {
@@ -356,7 +397,10 @@
     stylesXml() {
       const f = esc(this.bodyFont);
       const hp = Math.round(this.bodySize * 2);
-      let headings = "";
+      // Tytuł, spis treści — bez własnego wyglądu (wygląd z PDF jest bezpośrednio w akapicie),
+      // tylko znaczenie: nawigacja, spis treści Worda, „Nagłówek spisu treści” poza konspektem.
+      let headings = `<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="10"/><w:qFormat/></w:style><w:style w:type="paragraph" w:styleId="Subtitle"><w:name w:val="Subtitle"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="11"/><w:qFormat/></w:style><w:style w:type="paragraph" w:styleId="TOCHeading"><w:name w:val="TOC Heading"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="39"/><w:unhideWhenUsed/><w:qFormat/></w:style>`;
+      for (let lvl = 1; lvl <= 9; lvl++) headings += `<w:style w:type="paragraph" w:styleId="TOC${lvl}"><w:name w:val="toc ${lvl}"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="39"/><w:unhideWhenUsed/></w:style>`;
       for (let lvl = 1; lvl <= 6; lvl++) {
         headings += `<w:style w:type="paragraph" w:styleId="Heading${lvl}"><w:name w:val="heading ${lvl}"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:pPr><w:keepNext/><w:outlineLvl w:val="${lvl - 1}"/></w:pPr></w:style>`;
       }
@@ -436,6 +480,8 @@
     const zip = new JSZipCtor();
     const hasPng = w.media.some((m) => m.ext === "png"), hasJpg = w.media.some((m) => m.ext === "jpeg");
     let overrides = `<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>`;
+    const hasLists = w.listDefs.length > 0;
+    if (hasLists) overrides += `<Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/>`;
     if ((meta.fonts || []).length) overrides += `<Override PartName="/word/fontTable.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml"/>`;
     for (const sec of sections) {
       if (sec.footerName) overrides += `<Override PartName="/word/${sec.footerName}" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>`;
@@ -449,12 +495,14 @@
       `<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>`,
       `<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>`,
       ...((meta.fonts || []).length ? [`<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable" Target="fontTable.xml"/>`] : []),
+      ...(hasLists ? [`<Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/>`] : []),
       ...w.rels.map((r) => `<Relationship Id="${r.id}" Type="${r.type}" Target="${esc(r.target)}"${r.external ? ' TargetMode="External"' : ""}/>`),
     ];
     zip.file("word/_rels/document.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${rels.join("")}</Relationships>`);
     zip.file("word/document.xml", documentXml);
     zip.file("word/styles.xml", w.stylesXml());
+    if (hasLists) zip.file("word/numbering.xml", w.numberingXml());
     let settings = w.settingsXml();
     // Osadzone czcionki (pdf-fonts.js): fontTable + zaciemnione .odttf
     const fonts = meta.fonts || [];

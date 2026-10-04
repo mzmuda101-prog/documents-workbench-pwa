@@ -1160,6 +1160,7 @@
       x1: Math.max(...rights),
       nLines: lines.length,
       list: list ? list.kind : null,
+      listMarker: list ? list.marker : null, // pdf-convert.js robi z tego prawdziwą listę Worda
       rotated: first.rotated,
     };
   }

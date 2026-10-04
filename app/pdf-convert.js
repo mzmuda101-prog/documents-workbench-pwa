@@ -48,24 +48,175 @@
     return b.tokens.map((t) => (t.type === "tab" ? "\t" : t.text)).join("");
   }
 
-  // Nagłówki: akapity wyraźnie większe od tekstu podstawowego (poziomy wg rozmiaru).
+  // Nagłówki: krótkie akapity większe od tekstu podstawowego, poziomy wg rozmiaru — jak Word przy
+  // otwieraniu PDF: okładka (największe kroje tylko na 1. stronie) to Tytuł / Podtytuł, a
+  // rozdziały zaczynają się od Nagłówka 1. Dawniej tytuł był Nagłówkiem 1, a rozdziały dopiero
+  // trzecim poziomem; nagłówki 14 pt przy tekście 12 pt (×1,17) przepadały (próg ×1,18).
+  function headingCandidate(b, inTable) {
+    if (b.type !== "para" || inTable || b.nLines > 3 || b.list) return false;
+    const text = paraText(b).trim();
+    return text.length >= 2 && text.length <= 160 && !/\t/.test(text);
+  }
   function assignHeadings(pages, bodySize) {
-    const sizes = new Set();
+    const where = new Map(); // rozmiar → strony, na których jest
     for (const p of pages) walkBlocks(p.blocks, (b, inTable) => {
-      if (b.type !== "para" || inTable || b.nLines > 3) return;
-      const text = paraText(b).trim();
-      if (text.length < 2 || text.length > 160 || /\t/.test(text)) return;
-      if (b.size >= bodySize * 1.18) sizes.add(Math.round(b.size));
+      if (!headingCandidate(b, inTable) || b.size < bodySize * 1.12) return;
+      const k = Math.round(b.size);
+      if (!where.has(k)) where.set(k, new Set());
+      where.get(k).add(p.index);
     });
-    const levels = [...sizes].sort((a, b) => b - a).slice(0, 4);
+    const sizes = [...where.keys()].sort((a, b) => b - a);
+    // okładka: kroje WIĘKSZE od każdego nagłówka z dalszych stron i tylko na 1. stronie
+    const later = sizes.filter((k) => [...where.get(k)].some((i) => i > 0));
+    const cover = pages.length > 1 && later.length ? sizes.filter((k) => k > Math.max(...later) && [...where.get(k)].every((i) => i === 0)) : [];
+    const levels = sizes.filter((k) => !cover.includes(k)).slice(0, 4);
     for (const p of pages) walkBlocks(p.blocks, (b, inTable) => {
-      if (b.type !== "para" || inTable || b.nLines > 3) return;
-      const text = paraText(b).trim();
-      if (text.length < 2 || text.length > 160 || /\t/.test(text)) return;
-      const lvl = levels.indexOf(Math.round(b.size));
-      if (lvl >= 0) b.headingLevel = lvl + 1;
+      if (!headingCandidate(b, inTable)) return;
+      const k = Math.round(b.size);
+      if (cover.includes(k)) b.titleRole = k === cover[0] ? "Title" : "Subtitle";
+      else if (levels.includes(k)) b.headingLevel = levels.indexOf(k) + 1;
     });
     return levels;
+  }
+
+  // Spis treści: wiersze „tekst …… numer strony” (tabulator z kropkami do prawej) → link do
+  // zakładki przy nagłówku o tym samym tekście (klik przenosi w Wordzie i w aplikacji), styl
+  // „Spis treści N” wg poziomu nagłówka; tytuł spisu → „Nagłówek spisu treści” (nie rozdział).
+  function assignToc(pages) {
+    const norm = (t) => t.replace(/\s+/g, " ").replace(/[.…\s]+$/, "").trim().toLowerCase();
+    const heads = [];
+    const tocs = [];
+    let prev = null;
+    let tocTitle = null;
+    for (const p of pages) walkBlocks(p.blocks, (b, inTable) => {
+      if (b.type !== "para" || inTable) { prev = null; return; }
+      const i = b.tokens.findIndex((t) => t.type === "tab" && t.leader && t.align === "right");
+      const tail = i >= 0 ? b.tokens.slice(i + 1).filter((t) => t.type === "text").map((t) => t.text).join("").trim() : "";
+      if (i > 0 && /^\d{1,4}$/.test(tail)) {
+        const text = norm(b.tokens.slice(0, i).filter((t) => t.type === "text").map((t) => t.text).join(""));
+        if (text) {
+          if (!tocs.length && prev?.headingLevel && /^(spis treści|spis rzeczy|zawartość|table of contents|contents)$/i.test(paraText(prev).trim())) tocTitle = prev;
+          tocs.push({ b, text });
+        }
+      } else if (b.headingLevel) heads.push({ b, text: norm(paraText(b)) });
+      prev = b;
+    });
+    let n = 0;
+    const used = new Set();
+    for (const t of tocs) {
+      const h = heads.find((x) => !used.has(x) && x.text === t.text);
+      if (!h) continue;
+      used.add(h);
+      if (!h.b.bookmark) h.b.bookmark = `_Toc${++n}`;
+      t.b.tocLink = h.b.bookmark;
+      t.b.tocLevel = Math.min(9, h.b.headingLevel);
+    }
+    if (n >= 2 && tocTitle) { // „Spis treści” to nie rozdział (Word też go tak nie liczy)
+      delete tocTitle.headingLevel;
+      tocTitle.tocHeading = true;
+    }
+    return n;
+  }
+
+  // Listy: kolejne akapity ze znacznikiem (•, o, ▪, 1., a), (i)…) → prawdziwa lista Worda
+  // (numeracja i wcięcia jako lista — edytuje się jak w Wordzie). Poziom = położenie znacznika.
+  // Gdy czegoś nie da się odtworzyć wiernie (numery z przerwami, mieszane rodzaje na jednym
+  // poziomie) — ciąg zostaje jak dawniej: znacznik i tabulator jako tekst.
+  const ROMAN = { i: 1, v: 5, x: 10, l: 50, c: 100 };
+  function romanValue(r) {
+    let v = 0;
+    const s = r.toLowerCase();
+    for (let i = 0; i < s.length; i++) {
+      const a = ROMAN[s[i]], b = ROMAN[s[i + 1]] || 0;
+      if (!a) return 0;
+      v += a < b ? -a : a;
+    }
+    return v;
+  }
+  function parseMarker(m) {
+    let x = /^(\(?)(\d{1,3})([.)])$/.exec(m);
+    if (x) return { fmt: "decimal", value: +x[2], pre: x[1], post: x[3] };
+    x = /^(\(?)([ivxlc]{1,5})([.)])$/.exec(m);
+    if (x && romanValue(x[2]) && x[2] !== "c" && x[2] !== "l") return { fmt: "lowerRoman", value: romanValue(x[2]), pre: x[1], post: x[3], letter: x[2].length === 1 ? x[2] : null };
+    x = /^(\(?)([IVXLC]{1,5})([.)])$/.exec(m);
+    if (x && romanValue(x[2]) && x[2] !== "C" && x[2] !== "L") return { fmt: "upperRoman", value: romanValue(x[2]), pre: x[1], post: x[3], letter: x[2].length === 1 ? x[2] : null };
+    x = /^(\(?)([a-z])([.)])$/.exec(m);
+    if (x) return { fmt: "lowerLetter", value: x[2].charCodeAt(0) - 96, pre: x[1], post: x[3] };
+    x = /^(\(?)([A-Z])([.)])$/.exec(m);
+    if (x) return { fmt: "upperLetter", value: x[2].charCodeAt(0) - 64, pre: x[1], post: x[3] };
+    return null;
+  }
+  function assignLists(pages) {
+    const defs = []; // definicje list (numbering.xml) — pdf-docx.js
+    // pojemniki: treść stron (lista może przejść na następną stronę) + każda komórka / kolumna
+    const containers = [[]];
+    const collect = (blocks, into) => {
+      for (const b of blocks) {
+        into.push(b);
+        if (b.type === "table" || b.type === "columns") for (const c of b.cells) { const sub = []; containers.push(sub); collect(c.blocks || [], sub); }
+      }
+    };
+    for (const p of pages) collect(p.blocks, containers[0]);
+    for (const blocks of containers) {
+      let run = [];
+      const flushRun = () => { if (run.length) makeList(run, defs); run = []; };
+      for (const b of blocks) {
+        if (b.type === "para" && b.list && b.listMarker) run.push(b);
+        else flushRun();
+      }
+      flushRun();
+    }
+    return defs;
+  }
+  function makeList(run, defs) {
+    // poziomy: położenie znacznika od lewej krawędzi obszaru (tolerancja 4 pt)
+    const pos = (b) => b.indLeft + b.firstLine;
+    const cols = [];
+    for (const b of run) if (!cols.some((c) => Math.abs(c - pos(b)) < 4)) cols.push(pos(b));
+    cols.sort((a, b) => a - b);
+    if (cols.length > 9) return;
+    const lvlOf = (b) => cols.findIndex((c) => Math.abs(c - pos(b)) < 4);
+    const levels = [];
+    let last = []; // ostatnia wartość na poziomie (numeracja od nowa po wyższym poziomie)
+    for (const b of run) {
+      const L = lvlOf(b);
+      const num = parseMarker(b.listMarker);
+      const kind = b.list === "bullet" || !num ? "bullet" : "number";
+      if (b.list === "number" && !num) return; // „1.1.”, „§ 3” itp. — zostaje tekstem
+      const lv = levels[L] || (levels[L] = { kind, markers: new Map(), fmt: num?.fmt, pre: num?.pre, post: num?.post, start: num?.value, tok: b.tokens.find((t) => t.type === "text") });
+      if (lv.kind !== kind) return;
+      if (kind === "bullet") lv.markers.set(b.listMarker, (lv.markers.get(b.listMarker) || 0) + 1);
+      else {
+        // „i.” może być literą (a, b, … i) albo rzymską jedynką — rozstrzyga poziom
+        let fmt = num.fmt, value = num.value;
+        if (lv.fmt === "lowerLetter" && fmt === "lowerRoman" && num.letter) { fmt = "lowerLetter"; value = num.letter.charCodeAt(0) - 96; }
+        if (lv.fmt === "upperLetter" && fmt === "upperRoman" && num.letter) { fmt = "upperLetter"; value = num.letter.charCodeAt(0) - 64; }
+        if (fmt !== lv.fmt || num.pre !== lv.pre || num.post !== lv.post) return;
+        const expect = last[L] == null ? (L === 0 ? lv.start : 1) : last[L] + 1;
+        if (value !== expect) return;
+        last[L] = value;
+      }
+      for (let k = L + 1; k < last.length; k++) last[k] = null; // głębsze poziomy liczą od nowa
+    }
+    if (levels.some((lv) => !lv)) return; // dziura w poziomach (np. tylko poziom 2) — zostaje tekstem
+    const def = {
+      id: defs.length + 1,
+      levels: levels.map((lv, i) => {
+        const sample = run.find((b) => lvlOf(b) === i);
+        return {
+          kind: lv.kind,
+          fmt: lv.kind === "bullet" ? "bullet" : lv.fmt,
+          text: lv.kind === "bullet" ? [...lv.markers].sort((a, b) => b[1] - a[1])[0][0] : `${lv.pre}%${i + 1}${lv.post}`,
+          start: lv.kind === "bullet" ? 1 : lv.start,
+          left: sample.indLeft,
+          hanging: Math.max(0, -sample.firstLine),
+          font: lv.tok?.font,
+          size: lv.tok?.size,
+        };
+      }),
+    };
+    defs.push(def);
+    for (const b of run) b.numbering = { numId: def.id, ilvl: lvlOf(b) };
   }
 
   // Treść: atomy drzewa układu (do marginesów).
@@ -228,6 +379,8 @@
     const bodySize = modeOf(sizeVotes) || 11;
     const bodyFont = modeOf(fontVotes) || "Calibri";
     assignHeadings(pages, bodySize);
+    const tocLinks = assignToc(pages);
+    const listDefs = assignLists(pages);
 
     // Stopki/nagłówki z numerem strony → pole PAGE / NUMPAGES
     if (running.size) {
@@ -324,7 +477,9 @@
     }
 
     env.onProgress?.(n, n, "write");
-    const meta = { bodyFont, bodySize, title: env.title || "", lang: env.lang || "pl-PL", fonts };
+    const meta = { bodyFont, bodySize, title: env.title || "", lang: env.lang || "pl-PL", fonts, listDefs };
+    report.lists = listDefs.length;
+    report.tocLinks = tocLinks;
     const t3 = Date.now();
     const bytes = await NS.buildDocx(pages, images, meta, env.JSZip);
     report.timings.write = Date.now() - t3;

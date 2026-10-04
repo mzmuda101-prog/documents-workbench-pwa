@@ -1,8 +1,10 @@
 // Post-render fixes for docx-preview output (Symbol bullets, visual tofu, etc.).
 
-function getPreviewSection(host) {
+// Cały podgląd (wszystkie strony/sekcje). Dawniej poprawki list brały tylko PIERWSZĄ sekcję —
+// listy od drugiej strony (podział strony / sekcji, PDF → DOCX) zostawały nienaprawione.
+function getPreviewRoot(host) {
   const root = host?.querySelector?.(".docx-preview-host") || host;
-  return root?.querySelector("section.docx") || root?.querySelector(".docx") || root;
+  return root?.querySelector(".docx-wrapper") || root;
 }
 
 function isNumberedListMarker(beforeStyle) {
@@ -21,7 +23,7 @@ function usesLegacyBulletFont(beforeStyle) {
 }
 
 function fixDocxBulletRendering(host) {
-  const section = getPreviewSection(host);
+  const section = getPreviewRoot(host);
   if (!section) return 0;
   let fixed = 0;
   section.querySelectorAll('p[class*="docx-num-"]').forEach((p) => {
@@ -29,6 +31,18 @@ function fixDocxBulletRendering(host) {
     if (paraStyle.display !== "list-item") return;
     const before = getComputedStyle(p, "::before");
     if (isImageBullet(before)) return;
+
+    // Jak w Wordzie: numer / punktor na początku wcięcia wiszącego, tekst (po tabulatorze) ZAWSZE
+    // na lewym wcięciu. docx-preview pisał „1.\t” w tekście, a tabulator zwijał się do spacji —
+    // tekst punktu zaczynał się kilka-kilkanaście px za wcześnie (listy z Worda i z PDF → DOCX).
+    // Znacznik wychodzi z biegu tekstu (absolutnie) — kursor przy edycji stoi na początku tekstu.
+    const hang = -(parseFloat(paraStyle.textIndent) || 0);
+    if (hang > 0.5 && before.content !== "none" && !usesLegacyBulletFont(before)) {
+      p.classList.add("dwb-list-hang");
+      p.style.setProperty("--dwb-hang", `${hang}px`);
+      fixed++;
+      return;
+    }
 
     if (isNumberedListMarker(before)) {
       p.classList.add("docx-list-numbered-fixed");
@@ -46,7 +60,7 @@ function fixDocxBulletRendering(host) {
 }
 
 function auditDocxVisualIssues(host) {
-  const section = getPreviewSection(host);
+  const section = getPreviewRoot(host);
   const issues = [];
   if (!section) return { issues, bulletsFixed: 0, brokenBullets: 0, numberedFixed: 0 };
 

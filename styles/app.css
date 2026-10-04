@@ -550,7 +550,7 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
 .docx-preview-host .docx p.docx-bullet-fixed {
   list-style-position: outside !important;
   text-indent: 0 !important; /* docx-preview uses negative indent for inside ::before bullets */
-  padding-inline-start: 0.35em !important;
+  padding-inline-start: 0 !important; /* tekst na lewym wcięciu jak w Wordzie (dawniej +0,35 em) */
   /* margin-inline-start zostaje z docx-preview (36pt, 72pt…) — nie nadpisujemy */
 }
 .docx-preview-host p.docx-bullet-fixed::before {
@@ -574,6 +574,10 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
   vertical-align: top;
   box-sizing: border-box;
 }
+
+/* Lista z wcięciem wiszącym (docx-render-fixes.js): tekst na lewym wcięciu, numer w wysunięciu */
+.docx-preview-host p.dwb-list-hang { text-indent: 0 !important; position: relative; }
+.docx-preview-host p.dwb-list-hang::before { position: absolute; left: calc(-1 * var(--dwb-hang, 18pt)); white-space: pre; }
 
 .doc-canvas.read-only .docx-preview-host { cursor: default; }
 .doc-canvas.edit-mode .docx-preview-host { cursor: default; }
