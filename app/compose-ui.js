@@ -2058,11 +2058,11 @@ const composeUi = (() => {
     placeCommentCard();
   }
   const coarsePointer = () => !!window.matchMedia?.("(pointer: coarse)").matches;
-  // Najmniejsza wysokość karty komentarza, gdy brakuje miejsca (Mateusz 2026-10-05: jedna linijka to
-  // za mało; telefon 5–6 linijek, komputer więcej i zależnie od ekranu). Do strojenia:
-  // lines = linijki treści przy zwykłej wielkości, screen = część widocznej wysokości ekranu,
-  // chrome = autor, odstępy i przyciski (px).
-  const COMMENT_CARD_MIN = { touch: { lines: 6, screen: 0.38, chrome: 82 }, desktop: { lines: 8, screen: 0.40, chrome: 66 } };
+  // Wysokość karty komentarza (Mateusz 2026-10-05). Karta jest tak wysoka jak treść, ale:
+  //   max    = najwyżej taka część widocznej wysokości ekranu (dłuższa treść przewija się z „Więcej ↓”),
+  //   lines / screen = najmniej (gdy brakuje miejsca): linijki treści w skali tekstu albo część ekranu,
+  //            co większe (jedna linijka to za mało), chrome = autor, odstępy i przyciski (px).
+  const COMMENT_CARD_MIN = { touch: { lines: 5, screen: 0.30, chrome: 82, max: 0.5 }, desktop: { lines: 8, screen: 0.40, chrome: 66, max: 0.6 } };
   function placeCommentCard() {
     if (!cCard) return;
     cCard.el.style.setProperty("--cc-z", String(commentZoom()));
@@ -2086,7 +2086,9 @@ const composeUi = (() => {
     const minTop = Math.max(8, vp?.top ?? 8);
     const above = r.top - 8 - minTop;
     const below = viewH - 8 - (r.bottom + 40);
-    cCard.el.style.maxHeight = "";
+    const m = COMMENT_CARD_MIN[coarsePointer() ? "touch" : "desktop"];
+    const maxH = Math.round(viewH * m.max);
+    cCard.el.style.maxHeight = `${maxH}px`;
     const w = cCard.el.offsetWidth; let h = cCard.el.offsetHeight;
     const left = Math.max(8, Math.min(r.left - 16, viewW - w - 8));
     let top;
@@ -2097,9 +2099,8 @@ const composeUi = (() => {
       // minimum: linijki treści w skali tekstu komentarza (przy przybliżeniu 150% wyższe) albo część
       // widocznego ekranu (większy ekran = wyższa karta) — co większe; progi w COMMENT_CARD_MIN
       const z = commentZoom();
-      const m = COMMENT_CARD_MIN[coarsePointer() ? "touch" : "desktop"];
-      const minH = Math.max(Math.round((22 + m.lines * 19) * z) + m.chrome, Math.round(viewH * m.screen));
-      cCard.el.style.maxHeight = `${Math.max(Math.min(minH, viewH - 16), up ? above : below)}px`;
+      const minH = Math.min(maxH, Math.max(Math.round((22 + m.lines * 19) * z) + m.chrome, Math.round(viewH * m.screen)));
+      cCard.el.style.maxHeight = `${Math.min(maxH, Math.max(minH, up ? above : below))}px`;
       h = cCard.el.offsetHeight;
       top = up ? Math.max(minTop, r.top - h - 8) : r.bottom + 40;
       top = Math.max(minTop, Math.min(top, viewH - h - 8)); // cała karta na ekranie (najwyżej zachodzi na wiersz)
