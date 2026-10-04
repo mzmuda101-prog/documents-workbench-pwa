@@ -19,6 +19,7 @@ const dwbNotes = (() => {
   // klucz „footnote:2” → { li, editable, lock, base: [runs akapitu], mark: wzór numeru na początku }
   let notes = new Map();
   let labels = new Map(); // klucz → numer jak w Wordzie („3”, „iv”, „*”)
+  let nums = new Map(); // klucz → { n: numer kolejny, fmt } (lista przypisów bez numeru w treści)
   let texts = new Map(); // klucz → treść przypisu (dymek)
   let parts = null; // { footnote, endnote, settings } — DOM części z pliku
 
@@ -76,6 +77,7 @@ const dwbNotes = (() => {
   async function prepare(bytes) {
     notes = new Map();
     labels = new Map();
+    nums = new Map();
     texts = new Map();
     parts = null;
     const host = hostEl();
@@ -88,7 +90,7 @@ const dwbNotes = (() => {
       const f = fmt[key.split(":")[0]] || fmt.footnote;
       const label = formatNum(f.start - 1 + (Number(sup.dataset.dwbNoteNum) || 1), f.fmt);
       sup.textContent = label;
-      if (!labels.has(key)) labels.set(key, label);
+      if (!labels.has(key)) { labels.set(key, label); nums.set(key, { n: f.start - 1 + (Number(sup.dataset.dwbNoteNum) || 1), fmt: f.fmt }); }
     });
     labels.forEach((_, key) => {
       const [kind, id] = key.split(":");
@@ -223,7 +225,11 @@ const dwbNotes = (() => {
       }
       if (!hasMark && label) { // przypis bez numeru w treści (inny program) — numer z listy
         li.classList.add("dwb-note-native");
-        li.value = Number.parseInt(label, 10) || 0;
+        // numer kolejny + rodzaj numeracji listy (końcowe „i, ii…”) — dawniej parseInt(„i”) = 0 → „0.”
+        const nm = nums.get(key);
+        li.value = nm?.n || Number.parseInt(label, 10) || 1;
+        const css = { lowerRoman: "lower-roman", upperRoman: "upper-roman", lowerLetter: "lower-alpha", upperLetter: "upper-alpha" }[nm?.fmt];
+        if (css) li.style.listStyleType = css;
       }
       paras.forEach((p, i) => { p.dataset.noteKey = key; p.dataset.noteSrc = String(i); });
     });

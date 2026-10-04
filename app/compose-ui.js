@@ -1632,10 +1632,11 @@ const composeUi = (() => {
     const d = iso ? new Date(iso) : null;
     return d && !isNaN(d) ? d.toLocaleDateString(currentLang === "en" ? "en-GB" : "pl-PL", { day: "numeric", month: "short", year: "numeric" }) : "";
   }
-  function showCommentCard(hit) {
+  // ro = tryb Czytanie: sama treść (autor, data, odpowiedzi), bez przycisków zmian
+  function showCommentCard(hit, ro = false) {
     const c = commentData.byId.get(hit.id);
     if (!c) return;
-    if (cCard?.id === hit.id && cCard.done === c.done) { placeCommentCard(); return; }
+    if (cCard?.id === hit.id && cCard.done === c.done && cCard.ro === ro) { placeCommentCard(); return; }
     hideCommentCard();
     const el = document.createElement("div");
     el.className = `comment-card${c.done ? " is-done" : ""}`;
@@ -1665,10 +1666,15 @@ const composeUi = (() => {
       mk("commentDelete", () => { hideCommentCard(); applyDocumentEdit({ op: "revisions", action: "removeComments", ids: [c.id, ...c.replies.map((r) => r.id)] }); }, "cc-del"),
     );
     if (c.done) { const badge = document.createElement("div"); badge.className = "cc-done"; badge.textContent = t("commentResolved"); el.appendChild(badge); }
-    el.append(list, actions);
+    if (ro) {
+      const note = document.createElement("div");
+      note.className = "cc-ro-note";
+      note.textContent = t("commentReadOnlyNote");
+      el.append(list, note);
+    } else el.append(list, actions);
     el.addEventListener("mousedown", (e) => { if (e.target.closest("button")) e.preventDefault(); });
     document.body.appendChild(el);
-    cCard = { el, id: hit.id, done: c.done };
+    cCard = { el, id: hit.id, done: c.done, ro };
     placeCommentCard();
   }
   function placeCommentCard() {
@@ -1923,7 +1929,32 @@ const composeUi = (() => {
       imageEdit(index, { action: "delete" }, false);
     }
   }, true);
-  document.getElementById("readMode")?.addEventListener("change", () => { hideImageCard(); if (tableBtn) tableBtn.hidden = true; });
+  document.getElementById("readMode")?.addEventListener("change", () => { hideImageCard(); hideCommentCard(); if (tableBtn) tableBtn.hidden = true; });
+
+  // Czytanie: klik / stuknięcie w komentowany tekst pokazuje komentarz (tylko do podglądu, jak
+  // w Wordzie w trybie tylko do odczytu); klik obok albo zaznaczanie tekstu — karta znika.
+  function commentAtPoint(x, y) {
+    let node = null; let off = 0;
+    if (document.caretRangeFromPoint) { const r = document.caretRangeFromPoint(x, y); if (r) { node = r.startContainer; off = r.startOffset; } }
+    else if (document.caretPositionFromPoint) { const p = document.caretPositionFromPoint(x, y); if (p) { node = p.offsetNode; off = p.offset; } }
+    if (!node) return null;
+    let hit = null;
+    commentRanges().forEach(({ id, range }) => {
+      try { if (range.isPointInRange(node, off) && commentData.byId.get(id) && !commentData.byId.get(id).parentId) hit = { id, range }; } catch (_) { /* inny dokument */ }
+    });
+    return hit;
+  }
+  docCanvasEl?.addEventListener("click", (e) => {
+    if (!readOnlyMode || e.button > 0) return;
+    if (!host()?.contains(e.target) || e.target.closest("a[href], sup[data-dwb-note], sup.note-mark")) { hideCommentCard(); return; }
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed && sel.toString().trim()) { hideCommentCard(); return; } // zaznaczanie tekstu
+    const hit = commentAtPoint(e.clientX, e.clientY);
+    if (hit) showCommentCard(hit, true); else hideCommentCard();
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && cCard?.ro) hideCommentCard(); });
+  // klik poza dokumentem i poza kartą (pasek, panel) — karta Czytania znika
+  document.addEventListener("pointerdown", (e) => { if (cCard?.ro && !cCard.el.contains(e.target) && !docCanvasEl?.contains(e.target)) hideCommentCard(); }, true);
 
   // Wklejony obraz (zrzut ekranu, skopiowane zdjęcie) — w miejscu kursora, jak „Wstaw → Obraz”.
   docCanvasEl?.addEventListener("paste", (e) => {

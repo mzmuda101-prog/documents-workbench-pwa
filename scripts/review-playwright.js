@@ -70,6 +70,26 @@ async function run() {
   await page.waitForTimeout(150);
   check("klik w komentarz podświetla akapit w podglądzie", await page.evaluate(() => /Kara umowna/.test(document.querySelector(".search-hit-active")?.textContent || "")));
 
+  // ── Czytanie: klik w komentowany tekst = karta komentarza tylko do podglądu ──
+  const cmPt = await page.evaluate(() => {
+    const s = document.querySelector('span[data-cm-kind="start"]');
+    s.scrollIntoView({ block: "center" });
+    const tn = document.createTreeWalker(s.parentElement.closest("p"), NodeFilter.SHOW_TEXT).nextNode();
+    const r = document.createRange(); r.setStart(tn, 1); r.setEnd(tn, 2);
+    const b = r.getBoundingClientRect();
+    return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
+  });
+  await page.waitForTimeout(300);
+  await page.mouse.click(cmPt.x, cmPt.y);
+  await page.waitForTimeout(250);
+  const roCard = await page.evaluate(() => { const c = document.querySelector(".comment-card"); return c ? { text: c.textContent, buttons: c.querySelectorAll("button").length, ro: readOnlyMode } : null; });
+  check("Czytanie: klik w komentowany tekst pokazuje komentarz bez przycisków zmian", roCard && roCard.ro && /5% to nie za dużo/.test(roCard.text) && roCard.buttons === 0 && /trybie Edycja/.test(roCard.text), JSON.stringify(roCard));
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(100);
+  check("Czytanie: Esc chowa kartę komentarza", !(await page.evaluate(() => !!document.querySelector(".comment-card"))));
+  const endLi = await page.evaluate(() => { const li = document.querySelector('ol.dwb-notes > li[data-dwb-note^="endnote:"]'); return li ? `${li.value}/${getComputedStyle(li).listStyleType}` : ""; });
+  check("lista przypisów końcowych numerowana jak w Wordzie (i, nie 0)", !endLi || endLi === "1/lower-roman", endLi);
+
   // ── Edycja: akapity ze złożoną treścią są zablokowane, zwykłe edytowalne ─────
   await page.evaluate(() => { readModeEl.checked = false; readModeEl.dispatchEvent(new Event("change", { bubbles: true })); });
   await page.waitForTimeout(400);
