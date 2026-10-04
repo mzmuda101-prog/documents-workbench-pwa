@@ -44,6 +44,13 @@
     if (b.type === "rule") return b.y - 1;
     return b.top || 0;
   }
+  // Komórka układu kolumn kończąca się tabelą (ramka z PDF): Word wymaga po tabeli akapitu
+  // (MIN_LINE), a dolne obramowanie wystaje o połowę — blok jest o tyle wyższy niż w PDF.
+  // Odstęp pod nim trzeba o to zmniejszyć (DC-85: tabela pod paskiem nagłówków ~2 pt za nisko).
+  function tailExtra(b) {
+    if (b.type !== "columns") return 0;
+    return Math.max(0, ...b.cells.map((c) => (c.blocks[c.blocks.length - 1]?.type === "table" ? MIN_LINE + 0.4 : 0)));
+  }
   function blockBottom(b) {
     if (b.type === "para") return paraBoxBottom(b);
     if (b.type === "table") return b.y1;
@@ -325,7 +332,7 @@
         // Ujemny odstęp się zeruje — blok w rzeczywistości stoi niżej o tyle; kursor musi to
         // wiedzieć, inaczej przesunięcie ciągnęło się do końca strony (następne bloki go nie odrabiały).
         cursor = blockBottom(b) + (b.type === "para" ? Math.max(0, -local.spaceBefore) : 0);
-        if (b.type === "table" || b.type === "columns") cursor = Math.max(cursor, top);
+        if (b.type === "table" || b.type === "columns") cursor = Math.max(cursor, top) + tailExtra(b);
       }
       if (!n) xml += this.emptyPara({ pageBreakBefore: ctx.pageBreakBefore, anchors: ctx.anchors, sectPr: ctx.sectPr, spaceBefore: 0 }, 1);
       return xml;

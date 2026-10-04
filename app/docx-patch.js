@@ -12,21 +12,16 @@ function collectParagraphElements(rootEl, scope) {
   if (!body) return paragraphs;
   const start = scope === "body" ? body : rootEl;
 
-  function walkTable(tbl) {
-    const rows = tbl.getElementsByTagNameNS(W_NS, "tr");
-    for (let r = 0; r < rows.length; r++) {
-      const cells = rows[r].getElementsByTagNameNS(W_NS, "tc");
-      for (let c = 0; c < cells.length; c++) walk(cells[c]);
-    }
-  }
-
+  // Tabela = zwykłe zejście w dół (wiersze → komórki → akapity, w kolejności dokumentu). Dawniej
+  // wiersze brane były getElementsByTagNameNS („w głąb”) — tabela W tabeli (formularze, układ z
+  // PDF) liczyła się dwa razy: numery akapitów pliku rozjeżdżały się z podglądem i zapis edycji
+  // wpisywał tekst w cudze akapity (DC-85: „KOLEJNOŚĆ PRAC” zamiast „POTENCJALNE ZAGROŻENIA”).
   function walk(node) {
     for (let i = 0; i < node.childNodes.length; i++) {
       const child = node.childNodes[i];
       if (child.nodeType !== 1) continue;
       if (child.localName === "p" && child.namespaceURI === W_NS) paragraphs.push(child);
-      else if (child.localName === "tbl" && child.namespaceURI === W_NS) walkTable(child);
-      else if (child.localName !== "sectPr") walk(child);
+      else if (child.localName !== "sectPr" && child.localName !== "tblPr" && child.localName !== "tblGrid" && child.localName !== "trPr" && child.localName !== "tcPr") walk(child);
     }
   }
 
@@ -551,7 +546,9 @@ function applyParagraphBatchInXml(xml, items) {
   (items || []).forEach(({ index, text, runs }) => {
     const p = paragraphs[index];
     if (!p) return;
-    if (runs?.length) {
+    // Pusta lista fragmentów = akapit wyczyszczony (dawniej szła ścieżka „text”, a text był
+    // pusty — do pliku trafiało dosłowne „undefined”)
+    if (Array.isArray(runs)) {
       const current = extractRunsFromParagraphXml(p);
       if (runsEqual(current, runs)) return;
       applyRunsToParagraphXml(p, runs);

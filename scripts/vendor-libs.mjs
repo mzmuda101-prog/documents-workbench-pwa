@@ -99,8 +99,19 @@ function patchBundle() {
   const reRenderP = /renderParagraph\((\w+)\)\{var (\w+)=this\.renderContainer\(\1,"p"\);/;
   if (!reRenderP.test(src)) throw new Error("łatka podziału akapitu: wzorzec renderParagraph nie pasuje");
   src = src.replace(reRenderP, (_, el, p) => `renderParagraph(${el}){var ${p}=this.renderContainer(${el},"p");${el}.__dwbCont&&(${p}.dataset.dwbCont="1");`);
-  fs.writeFileSync(OUT, src);
   console.log("  ✅  łatka: druga połówka akapitu podzielonego podziałem strony oznaczona");
+
+  // 7) Wcięcie tabeli (w:tblInd w:w="…" w:type="dxa"): docx-preview czytał je jak wcięcie akapitu
+  //    (atrybuty left/start) — tabela zawsze stała przy marginesie. W Wordzie (tryb 2013+) to
+  //    odległość krawędzi tabeli od marginesu, także ujemna (tabela wysunięta w lewo).
+  const reTblInd = /case"ind":case"tblInd":this\.parseIndentation\((\w+),(\w+)\);break;/;
+  if (!reTblInd.test(src)) throw new Error("łatka tblInd: wzorzec nie pasuje (nowa wersja docx-preview?)");
+  const mParser = src.match(/parseIndentation\(\w+,\w+\)\{var \w+=(\w+)\.lengthAttr\(/);
+  if (!mParser) throw new Error("łatka tblInd: brak globalXmlParser w parseIndentation");
+  const XP = mParser[1];
+  src = src.replace(reTblInd, (_, el, st) => `case"ind":this.parseIndentation(${el},${st});break;case"tblInd":{var __ty=${XP}.attr(${el},"type");if(!__ty||__ty==="dxa"){var __w=${XP}.lengthAttr(${el},"w");__w&&(${st}["margin-inline-start"]=__w)}}break;`);
+  fs.writeFileSync(OUT, src);
+  console.log("  ✅  łatka: wcięcie tabeli (w:tblInd)");
 }
 
 // pdf.js (konwersja PDF → DOCX): moduł główny + worker + wasm (obrazy JPEG2000/JBIG2, profile
