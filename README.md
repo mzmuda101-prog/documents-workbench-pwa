@@ -38,6 +38,13 @@ Siostrzana aplikacja [Sheet Workbench PWA](../sheet-workbench-pwa/README.md).
   Worda („razem z następnym”, wiersze razem, wdowy/sieroty) i odstępy wierszy jak w Wordzie;
   sprawdzone z prawdziwym Wordem (`npm run test:pages`). Przybliżone przy czcionkach, których
   przeglądarka nie ma i dla których nie ma zamiennika (niżej)
+- **Przypisy dolne i końcowe** (`app/doc-notes.js`): numer jak w Wordzie (ciągły przez cały
+  dokument, format z ustawień pliku — 1, i, a, *), dymek z treścią przypisu po najechaniu na
+  odnośnik (na dotyku przytrzymanie), klik (Czytanie) / dwuklik (Edycja) → skok do przypisu i
+  „↩ Wróć”, klik w numer przypisu wraca do tekstu. Akapity z odnośnikiem są edytowalne (odnośnik
+  to nienaruszalna „wyspa”), tekst przypisu poprawia się na dole strony (Enter = nowy akapit
+  przypisu, numeru nie da się skasować) — zapis do `footnotes.xml` / `endnotes.xml`, razem z
+  Cofnij, szkicem i kartami. Przypis z tabelą/polem — tylko do odczytu. `npm run test:notes`
 - **Czcionki jak w Wordzie bez Office** (iPhone, Android, Mac bez Office): brakujące Calibri,
   Cambria, Arial, Times New Roman, Courier New i Georgia zastępują darmowe kroje o IDENTYCZNYCH
   szerokościach liter (Carlito, Caladea, Arimo, Tinos, Cousine, Gelasio) — wiersze i strony
@@ -117,6 +124,7 @@ npm run test:caret    # poruszanie się kursorem między akapitami (Chromium + W
 npm run test:flows    # funkcje klikane jak użytkownik (Chromium + WebKit)
 npm run test:export   # eksport, statystyki, import/eksport JSON, usuwanie danych osobowych
 npm run test:keys     # klawiatura, tryb skupienia, podpowiedzi
+npm run test:notes    # przypisy: numery, dymek, skok, edycja treści i przypisów, zapis (Chromium + WebKit)
 npm run test:fonts    # zamienniki krojów Office: szerokości jak w Wordzie, offline (Chromium + WebKit)
 npm run bench         # pomiar wydajności na dużych dokumentach (~100 i ~300 stron, CPU ×4)
 npm run test:stress   # pełny przebieg na dużym .docx (wymaga npm run serve)

@@ -19,9 +19,11 @@ function collapseSpacesKeepNewlines(s) {
 // <ol> przypisów. Dawniej brane było każde <p> z PIERWSZEJ sekcji — z nagłówkiem i
 // przypisami, bez dalszych sekcji — więc numery akapitów przesuwały się względem pliku
 // i zapis edycji trafiał w cudze akapity (np. nagłówek „Poufne” wpisany w treść).
+// Druga połówka akapitu podzielonego podziałem strony (data-dwb-cont, łatka nr 6 docx-preview)
+// to dalej TEN SAM akapit pliku — nie liczy się jako osobny.
 function collectPreviewParagraphElements(host) {
   if (!host) return [];
-  const body = host.querySelectorAll("section.docx > article p");
+  const body = host.querySelectorAll("section.docx > article p:not([data-dwb-cont])");
   if (body.length) return Array.from(body);
   const docxRoot = host.querySelector(".docx") || host;
   return Array.from(docxRoot.querySelectorAll("p"));
@@ -30,9 +32,9 @@ function collectPreviewParagraphElements(host) {
 // Akapity, których edycja w podglądzie zgubiłaby coś z pliku: zapis akapitu przepisuje jego
 // fragmenty tekstu od nowa (applyRunsToParagraphXml), więc przypis, obraz, pole, link czy
 // śledzona zmiana w środku by przepadły. Takie akapity są tylko do odczytu, z wyjaśnieniem.
+// Odnośnik do przypisu NIE blokuje — jest „wyspą” (doc-notes.js), jak znacznik komentarza.
 const INLINE_LOCK_TAGS = [
   ["ins", "lockTracked"], ["del", "lockTracked"], ["moveFrom", "lockTracked"], ["moveTo", "lockTracked"], ["rPrChange", "lockTracked"],
-  ["footnoteReference", "lockNote"], ["endnoteReference", "lockNote"],
   ["drawing", "lockObject"], ["pict", "lockObject"], ["object", "lockObject"],
   ["fldChar", "lockField"], ["fldSimple", "lockField"],
 ];
@@ -48,14 +50,18 @@ function paragraphCommentLock(xp) {
 
 // Znaczniki komentarza w podglądzie: puste <span data-cm> w tych samych miejscach tekstu co w pliku
 // (podgląd ich nie rysuje). Zapis akapitu oddaje je jako „wyspy” — komentarz nie ginie przy pisaniu.
-function stampCommentMarks(xp, el, nextKey) {
+// noteLabels — długości numerów przypisów (odnośnik / numer na początku przypisu) w kolejności:
+// w pliku mają zerową długość, a w podglądzie numer to tekst — przesuwa położenia za nim.
+function stampCommentMarks(xp, el, nextKey, noteLabels = []) {
   const parts = paragraphXmlParts(xp);
   if (!parts.some((n) => n.localName !== "r" || isCommentReferenceRun(n))) return;
-  el.querySelectorAll("span[data-cm]").forEach((x) => x.remove());
+  el.querySelectorAll('span[data-cm]:not([data-cm-kind="note"])').forEach((x) => x.remove());
   let offset = 0;
+  let noteAt = 0;
   const groups = new Map(); // przesunięcie → [znaczniki po kolei]
   parts.forEach((n) => {
     if (n.localName === "sdt") { offset += ffText(ffKid(n, "sdtContent")).length; return; }
+    if (noteRunKind(n)) { offset += noteLabels[noteAt++] || 0; return; }
     if (n.localName !== "r" || isCommentReferenceRun(n)) {
       const key = nextKey();
       docIslandXml.set(key, new XMLSerializer().serializeToString(n));
@@ -71,17 +77,26 @@ function stampCommentMarks(xp, el, nextKey) {
     }
     Array.from(n.childNodes).forEach((c) => {
       if (c.localName === "t") offset += (c.textContent || "").length;
-      else if (c.localName === "br") offset += 1;
+      else if (c.localName === "br" || c.localName === "tab") offset += 1;
     });
   });
   groups.forEach((spans, at) => {
     const frag = document.createDocumentFragment();
     spans.forEach((sp) => frag.appendChild(sp));
     const range = at > 0 ? formDomRange(el, at, at) : null;
+    // tuż za numerem przypisu położenie wypada W JEGO tekście — znacznik idzie za wyspę
+    const inNote = range && (range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement)?.closest?.('[data-cm-kind="note"]');
+    if (inNote && el.contains(inNote)) { range.setStartAfter(inNote); range.collapse(true); }
     if (range) range.insertNode(frag);
     else if (at === 0) el.insertBefore(frag, el.firstChild);
     else el.appendChild(frag);
   });
+}
+
+// Podział strony / kolumny W akapicie: model akapitu zna tylko złamanie wiersza — zapis zamieniłby
+// podział strony na zwykłe złamanie (a podgląd dzieli taki akapit na dwa). Tylko do odczytu.
+function paragraphPageBreakLock(xp) {
+  return Array.from(xp.getElementsByTagNameNS(W_NS, "br")).some((br) => /^(page|column)$/.test(br.getAttributeNS(W_NS, "type") || br.getAttribute("w:type") || "")) ? "lockPageBreak" : null;
 }
 
 function paragraphNestedRunLock(xp) {
@@ -130,25 +145,40 @@ async function markLockedParagraphs(bytes) {
     await refreshFormScan().catch(() => {});
     if (bytes !== originalFileBytes) return;
   }
+  // przypisy: numery jak w Wordzie i treść do dymków — PRZED oznaczaniem (długości numerów)
+  if (typeof dwbNotes !== "undefined") {
+    await dwbNotes.prepare(bytes).catch((e) => log(`Przypisy: ${e.message || e}`, "error"));
+    if (bytes !== originalFileBytes) return;
+  }
   const previews = collectPreviewParagraphElements(host);
   const boxes = new Map(); // rodzic akapitu w pliku → numer „pojemnika”
   let commentKey = 0;
+  const nextKey = () => `c${commentKey++}`;
   collectParagraphElements(doc.documentElement, "all").forEach((xp, i) => {
     const el = previews[i];
     if (!el) return;
     if (!boxes.has(xp.parentNode)) boxes.set(xp.parentNode, String(boxes.size));
     el.dataset.box = boxes.get(xp.parentNode);
     const hit = INLINE_LOCK_TAGS.find(([tag]) => xp.getElementsByTagNameNS(W_NS, tag).length);
-    let lock = formParagraphLock(xp) || hit?.[1] || paragraphNestedRunLock(xp) || paragraphCommentLock(xp); // pole formularza Worda: docx-forms.js
+    let lock = formParagraphLock(xp) || hit?.[1] || paragraphPageBreakLock(xp) || paragraphNestedRunLock(xp) || paragraphCommentLock(xp); // pole formularza Worda: docx-forms.js
     if (!lock && !stampParagraphLinks(xp, el)) lock = "lockLink";
     if (!lock) {
       const keys = Array.from(xp.childNodes).filter((n) => islandKey.has(n)).map((n) => islandKey.get(n));
       if (keys.some((k) => !el.querySelector(`.ff-field[data-ff="${k}"]`))) lock = "lockForm";
     }
-    if (!lock) stampCommentMarks(xp, el, () => `c${commentKey++}`);
+    const hasRef = xp.getElementsByTagNameNS(W_NS, "footnoteReference").length || xp.getElementsByTagNameNS(W_NS, "endnoteReference").length;
+    if (!lock && hasRef) lock = typeof dwbNotes !== "undefined" ? dwbNotes.stampRefs(xp, el, nextKey) : "lockNote";
+    if (!lock) stampCommentMarks(xp, el, nextKey, hasRef ? dwbNotes.refLabelLengths(el) : []);
     if (lock) el.dataset.lock = lock;
     else delete el.dataset.lock;
   });
+  // druga połówka akapitu z podziałem strony — ta sama blokada co pierwsza
+  let owner = null;
+  host.querySelectorAll("section.docx > article p").forEach((p) => {
+    if (!p.dataset.dwbCont) { owner = p; return; }
+    p.dataset.lock = owner?.dataset.lock || "lockPageBreak";
+  });
+  if (typeof dwbNotes !== "undefined") dwbNotes.setupList(nextKey); // tekst przypisów na dole strony
   if (typeof composeUi !== "undefined") {
     composeUi.paintCommentHighlights(); // podświetlenie komentowanego tekstu
     composeUi.fixPreviewPageNumbers(); // numery stron w nagłówkach/stopkach podglądu
@@ -205,7 +235,17 @@ function resetInlineDirtyAfterRender() {
   inlineDirtyValid = true;
 }
 
+// Zmiany do zapisu: akapity treści ({ index, runs }) + przypisy ({ note, paras }, doc-notes.js).
+// Wszyscy odbiorcy (Zapisz, Cofnij, szkic, karty, przerysowanie) podają listę dalej jako
+// op „paragraphBatch” — buildPatchedDocx kieruje przypisy do footnotes.xml / endnotes.xml.
 function collectInlineParagraphEdits() {
+  const body = collectBodyParagraphEdits();
+  if (inlineLocksPending || typeof dwbNotes === "undefined") return body;
+  const notes = dwbNotes.collectEdits();
+  return notes.length ? [...body, ...notes] : body;
+}
+
+function collectBodyParagraphEdits() {
   const host = docCanvasEl?.querySelector(".docx-preview-host");
   if (!host || !baselineParagraphRuns.length || inlineLocksPending) return [];
   const previews = collectPreviewParagraphElements(host);
@@ -243,12 +283,15 @@ function restoreInlineParagraphs(snapshotEdits) {
   if (!host || !inlineDirtyValid || inlineStructuralPending) return false;
   const previews = collectPreviewParagraphElements(host);
   if (previews.length !== baselineParagraphRuns.length) return false;
+  // przypisy — pełna ścieżka (przebudowa pliku), szybka zna tylko akapity treści
+  if ((snapshotEdits || []).some((e) => e.note) || (typeof dwbNotes !== "undefined" && dwbNotes.collectEdits().length)) return false;
   const want = new Map((snapshotEdits || []).map((e) => [e.index, e.runs]));
   const touch = new Set([...collectInlineParagraphEdits().map((e) => e.index), ...want.keys()]);
   // akapit z polem formularza: odbudowa z fragmentów zgubiłaby opakowanie pola — rysujemy od nowa
   for (const i of touch) {
     const runs = want.has(i) ? want.get(i) : pristineParas.get(previews[i]) ? null : baselineParagraphRuns[i];
-    if (runs?.some((r) => r.island)) return false;
+    // akapit z wyspą (pole, komentarz, przypis): kopia z renderu nie ma oznaczeń wysp — rysujemy od nowa
+    if (runs?.some((r) => r.island || r.tab) || baselineParagraphRuns[i]?.some((r) => r.island || r.tab)) return false;
   }
   touch.forEach((i) => {
     const p = previews[i];
@@ -512,6 +555,15 @@ function placeCaret(el, offset) {
   const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
   let node = walker.nextNode();
   while (node) {
+    // wyspa (numer przypisu, pole) — kursor przed albo za nią, nigdy w środku (tam nie da się pisać)
+    const island = node.parentElement?.closest('[contenteditable="false"]');
+    if (island && island !== el && el.contains(island) && remaining <= node.length) {
+      if (remaining === 0) range.setStartBefore(island); else range.setStartAfter(island);
+      range.collapse(true);
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+      return;
+    }
     if (remaining <= node.length) {
       range.setStart(node, remaining);
       range.collapse(true);
@@ -766,6 +818,7 @@ async function onDocCanvasKeydown(e) {
 
   const p = e.target.closest?.(".docx-editable-p");
   if (!p) return;
+  if (p.dataset.noteKey) { dwbNotes.keydown(p, e); return; } // tekst przypisu (doc-notes.js)
 
   const paraIndex = resolveParaIndex(p);
   if (paraIndex < 0) return;
@@ -880,6 +933,18 @@ function syncInlineEditMode() {
       document.addEventListener("selectionchange", onFormatSelectionChange);
     }
   }
+  // druga połówka akapitu z podziałem strony: nigdy edytowalna, wyjaśnienie jak przy blokadzie
+  host.querySelectorAll("p[data-dwb-cont]").forEach((p) => {
+    p.contentEditable = "false";
+    p.classList.toggle("docx-locked-p", editable);
+    if (editable && p.dataset.lock) {
+      p.dataset.hint = "";
+      p.dataset.hintPl = I18N.pl[p.dataset.lock];
+      p.dataset.hintEn = I18N.en[p.dataset.lock];
+      p.dataset.hintTouch = "on";
+    } else ["hint", "hintPl", "hintEn", "hintTouch"].forEach((k) => delete p.dataset[k]);
+  });
+  if (typeof dwbNotes !== "undefined") dwbNotes.sync(editable);
   docCanvasEl?.classList.toggle("edit-mode", editable);
   docCanvasEl?.classList.toggle("read-only", readOnlyMode);
   syncFormatToolbar();
@@ -919,6 +984,7 @@ async function mergeInlineEditsIntoBytes() {
   const { bytes, changeCount } = await buildPatchedDocx(originalFileBytes, [{ op: "paragraphBatch", items: inlineEdits }]);
   originalFileBytes = bytes;
   await refreshInlineEditBaseline(bytes);
+  if (typeof dwbNotes !== "undefined") dwbNotes.rebase();
   if (changeCount > 0) setDirtyState(true);
   return changeCount;
 }

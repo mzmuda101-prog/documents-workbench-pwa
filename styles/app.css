@@ -1658,6 +1658,20 @@ textarea.ff-pop-input { min-height: 4.5em; resize: vertical; }
 /* Obrazy zakotwiczone do strony (mapki, skany, warstwa grafiki z PDF) — „za tekstem” ma z-index −1,
    więc strona musi mieć własny kontekst warstw, inaczej obraz schowałby się pod białą kartką. */
 section.docx { isolation: isolate; }
+
+/* ── przypisy (doc-notes.js) ── jak w Wordzie: krótka kreska nad listą, numer w tekście
+   przypisu (wyspa „note-mark”), bez wcięcia listy; odnośnik w treści z dymkiem treści */
+section.docx > ol.dwb-notes { list-style: none; margin: 10pt 0 0; padding: 5pt 0 0; position: relative; }
+section.docx > ol.dwb-notes::before { content: ""; position: absolute; top: 0; left: 0; width: min(144pt, 33%); border-top: 0.75pt solid currentColor; opacity: 0.75; }
+section.docx > ol.dwb-notes > li { margin: 0; padding: 0; }
+section.docx > ol.dwb-notes > li.dwb-note-native { list-style: decimal outside; margin-left: 1.6em; }
+section.docx > ol.dwb-notes > li > p { margin-top: 0; }
+sup[data-dwb-note], sup.note-mark { line-height: 0; cursor: pointer; border-radius: 3px; }
+sup[data-dwb-note]:hover, sup.note-mark:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.note-flash { animation: note-flash 1.6s ease-out; }
+@keyframes note-flash { 0%, 35% { background: color-mix(in srgb, var(--accent) 22%, transparent); } 100% { background: transparent; } }
+.cursor-hint.note-hint .cursor-hint-scaler { max-width: min(380px, calc(100vw - 32px)); font-weight: 400; font-size: 12.5px; line-height: 1.45; text-align: left; justify-content: flex-start; }
+@media (prefers-reduced-motion: reduce) { .note-flash { animation: none; outline: 2px solid var(--accent); } }
 /* Word nie podciąga par liter (kerning) ani nie łączy „fi” w ligatury, jeśli plik tego nie każe —
    przeglądarka robi to domyślnie i tekst wychodził węższy: inaczej zawijały się wiersze. */
 section.docx { font-kerning: none; font-variant-ligatures: none; }

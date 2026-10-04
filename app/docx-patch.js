@@ -696,7 +696,12 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
   let coreXml = null;
   const list = edits || [];
   for (let i = 0; i < list.length; i++) {
-    const normalized = list[i].op ? list[i] : { ...list[i], op: "replace" };
+    let normalized = list[i].op ? list[i] : { ...list[i], op: "replace" };
+    // tekst przypisów (doc-notes.js) — do footnotes.xml / endnotes.xml; akapity treści dalej niżej
+    if (normalized.op === "paragraphBatch" && normalized.items?.some((it) => it.note)) {
+      if (typeof applyNoteEditsInZip === "function") total += await applyNoteEditsInZip(zip, normalized.items.filter((it) => it.note));
+      normalized = { ...normalized, items: normalized.items.filter((it) => !it.note) };
+    }
     if (normalized.op === "coreMetadata") {
       if (typeof prepareCoreMetadataInZip === "function" && coreXml === null) {
         coreXml = await prepareCoreMetadataInZip(zip);

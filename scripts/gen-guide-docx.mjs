@@ -115,7 +115,7 @@ const body = [
   p([
     "Aplikacja pokazuje przypisy tak jak Word",
     { raw: '<w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:footnoteReference w:id="1"/></w:r>' },
-    " — ich lista jest też w panelu Recenzja.",
+    ". Najedź na numer przypisu, żeby zobaczyć jego treść; w Edycji dwuklik przenosi do przypisu na dole strony — jego tekst poprawisz tam jak zwykły akapit (Enter = nowy akapit przypisu), a klik w numer przypisu wraca do tekstu. Lista przypisów jest też w panelu Recenzja.",
   ]),
   table([
     ["Funkcja", "Gdzie", "Skrót"],

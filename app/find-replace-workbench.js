@@ -217,7 +217,7 @@ async function runFindReplaceScan() {
   // zamiana i tak scala najpierw — applyDocumentEdit — więc numeracja się zgadza.)
   if (typeof waitInlineStructuralIdle === "function") await waitInlineStructuralIdle();
   const pending = typeof collectInlineParagraphEdits === "function" ? collectInlineParagraphEdits() : [];
-  const override = new Map(pending.map((e) => [e.index, previewRunsToPlainText(e.runs).replace(/\n/g, "")]));
+  const override = new Map(pending.filter((e) => !e.note).map((e) => [e.index, previewRunsToPlainText(e.runs).replace(/\n/g, "")]));
   const doc = await getDocumentXmlDom(originalFileBytes);
   const paras = docBodyParagraphs(docCanvasEl);
   frMatches = doc ? scanFindMatchesInDoc(doc, edit, edit.scope, override).map((m) => ({ ...m, el: paras[m.paraIndex] })) : [];

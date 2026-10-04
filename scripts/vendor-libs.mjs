@@ -72,8 +72,35 @@ function patchBundle() {
   const XML = (src.slice(Math.max(0, mSp.index - 4000), mSp.index).match(/(\w+)\.lengthAttr\(\w+,"val",\w+\.FontSize\)/) || [])[1];
   if (!XML) throw new Error("łatka spacing przebiegu: brak lengthAttr w pobliżu");
   src = src.replace(reSp, (_, T, K, E) => `case"spacing":${T}.localName=="pPr"?this.parseSpacing(${K},${E}):${T}.localName=="rPr"&&(${E}["letter-spacing"]=${XML}.lengthAttr(${K},"val"));break;`);
-  fs.writeFileSync(OUT, src);
   console.log("  ✅  łatka: odstępy między znakami w przebiegu (letter-spacing)");
+
+  // 5) Przypisy: docx-preview numerował od 1 na KAŻDEJ stronie podglądu (Word — ciągle przez
+  //    dokument) i nie zostawiał śladu, który przypis wskazuje odnośnik. Numer ciągły + na
+  //    odnośniku i pozycji listy „footnote:ID” / „endnote:ID” — app/doc-notes.js robi z tego
+  //    dymek z treścią, skok do przypisu, edycję tekstu przypisu i format numeru z ustawień.
+  for (const kind of ["Footnote", "Endnote"]) {
+    const reRef = new RegExp(`render${kind}Reference\\((\\w+)\\)\\{var (\\w+)=this\\.createElement\\("sup"\\);return this\\.current${kind}Ids\\.push\\(\\1\\.id\\),\\2\\.textContent=\`\\$\\{this\\.current${kind}Ids\\.length\\}\``);
+    if (!reRef.test(src)) throw new Error(`łatka przypisów: wzorzec render${kind}Reference nie pasuje (nowa wersja docx-preview?)`);
+    const low = kind.toLowerCase();
+    src = src.replace(reRef, (_, el, sup) => `render${kind}Reference(${el}){var ${sup}=this.createElement("sup");return this.current${kind}Ids.push(${el}.id),this.__dwb${kind}N=(this.__dwb${kind}N||0)+1,${sup}.dataset.dwbNote="${low}:"+${el}.id,${sup}.dataset.dwbNoteNum=this.__dwb${kind}N,${sup}.textContent=\`\${this.__dwb${kind}N}\``);
+  }
+  const reNotes = /renderNotes\((\w+),(\w+),(\w+)\)\{var (\w+)=\1\.map\((\w+)=>\2\[\5\]\)\.filter\(\5=>\5\);if\(\4\.length>0\)\{var (\w+)=this\.createElement\("ol",null,this\.renderElements\(\4\)\);\3\.appendChild\(\6\)\}/;
+  if (!reNotes.test(src)) throw new Error("łatka przypisów: wzorzec renderNotes nie pasuje (nowa wersja docx-preview?)");
+  src = src.replace(reNotes, (_, ids, map, into, notes, x, ol) => `renderNotes(${ids},${map},${into}){var ${notes}=${ids}.map(${x}=>${map}[${x}]).filter(${x}=>${x});if(${notes}.length>0){var ${ol}=this.createElement("ol",null,this.renderElements(${notes}));var __k=${map}===this.footnoteMap?"footnote":"endnote";${ol}.className="dwb-notes dwb-notes-"+__k;${notes}.forEach((__n,__i)=>{var __li=${ol}.children[__i];__li&&(__li.dataset.dwbNote=__k+":"+__n.id)});${into}.appendChild(${ol})}`);
+  console.log("  ✅  łatka: przypisy — numeracja ciągła, odnośnik i pozycja listy z id przypisu");
+
+  // 6) Podział strony W ŚRODKU akapitu (tekst za <w:br w:type="page"/>): docx-preview dzieli
+  //    akapit na dwa <p>. Dawniej akapity podglądu rozjeżdżały się od tego miejsca z plikiem
+  //    (edycja dalszych trafiała w złe akapity albo przepadała). Druga połówka dostaje
+  //    data-dwb-cont — collectPreviewParagraphElements ją pomija, cały akapit tylko do odczytu.
+  const reSplit = /var (\w+)=(\w+)\.children,(\w+)=\{\.\.\.\2,children:\1\.slice\((\w+)\)\};/;
+  if (!reSplit.test(src)) throw new Error("łatka podziału akapitu: wzorzec splitBySection nie pasuje (nowa wersja docx-preview?)");
+  src = src.replace(reSplit, (_, kids, p, np, idx) => `var ${kids}=${p}.children,${np}={...${p},children:${kids}.slice(${idx}),__dwbCont:!0};`);
+  const reRenderP = /renderParagraph\((\w+)\)\{var (\w+)=this\.renderContainer\(\1,"p"\);/;
+  if (!reRenderP.test(src)) throw new Error("łatka podziału akapitu: wzorzec renderParagraph nie pasuje");
+  src = src.replace(reRenderP, (_, el, p) => `renderParagraph(${el}){var ${p}=this.renderContainer(${el},"p");${el}.__dwbCont&&(${p}.dataset.dwbCont="1");`);
+  fs.writeFileSync(OUT, src);
+  console.log("  ✅  łatka: druga połówka akapitu podzielonego podziałem strony oznaczona");
 }
 
 // pdf.js (konwersja PDF → DOCX): moduł główny + worker + wasm (obrazy JPEG2000/JBIG2, profile

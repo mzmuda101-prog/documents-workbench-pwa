@@ -74,8 +74,9 @@ async function run() {
   await page.evaluate(() => { readModeEl.checked = false; readModeEl.dispatchEvent(new Event("change", { bubbles: true })); });
   await page.waitForTimeout(400);
   const locks = await page.evaluate(() => collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).map((p) => `${p.dataset.lock || "-"}:${p.contentEditable}`));
-  check("blokady: śledzone zmiany (akapity 2, 4, 5 — też sama zmiana formatu) i przypis końcowy (9) tylko do odczytu",
-    locks[1] === "lockTracked:false" && locks[3] === "lockTracked:false" && locks[4] === "lockTracked:false" && locks[8] === "lockNote:false", locks.join(" "));
+  // akapit z odnośnikiem do przypisu (9) — od 2026-10-04 edytowalny, odnośnik to „wyspa” (doc-notes.js)
+  check("blokady: śledzone zmiany (akapity 2, 4, 5 — też sama zmiana formatu); akapit z przypisem końcowym (9) edytowalny",
+    locks[1] === "lockTracked:false" && locks[3] === "lockTracked:false" && locks[4] === "lockTracked:false" && locks[8] === "-:true", locks.join(" "));
   check("akapit ze zmianą tylko formatu AKAPITU (wyrównanie) edytowalny — zapis tekstu jej nie rusza", locks[5] === "-:true", locks[5]);
   check("akapit z samym komentarzem da się edytować", locks[2] === "-:true", locks[2]);
   check("mapowanie: w podglądzie tyle akapitów treści, ile w pliku (bez nagłówka i przypisów)",
@@ -137,7 +138,7 @@ async function run() {
 
   // plik po zmianach dalej się otwiera (podgląd bez błędów)
   const unlocked = await page.evaluate(() => collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).map((p) => p.dataset.lock || "-"));
-  check("po rozstrzygnięciu zmian akapit 2 znów edytowalny, przypis dalej chroniony", unlocked[1] === "-" && unlocked.includes("lockNote"), unlocked.join(" "));
+  check("po rozstrzygnięciu zmian akapit 2 znów edytowalny (i nic nie jest zablokowane)", unlocked[1] === "-" && unlocked.every((l) => l === "-"), unlocked.join(" "));
   check("podgląd dokumentu działa po zmianach", await page.evaluate(() => document.querySelectorAll(".docx-preview-host p").length > 5));
 
   // ── dokument z podziałami strony = kilka <section> w podglądzie ────────────

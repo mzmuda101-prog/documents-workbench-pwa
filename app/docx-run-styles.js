@@ -89,8 +89,9 @@ function mergeAdjacentRuns(runs) {
       return;
     }
     if (run.island) { out.push({ ...run }); return; } // pole formularza — nienaruszalna „wyspa”
+    if (run.tab) { out.push({ ...run }); return; } // tabulator — osobny element (<w:tab/>)
     const prev = out[out.length - 1];
-    if (prev && !prev.break && !prev.island && runsStyleEqual(prev, run)) {
+    if (prev && !prev.break && !prev.island && !prev.tab && runsStyleEqual(prev, run)) {
       prev.text += run.text;
       return;
     }
@@ -105,17 +106,28 @@ function extractRunsFromPreviewParagraph(pEl) {
 
   function walk(node, inherited = {}) {
     if (node.nodeType === Node.TEXT_NODE) {
-      const text = node.textContent || "";
+      // U+FEFF = miejsce na kursor za odnośnikiem przypisu (doc-notes.js) — nie jest treścią
+      const text = (node.textContent || "").replace(/\uFEFF/g, "");
       if (!text) return;
       // Shift+Enter / wklejone wiersze: przeglądarka przy white-space: pre-wrap wstawia znak
       // „\n” zamiast <br>. W pliku musi to być <w:br/> — „\n” w <w:t> Word pokazuje jako spację.
       text.split("\n").forEach((part, i) => {
         if (i) runs.push({ break: true });
-        if (part) runs.push({ text: part, ...inherited });
+        // tabulator wpisany klawiszem Tab = znak „\t” — w pliku <w:tab/>, jak tabulator z pliku
+        part.split("\t").forEach((seg, j) => {
+          if (j) runs.push({ tab: true, text: "\t", ...inherited });
+          if (seg) runs.push({ text: seg, ...inherited });
+        });
       });
       return;
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return;
+    // tabulator z pliku: docx-preview rysuje <span class="docx-tab">&emsp;</span>. Dawniej szedł do
+    // pliku jako spacja szerokości „em” — po edycji akapitu wyrównanie do tabulatora znikało.
+    if (node.classList?.contains("docx-tab")) {
+      runs.push({ tab: true, text: "\t", ...inherited });
+      return;
+    }
     // pole formularza w zdaniu (docx-forms.js): cała kontrolka z pliku, bez zmian
     if (node.dataset?.ff && docIslandXml.has(node.dataset.ff)) {
       runs.push({ island: docIslandXml.get(node.dataset.ff), text: node.textContent || "" });
@@ -158,6 +170,8 @@ function runsEqual(a, b) {
     if (!!run.break !== !!other.break) return false;
     if (run.break) return true;
     if (run.island || other.island) return run.island === other.island;
+    if (!!run.tab !== !!other.tab) return false;
+    if (run.tab) return true; // styl samego tabulatora nie ma znaczenia
     return run.text === other.text && runsStyleEqual(run, other);
   });
 }
@@ -212,6 +226,18 @@ function isCommentReferenceRun(r) {
   return r.localName === "r" && Array.from(r.childNodes).some((n) => n.localName === "commentReference");
 }
 
+// Przypisy (doc-notes.js): „ref” = odnośnik w treści (podgląd rysuje numer <sup>), „mark” = numer
+// na początku tekstu przypisu (podgląd go nie rysuje — numer daje lista). Oba to „wyspy”: zapis
+// akapitu oddaje cały fragment z pliku bez zmian, więc pisanie obok nie gubi przypisu.
+function noteRunKind(r) {
+  if (r.localName !== "r") return null;
+  for (const n of r.childNodes) {
+    if (n.localName === "footnoteReference" || n.localName === "endnoteReference") return "ref";
+    if (n.localName === "footnoteRef" || n.localName === "endnoteRef") return "mark";
+  }
+  return null;
+}
+
 function extractRunsFromParagraphXml(pEl) {
   const runs = [];
   paragraphXmlParts(pEl).forEach((r) => {
@@ -220,7 +246,7 @@ function extractRunsFromParagraphXml(pEl) {
       return;
     }
     // komentarz: początek/koniec zakresu i fragment z odwołaniem — „wyspy” o zerowej długości
-    if (r.localName !== "r" || isCommentReferenceRun(r)) {
+    if (r.localName !== "r" || isCommentReferenceRun(r) || noteRunKind(r)) {
       runs.push({ island: new XMLSerializer().serializeToString(r), text: "" });
       return;
     }
@@ -258,6 +284,7 @@ function extractRunsFromParagraphXml(pEl) {
     Array.from(r.childNodes).forEach((n) => {
       if (n.namespaceURI !== W_NS) return;
       if (n.localName === "br") runs.push({ break: true });
+      else if (n.localName === "tab") runs.push({ tab: true, text: "\t", ...style });
       else if (n.localName === "t" && n.textContent) runs.push({ text: n.textContent, ...style });
     });
   });
@@ -343,11 +370,17 @@ function createRunElement(doc, run) {
     Array.from(rPr.childNodes).sort((x, y) => order.indexOf(x.localName) - order.indexOf(y.localName)).forEach((n) => rPr.appendChild(n));
     r.appendChild(rPr);
   }
-  const t = doc.createElementNS(W_NS, "t");
-  const text = sanitizeXmlText(run.text || "");
-  if (/^\s|\s$/.test(text)) t.setAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:space", "preserve");
-  t.textContent = text;
-  r.appendChild(t);
+  // Tekst z tabulatorami: „\t” → <w:tab/> (w <w:t> Word pokazałby go jako spację). Bez względu
+  // na znacznik „tab” — fragment mógł odziedziczyć go razem ze stylem sąsiada.
+  String(run.text || "").split("\t").forEach((seg, i) => {
+    if (i) r.appendChild(doc.createElementNS(W_NS, "tab"));
+    const text = sanitizeXmlText(seg);
+    if (!text) return;
+    const t = doc.createElementNS(W_NS, "t");
+    if (/^\s|\s$/.test(text)) t.setAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:space", "preserve");
+    t.textContent = text;
+    r.appendChild(t);
+  });
   return r;
 }
 
