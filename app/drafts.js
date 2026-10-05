@@ -260,7 +260,10 @@ const dwbDrafts = (() => {
     if (job !== renderJob || originalFileBytes) return;
     host.replaceChildren();
     host.hidden = !recs.length;
-    recs.slice(0, 5).forEach((r) => {
+    // Pełna karta tylko dla najnowszego szkicu; reszta pod zwijanym „Pozostałe (N)” z własnym
+    // przewijaniem — dawniej do 5 pełnych kart jedna pod drugą zasłaniało ekran startowy
+    // (zgłoszenie Mateusza 2026-10-05). Szkice nie obciążają aplikacji (czytane raz przy starcie).
+    const cardFor = (r) => {
       const card = document.createElement("div");
       card.className = "draft-card";
       card.setAttribute("role", "group");
@@ -285,8 +288,20 @@ const dwbDrafts = (() => {
       no.addEventListener("click", () => discard(r.id, r.fileName));
       actions.append(ok, no);
       card.append(head, name, meta, actions);
-      host.append(card);
-    });
+      return card;
+    };
+    if (recs[0]) host.append(cardFor(recs[0]));
+    if (recs.length > 1) {
+      const more = document.createElement("details");
+      more.className = "draft-more";
+      const sum = document.createElement("summary");
+      sum.textContent = t("draftMore", { count: recs.length - 1 });
+      const list = document.createElement("div");
+      list.className = "draft-more-list";
+      recs.slice(1, 12).forEach((r) => list.append(cardFor(r)));
+      more.append(sum, list);
+      host.append(more);
+    }
     if (recs.length) {
       const note = document.createElement("p");
       note.className = "draft-note";
