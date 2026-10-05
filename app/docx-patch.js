@@ -740,6 +740,38 @@ function commentRefIds(xml) {
   return new Set([...String(xml).matchAll(/<w:commentReference\b[^>]*\bw:id="(-?\d+)"/g)].map((m) => m[1]));
 }
 
+// Naprawa nazw krojów zepsutych przez starsze wersje (do 2026-10-05): podgląd ma
+// „"DM Sans", sans-serif”, odczyt obcinał tylko początkowy cudzysłów i do pliku szło
+// w:ascii="DM Sans&quot;" — Word nie znajdował takiego kroju. Przy każdym zapisie: bez cudzysłowów.
+function repairFontNames(xml) {
+  if (!xml.includes("&quot;") && !xml.includes("&apos;")) return xml;
+  return xml.replace(/(<w:rFonts\b[^>]*>)/g, (tag) => tag.replace(/(w:(?:ascii|hAnsi|cs|eastAsia)=")([^"]*)"/g, (m, a, v) => `${a}${v.replace(/&quot;|&apos;/g, "").trim()}"`));
+}
+
+// Naprawy przy OTWARCIU pliku (w pamięci, przed podglądem; do pliku trafiają przy zapisie):
+//  • BOM (\uFEFF) na początku części XML — tak zapisują niektóre programy (.NET). Parser XML
+//    w Safari odrzuca taki tekst: podgląd działał (ma własny parser), ale ZAPIS w Safari po cichu
+//    gubił wpisany tekst. Word czyta XML bez BOM tak samo.
+//  • zepsute nazwy krojów ze starszych wersji („DM Sans&quot;”) — podgląd pokazuje właściwy krój.
+// Zwraca te same bajty, gdy nie ma czego naprawiać.
+async function repairDocxFontNames(bytes) {
+  if (!window.JSZip || !bytes) return bytes;
+  try {
+    const zip = await window.JSZip.loadAsync(bytes);
+    let changed = false;
+    for (const f of Object.keys(zip.files)) {
+      if (zip.files[f].dir || !/\.(xml|rels)$/i.test(f)) continue;
+      const part = await zip.file(f).async("string");
+      let fixed = part.charCodeAt(0) === 0xfeff ? part.slice(1) : part;
+      if (/^word\/(document|header\d*|footer\d*|footnotes|endnotes|comments|styles)\.xml$/.test(f)) fixed = repairFontNames(fixed);
+      if (fixed !== part) { zip.file(f, fixed); changed = true; }
+    }
+    return changed ? await zip.generateAsync({ type: "uint8array", compression: "DEFLATE", compressionOptions: { level: 6 } }) : bytes;
+  } catch (_) {
+    return bytes;
+  }
+}
+
 async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
   if (!window.JSZip) throw new Error("JSZip missing");
   const zip = await window.JSZip.loadAsync(bytes);
@@ -856,8 +888,15 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
     const lost = [...commentRefsBefore].filter((id) => !after.has(id));
     if (lost.length) xml = (await applyRevisionsInZip(zip, xml, { op: "revisions", action: "removeComments", ids: lost })).xml;
   }
+  xml = repairFontNames(xml);
   zip.file("word/document.xml", xml);
   if (coreXml !== null) zip.file("docProps/core.xml", coreXml);
+  for (const f of Object.keys(zip.files)) {
+    if (!/^word\/(header\d*|footer\d*|footnotes|endnotes|comments|styles)\.xml$/.test(f)) continue;
+    const part = await zip.file(f).async("string");
+    const fixed = repairFontNames(part);
+    if (fixed !== part) zip.file(f, fixed);
+  }
   const out = await zip.generateAsync({
     type: "uint8array",
     compression: "DEFLATE",

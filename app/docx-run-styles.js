@@ -50,7 +50,9 @@ function parseSpanStyle(cssText) {
     if ((key === "text-decoration" || key === "text-decoration-line") && val.includes("line-through")) style.strike = true;
     if (key === "color") style.color = val;
     if (key === "background-color" || key === "background") { const h = normHighlight(val); if (h) style.highlight = h; }
-    if (key === "font-family") style.fontFamily = val.replace(/^["']|["']$/g, "").split(",")[0].trim();
+    // pierwsza rodzina z listy, bez cudzysłowów z OBU stron: podgląd ma „"DM Sans", sans-serif” —
+    // dawniej obcinany był tylko początkowy cudzysłów i do pliku szła nazwa kroju „DM Sans"”
+    if (key === "font-family") style.fontFamily = val.split(",")[0].trim().replace(/^["']+|["']+$/g, "").trim();
     if (key === "font-size") {
       const pt = cssFontSizeToPt(val);
       if (pt) style.fontSize = `${pt}pt`;
@@ -77,9 +79,15 @@ function runStyleToCss(run) {
   return parts.join(";");
 }
 
+// Trzy stany: włączone / jawnie WYŁĄCZONE (w:b w:val="0" — zwykły tekst w pogrubionym nagłówku)
+// / nieustawione (jak styl akapitu). Dawniej wyłączone = nieustawione: sklejanie fragmentów gubiło
+// wyłączenie i tekst w Wordzie wracał pogrubiony.
+const tri = (v) => (v === true ? 1 : v === false ? 0 : -1);
 function runsStyleEqual(a, b) {
-  return !!a.bold === !!b.bold
-    && !!a.italic === !!b.italic
+  // podkreślenie/przekreślenie: dwa stany — podgląd nie zostawia śladu jawnego „wyłączone”
+  // (w:u w:val="none" rysuje jak brak podkreślenia), więc porównanie i tak by się rozjechało
+  return tri(a.bold) === tri(b.bold)
+    && tri(a.italic) === tri(b.italic)
     && !!a.underline === !!b.underline
     && !!a.strike === !!b.strike
     && (parseCssColorToWordHex(a.color) || "") === (parseCssColorToWordHex(b.color) || "") // „rgb(5, 99, 193)” z podglądu = „#0563C1” z pliku
@@ -142,7 +150,7 @@ function extractRunsFromPreviewParagraph(pEl) {
       return;
     }
     if (node.dataset?.cm && docIslandXml.has(node.dataset.cm)) { // znacznik komentarza (docx-inline-edit.js)
-      runs.push({ island: docIslandXml.get(node.dataset.cm), text: "" });
+      runs.push({ island: docIslandXml.get(node.dataset.cm), text: node.dataset.cmKind === "sym" ? node.textContent : "" });
       return;
     }
     const tag = node.localName.toLowerCase();
@@ -250,49 +258,102 @@ function noteRunKind(r) {
   return null;
 }
 
+// Włączone/wyłączone (w:b, w:i, w:strike…): sam znacznik = włączone, w:val="0|false|off" = WYŁĄCZONE
+// (np. zwykły tekst w pogrubionym nagłówku). Dawniej każdy znacznik był „włączony” — po Cofnij
+// taki tekst wracał pogrubiony, a porównanie z podglądem widziało zmianę, której nie było.
+function wOnOff(el) {
+  if (!el) return undefined;
+  return !/^(0|false|off|none)$/i.test(getWVal(el) || "");
+}
+// Krój jak w docx-preview (parseFont): ascii, potem krój motywu (var(--docx-…-font)), potem
+// eastAsia — tak samo czyta go podgląd, więc porównanie i zapis mówią tym samym językiem.
+function xmlRunFont(fonts) {
+  const clean = (v) => String(v || "").replace(/["']/g, "").trim();
+  const ascii = clean(fonts.getAttributeNS(W_NS, "ascii") || fonts.getAttributeNS(W_NS, "hAnsi"));
+  if (ascii) return ascii;
+  const theme = fonts.getAttributeNS(W_NS, "asciiTheme") || fonts.getAttributeNS(W_NS, "hAnsiTheme");
+  if (theme) return `var(--docx-${theme}-font)`;
+  return clean(fonts.getAttributeNS(W_NS, "eastAsia")) || null;
+}
+// Format fragmentu w:r w modelu akapitu (pogrubienie, kolor, krój, rozmiar, link…).
+function xmlRunStyle(r) {
+  const style = {};
+  if (r.parentNode?.localName === "hyperlink") {
+    const ref = hyperlinkRef(r.parentNode);
+    if (ref) style.link = ref;
+  }
+  const rPr = Array.from(r.childNodes).find((n) => n.localName === "rPr" && n.namespaceURI === W_NS);
+  if (!rPr) return style;
+  const kid = (name) => Array.from(rPr.childNodes).find((n) => n.localName === name);
+  for (const [k, tag] of [["bold", "b"], ["italic", "i"], ["strike", "strike"]]) {
+    const v = wOnOff(kid(tag));
+    if (v !== undefined) style[k] = v;
+  }
+  const u = kid("u");
+  if (u) style.underline = !/^none$/i.test(getWVal(u) || "single");
+  const colorEl = kid("color");
+  const hex = colorEl ? getWVal(colorEl) : null;
+  if (hex && hex !== "auto") style.color = `#${hex.replace(/^#/, "")}`;
+  const fonts = kid("rFonts");
+  if (fonts) style.fontFamily = xmlRunFont(fonts);
+  const hl = kid("highlight");
+  const shd = kid("shd");
+  const hlVal = hl ? getWVal(hl) : null;
+  const shdFill = shd ? (shd.getAttributeNS(W_NS, "fill") || shd.getAttribute("w:fill")) : null;
+  if (hlVal && hlVal !== "none") style.highlight = normHighlight(hlVal);
+  else if (shdFill && shdFill !== "auto") style.highlight = normHighlight(`#${shdFill}`);
+  const sz = kid("sz");
+  if (sz) {
+    const half = parseInt(getWVal(sz) || "0", 10);
+    if (half) style.fontSize = `${half / 2}pt`;
+  }
+  return style;
+}
+
+// Symbol Worda (w:sym — znak z kroju Symbol/Wingdings, np. „§”, kratka formularza): podgląd rysuje
+// go jako <span style="font-family: Symbol">znak</span>. Fragment z SAMYM symbolem jest wyspą
+// z tekstem = ten znak (zapis oddaje oryginalne w:sym). Dawniej odczyt z pliku go pomijał,
+// a zapis pisanego akapitu po cichu gubił symbol.
+function isSymRun(r) {
+  return r?.localName === "r" && Array.from(r.childNodes).some((n) => n.localName === "sym" && n.namespaceURI === W_NS);
+}
+function symRunText(r) {
+  return Array.from(r.childNodes).filter((n) => n.localName === "sym").map((n) => {
+    const code = parseInt(n.getAttributeNS(W_NS, "char") || n.getAttribute("w:char") || "", 16);
+    return Number.isFinite(code) ? String.fromCharCode(code) : "";
+  }).join("");
+}
+// null = symbole da się zachować jako wyspy; inaczej powód blokady akapitu.
+function paragraphSymbolLock(xp) {
+  for (const s of Array.from(xp.getElementsByTagNameNS(W_NS, "sym"))) {
+    const r = s.parentNode;
+    if (r?.localName !== "r" || r.parentNode !== xp) return "lockSymbol";
+    if (Array.from(r.childNodes).some((n) => n.nodeType === 1 && !["rPr", "sym"].includes(n.localName))) return "lockSymbol";
+  }
+  return null;
+}
+
 function extractRunsFromParagraphXml(pEl) {
   const runs = [];
+  const symIslands = !paragraphSymbolLock(pEl);
+  // rysunek jako wyspa — ta sama reguła co w podglądzie (docx-inline-edit.js paragraphObjectLock),
+  // inaczej każdy akapit z rysunkiem wychodził „zmieniony” i był przepisywany przy zapisie
+  const objIslands = typeof isObjectRun === "function" && typeof paragraphObjectLock === "function" && !paragraphObjectLock(pEl);
   paragraphXmlParts(pEl).forEach((r) => {
     if (r.localName === "sdt") {
       runs.push({ island: new XMLSerializer().serializeToString(r), text: ffText(ffKid(r, "sdtContent")) });
       return;
     }
     // komentarz: początek/koniec zakresu i fragment z odwołaniem — „wyspy” o zerowej długości
-    if (r.localName !== "r" || isCommentReferenceRun(r) || noteRunKind(r)) {
+    if (symIslands && isSymRun(r)) {
+      runs.push({ island: new XMLSerializer().serializeToString(r), text: symRunText(r) });
+      return;
+    }
+    if (r.localName !== "r" || isCommentReferenceRun(r) || noteRunKind(r) || (objIslands && isObjectRun(r))) {
       runs.push({ island: new XMLSerializer().serializeToString(r), text: "" });
       return;
     }
-    const style = {};
-    if (r.parentNode?.localName === "hyperlink") {
-      const ref = hyperlinkRef(r.parentNode);
-      if (ref) style.link = ref;
-    }
-    const rPr = Array.from(r.childNodes).find((n) => n.localName === "rPr" && n.namespaceURI === W_NS);
-    if (rPr) {
-      if (Array.from(rPr.childNodes).some((n) => n.localName === "b")) style.bold = true;
-      if (Array.from(rPr.childNodes).some((n) => n.localName === "i")) style.italic = true;
-      if (Array.from(rPr.childNodes).some((n) => n.localName === "u")) style.underline = true;
-      const strikeEl = Array.from(rPr.childNodes).find((n) => n.localName === "strike");
-      if (strikeEl && !/^(0|false|off)$/i.test(getWVal(strikeEl) || "")) style.strike = true;
-      const colorEl = Array.from(rPr.childNodes).find((n) => n.localName === "color");
-      const hex = colorEl ? getWVal(colorEl) : null;
-      if (hex) style.color = `#${hex.replace(/^#/, "")}`;
-      const fonts = Array.from(rPr.childNodes).find((n) => n.localName === "rFonts");
-      if (fonts) {
-        style.fontFamily = fonts.getAttributeNS(W_NS, "ascii") || fonts.getAttributeNS(W_NS, "hAnsi") || getWVal(fonts);
-      }
-      const hl = Array.from(rPr.childNodes).find((n) => n.localName === "highlight");
-      const shd = Array.from(rPr.childNodes).find((n) => n.localName === "shd");
-      const hlVal = hl ? getWVal(hl) : null;
-      const shdFill = shd ? (shd.getAttributeNS(W_NS, "fill") || shd.getAttribute("w:fill")) : null;
-      if (hlVal && hlVal !== "none") style.highlight = normHighlight(hlVal);
-      else if (shdFill && shdFill !== "auto") style.highlight = normHighlight(`#${shdFill}`);
-      const sz = Array.from(rPr.childNodes).find((n) => n.localName === "sz");
-      if (sz) {
-        const half = parseInt(getWVal(sz) || "0", 10);
-        if (half) style.fontSize = `${half / 2}pt`;
-      }
-    }
+    const style = xmlRunStyle(r);
     // Tekst i łamania w kolejności: jeden fragment może mieć <w:t>a</w:t><w:br/><w:t>b</w:t>
     // (tak zapisujemy wielowierszowe wstawienia). Dawniej samo <w:br/> kasowało tekst fragmentu.
     Array.from(r.childNodes).forEach((n) => {
@@ -315,27 +376,29 @@ function createRunElement(doc, run) {
     rPr.appendChild(rs);
     hasPr = true;
   }
-  if (run.bold) {
+  // false = jawnie WYŁĄCZONE (Ctrl/⌘+B w pogrubionym nagłówku) — bez w:val="0" Word wziąłby
+  // pogrubienie ze stylu akapitu
+  if (run.bold != null) {
     const b = doc.createElementNS(W_NS, "b");
-    setWVal(b, "1");
+    setWVal(b, run.bold ? "1" : "0");
     rPr.appendChild(b);
     hasPr = true;
   }
-  if (run.italic) {
+  if (run.italic != null) {
     const i = doc.createElementNS(W_NS, "i");
-    setWVal(i, "1");
+    setWVal(i, run.italic ? "1" : "0");
     rPr.appendChild(i);
     hasPr = true;
   }
-  if (run.strike) {
+  if (run.strike != null) {
     const st = doc.createElementNS(W_NS, "strike");
-    setWVal(st, "1");
+    setWVal(st, run.strike ? "1" : "0");
     rPr.appendChild(st);
     hasPr = true;
   }
-  if (run.underline) {
+  if (run.underline != null) {
     const u = doc.createElementNS(W_NS, "u");
-    setWVal(u, "single");
+    setWVal(u, run.underline ? "single" : "none");
     rPr.appendChild(u);
     hasPr = true;
   }
@@ -350,9 +413,16 @@ function createRunElement(doc, run) {
   }
   if (run.fontFamily) {
     const rf = doc.createElementNS(W_NS, "rFonts");
-    rf.setAttributeNS(W_NS, "ascii", run.fontFamily);
-    rf.setAttributeNS(W_NS, "hAnsi", run.fontFamily);
-    rf.setAttributeNS(W_NS, "cs", run.fontFamily);
+    const theme = String(run.fontFamily).match(/^var\(--docx-(\w+)-font\)$/);
+    if (theme) { // krój motywu (np. „Treść” = minorHAnsi) — odwołanie, nie nazwa
+      rf.setAttributeNS(W_NS, "w:asciiTheme", theme[1]);
+      rf.setAttributeNS(W_NS, "w:hAnsiTheme", theme[1]);
+    } else {
+      const name = String(run.fontFamily).replace(/["']/g, "").trim();
+      rf.setAttributeNS(W_NS, "ascii", name);
+      rf.setAttributeNS(W_NS, "hAnsi", name);
+      rf.setAttributeNS(W_NS, "cs", name);
+    }
     rPr.appendChild(rf);
     hasPr = true;
   }
@@ -414,7 +484,54 @@ function createHyperlinkElement(doc, link) {
   return h;
 }
 
+// Oryginalne właściwości fragmentów akapitu (przed przepisaniem): model akapitu zna tylko część
+// formatu Worda (pogrubienie, kursywa, kolor, krój, rozmiar…), a w:rPr ma też język, krój motywu,
+// odstępy, kapitaliki, cień… Dawniej każdy fragment pisanego akapitu był budowany od zera i to
+// wszystko przepadało. Teraz fragment o tym samym formacie dostaje KOPIĘ oryginału; inny format
+// pogrubienia/kursywy/podkreślenia/koloru — kopię fragmentu o tym samym kroju i rozmiarze
+// z poprawionymi tylko tymi cechami; zupełnie nowy format — budowany od zera, jak dawniej.
+function originalRunProps(pEl) {
+  const out = [];
+  const walk = (parent) => Array.from(parent.childNodes).forEach((n) => {
+    if (n.namespaceURI !== W_NS) return;
+    if (n.localName === "hyperlink") return walk(n);
+    if (n.localName !== "r" || !Array.from(n.childNodes).some((c) => c.localName === "t" && c.textContent)) return;
+    const rPr = Array.from(n.childNodes).find((c) => c.localName === "rPr" && c.namespaceURI === W_NS);
+    out.push({ style: xmlRunStyle(n), rPr: rPr || null });
+  });
+  walk(pEl);
+  return out;
+}
+const TOGGLE_TAGS = { bold: ["b", "bCs"], italic: ["i", "iCs"], strike: ["strike"], underline: ["u"], color: ["color"], highlight: ["highlight", "shd"] };
+const RPR_ORDER = ["rStyle", "rFonts", "b", "bCs", "i", "iCs", "caps", "smallCaps", "strike", "dstrike", "outline", "shadow", "emboss", "imprint", "noProof", "snapToGrid", "vanish", "webHidden", "color", "spacing", "w", "kern", "position", "sz", "szCs", "highlight", "u", "effect", "bdr", "shd", "fitText", "vertAlign", "rtl", "cs", "em", "lang", "eastAsianLayout", "specVanish", "oMath"];
+function runFromOriginal(doc, run, originals) {
+  if (run.link) return null; // link: styl Hiperłącze zakłada createRunElement
+  const same = originals.find((o) => !o.style.link && runsStyleEqual(o.style, run));
+  const near = same || originals.find((o) => !o.style.link && (o.style.fontFamily || "") === (run.fontFamily || "") && (o.style.fontSize || "") === (run.fontSize || ""));
+  if (!near) return null;
+  const fresh = createRunElement(doc, run);
+  if (!near.rPr) return same ? fresh : null; // oryginał bez w:rPr — nowy i tak ma tylko to, co trzeba
+  const rPr = near.rPr.cloneNode(true);
+  if (!same) {
+    // podmień tylko cechy przełączane, resztę oryginału zostaw
+    const freshPr = Array.from(fresh.childNodes).find((c) => c.localName === "rPr");
+    for (const [k, tags] of Object.entries(TOGGLE_TAGS)) {
+      const want = k === "color" ? parseCssColorToWordHex(run.color) || null : k === "highlight" ? normHighlight(run.highlight) : run[k];
+      const had = k === "color" ? parseCssColorToWordHex(near.style.color) || null : k === "highlight" ? normHighlight(near.style.highlight) : near.style[k];
+      if ((k === "color" || k === "highlight") ? (want || "") === (had || "") : !!want === !!had) continue;
+      Array.from(rPr.childNodes).filter((c) => tags.includes(c.localName)).forEach((c) => rPr.removeChild(c));
+      if (freshPr) Array.from(freshPr.childNodes).filter((c) => tags.includes(c.localName)).forEach((c) => rPr.appendChild(c.cloneNode(true)));
+    }
+    Array.from(rPr.childNodes).sort((x, y) => (RPR_ORDER.indexOf(x.localName) + 1 || 99) - (RPR_ORDER.indexOf(y.localName) + 1 || 99)).forEach((c) => rPr.appendChild(c));
+  }
+  const old = Array.from(fresh.childNodes).find((c) => c.localName === "rPr");
+  if (old) fresh.replaceChild(doc.importNode(rPr, true), old);
+  else fresh.insertBefore(doc.importNode(rPr, true), fresh.firstChild);
+  return fresh;
+}
+
 function applyRunsToParagraphXml(pEl, runs) {
+  const originals = originalRunProps(pEl);
   // pola-wyspy wracają z listy fragmentów (w swoich miejscach) — stare kontrolki precz
   Array.from(pEl.childNodes).forEach((n) => {
     if (n.namespaceURI !== W_NS) return;
@@ -440,7 +557,7 @@ function applyRunsToParagraphXml(pEl, runs) {
       return;
     }
     if (!run.text) return;
-    if (!run.link) { hl = null; pEl.appendChild(createRunElement(doc, run)); return; }
+    if (!run.link) { hl = null; pEl.appendChild(runFromOriginal(doc, run, originals) || createRunElement(doc, run)); return; }
     if (!hl || hl._dwbLink !== run.link) {
       hl = createHyperlinkElement(doc, run.link);
       hl._dwbLink = run.link;
@@ -550,25 +667,36 @@ function getInheritedRunStyleAtCaret(rootEl) {
 
 // Węzeł tekstu, którego format „dziedziczy” kursor (container, offset) w akapicie rootEl.
 // Pomija tekst wysp (odnośnik przypisu, pole formularza) i znaki-pomocnicze kursora (U+FEFF).
+// Wyjątek (zgłoszenie: klik w słowo 8 pt pokazywał 9 pt): kursor na POCZĄTKU słowa, a przed nim
+// spacja w innym formacie (klik w lewą połowę pierwszej litery) — liczy się słowo, w które kliknięto,
+// i tak samo dostaje format to, co się dopisze przed nim. W środku i na końcu słowa — znak przed.
 function caretStyleSourceNode(rootEl, container, offset) {
   const real = (n) => {
     if (!/[^\uFEFF]/.test(n.data)) return false;
     const island = n.parentElement?.closest('[contenteditable="false"]');
     return !(island && island !== rootEl && rootEl.contains(island));
   };
-  if (container.nodeType === 3 && offset > 0 && real(container)) return container;
-  // pozycja między węzłami albo na początku węzła tekstu — ostatni tekst PRZED nią,
-  // a gdy go nie ma (początek akapitu) — pierwszy za nią
+  const lastChar = (n, end) => n.data.slice(0, end).replace(/\uFEFF/g, "").slice(-1);
+  const firstChar = (n, start) => n.data.slice(start).replace(/\uFEFF/g, "").charAt(0);
+  // znak przed kursorem i znak za nim (z węzłami)
   const at = document.createRange();
   at.setStart(container, offset);
   const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT);
-  let before = null;
-  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-    if (!real(n)) continue;
-    if (n !== container && at.comparePoint(n, n.length) <= 0) { before = n; continue; }
-    return before || n;
+  let before = null, beforeCh = "", after = null, afterCh = "";
+  if (container.nodeType === 3 && real(container)) {
+    if (offset > 0 && lastChar(container, offset)) { before = container; beforeCh = lastChar(container, offset); }
+    if (firstChar(container, offset)) { after = container; afterCh = firstChar(container, offset); }
   }
-  return before || container;
+  if (!before || !after) {
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (!real(n) || n === container) continue;
+      if (at.comparePoint(n, n.length) <= 0) { if (!before || before !== container) { before = n; beforeCh = lastChar(n, n.length); } continue; }
+      if (!after) { after = n; afterCh = firstChar(n, 0); }
+      break;
+    }
+  }
+  if (before && after && after !== before && /\s/.test(beforeCh) && /\S/.test(afterCh)) return after;
+  return before || after || container;
 }
 
 function mergeRunStyles(base, extra) {

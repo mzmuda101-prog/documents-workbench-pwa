@@ -98,6 +98,8 @@ async function ingestFile(file, options = {}) {
 
     const buf = await file.arrayBuffer();
     originalFileBytes = new Uint8Array(buf);
+    // zepsute nazwy krojów ze starszych wersji (naprawa w pamięci; trafi do pliku przy zapisie)
+    if (typeof repairDocxFontNames === "function") originalFileBytes = await repairDocxFontNames(originalFileBytes);
     pendingDocEdits = [];
     currentFileName = file.name || "document.docx";
     currentFileType = "docx";

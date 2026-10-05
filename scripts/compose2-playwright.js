@@ -221,6 +221,8 @@ async function run() {
   await caretAt(page, 0, 0);
   await insertMenu(page, "Spis treści");
   await idle(page);
+  // przerysowanie po wstawieniu rusza z opóźnieniem — w tłoku „spokój” bywał PRZED renderem
+  await page.waitForFunction(() => !inlineLocksPending && collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).some((p) => p.dataset.lock === "lockField"), null, { timeout: 20000 }).catch(() => {});
   ps = await paras(page);
   check("spis treści na początku: tytuł + wpis „Rozdział” (zablokowany, z linkiem)", ps[0].text === "Spis treści" && /^Rozdział\t?\s*\d*$/.test(ps[1].text.replace(/\s+$/, "")) && ps[1].lock === "lockField" && ps[1].links === 1, JSON.stringify(ps.slice(0, 3)));
   check("kursor wraca do tekstu za spisem", (await focusedIndex(page)) === 2, await focusedIndex(page));

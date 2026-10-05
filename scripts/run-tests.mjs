@@ -138,7 +138,10 @@ async function main() {
       if (again.ok) {
         flaky.push(r);
         console.log(`⚠️  ${r.step.label} — przeszedł za drugim razem (niestabilny w tłoku). Pierwsza porażka:`);
-        console.log(r.out.trim().split("\n").slice(-6).map((l) => "     │ " + l).join("\n"));
+        // najpierw linie z ❌ (które sprawdzenie padło), potem końcówka wyjścia
+        const lines = r.out.trim().split("\n");
+        const fails = lines.filter((l) => /❌|Error|Timeout/.test(l)).slice(0, 8);
+        console.log([...fails, ...lines.slice(-3)].map((l) => "     │ " + l).join("\n"));
       }
       else { broken.push(again); console.log(`❌ ${r.step.label} — padł ponownie`); }
     }

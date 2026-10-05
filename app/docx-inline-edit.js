@@ -133,6 +133,32 @@ function previewInlineObjects(el) {
   return out;
 }
 
+// Symbole (w:sym) jako wyspy: <span> ze znakiem w podglądzie dostaje XML fragmentu z pliku.
+// Kolejność i znaki muszą się zgadzać — inaczej akapit tylko do odczytu (bezpiecznie).
+function stampSymbolIslands(xp, el, nextKey) {
+  const runs = paragraphXmlParts(xp).filter(isSymRun);
+  if (!runs.length) return null;
+  const spans = [];
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    const sp = n.parentElement;
+    if (sp && sp !== el && sp.childNodes.length === 1 && sp.style?.fontFamily && !sp.dataset.cm) spans.push(sp);
+  }
+  let at = 0;
+  for (const r of runs) {
+    const ch = symRunText(r);
+    while (at < spans.length && spans[at].textContent !== ch) at++;
+    if (at >= spans.length) return "lockSymbol";
+    const sp = spans[at++];
+    const key = nextKey();
+    docIslandXml.set(key, new XMLSerializer().serializeToString(r));
+    sp.dataset.cm = key;
+    sp.dataset.cmKind = "sym";
+    sp.contentEditable = "false";
+  }
+  return null;
+}
+
 // Znaczniki komentarza w podglądzie: puste <span data-cm> w tych samych miejscach tekstu co w pliku
 // (podgląd ich nie rysuje). Zapis akapitu oddaje je jako „wyspy” — komentarz nie ginie przy pisaniu.
 // noteLabels — długości numerów przypisów (odnośnik / numer na początku przypisu) w kolejności:
@@ -140,7 +166,7 @@ function previewInlineObjects(el) {
 function stampCommentMarks(xp, el, nextKey, noteLabels = []) {
   const parts = paragraphXmlParts(xp);
   if (!parts.some((n) => n.localName !== "r" || isCommentReferenceRun(n) || isObjectRun(n))) return;
-  el.querySelectorAll('span[data-cm]:not([data-cm-kind="note"]):not([data-cm-kind="obj"])').forEach((x) => x.remove());
+  el.querySelectorAll('span[data-cm]:not([data-cm-kind="note"]):not([data-cm-kind="obj"]):not([data-cm-kind="sym"])').forEach((x) => x.remove());
   // rysunki w linii: wyspą jest sam obraz w podglądzie (usunięcie go usuwa go z pliku, jak w Wordzie),
   // o ile liczba się zgadza; inaczej pusty znacznik w miejscu fragmentu (rysunek zostaje w pliku)
   const inlineRuns = parts.filter((n) => isObjectRun(n) && isInlineObjectRun(n));
@@ -153,6 +179,7 @@ function stampCommentMarks(xp, el, nextKey, noteLabels = []) {
   parts.forEach((n) => {
     if (n.localName === "sdt") { offset += ffText(ffKid(n, "sdtContent")).length; return; }
     if (noteRunKind(n)) { offset += noteLabels[noteAt++] || 0; return; }
+    if (isSymRun(n)) { offset += symRunText(n).length; return; } // wyspa-symbol (stampSymbolIslands)
     if (isObjectRun(n)) {
       const key = nextKey();
       docIslandXml.set(key, new XMLSerializer().serializeToString(n));
@@ -280,7 +307,7 @@ async function markLockedParagraphs(bytes) {
     // rysunki: wyspy, gdy się da (paragraphObjectLock) — wtedy blokują tylko inne powody
     const objLock = paragraphObjectLock(xp);
     const hit = INLINE_LOCK_TAGS.find(([tag, why]) => (why !== "lockObject" || objLock) && xp.getElementsByTagNameNS(W_NS, tag).length);
-    let lock = formParagraphLock(xp) || hit?.[1] || paragraphPageBreakLock(xp) || paragraphNestedRunLock(xp) || paragraphCommentLock(xp); // pole formularza Worda: docx-forms.js
+    let lock = formParagraphLock(xp) || hit?.[1] || paragraphSymbolLock(xp) || paragraphPageBreakLock(xp) || paragraphNestedRunLock(xp) || paragraphCommentLock(xp); // pole formularza Worda: docx-forms.js
     if (!lock && !stampParagraphLinks(xp, el)) lock = "lockLink";
     if (!lock) {
       const keys = Array.from(xp.childNodes).filter((n) => islandKey.has(n)).map((n) => islandKey.get(n));
@@ -288,6 +315,7 @@ async function markLockedParagraphs(bytes) {
     }
     const hasRef = xp.getElementsByTagNameNS(W_NS, "footnoteReference").length || xp.getElementsByTagNameNS(W_NS, "endnoteReference").length;
     if (!lock && hasRef) lock = typeof dwbNotes !== "undefined" ? dwbNotes.stampRefs(xp, el, nextKey) : "lockNote";
+    if (!lock) lock = stampSymbolIslands(xp, el, nextKey);
     if (!lock) stampCommentMarks(xp, el, nextKey, hasRef ? dwbNotes.refLabelLengths(el) : []);
     if (lock) el.dataset.lock = lock;
     else delete el.dataset.lock;

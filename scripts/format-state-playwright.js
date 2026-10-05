@@ -134,6 +134,37 @@ async function run() {
   runs = await savedRuns(page, "Zwykły");
   check("przycisk B na zaznaczeniu zdejmuje pogrubienie, przycisk gaśnie", !(await btn(page)).b && runs.every((r) => !r[1]), JSON.stringify({ runs, b: await btn(page) }));
 
+  // ── 5. rozmiar przy kursorze (zgłoszenie: klik w słowo 8 pt pokazywał 9 pt) ─────────────
+  await page.evaluate(() => { const ps = document.querySelectorAll(".docx-preview-host p.docx-editable-p"); const p = ps[ps.length - 1]; placeCaret(p, p.textContent.length); });
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Duże litery ");
+  await page.selectOption("#fmtFontSize", "8");
+  await page.keyboard.type("malutkie");
+  await page.selectOption("#fmtFontSize", "12");
+  await page.keyboard.type(" i dalej duże");
+  await page.waitForTimeout(300);
+  const edge = await page.evaluate(() => {
+    const p = [...document.querySelectorAll(".docx-preview-host p.docx-editable-p")].find((x) => x.textContent.includes("malutkie"));
+    const w = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+    for (let n = w.nextNode(); n; n = w.nextNode()) {
+      const i = n.data.indexOf("malutkie");
+      if (i >= 0) { const r = document.createRange(); r.setStart(n, i); r.setEnd(n, i + 1); const b = r.getBoundingClientRect(); return { x: b.left + 1, y: b.top + b.height / 2 }; }
+    }
+  });
+  await page.mouse.click(edge.x, edge.y); // lewa połowa pierwszej litery → kursor PRZED słowem
+  await page.waitForTimeout(200);
+  const shownEdge = await page.evaluate(() => document.getElementById("fmtFontSize").value);
+  check("klik w lewą krawędź słowa 8 pt (przed nim spacja 12 pt): lista rozmiarów pokazuje 8", shownEdge === "8", shownEdge);
+  await page.keyboard.type("bardzo ");
+  await page.waitForTimeout(300);
+  const typedSize = await page.evaluate(async () => {
+    const z = await JSZip.loadAsync(await buildDocumentForSave());
+    const doc = await z.file("word/document.xml").async("string");
+    const m = doc.match(/<w:r>(?:(?!<\/w:r>).)*?<w:t[^>]*>[^<]*bardzo[^<]*<\/w:t>/);
+    return m ? (m[0].match(/<w:sz w:val="(\d+)"/) || [])[1] : null;
+  });
+  check("dopisane na początku słowa 8 pt dostaje 8 pt (jak pokazuje lista)", typedSize === "16", String(typedSize));
+
   await browser.close();
   const real = errors.filter((e) => !/ResizeObserver/.test(e));
   if (real.length) check("bez błędów w konsoli", false, real.join(" | ").slice(0, 400));
