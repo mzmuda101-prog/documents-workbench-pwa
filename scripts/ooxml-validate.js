@@ -37,7 +37,11 @@ function validate(files) {
   } catch (e) {
     out = e.stdout; // kod 1/2 = są błędy; wynik i tak na stdout
   }
-  return JSON.parse(out);
+  try {
+    return JSON.parse(out);
+  } catch (_) {
+    throw new Error(`walidator nie zwrócił wyniku (dotnet: ${String(out || "").slice(0, 200) || "pusto"})`);
+  }
 }
 
 // Błędy, których nie było w oryginale (porównanie po części pliku i opisie, z krotnością —

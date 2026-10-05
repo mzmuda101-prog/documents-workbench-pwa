@@ -45,7 +45,7 @@ async function openPage(browser) {
   return { context, page, errors };
 }
 const idle = (page) => page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && !inlineLocksPending, null, { timeout: 30000 })
-  .then(() => page.evaluate(() => waitInlineStructuralIdle())).then(() => page.waitForTimeout(250));
+  .then(() => page.evaluate(() => waitInlineStructuralIdle())).then(() => page.waitForTimeout(50)); // gotowość = nakładka + kolejka; dawniej 250 ms × 36 operacji × 9 plików ≈ 80 s samego czekania
 const toEdit = async (page) => {
   await page.evaluate(() => { if (readOnlyMode) { readModeEl.checked = false; readModeEl.dispatchEvent(new Event("change")); } });
   await page.waitForFunction(() => !readOnlyMode && document.querySelector(".docx-edit-root"), null, { timeout: 15000 });

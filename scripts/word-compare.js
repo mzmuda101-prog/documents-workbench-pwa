@@ -22,7 +22,22 @@ const path = require("path");
 const crypto = require("crypto");
 const { execFileSync } = require("child_process");
 const pw = require("playwright");
+const JSZip = require("jszip");
 const { APP_URL } = require("./docx-test-helpers");
+
+// Plik bez styles.xml / bez rozmiaru strony: Word bierze WŁASNE wartości domyślne (Aptos 12 pt,
+// odstęp po akapicie, strona Letter, marginesy 1″) — różnice to nie błąd układu aplikacji.
+async function fileNotes(file) {
+  try {
+    const zip = await JSZip.loadAsync(fs.readFileSync(file));
+    const doc = (await zip.file("word/document.xml")?.async("string")) || "";
+    const out = [];
+    if (!zip.file("word/styles.xml")) out.push("bez styles.xml (domyślne Worda)");
+    if (!/<w:pgSz\b/.test(doc)) out.push("bez rozmiaru strony (Word: swój papier)");
+    if (!/<w:pgMar\b/.test(doc)) out.push("bez marginesów (Word: 1″)");
+    return out;
+  } catch (_) { return []; }
+}
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT = path.join(ROOT, "output/word-compare");
@@ -38,6 +53,8 @@ function wordPdf(file) {
   const base = `${path.basename(file, ".docx")}-${hash}`;
   const pdf = path.join(CACHE, `${base}.pdf`);
   if (fs.existsSync(pdf) && !process.env.FRESH) return pdf;
+  // starsze PDF-y tego pliku (inna treść = inny skrót) — precz, żeby pamięć nie rosła
+  for (const f of fs.readdirSync(CACHE)) if (f !== path.basename(pdf) && f.startsWith(`${path.basename(file, ".docx")}-`) && /-[0-9a-f]{12}\.(pdf|docx)$/.test(f)) fs.rmSync(path.join(CACHE, f), { force: true });
   const docx = path.join(CACHE, `${base}.docx`); // kopia w output/ — Word ma tu dostęp
   fs.copyFileSync(file, docx);
   const esc = (s) => s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
@@ -53,7 +70,13 @@ function wordPdf(file) {
         end try
       end tell`], { timeout: 180000, stdio: ["ignore", "pipe", "pipe"] });
   } catch (e) {
-    if (!fs.existsSync(pdf)) throw new Error(String(e.stderr || e.message).trim().split("\n").pop());
+    if (!fs.existsSync(pdf)) {
+      // Word potrafi zawisnąć na pytaniu (naprawa pliku, zgoda na dostęp) — zamykamy wszystko,
+      // żeby następne pliki nie padały kolejno (dawniej 7 porażek po jednej)
+      try { execFileSync("osascript", ["-e", 'tell application "Microsoft Word" to close every document saving no'], { timeout: 30000, stdio: "ignore" }); } catch (_) { /* Word nie odpowiada */ }
+      fs.rmSync(docx, { force: true });
+      throw new Error(String(e.stderr || e.message).trim().split("\n").pop());
+    }
   }
   fs.rmSync(docx, { force: true });
   if (!fs.existsSync(pdf)) throw new Error("Word nie zapisał PDF-a");
@@ -172,9 +195,10 @@ async function run() {
       fs.writeFileSync(path.join(OUT, f), Buffer.from(pg.overlay.split(",")[1], "base64"));
       pg.overlay = f;
     });
+    res.notes = await fileNotes(file);
     report.push({ name, ...res });
     const worst = res.pages.filter((p) => p.match != null).reduce((m, p) => Math.min(m, p.match), 100);
-    console.log(`${res.wordPages === res.ourPages ? "✅" : "❌"} ${name}: strony Word ${res.wordPages} / aplikacja ${res.ourPages}; zgodność ${res.pages.map((p) => p.match ?? "—").join(" · ")} %; wiersze (mediana przesunięcia) ${res.pages.map((p) => p.rowShift ?? "—").join(" · ")} px${worst < 80 ? "  ⚠️" : ""}`);
+    console.log(`${res.wordPages === res.ourPages ? "✅" : "❌"} ${name}: strony Word ${res.wordPages} / aplikacja ${res.ourPages}; zgodność ${res.pages.map((p) => p.match ?? "—").join(" · ")} %; wiersze (mediana przesunięcia) ${res.pages.map((p) => p.rowShift ?? "—").join(" · ")} px${worst < 80 ? "  ⚠️" : ""}${res.notes.length ? `  (${res.notes.join(", ")})` : ""}`);
   }
   await browser.close();
   // raport HTML (lokalny plik)
@@ -186,12 +210,15 @@ async function run() {
 <h1>Podgląd wydruku aplikacji vs PDF z Worda</h1>
 <p class="legend">Nakładka:<span style="background:#dc1e1e"></span>tylko Word<span style="background:#1e5ae6"></span>tylko aplikacja<span style="background:#787878"></span>wspólne<span style="background:#bebebe"></span>w tolerancji ±2 px</p>
 <table><tr><th>Plik</th><th>Strony Word / aplikacja</th><th>Zgodność stron (%)</th><th>Przesunięcie wierszy — mediana / maks. (px)</th></tr>
-${report.map((r) => r.error ? `<tr><td>${esc(r.name)}</td><td class="bad" colspan="3">${esc(r.error)}</td></tr>` : `<tr><td><a href="#${esc(r.name)}">${esc(r.name)}</a></td><td class="${r.wordPages !== r.ourPages ? "bad" : ""}">${r.wordPages} / ${r.ourPages}</td><td>${r.pages.map((p) => p.match ?? esc(p.missing)).join(" · ")}</td><td>${r.pages.map((p) => p.rowShift == null ? "—" : `${p.rowShift} / ${p.rowShiftMax}`).join(" · ")}</td></tr>`).join("")}
+${report.map((r) => r.error ? `<tr><td>${esc(r.name)}</td><td class="bad" colspan="3">${esc(r.error)}</td></tr>` : `<tr><td><a href="#${esc(r.name)}">${esc(r.name)}</a>${r.notes?.length ? `<br><small>${esc(r.notes.join(", "))}</small>` : ""}</td><td class="${r.wordPages !== r.ourPages ? "bad" : ""}">${r.wordPages} / ${r.ourPages}</td><td>${r.pages.map((p) => p.match ?? esc(p.missing)).join(" · ")}</td><td>${r.pages.map((p) => p.rowShift == null ? "—" : `${p.rowShift} / ${p.rowShiftMax}`).join(" · ")}</td></tr>`).join("")}
 </table>
 ${report.filter((r) => !r.error).map((r) => `<h2 id="${esc(r.name)}">${esc(r.name)}</h2><div class="pages">${r.pages.map((p) => p.overlay ? `<figure><a href="${esc(p.overlay)}"><img src="${esc(p.overlay)}" alt=""></a><figcaption>str. ${p.page}: ${p.match} % · wiersze ${p.rowsWord}/${p.rowsOurs} · przes. ${p.rowShift} px</figcaption></figure>` : `<figure><figcaption class="bad">str. ${p.page}: ${esc(p.missing)}</figcaption></figure>`).join("")}</div>`).join("")}
 </html>`;
   fs.writeFileSync(path.join(OUT, "raport.html"), html);
   console.log(`\nRaport: ${path.relative(ROOT, path.join(OUT, "raport.html"))}`);
+  // inna liczba stron (albo Word nie zrobił PDF-a) = kod błędu — do skryptów i porównań w czasie
+  const bad = report.filter((r) => r.error || r.wordPages !== r.ourPages).length;
+  if (bad) { console.log(`❌ ${bad} z ${report.length}: inna liczba stron albo błąd Worda`); process.exitCode = 1; }
 }
 
 run().catch((e) => { console.error(e); process.exit(1); });
