@@ -232,6 +232,16 @@
       return `<w:p><w:pPr>${pPr.join("")}</w:pPr>${ctx.anchors || ""}</w:p>`;
     }
 
+    // Pusta komórka tabeli (rubryka formularza do wypełnienia). Gdy mieści się w niej wiersz
+    // zwykłego tekstu, akapit ma wysokość wiersza tekstu dokumentu: kursor staje W komórce, na górze
+    // z lewej (jak w Wordzie), a wpisany tekst ma normalny rozmiar. Akapit 1 pt dawał kursor
+    // wyśrodkowany na górnej linii komórki. Za niska komórka (pasek, kreska) — dalej 1 pt.
+    cellEmptyPara(cellH) {
+      const line = Math.round(this.bodySize * 1.15 * 10) / 10;
+      if (!(cellH >= line + 1)) return this.emptyPara({}, 1);
+      return `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="${TW(line)}" w:lineRule="exact"/></w:pPr></w:p>`;
+    }
+
     ruleXml(b, ctx, box) {
       const pPr = [];
       if (ctx.pageBreakBefore) pPr.push("<w:pageBreakBefore/>");
@@ -364,9 +374,10 @@
           tcPr.push(`<w:tcBorders>${this.borderXml("top", bd.top)}${this.borderXml("left", bd.left)}${this.borderXml("bottom", bd.bottom)}${this.borderXml("right", bd.right)}</w:tcBorders>`);
           if (cell.fill) tcPr.push(`<w:shd w:val="clear" w:color="auto" w:fill="${cell.fill.toUpperCase()}"/>`);
           let body;
-          if (r === cell.r0) {
-            body = this.blocksXml(cell.blocks || [], { x0: cell.x0 + pad, x1: cell.x1 - pad, top: cell.y0 }, { images: ctx.images });
-          } else body = this.emptyPara({}, 1);
+          if (r === cell.r0 && cell.blocks?.length) {
+            body = this.blocksXml(cell.blocks, { x0: cell.x0 + pad, x1: cell.x1 - pad, top: cell.y0 }, { images: ctx.images });
+          } else if (r === cell.r0) body = this.cellEmptyPara(Y[cell.r1 + 1] - Y[cell.r0]);
+          else body = this.emptyPara({}, 1);
           if (!body.endsWith("</w:p>")) body += this.emptyPara({}, 1); // komórka musi kończyć się akapitem
           cells += `<w:tc><w:tcPr>${tcPr.join("")}</w:tcPr>${body}</w:tc>`;
           c += span;

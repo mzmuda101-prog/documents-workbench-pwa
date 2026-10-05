@@ -2062,7 +2062,7 @@ const composeUi = (() => {
   //   max    = najwyżej taka część widocznej wysokości ekranu (dłuższa treść przewija się z „Więcej ↓”),
   //   lines / screen = najmniej (gdy brakuje miejsca): linijki treści w skali tekstu albo część ekranu,
   //            co większe (jedna linijka to za mało), chrome = autor, odstępy i przyciski (px).
-  const COMMENT_CARD_MIN = { touch: { lines: 5, screen: 0.30, chrome: 82, max: 0.5 }, desktop: { lines: 8, screen: 0.40, chrome: 66, max: 0.65 } };
+  const COMMENT_CARD_MIN = { touch: { lines: 5, screen: 0.30, chrome: 82, max: 0.5 }, desktop: { lines: 8, screen: 0.40, chrome: 66, max: 0.61 } };
   function placeCommentCard() {
     if (!cCard) return;
     cCard.el.style.setProperty("--cc-z", String(commentZoom()));

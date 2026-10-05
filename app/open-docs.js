@@ -295,6 +295,34 @@ const dwbOpenDocs = (() => {
       next.querySelector(".doc-tab-btn")?.focus();
     });
     addBtn?.addEventListener("click", () => { if (typeof openFilePicker === "function") openFilePicker(); });
+    placeTabs();
+  }
+
+  // Szeroki ekran (≥1024 px — jak panel obok dokumentu): karty stoją W nagłówku, między nazwą
+  // pliku a „Zapisz” (tam jest wolne miejsce) — dokument nie traci całego pasa wysokości.
+  // Węziej: osobny, niski rząd pod nagłówkiem (telefon: chowa się razem z nagłówkiem).
+  // Bez chowania „do najechania myszką” — na tablecie/telefonie nie ma najechania.
+  const HERO_TABS_MQ = "(min-width: 1024px)";
+  let tabsHome = null;
+  function placeTabs() {
+    const hero = document.querySelector(".hero");
+    const right = hero?.querySelector(".hero-right");
+    if (!tabsEl || !right) return;
+    if (!tabsHome) {
+      tabsHome = document.createComment(" miejsce kart pod nagłówkiem ");
+      tabsEl.before(tabsHome);
+      window.matchMedia(HERO_TABS_MQ).addEventListener?.("change", placeTabs);
+    }
+    const inHero = window.matchMedia(HERO_TABS_MQ).matches;
+    if (inHero === (tabsEl.parentElement === hero)) return;
+    if (inHero) hero.insertBefore(tabsEl, right);
+    else tabsHome.after(tabsEl);
+    tabsEl.classList.toggle("in-hero", inHero);
+    if (!tabsEl.hidden) {
+      if (typeof appFrame !== "undefined") appFrame.syncDock?.();
+      if (typeof syncDocViewportHeight === "function") syncDocViewportHeight();
+      rowEl._dwbFadeSync?.();
+    }
   }
 
   // ── podpięcie pod aplikację ────────────────────────────────────────────────

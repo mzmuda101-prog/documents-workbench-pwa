@@ -91,6 +91,13 @@ async function run() {
   check("każde pole ma w podglądzie ramkę z rodzajem (13), placeholder/zablokowane oznaczone",
     scan.wraps.split(" ").length === 13 && /s2:ff-dropdown/.test(scan.wraps) && /s4:ff-date/.test(scan.wraps) && /s1:ff-text\.is-placeholder/.test(scan.wraps) && /s8:ff-text\.is-locked/.test(scan.wraps) && /f1:ff-checkbox\.ff-glyph/.test(scan.wraps) && /s7:ff-dropdown\.is-block/.test(scan.wraps), scan.wraps);
   check("lista ma znaczek ▾ (::after), pole tekstowe bez znaczka", scan.chevron === "inline-block" && scan.textIcon === "none", `${scan.chevron} / ${scan.textIcon}`);
+  // „.docx span” z docx-preview dawał polu domyślną czcionkę dokumentu (☐ MS Gothic → Calibri 11 pt),
+  // a tło następnego wiersza zasłaniało połowę kratki — kratka ma krój/rozmiar fragmentu i leży wyżej.
+  const cbFont = await page.evaluate(() => [...document.querySelectorAll('.ff-field.ff-checkbox[data-ff^="s"]')].map((w) => {
+    const a = getComputedStyle(w), b = getComputedStyle(w.parentElement);
+    return { same: a.fontSize === b.fontSize && a.fontFamily === b.fontFamily, pos: a.position, f: a.fontFamily };
+  }));
+  check("kratka w podglądzie: krój i rozmiar jak jej fragment (MS Gothic), nad tłem sąsiednich wierszy", cbFont.length === 2 && cbFont.every((c) => c.same && /Gothic/.test(c.f) && c.pos === "relative"), JSON.stringify(cbFont));
   const noLeak = await page.evaluate(async () => { inlineDirtyValid = false; const n = collectInlineParagraphEdits().length; inlineDirtyValid = true; return { n, same: (await buildDocumentForSave()) === originalFileBytes }; });
   check("ramki pól nie są zmianą dokumentu (zapis bez zmian = te same bajty)", noLeak.n === 0 && noLeak.same, JSON.stringify(noLeak));
   // Etap 2 (2026-10-01): proste pole w zdaniu to „wyspa” — akapit edytowalny, pole przenoszone w całości.

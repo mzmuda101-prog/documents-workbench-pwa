@@ -89,6 +89,12 @@ async function run() {
   check("wybór 2 plików przy otwartym: 3 karty, pierwszy z wybranych na wierzchu, drugi czeka", st.visible && st.dom.length === 3 && st.file === "sample.docx" && st.dom[1].active && st.dom[2].waiting && st.dom[2].name === "links-sample", JSON.stringify(st.dom));
   check("otwieranie nie pyta o porzucenie zmian (A zostaje w karcie)", dialogs.length === 0, JSON.stringify(dialogs));
   check("karta A: kropka „niezapisane”", st.dom[0].name === "headings-sample" && st.dom[0].dirty && !st.dom[1].dirty, JSON.stringify(st.dom));
+  const place = await page.evaluate(() => {
+    const t = document.getElementById("docTabs"), h = document.querySelector(".hero");
+    const tr = t.getBoundingClientRect(), hr = h.getBoundingClientRect(), ws = document.querySelector(".workspace").getBoundingClientRect();
+    return { inHero: t.parentElement === h, inside: tr.top >= hr.top && tr.bottom <= hr.bottom, gap: Math.round(ws.top - hr.bottom) };
+  });
+  check("szeroki ekran: karty w nagłówku (bez osobnego pasa nad dokumentem)", place.inHero && place.inside && place.gap <= 20, JSON.stringify(place));
   check("nowy dokument czysty, nagłówek z jego nazwą", !st.dirty && st.title === "sample.docx", JSON.stringify({ dirty: st.dirty, title: st.title }));
 
   // ── 3. powrót do A: zmiany i „niezapisane” na miejscu ──────────────────────
@@ -156,9 +162,9 @@ async function run() {
   const phone = await page.evaluate(() => {
     const row = document.getElementById("docTabsRow");
     const r = document.getElementById("docTabs").getBoundingClientRect();
-    return { n: row.children.length, scroll: row.scrollWidth > row.clientWidth, fade: row.classList.contains("more-r") || row.classList.contains("more-l"), fits: r.right <= innerWidth + 0.5, pageScrollX: document.documentElement.scrollWidth <= innerWidth };
+    return { under: document.getElementById("docTabs").parentElement !== document.querySelector(".hero"), n: row.children.length, scroll: row.scrollWidth > row.clientWidth, fade: row.classList.contains("more-r") || row.classList.contains("more-l"), fits: r.right <= innerWidth + 0.5, pageScrollX: document.documentElement.scrollWidth <= innerWidth };
   });
-  check("telefon: 6 kart w jednym rzędzie, przewijanie w bok z wygaszeniem, bez poziomego przewijania strony", phone.n === 6 && phone.scroll && phone.fade && phone.fits && phone.pageScrollX, JSON.stringify(phone));
+  check("telefon: 6 kart w jednym rzędzie pod nagłówkiem, przewijanie w bok z wygaszeniem, bez poziomego przewijania strony", phone.under && phone.n === 6 && phone.scroll && phone.fade && phone.fits && phone.pageScrollX, JSON.stringify(phone));
 
   await browser.close();
   const real = errors.filter((e) => !/ResizeObserver/.test(e));

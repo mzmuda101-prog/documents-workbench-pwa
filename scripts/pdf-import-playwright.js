@@ -40,6 +40,7 @@ const FIXTURE_HTML = `<!doctype html><html lang="pl"><head><meta charset="utf-8"
 <table><tr><th>Pozycja</th><th>Ilość</th><th>Cena</th><th>Wartość</th></tr>
 <tr><td>Kabel YDY 3×2,5</td><td>120 m</td><td>4,20 zł</td><td>504,00 zł</td></tr>
 <tr><td>Puszka instalacyjna</td><td>15 szt.</td><td>1,10 zł</td><td>16,50 zł</td></tr>
+<tr style="height: 30pt"><td></td><td></td><td></td><td></td></tr>
 <tr><td colspan="3">Razem</td><td>520,50 zł</td></tr></table>
 <p>Powierzchnia: 25 m<sup>2</sup>. Regulamin: <a href="https://example.com/regulamin">example.com/regulamin</a>.</p>
 <p><img alt="logo" width="120" height="60" src="__IMG__"></p>
@@ -157,6 +158,8 @@ const docxState = (page) => page.evaluate(async () => {
     paras,
     heading1: [...d.getElementsByTagNameNS(W, "pStyle")].filter((s) => s.getAttributeNS(W, "val") === "Heading1").length,
     tables: d.getElementsByTagNameNS(W, "tbl").length,
+    // pusta rubryka tabeli: akapit na wysokość wiersza tekstu (nie 1 pt — kursor stawał na linii komórki)
+    emptyCells: [...d.getElementsByTagNameNS(W, "tc")].filter((tc) => !tc.textContent.trim() && !tc.getElementsByTagNameNS(W, "tbl").length).map((tc) => Number(tc.getElementsByTagNameNS(W, "spacing")[0]?.getAttributeNS(W, "line") || 0)),
     shading: /<w:shd [^>]*w:fill="(?!auto)/.test(doc),
     media: files.filter((f) => f.startsWith("word/media/")).length,
     link: /example\.com\/regulamin/.test(rels) && /<w:hyperlink /.test(doc),
@@ -218,6 +221,7 @@ async function run() {
   check("tytuł jako Nagłówek 1 (nawigacja/struktura)", st.heading1 >= 1, `Heading1: ${st.heading1}`);
   check("akapit wyjustowany = jeden akapit (nie wiersz na akapit)", st.paras.some((p) => p.includes("Ten akapit jest długi") && p.includes("terminem usunięcia")), "");
   check("tabela z tłem nagłówka", st.tables >= 1 && st.shading, `tabele ${st.tables}`);
+  check("pusty wiersz tabeli: 4 komórki z akapitem na wiersz tekstu (≥ 10 pt), nie 1 pt", st.emptyCells.filter((l) => l >= 200).length === 4, JSON.stringify(st.emptyCells));
   check("komórki tabeli: Ilość, 120 m, Razem, 520,50 zł", ["Ilość", "120 m", "Razem", "520,50 zł"].every((s) => st.paras.some((p) => p.trim() === s)), "");
   check("obraz w pliku", st.media >= 1, `media ${st.media}`);
   check("link zachowany jako hiperłącze", st.link, "");
