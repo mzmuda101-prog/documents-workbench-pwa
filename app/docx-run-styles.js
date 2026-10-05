@@ -703,23 +703,43 @@ function mergeRunStyles(base, extra) {
   return { ...base, ...Object.fromEntries(Object.entries(extra || {}).filter(([, v]) => v != null && v !== "")) };
 }
 
-function insertStyledTextAtCaret(text, style, rootEl) {
+// opts.turnOff — format WYŁĄCZONY przez użytkownika (Ctrl/⌘+B bez zaznaczenia): tekst wychodzi
+// z fragmentu. Dziedziczone „nie” od sąsiada (fragment z w:b w:val="0") dopisuje się normalnie.
+function insertStyledTextAtCaret(text, style, rootEl, opts = {}) {
   const sel = window.getSelection();
   if (!sel?.rangeCount) return false;
   const range = sel.getRangeAt(0);
   if (rootEl && !rootEl.contains(range.startContainer)) return false;
   range.deleteContents();
-  const css = runStyleToCss(style || {});
+  let css = runStyleToCss(style || {});
   // wyłączony format (bez zaznaczenia: Ctrl/⌘+B w pogrubionym słowie) — tekst poza fragmentem,
   // z pełnym formatem miejsca (krój, rozmiar, kolor) poza wyłączoną cechą
-  if (styleTurnsOff(style)) {
+  if (opts.turnOff && styleTurnsOff(opts.turnOff)) {
     const sc0 = range.startContainer;
     const prev0 = sc0.nodeType === 1 ? sc0.childNodes[range.startOffset - 1] : null;
     if (!(prev0?.localName === "span" && prev0.getAttribute("style") === css && prev0.lastChild?.nodeType === 3)) {
-      const marker = breakOutOfRunsAtCaret(range, rootEl || range.startContainer.parentElement?.closest("p"));
+      const para = rootEl || range.startContainer.parentElement?.closest("p");
+      const marker = breakOutOfRunsAtCaret(range, para);
       range.setStartBefore(marker);
       range.collapse(true);
       marker.remove();
+      // poza fragmentami decyduje styl akapitu: jawne „nie” tylko, gdy akapit SAM ma tę cechę
+      // (pogrubiony nagłówek) — inaczej każdy dalszy tekst niósłby w pliku zbędne w:b w:val="0"
+      if (para) {
+        // format „gołego” fragmentu w tym akapicie: docx-preview daje styl akapitu fragmentom
+        // (.styl span), nie samemu <p> — próbny pusty <span> pokazuje, co dostałby zwykły tekst
+        const probe = document.createElement("span");
+        probe.textContent = "x";
+        para.appendChild(probe);
+        const cs = getComputedStyle(probe);
+        const deco = (() => { let d = ""; for (let a = probe; a && a !== para.parentElement; a = a.parentElement) d += " " + (getComputedStyle(a).textDecorationLine || ""); return d; })();
+        const flags = { bold: cs.fontWeight === "bold" || parseInt(cs.fontWeight, 10) >= 600, italic: /italic|oblique/.test(cs.fontStyle), underline: /underline/.test(deco), strike: /line-through/.test(deco) };
+        probe.remove();
+        const style2 = { ...style };
+        for (const k of ["bold", "italic", "underline", "strike"]) if (style2[k] === false && !flags[k]) delete style2[k];
+        style = style2;
+        css = runStyleToCss(style);
+      }
     }
   }
   // kolejna litera tuż za fragmentem w tym samym stylu — dopisz do niego (dawniej każda litera

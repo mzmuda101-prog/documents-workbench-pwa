@@ -226,7 +226,7 @@ const dwbSel = (() => {
     const p = deleteSpan(info);
     if (!p) return;
     if (text) {
-      insertStyledTextAtCaret(text, mergeRunStyles(style || {}, currentTypingStyle()), p);
+      insertStyledTextAtCaret(text, mergeRunStyles(style || {}, currentTypingStyle()), p, { turnOff: currentTypingStyle() });
       onInlineParagraphInput();
     }
   }

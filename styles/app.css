@@ -2286,3 +2286,8 @@ section.docx.dwb-gapped { min-height: var(--dwb-sec-min) !important; }
 @media print { .dwb-page-gap, .dwb-page-gap-band { display: none !important; } }
 /* karta komentarza w trybie Czytanie — bez przycisków, tylko dyskretna podpowiedź */
 .cc-ro-note { padding: 2px 12px 10px; font-size: 11.5px; color: var(--muted); }
+
+/* A+ / A− przy rozmiarze czcionki (jak w Wordzie): zwarte, „A” mniejsze w A− */
+.font-step-btn { min-width: 30px; padding: 0 6px; font-weight: 700; font-size: 14px; }
+.font-step-btn sup { font-size: 9px; margin-left: 1px; }
+.font-step-btn .font-step-small { font-size: 11.5px; }

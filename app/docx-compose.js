@@ -47,6 +47,12 @@ const COMPOSE_STYLE_DEFS = {
     name: "heading 3", id: "Heading3",
     body: `<w:basedOn w:val="{NORMAL}"/><w:next w:val="{NORMAL}"/><w:uiPriority w:val="9"/><w:unhideWhenUsed/><w:qFormat/><w:pPr><w:keepNext/><w:keepLines/><w:spacing w:before="200" w:after="60"/><w:outlineLvl w:val="2"/></w:pPr><w:rPr><w:b/><w:bCs/><w:color w:val="1F3763"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>`,
   },
+  // Ramka: pasek z lewej i jasne tło (jak „Spróbuj:” w przewodniku) — wyróżniony akapit; Enter na
+  // końcu → dalej zwykły tekst (w:next), pusty akapit w ramce + Enter/Backspace → Normalny
+  callout: {
+    name: "ramka", id: "DWBRamka", label: "Ramka",
+    body: `<w:basedOn w:val="{NORMAL}"/><w:next w:val="{NORMAL}"/><w:uiPriority w:val="30"/><w:qFormat/><w:pPr><w:pBdr><w:left w:val="single" w:sz="18" w:space="8" w:color="1F5FBF"/></w:pBdr><w:shd w:val="clear" w:color="auto" w:fill="EEF3FB"/><w:spacing w:before="120" w:after="160"/><w:ind w:left="240" w:right="120"/></w:pPr>`,
+  },
   quote: {
     name: "quote", id: "Quote",
     body: `<w:basedOn w:val="{NORMAL}"/><w:next w:val="{NORMAL}"/><w:uiPriority w:val="29"/><w:qFormat/><w:pPr><w:spacing w:before="200" w:after="160"/><w:ind w:left="864" w:right="864"/></w:pPr><w:rPr><w:i/><w:iCs/><w:color w:val="404040"/></w:rPr>`,
@@ -62,7 +68,7 @@ Object.assign(COMPOSE_STYLE_DEFS, {
   toc2: { name: "toc 2", id: "TOC2", body: `<w:basedOn w:val="{NORMAL}"/><w:next w:val="{NORMAL}"/><w:uiPriority w:val="39"/><w:unhideWhenUsed/><w:pPr><w:spacing w:after="100"/><w:ind w:left="220"/></w:pPr>` },
   toc3: { name: "toc 3", id: "TOC3", body: `<w:basedOn w:val="{NORMAL}"/><w:next w:val="{NORMAL}"/><w:uiPriority w:val="39"/><w:unhideWhenUsed/><w:pPr><w:spacing w:after="100"/><w:ind w:left="440"/></w:pPr>` },
 });
-const COMPOSE_STYLE_KEYS = ["normal", "title", "subtitle", "h1", "h2", "h3", "quote"];
+const COMPOSE_STYLE_KEYS = ["normal", "title", "subtitle", "h1", "h2", "h3", "quote", "callout"];
 const COMPOSE_TOC_KEYS = ["toc1", "toc2", "toc3"];
 
 const COMPOSE_DOC_DEFAULTS = `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="Calibri" w:cs="Calibri"/><w:sz w:val="22"/><w:szCs w:val="22"/><w:lang w:val="pl-PL" w:eastAsia="en-US" w:bidi="ar-SA"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="259" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>`;
@@ -148,6 +154,18 @@ async function readComposeStyleClasses(bytes) {
       const id = key === "normal" ? idx.defaultId : idx.byName.get(COMPOSE_STYLE_DEFS[key].name);
       if (id && !map.has(docxStyleClassName(id))) map.set(docxStyleClassName(id), key);
     });
+    // Pozostałe style akapitu z pliku („Wskazówka”, „Tekst podstawowy”…) — lista stylów pokazuje
+    // ich nazwę. Dawniej pokazywała „Normalny”, więc wybranie „Normalny” nic nie robiło i z akapitu
+    // w takim stylu (np. ramka z tłem) nie było jak wyjść. Akapit listy ma swój przycisk — pomijamy.
+    Array.from(composeParse(xml).getElementsByTagNameNS(W_NS, "style")).forEach((st) => {
+      const id = st.getAttributeNS(W_NS, "styleId");
+      if (st.getAttributeNS(W_NS, "type") !== "paragraph" || !id) return;
+      const cls = docxStyleClassName(id);
+      const name = (composeDirectChild(st, "name")?.getAttributeNS(W_NS, "val") || id).trim();
+      if (map.has(cls) || /^(list paragraph|akapit z listą|toc|spis treści)/i.test(name)) return;
+      if (typeof docHeadingStyleClasses !== "undefined" && docHeadingStyleClasses.get?.(cls)) return;
+      map.set(cls, `custom:${name}`);
+    });
   } catch (_) { /* uszkodzony styles.xml — lista pokaże „Normalny” */ }
   return map;
 }
@@ -193,7 +211,7 @@ async function composeEnsureStyle(zip, key, cache) {
     const normal = idx.defaultId;
     let body = def.body;
     body = normal ? body.replaceAll("{NORMAL}", normal) : body.replace(/<w:basedOn[^>]*\/>|<w:next[^>]*\/>/g, "");
-    const frag = composeParse(`<w:styles xmlns:w="${W_NS}"><w:style w:type="paragraph" w:styleId="${id}"><w:name w:val="${def.name}"/>${body}</w:style></w:styles>`);
+    const frag = composeParse(`<w:styles xmlns:w="${W_NS}"><w:style w:type="paragraph" w:styleId="${id}"><w:name w:val="${def.label || def.name}"/>${body}</w:style></w:styles>`);
     doc.documentElement.appendChild(doc.importNode(frag.documentElement.firstChild, true));
     cache.stylesXml = composeSerialize(doc);
     cache.stylesDirty = true;
@@ -377,7 +395,7 @@ async function createComposeDocx(kind = "blank", lang = "pl") {
   COMPOSE_STYLE_KEYS.filter((k) => k !== "normal").forEach((k) => {
     const def = COMPOSE_STYLE_DEFS[k];
     styleIds[k] = def.id;
-    styleXml.push(`<w:style w:type="paragraph" w:styleId="${def.id}"><w:name w:val="${def.name}"/>${def.body.replaceAll("{NORMAL}", "Normal")}</w:style>`);
+    styleXml.push(`<w:style w:type="paragraph" w:styleId="${def.id}"><w:name w:val="${def.label || def.name}"/>${def.body.replaceAll("{NORMAL}", "Normal")}</w:style>`);
   });
   const langTag = lang === "en" ? "en-GB" : "pl-PL";
   const body = composeTemplateBody(kind, lang).map((s) => composeParagraphXml(s, styleIds)).join("");
@@ -417,6 +435,10 @@ function composeStyleKeyOf(p) {
     const level = docHeadingStyleClasses?.get?.(cls);
     if (level) return level <= 3 ? `h${level}` : "h3";
   }
+  for (const cls of p.classList) { // własny styl pliku („custom:Wskazówka”)
+    const key = docComposeStyleClasses.get(cls);
+    if (key?.startsWith("custom:")) return key;
+  }
   return "normal";
 }
 
@@ -426,7 +448,8 @@ function composeStripNextStyle(newP) {
   let had = false;
   Array.from(newP.classList).forEach((cls) => {
     const key = docComposeStyleClasses.get(cls);
-    if ((key && key !== "normal") || docHeadingStyleClasses?.get?.(cls)) {
+    // własny styl pliku zostaje (jak w Wordzie bez „następnego stylu”) — wyjście: Enter w pustym akapicie
+    if ((key && key !== "normal" && !key.startsWith("custom:")) || docHeadingStyleClasses?.get?.(cls)) {
       newP.classList.remove(cls);
       had = true;
     }

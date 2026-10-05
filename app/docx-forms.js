@@ -333,7 +333,8 @@ async function scanFormFields(bytes) {
       if (dp && (enf === "1" || enf === "true" || enf === "on")) protection = ffAttr(dp, "edit") || "readOnly";
     }
   } catch (_) { /* brak ustawień — bez ochrony */ }
-  return { fields, protection };
+  // liczba akapitów pliku — paintFormFields czeka, aż podgląd ma tyle samo (patrz tam)
+  return { fields, protection, paraCount: collectParagraphElements(doc.documentElement, "all").length };
 }
 
 // ── daty w formacie Worda (d MMMM yyyy, dd.MM.yyyy, dddd…) ───────────────────
@@ -700,6 +701,20 @@ function paintFormFields() {
   const host = docCanvasEl?.querySelector(".docx-preview-host");
   if (!host || !formScan?.fields.length || formScan.bytes !== originalFileBytes) return;
   const previews = collectPreviewParagraphElements(host);
+  // Podgląd już po Enterze/Backspace, a plik (i skan) jeszcze przed — numery akapitów się nie
+  // zgadzają: pole z akapitu N trafiało do NOWEGO akapitu N, a zapis wpisywał je do pliku (cudze
+  // pola w następnych akapitach). Czekamy na nową wersję pliku — wtedy skan i podgląd się zgodzą.
+  if (Number.isFinite(formScan.paraCount) && previews.length !== formScan.paraCount) return;
+  // Opakowania z poprzedniego skanu, których klucz wskazuje dziś inne pole (numeracja „N-ta
+  // kontrolka” przesuwa się po wstawieniu/usunięciu pola) — precz, zanim powstaną nowe. Dawniej
+  // zostawały: pole dostawało drugie opakowanie, a zapis brał XML cudzej kontrolki.
+  const where = new Map(formScan.fields.map((f) => [f.key, Number.isFinite(f.paraIndex) ? previews[f.paraIndex] : null]));
+  host.querySelectorAll(".ff-field[data-ff]").forEach((w) => {
+    const p = w.closest("p");
+    if (where.get(w.dataset.ff) === p) return;
+    if (w.classList.contains("ff-glyph")) { w.remove(); return; } // sztuczny znaczek (☐ starego pola) — nie tekst pliku
+    w.replaceWith(...w.childNodes);
+  });
   formScan.fields.forEach((f) => {
     const p = Number.isFinite(f.paraIndex) ? previews[f.paraIndex] : null;
     if (!p) return;

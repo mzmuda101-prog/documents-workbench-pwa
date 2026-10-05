@@ -66,6 +66,8 @@ async function run() {
   await page.keyboard.type("dalej");
   await page.waitForTimeout(300);
   let runs = await savedRuns(page, "Zwykły");
+  const noise = await page.evaluate(async () => { const z = await JSZip.loadAsync(await buildDocumentForSave()); const d = await z.file("word/document.xml").async("string"); return (d.match(/<w:p[ >](?:(?!<\/w:p>).)*Zwykły(?:(?!<\/w:p>).)*<\/w:p>/s) || [""])[0].includes('w:b w:val="0"'); });
+  check("zwykły akapit po Ctrl/⌘+B: bez zbędnego w:b w:val=\"0\" w pliku", !noise, String(noise));
   check("plik: „Zwykły ” zwykły, „gruby” pogrubiony, „dalej” zwykły (bez spacji)", JSON.stringify(runs) === JSON.stringify([["Zwykły ", false, false], ["gruby", true, false], ["dalej", false, false]]), JSON.stringify(runs));
 
   // ── 2. zgłoszenie: kursor na końcu ISTNIEJĄCEGO pogrubionego słowa → Ctrl/⌘+B → pisanie ──────
@@ -118,6 +120,39 @@ async function run() {
   runs = await savedRuns(page, "podkreślony");
   check("podkreślenie wyłączone w trakcie pisania: „koniec” bez podkreślenia", JSON.stringify(runs) === JSON.stringify([["Tekst ", false, false], ["podkreślony", false, true], ["koniec", false, false]]), JSON.stringify(runs));
 
+  // ── 3b. kursywa: Ctrl/⌘+I za pochylonym słowem; w Cytacie (pochylony ze stylu) → w:i w:val="0" ──
+  await page.evaluate(() => { const ps = document.querySelectorAll(".docx-preview-host p.docx-editable-p"); const p = ps[ps.length - 1]; placeCaret(p, p.textContent.length); });
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Zdanie ");
+  await page.keyboard.press(`${MOD}+i`);
+  await page.keyboard.type("pochyłe");
+  const iOn = await page.evaluate(() => document.getElementById("fmtItalic").classList.contains("is-on"));
+  await page.keyboard.press(`${MOD}+i`);
+  const iOff = await page.evaluate(() => document.getElementById("fmtItalic").classList.contains("is-on"));
+  await page.keyboard.type("proste");
+  await page.waitForTimeout(300);
+  const iRuns = await page.evaluate(async () => {
+    const z = await JSZip.loadAsync(await buildDocumentForSave());
+    const doc = await z.file("word/document.xml").async("string");
+    const p = (doc.match(/<w:p[ >](?:(?!<\/w:p>).)*pochyłe(?:(?!<\/w:p>).)*<\/w:p>/s) || [""])[0];
+    return [...p.matchAll(/<w:r>(.*?)<\/w:r>/gs)].map((m) => [(m[1].match(/<w:t[^>]*>([^<]*)/) || [])[1], /<w:i\/>|<w:i w:val="1"\/>/.test(m[1]), /<w:i w:val="0"\/>/.test(m[1])]);
+  });
+  check("kursywa: przycisk I świeci po Ctrl/⌘+I i gaśnie po drugim", iOn && !iOff, JSON.stringify({ iOn, iOff }));
+  check("kursywa: „pochyłe” pochylone, „proste” zaraz za nim (bez spacji) NIE, bez zbędnego w:i w:val=\"0\"", JSON.stringify(iRuns) === JSON.stringify([["Zdanie ", false, false], ["pochyłe", true, false], ["proste", false, false]]), JSON.stringify(iRuns));
+  await page.selectOption("#fmtParaStyle", "quote"); // Cytat = pochylony ze stylu
+  await idle(page);
+  await page.evaluate(() => { const p = [...document.querySelectorAll(".docx-preview-host p.docx-editable-p")].find((x) => x.textContent.includes("proste")); placeCaret(p, p.textContent.length); });
+  await page.keyboard.press(`${MOD}+i`);
+  await page.keyboard.type(" X");
+  await page.waitForTimeout(300);
+  const qx = await page.evaluate(async () => {
+    const z = await JSZip.loadAsync(await buildDocumentForSave());
+    const doc = await z.file("word/document.xml").async("string");
+    const p = (doc.match(/<w:p[ >](?:(?!<\/w:p>).)*proste(?:(?!<\/w:p>).)*<\/w:p>/s) || [""])[0];
+    return /<w:i w:val="0"\/>(?:(?!<\/w:r>).)*<w:t[^>]*> X/s.test(p);
+  });
+  check("Cytat (pochylony ze stylu) + Ctrl/⌘+I: dopisek zapisany z w:i w:val=\"0\"", qx, String(qx));
+
   // ── 4. zaznaczenie całego pogrubionego słowa → B „wciśnięty”; przycisk B zdejmuje pogrubienie ──
   await page.evaluate(() => {
     const p = [...document.querySelectorAll(".docx-preview-host p.docx-editable-p")].find((x) => x.textContent.includes("gruby"));
@@ -137,6 +172,7 @@ async function run() {
   // ── 5. rozmiar przy kursorze (zgłoszenie: klik w słowo 8 pt pokazywał 9 pt) ─────────────
   await page.evaluate(() => { const ps = document.querySelectorAll(".docx-preview-host p.docx-editable-p"); const p = ps[ps.length - 1]; placeCaret(p, p.textContent.length); });
   await page.keyboard.press("Enter");
+  await page.selectOption("#fmtFontSize", "12");
   await page.keyboard.type("Duże litery ");
   await page.selectOption("#fmtFontSize", "8");
   await page.keyboard.type("malutkie");
@@ -164,6 +200,23 @@ async function run() {
     return m ? (m[0].match(/<w:sz w:val="(\d+)"/) || [])[1] : null;
   });
   check("dopisane na początku słowa 8 pt dostaje 8 pt (jak pokazuje lista)", typedSize === "16", String(typedSize));
+
+  // ── 6. A+ na zaznaczeniu z różnymi rozmiarami: każdy o stopień osobno (8→9, 12→14) ──────────
+  await page.evaluate(() => {
+    const p = [...document.querySelectorAll(".docx-preview-host p.docx-editable-p")].find((x) => x.textContent.includes("malutkie"));
+    const r = document.createRange(); r.selectNodeContents(p); const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+  });
+  await page.waitForTimeout(200);
+  await page.click("#fmtGrow");
+  await page.waitForTimeout(400);
+  const sizes = await page.evaluate(async () => {
+    const z = await JSZip.loadAsync(await buildDocumentForSave());
+    const doc = await z.file("word/document.xml").async("string");
+    const p = (doc.match(/<w:p[ >](?:(?!<\/w:p>).)*malutkie(?:(?!<\/w:p>).)*<\/w:p>/s) || [""])[0];
+    const runsOnly = p.replace(/<w:pPr>.*?<\/w:pPr>/s, ""); // bez znaku końca akapitu (w:pPr/w:rPr)
+    return [...new Set((runsOnly.match(/<w:sz w:val="(\d+)"/g) || []).map((m) => m.match(/\d+/)[0]))].sort();
+  });
+  check("A+ na zaznaczeniu 12 i 8 pt: każdy o stopień (14 i 9 pt) — różnice zostają", JSON.stringify(sizes) === JSON.stringify(["18", "28"]), JSON.stringify(sizes));
 
   await browser.close();
   const real = errors.filter((e) => !/ResizeObserver/.test(e));

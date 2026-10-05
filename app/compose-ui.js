@@ -95,7 +95,7 @@ const composeUi = (() => {
   // ── operacje ──────────────────────────────────────────────────────────────
   async function applyStyle(key) {
     const p = caretParagraph();
-    if (!p) { syncState(); return; }
+    if (!p || key.startsWith("custom:")) { syncState(); return; } // ten sam styl pliku — bez zmian
     await runFileEdit({ op: "paraFormat", indices: selectedParagraphIndices(p), style: key }, caretState(p));
   }
 
@@ -122,6 +122,29 @@ const composeUi = (() => {
   }
 
   // Enter w pustym punkcie / Backspace na początku punktu (docx-inline-edit.js) — koniec listy.
+  // Pusty akapit „wyróżniony” (ramka: obramowanie albo tło akapitu, cytat) → Normalny (Enter albo
+  // Backspace, jak wyjście z listy). Tylko takie: zwykły styl treści pliku („Tekst podstawowy”)
+  // i nagłówki działają jak w Wordzie — inaczej Enter+Backspace w piśmie z własnym stylem treści
+  // zamieniał akapit zamiast go skleić. Zwraca false, gdy akapit nie jest wyróżniony.
+  function isBoxParagraph(p) {
+    const key = typeof composeStyleKeyOf === "function" ? composeStyleKeyOf(p) : "normal";
+    if (key === "quote" || key === "callout") return true;
+    if (!key.startsWith("custom:")) return false;
+    const cs = getComputedStyle(p);
+    const bg = cs.backgroundColor;
+    const border = ["Top", "Right", "Bottom", "Left"].some((s) => parseFloat(cs[`border${s}Width`]) > 0 && cs[`border${s}Style`] !== "none");
+    // tło: widoczne, nie białe (styl „Normal (Web)” ma białe cieniowanie — to nie ramka)
+    const m = String(bg || "").match(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?/);
+    const tinted = m && (m[4] === undefined || parseFloat(m[4]) > 0.05) && Math.min(+m[1], +m[2], +m[3]) < 246;
+    return border || !!tinted;
+  }
+  function plainStyleAt(p) {
+    const index = resolveParaIndex(p);
+    if (index < 0 || !isBoxParagraph(p)) return false;
+    runFileEdit({ op: "paraFormat", indices: [index], style: "normal" }, { paraIndex: index, offset: 0 });
+    return true;
+  }
+
   function endListAt(p) {
     const index = resolveParaIndex(p);
     if (index < 0) return false;
@@ -2248,7 +2271,15 @@ const composeUi = (() => {
     if (p) lastP = p;
     const target = p || lastP;
     if (styleSel && document.activeElement !== styleSel) {
-      styleSel.value = target && typeof composeStyleKeyOf === "function" ? composeStyleKeyOf(target) : "normal";
+      const key = target && typeof composeStyleKeyOf === "function" ? composeStyleKeyOf(target) : "normal";
+      // własny styl pliku: osobna pozycja z jego nazwą (wybranie „Normalny” wtedy działa)
+      let cur = styleSel.querySelector("option[data-cur]");
+      if (key.startsWith("custom:")) {
+        if (!cur) { cur = document.createElement("option"); cur.dataset.cur = "1"; styleSel.appendChild(cur); }
+        cur.value = key;
+        cur.textContent = key.slice(7);
+      } else cur?.remove();
+      styleSel.value = key;
     }
     if (alignBtn) alignBtn.innerHTML = alignSvg(currentAlign());
     listBtn?.classList.toggle("is-on", !!target && isListParagraph(target) && !pop);
@@ -2493,5 +2524,5 @@ const composeUi = (() => {
     document.getElementById(id)?.addEventListener("click", openNewDialog);
   });
 
-  return { openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, openLinkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
+  return { openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, plainStyleAt, isBoxParagraph, openLinkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
 })();

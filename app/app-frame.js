@@ -501,10 +501,25 @@ const appFrame = (() => {
     syncCurrentSection();
     syncDocViewportHeight();
   }
+  // Skok do sekcji. Płynne przewijanie bywa przerwane albo „przestrzelone”, gdy w trakcie zmienia
+  // się układ (dociągnięte czcionki, odstępy stron) — na wolnym urządzeniu sekcja lądowała setki px
+  // niżej. Po animacji sprawdzamy i dociągamy bez animacji (chyba że użytkownik sam przewija).
+  let jumpToken = 0;
+  ["wheel", "touchstart", "keydown", "pointerdown"].forEach((type) => docViewportEl?.addEventListener(type, () => { jumpToken++; }, { passive: true }));
   function scrollDocTo(el) {
     if (!docViewportEl || !el) return;
-    const top = el.getBoundingClientRect().top - docViewportEl.getBoundingClientRect().top + docViewportEl.scrollTop - 12;
-    docViewportEl.scrollTo({ top: Math.max(0, top), behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    const offset = () => el.getBoundingClientRect().top - docViewportEl.getBoundingClientRect().top - 12;
+    const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
+    docViewportEl.scrollTo({ top: Math.max(0, docViewportEl.scrollTop + offset()), behavior: smooth ? "smooth" : "auto" });
+    if (!smooth) return;
+    const token = ++jumpToken;
+    const settle = () => {
+      if (token !== jumpToken || !el.isConnected) return;
+      const d = offset();
+      if (Math.abs(d) > 24) docViewportEl.scrollTo({ top: Math.max(0, docViewportEl.scrollTop + d), behavior: "auto" });
+    };
+    setTimeout(settle, 900);
+    setTimeout(settle, 1800);
   }
   let currentChip = null;
   function syncCurrentSection() {

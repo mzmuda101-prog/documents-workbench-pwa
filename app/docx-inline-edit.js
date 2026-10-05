@@ -486,11 +486,20 @@ function onParagraphBeforeInput(e) {
     }
   }
 
+  // litera wpisana z kursorem w środku pola/symbolu — obok wyspy, nie w niej
+  const selNow = window.getSelection();
+  if (selNow?.rangeCount && selNow.isCollapsed && caretOutOfIsland(selNow.getRangeAt(0), p) && !runStyleHasProps(mergeRunStyles(getInheritedRunStyleAtCaret(p), currentTypingStyle()))) {
+    e.preventDefault();
+    insertTextAtCaret(ch);
+    onInlineParagraphInput();
+    return;
+  }
   const inherited = getInheritedRunStyleAtCaret(p);
-  const style = mergeRunStyles(inherited, currentTypingStyle());
+  const typing = currentTypingStyle();
+  const style = mergeRunStyles(inherited, typing);
   if (!runStyleHasProps(style)) return;
   e.preventDefault();
-  insertStyledTextAtCaret(ch, style, p);
+  insertStyledTextAtCaret(ch, style, p, { turnOff: typing });
   if (activeTypingStyle) typingStyleAt = caretPoint(); // kursor poszedł za wpisaną literą — format dalej obowiązuje
   onInlineParagraphInput();
 }
@@ -866,11 +875,35 @@ function jumpToHeading(delta) {
   return true;
 }
 
+// Kursor (albo początek zaznaczenia) W ŚRODKU wyspy — pola formularza, symbolu, odnośnika
+// przypisu, rysunku (contenteditable=false) — wychodzi przed nią (na samym początku jej tekstu)
+// albo za nią. Strzałkami da się wejść kursorem w tekst pola; Enter rozcinał wtedy pole na dwa
+// (zdublowana kontrolka, przesunięta numeracja pól i cudze pola w następnych akapitach).
+function caretOutOfIsland(range, p) {
+  const n = range.startContainer;
+  const el = n.nodeType === 1 ? n : n.parentElement;
+  let isl = el?.closest?.('[contenteditable="false"]');
+  if (!isl || isl === p || !p.contains(isl)) return false;
+  // najbardziej zewnętrzna wyspa w akapicie (pole w polu, znaczek w opakowaniu)
+  for (let up = isl.parentElement?.closest('[contenteditable="false"]'); up && up !== p && p.contains(up); up = up.parentElement?.closest('[contenteditable="false"]')) isl = up;
+  const atStart = document.createRange();
+  atStart.setStart(isl, 0);
+  atStart.setEnd(range.startContainer, range.startOffset);
+  if (atStart.toString().replace(/\uFEFF/g, "").length === 0) range.setStartBefore(isl);
+  else range.setStartAfter(isl);
+  range.collapse(true);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  return true;
+}
+
 function splitParagraphDomAtCaret(p) {
   const sel = window.getSelection();
   if (!sel?.rangeCount) return null;
   const range = sel.getRangeAt(0);
   if (!range.collapsed) range.deleteContents();
+  caretOutOfIsland(range, p);
   const tailRange = document.createRange();
   tailRange.setStart(range.startContainer, range.startOffset);
   tailRange.setEndAfter(p.lastChild || p);
@@ -937,6 +970,9 @@ async function handleInlineEnter(p, paraIndex, e) {
   e.preventDefault();
   // Enter w PUSTYM punkcie listy kończy listę (jak w Wordzie), zamiast robić kolejny pusty punkt
   if (isListParagraph(p) && !previewRunsToPlainText(extractRunsFromPreviewParagraph(p)) && typeof composeUi !== "undefined" && composeUi.endListAt(p)) return;
+  // Enter w PUSTYM akapicie „wyróżnionym” (ramka, cytat) — akapit wraca do Normalnego (wyjście
+  // jak z listy); dawniej powstawał kolejny pusty w ramce i nie było jak z niej wyjść
+  if (!previewRunsToPlainText(extractRunsFromPreviewParagraph(p)) && typeof composeUi !== "undefined" && composeUi.plainStyleAt?.(p)) return;
   const newP = splitParagraphDomAtCaret(p);
   if (!newP) return;
   prepareEditableParagraph(newP);
@@ -971,6 +1007,12 @@ async function handleInlineBackspace(p, paraIndex, e) {
   if (isListParagraph(p) && sel?.isCollapsed && !e.fromDelete && typeof composeUi !== "undefined") {
     e.preventDefault();
     composeUi.endListAt(p);
+    return;
+  }
+  // pusty akapit „wyróżniony” (ramka, cytat) — najpierw zwykły tekst, kolejny Backspace skleja
+  if (sel?.isCollapsed && !e.fromDelete && !previewRunsToPlainText(extractRunsFromPreviewParagraph(p)) && typeof composeUi !== "undefined" && composeUi.isBoxParagraph?.(p)) {
+    e.preventDefault();
+    composeUi.plainStyleAt(p);
     return;
   }
   if (paraIndex <= 0) return;
@@ -1482,6 +1524,12 @@ function wireFormatToolbar() {
     sel.blur();
     if (v && v.trim()) apply(v.trim()); else syncFormatIndicators();
   };
+  // A+ / A− — o stopień z listy Worda, każdy rozmiar w zaznaczeniu osobno (stepFontSize)
+  [["fmtGrow", 1], ["fmtShrink", -1]].forEach(([id, dir]) => {
+    const b = document.getElementById(id);
+    b?.addEventListener("mousedown", (e) => e.preventDefault()); // zaznaczenie w tekście zostaje
+    b?.addEventListener("click", () => { if (!readOnlyMode) stepFontSize(dir, false); });
+  });
   const sizeSel = document.getElementById("fmtFontSize");
   sizeSel?.addEventListener("change", (e) => {
     if (e.target.value === "__custom") askOther(sizeSel, "fontSizeOther", applyFontSizePt);

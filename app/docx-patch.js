@@ -95,8 +95,13 @@ function splitParagraphInXml(xml, index, beforeText, afterText, beforeRuns, afte
   if (!p) return { xml, count: 0 };
   if (beforeRuns?.length) applyRunsToParagraphXml(p, beforeRuns);
   else setParagraphText(p, beforeText);
-  const newP = p.cloneNode(true);
-  clearParagraphRuns(newP);
+  // Nowy akapit = TYLKO właściwości akapitu (w:pPr) + treść „po kursorze”. Dawniej pełna kopia
+  // starego bez fragmentów tekstu: zostawały w niej pusta kopia pola formularza (zdublowana
+  // kontrolka, przesunięta numeracja pól → cudze pola w następnych akapitach), zakładki
+  // o tej samej nazwie i zdublowane zakresy komentarzy (Word zgłasza błąd pliku).
+  const newP = doc.createElementNS(W_NS, "w:p");
+  const pPrSrc = Array.from(p.childNodes).find((n) => n.localName === "pPr" && n.namespaceURI === W_NS);
+  if (pPrSrc) newP.appendChild(pPrSrc.cloneNode(true));
   if (afterRuns?.length) applyRunsToParagraphXml(newP, afterRuns);
   else setParagraphText(newP, afterText);
   if (p.nextSibling) p.parentNode.insertBefore(newP, p.nextSibling);
