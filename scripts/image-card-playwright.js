@@ -6,6 +6,8 @@
 // (bez znikania) i ten sam rozmiar obrazu (bez „dociągania”). Strzałki: zapis raz, po przerwie.
 // Linki do obrazów (Word: Link → Miejsce w tym dokumencie / odsyłacz do rysunku): obraz jako cel
 // w okienku linku, najechanie pokazuje podgląd obrazu bez skoku, klik skacze z „↩ Wróć”.
+// Z okienka linku: „Powiększ” / klik w obraz / Spacja / Shift+klik w link = podgląd obrazu
+// (image-viewer.js) bez przewijania dokumentu; na dotyku — przytrzymanie, potem „Powiększ”.
 // ENGINE=webkit (Safari/iPad).
 
 const pw = require("playwright");
@@ -134,8 +136,34 @@ async function run() {
   const peek = await page.evaluate(() => { const el = document.querySelector(".link-peek"); const i = el?.querySelector("img"); return el && { cap: el.querySelector(".link-peek-cap").textContent, loaded: i.complete && i.naturalWidth > 0, inView: el.getBoundingClientRect().bottom <= innerHeight && el.getBoundingClientRect().left >= 0 }; });
   check("najechanie: podgląd obrazu z podpisem, na ekranie", peek && peek.loaded && peek.inView && /Rysunek 1/.test(peek.cap), JSON.stringify(peek));
   check("podgląd nie przewija dokumentu", (await page.evaluate(() => docViewportEl.scrollTop)) === st0);
+  const viewerOpen = () => page.evaluate(() => !!document.querySelector(".image-viewer:not([hidden])"));
+  const zb = await page.$eval(".link-peek-zoom", (b) => { const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  await page.mouse.move(zb.x, zb.y, { steps: 8 }); // z linku na okienko — nie może zniknąć po drodze
+  await page.waitForTimeout(400);
+  check("zjazd myszą z linku na okienko: okienko zostaje", !!(await page.$(".link-peek")));
+  await page.mouse.click(zb.x, zb.y);
+  await page.waitForTimeout(300);
+  check("„Powiększ” w okienku linku otwiera podgląd obrazu, dokument stoi w miejscu", await viewerOpen() && !(await page.$(".link-peek")) && (await page.evaluate(() => docViewportEl.scrollTop)) === st0);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(250);
+  check("po zamknięciu podglądu dokument dalej w tym samym miejscu (bez skoku do obrazu)", !(await viewerOpen()) && (await page.evaluate(() => docViewportEl.scrollTop)) === st0 && !(await page.$(".link-back:not([hidden])")));
+  await page.click(".docx-preview-host a[data-dwb-img-link]", { modifiers: ["Shift"] });
+  await page.waitForTimeout(300);
+  check("Shift+klik w link do obrazu = od razu podgląd, bez skoku", await viewerOpen() && (await page.evaluate(() => docViewportEl.scrollTop)) === st0 && !(await page.$(".link-back:not([hidden])")));
+  await page.keyboard.press("Escape");
   await page.mouse.move(5, 5);
+  await page.waitForTimeout(500);
+  await page.hover(".docx-preview-host a[data-dwb-img-link]");
+  await page.waitForSelector(".link-peek", { timeout: 3000 });
+  await page.keyboard.press(" ");
+  await page.waitForTimeout(300);
+  check("Spacja przy okienku linku = podgląd (jak Szybki podgląd na Macu)", await viewerOpen() && (await page.evaluate(() => docViewportEl.scrollTop)) === st0);
+  await page.keyboard.press("Escape");
   await page.waitForTimeout(200);
+  await page.hover(".docx-preview-host a[data-dwb-img-link]");
+  await page.waitForSelector(".link-peek", { timeout: 3000 });
+  await page.mouse.move(5, 5);
+  await page.waitForTimeout(900);
   check("zjechanie z linku chowa podgląd", !(await page.$(".link-peek")));
   await page.click(".docx-preview-host a[data-dwb-img-link]");
   await page.waitForTimeout(900);
@@ -163,6 +191,12 @@ async function run() {
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     await tp.waitForTimeout(400);
     check("dotyk: po przytrzymaniu nie ma skoku (sam podgląd)", !(await tp.$(".link-back:not([hidden])")));
+    const tst0 = await tp.evaluate(() => docViewportEl.scrollTop);
+    await tp.tap(".link-peek-zoom");
+    await tp.waitForTimeout(400);
+    check("dotyk: „Powiększ” w okienku po przytrzymaniu otwiera podgląd, bez skoku", await tp.evaluate(() => !!document.querySelector(".image-viewer:not([hidden])")) && (await tp.evaluate(() => docViewportEl.scrollTop)) === tst0 && !(await tp.$(".link-back:not([hidden])")));
+    await tp.tap('.image-viewer .iv-btn[data-act="close"]');
+    await tp.waitForTimeout(300);
   }
   await tp.tap(".docx-preview-host a[data-dwb-img-link]");
   await tp.waitForTimeout(900);

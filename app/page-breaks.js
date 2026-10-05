@@ -84,10 +84,22 @@ const dwbPageBreaks = (() => {
   }
   const hasClass = (el, set) => !!el && [...el.classList].some((c) => set.has(c));
 
-  // Wiersze tekstu elementu: [[góra, dół], …] w układzie okna (prostokąty znaków złączone w linijki)
+  // Wiersze tekstu elementu: [[góra, dół], …] w układzie okna (prostokąty znaków złączone w linijki).
+  // Obrazy i inne „wyspy” w linii (rysunek, wykres, pole formularza) dokładamy osobno: prostokąty
+  // zakresu ich nie dają, a wtedy akapit z obrazem był jedną niską linijką na dole obrazu — odstęp
+  // strony liczony od niej zostawiał pas „str. N” w środku obrazu (zgłoszenie 2026-10-06).
+  // (opakowanie wyspy [contenteditable=false] to span — jego prostokąt ma wysokość linijki, nie
+  // obrazu; liczymy też to, co w środku: obraz, blok inline-block)
+  const ATOMS = "img, svg, canvas, video, object, iframe, [contenteditable=false], [contenteditable=false] > *";
   function textLines(el, range = document.createRange()) {
     range.selectNodeContents(el);
-    const rects = [...range.getClientRects()].filter((r) => r.height > 0).sort((a, b) => a.top - b.top);
+    const rects = [...range.getClientRects()];
+    el.querySelectorAll(ATOMS).forEach((a) => {
+      if (a.closest(".dwb-page-gap, .dwb-page-gap-spacer")) return;
+      const r = a.getBoundingClientRect();
+      if (r.height > 0 && r.width > 0) rects.push(r);
+    });
+    rects.splice(0, rects.length, ...rects.filter((r) => r.height > 0).sort((a, b) => a.top - b.top));
     if (!rects.length) return [];
     const lines = [];
     let top = rects[0].top;
@@ -469,9 +481,39 @@ const dwbPageBreaks = (() => {
     // zostawał przy starym akapicie: tekst wjeżdżał pod pas „str. N” albo zostawała pusta dziura
     // (zgłoszenie 2026-10-05). Każda zmiana akapitów → przeliczenie; własne odstępy pomijamy.
     const ours = (n) => n.nodeType === 1 && n.matches?.(".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-break");
+    // Raz na zawsze (zgłoszenie 2026-10-06: „przy różnych manewrach coś wjeżdża, jakby nie było
+    // układu strony”): obserwujemy rozmiar KAŻDEGO bloku treści kartki (akapit, tabela, obraz).
+    // Cokolwiek zmieni wysokość bloku — suwak obrazu, formatowanie, pole formularza, krój, który
+    // doszedł później, zmiana wyrównania — przelicza granice, bez wyliczania, które funkcje to robią.
+    // Własne odstępy nie są obserwowane; „nic się nie zmieniło” kończy liczenie bez dotykania DOM.
+    const sizes = new WeakMap(); // blok → ostatnia wysokość (pierwszy pomiar to nie zmiana)
+    const watched = new WeakSet();
+    const blockRO = new ResizeObserver((entries) => {
+      let changed = false;
+      for (const e of entries) {
+        const h = Math.round(e.contentRect.height * 2) / 2;
+        if (sizes.has(e.target) && sizes.get(e.target) !== h) changed = true;
+        sizes.set(e.target, h);
+      }
+      if (changed) schedule(150);
+    });
+    const watchBlocks = () => {
+      docCanvasEl.querySelectorAll(".docx-preview-host section.docx > article > *").forEach((b) => {
+        if (!watched.has(b) && !ours(b)) { watched.add(b); blockRO.observe(b); }
+      });
+    };
     new MutationObserver((records) => {
-      if (records.some((r) => [...r.addedNodes, ...r.removedNodes].some((n) => !ours(n)))) schedule(150);
-    }).observe(docCanvasEl, { childList: true, subtree: true });
+      let content = false;
+      for (const r of records) {
+        if (r.type === "childList") { if ([...r.addedNodes, ...r.removedNodes].some((n) => !ours(n))) content = true; }
+        else if (!ours(r.target) && !r.target.closest?.(".dwb-page-gap-band, .dwb-page-break")) content = true; // styl obrazu, tekst
+        if (content) break;
+      }
+      if (!content) return;
+      watchBlocks();
+      schedule(150);
+    }).observe(docCanvasEl, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["style", "width", "height", "src"] });
+    watchBlocks();
   }
   document.fonts?.ready?.then(() => schedule(0));
 

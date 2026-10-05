@@ -159,7 +159,7 @@ const imageViewer = (() => {
     requestAnimationFrame(() => {
       window.dispatchEvent(new Event("resize"));
       const shown = list[idx];
-      if (side && scroll && shown?.isConnected) shown.scrollIntoView({ block: "center", behavior: "instant" });
+      if (side && scroll && !keepDocPlace && shown?.isConnected) shown.scrollIntoView({ block: "center", behavior: "instant" });
     });
   }
   // ── granica panelu „Pół ekranu” ─────────────────────────────────────────────
@@ -338,7 +338,10 @@ const imageViewer = (() => {
     requestAnimationFrame(() => ui.root.classList.add("iv-ready"));
   }
 
-  function open(img) {
+  // keepDocPlace: otwarte z linku do obrazu — dokument zostaje tam, gdzie czytasz (bez przewijania
+  // do obrazu ani przy Pół ekranu, ani po zamknięciu).
+  let keepDocPlace = false;
+  function open(img, opts = {}) {
     if (!img?.src) return;
     if (!ui) build();
     labels();
@@ -347,6 +350,7 @@ const imageViewer = (() => {
     startIdx = list.indexOf(img);
     if (!wasOpen) returnFocus = document.activeElement;
     lastPointerInside = !wasOpen;
+    keepDocPlace = !!opts.keepDocPlace;
     ui.root.hidden = false;
     syncModeUi();
     show(startIdx);
@@ -378,7 +382,7 @@ const imageViewer = (() => {
     gesture = null;
     const shownImg = list[idx];
     // przejrzany dalej inny obraz — dokument przewija się do niego
-    if (idx !== startIdx && shownImg?.isConnected) shownImg.scrollIntoView({ block: "center", behavior: "instant" });
+    if (idx !== startIdx && !keepDocPlace && shownImg?.isConnected) shownImg.scrollIntoView({ block: "center", behavior: "instant" });
     if (returnFocus?.isConnected) returnFocus.focus?.({ preventScroll: true });
     returnFocus = null;
     list = [];

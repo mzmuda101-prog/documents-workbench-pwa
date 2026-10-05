@@ -172,13 +172,29 @@ function linkTargetImage(id) {
   return null;
 }
 
-const linkPeek = { el: null, a: null, timer: 0, touchTimer: 0, touchShown: false, pending: null };
+const linkPeek = { el: null, a: null, img: null, timer: 0, hideTimer: 0, touchTimer: 0, touchShown: false, pending: null };
 function hideLinkPeek() {
   clearTimeout(linkPeek.timer);
+  clearTimeout(linkPeek.hideTimer);
   linkPeek.pending = null; // przerwane czekanie (przewinięcie, klik) — następny ruch zaczyna od nowa
   linkPeek.el?.remove();
   linkPeek.el = null;
   linkPeek.a = null;
+  linkPeek.img = null;
+}
+// Mysz zjeżdża z linku na okienko (przycisk „Powiększ”) — chwila zwłoki, żeby nie znikło po drodze.
+function hideLinkPeekSoon() {
+  clearTimeout(linkPeek.hideTimer);
+  linkPeek.hideTimer = setTimeout(hideLinkPeek, 260);
+}
+// Podgląd obrazu na cały / pół ekranu prosto z linku — bez skoku do obrazu w dokumencie.
+function zoomLinkTarget(a) {
+  const hit = a ? linkTargetImage((a.getAttribute("href") || "").slice(1)) : null;
+  if (!hit || typeof imageViewer === "undefined") return false;
+  hideLinkPeek();
+  linkPeek.touchShown = false;
+  imageViewer.open(hit.img, { keepDocPlace: true });
+  return true;
 }
 function showLinkPeek(a, touch = false) {
   const hit = linkTargetImage((a.getAttribute("href") || "").slice(1));
@@ -187,7 +203,8 @@ function showLinkPeek(a, touch = false) {
   hideLinkPeek();
   const el = document.createElement("div");
   el.className = "link-peek";
-  el.setAttribute("role", "tooltip");
+  el.setAttribute("role", "dialog");
+  el.setAttribute("aria-label", t("linkPeekZoom"));
   const img = document.createElement("img");
   img.src = hit.img.currentSrc || hit.img.src;
   img.alt = hit.img.getAttribute("alt") || "";
@@ -197,10 +214,24 @@ function showLinkPeek(a, touch = false) {
   const tip = document.createElement("div");
   tip.className = "link-peek-tip";
   tip.textContent = t(touch ? "linkPeekGoTouch" : "linkPeekGo");
-  el.append(img, cap, tip);
+  // okienko jest klikalne: obraz albo „Powiększ” = podgląd obrazu (image-viewer.js)
+  const zoom = document.createElement("button");
+  zoom.type = "button";
+  zoom.className = "btn link-peek-zoom";
+  zoom.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16" y2="16"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg><span></span>';
+  zoom.querySelector("span").textContent = t("linkPeekZoom");
+  if (!touch) { zoom.dataset.hint = ""; zoom.dataset.hintPl = I18N.pl.linkPeekZoomHint; zoom.dataset.hintEn = I18N.en.linkPeekZoomHint; zoom.dataset.hintDelay = "0.4"; }
+  const row = document.createElement("div");
+  row.className = "link-peek-row";
+  row.append(tip, zoom);
+  el.append(img, cap, row);
+  el.addEventListener("click", (e) => { if (e.target === img || e.target.closest(".link-peek-zoom")) zoomLinkTarget(a); });
+  el.addEventListener("pointerenter", () => clearTimeout(linkPeek.hideTimer));
+  el.addEventListener("pointerleave", (e) => { if (e.pointerType !== "touch" && !a.contains(e.relatedTarget)) hideLinkPeekSoon(); });
   document.body.appendChild(el);
   linkPeek.el = el;
   linkPeek.a = a;
+  linkPeek.img = hit.img;
   const place = () => {
     if (linkPeek.el !== el) return;
     const vv = window.visualViewport;
@@ -259,8 +290,12 @@ function jumpToLinkTarget(id) {
 function onDocLinkClick(e) {
   const a = e.target.closest?.("a[href]");
   if (!a || !docCanvasEl.contains(a) || e.button > 0) return;
+  // przytrzymanie = sam podgląd; okienko zostaje po puszczeniu palca (można stuknąć „Powiększ”),
+  // znika po stuknięciu obok albo przewinięciu
+  if (linkPeek.touchShown) { linkPeek.touchShown = false; e.preventDefault(); return; }
   hideLinkPeek();
-  if (linkPeek.touchShown) { linkPeek.touchShown = false; e.preventDefault(); return; } // przytrzymanie = sam podgląd
+  // Shift+klik w link do obrazu = od razu podgląd obrazu (bez skoku)
+  if (e.shiftKey && a.hasAttribute("data-dwb-img-link") && zoomLinkTarget(a)) { e.preventDefault(); return; }
   const sel = window.getSelection();
   if (sel && !sel.isCollapsed && a.contains(sel.anchorNode)) return; // zaznaczanie tekstu linku
   e.preventDefault(); // nigdy nie zastępuj aplikacji stroną z linku
@@ -282,6 +317,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const peekSoon = (e) => {
     if (e.pointerType === "touch") return;
     const a = imgLinkAt(e);
+    if (a && linkPeek.a === a) clearTimeout(linkPeek.hideTimer); // wrócił z okienka na link
     if (!a || linkPeek.a === a || linkPeek.pending === a) return;
     linkPeek.pending = a;
     clearTimeout(linkPeek.timer);
@@ -292,7 +328,9 @@ document.addEventListener("DOMContentLoaded", () => {
   docCanvasEl?.addEventListener("pointerout", (e) => {
     if (e.pointerType === "touch") return;
     const a = imgLinkAt(e);
-    if (a && !a.contains(e.relatedTarget)) hideLinkPeek();
+    if (!a || a.contains(e.relatedTarget)) return;
+    if (linkPeek.a === a && linkPeek.el) hideLinkPeekSoon(); // może jedzie na okienko
+    else hideLinkPeek();
   });
   docCanvasEl?.addEventListener("pointerdown", (e) => {
     clearTimeout(linkPeek.touchTimer);
@@ -310,8 +348,15 @@ document.addEventListener("DOMContentLoaded", () => {
   // przytrzymanie na linku: bez systemowego menu (Kopiuj / Otwórz link) zamiast podglądu
   docCanvasEl?.addEventListener("contextmenu", (e) => { if (linkPeek.touchShown || (e.pointerType === "touch" && imgLinkAt(e))) e.preventDefault(); });
   docViewportEl?.addEventListener("scroll", hideLinkPeek, { passive: true });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && linkPeek.el) hideLinkPeek(); });
-  document.addEventListener("pointerdown", (e) => { if (linkPeek.el && !docCanvasEl?.contains(e.target)) hideLinkPeek(); }, true);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && linkPeek.el) hideLinkPeek();
+    // Spacja przy okienku obrazu (jak „Szybki podgląd” na Macu) = powiększ; nie przy pisaniu
+    if (e.key === " " && linkPeek.el && linkPeek.a && !e.ctrlKey && !e.metaKey && !e.altKey
+      && !document.activeElement?.closest?.("input, textarea, select, [contenteditable]:not([contenteditable=false]), button")) {
+      if (zoomLinkTarget(linkPeek.a)) e.preventDefault();
+    }
+  });
+  document.addEventListener("pointerdown", (e) => { if (linkPeek.el && !docCanvasEl?.contains(e.target) && !linkPeek.el.contains(e.target)) hideLinkPeek(); }, true);
   // Alt+← jak w Wordzie — tylko gdy jest dokąd wracać (inaczej przeglądarka cofnęłaby stronę)
   document.addEventListener("keydown", (e) => {
     if (e.altKey && !e.ctrlKey && !e.metaKey && e.key === "ArrowLeft" && linkGoBack()) e.preventDefault();

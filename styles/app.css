@@ -1976,8 +1976,12 @@ p.dwb-exact img { vertical-align: baseline; }
 .link-peek {
   position: fixed; z-index: 8960; display: flex; flex-direction: column; gap: 6px; max-width: min(300px, calc(100vw - 16px));
   padding: 8px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface);
-  box-shadow: 0 10px 28px rgba(8, 14, 28, 0.2); animation: compose-pop-in 120ms ease-out; pointer-events: none;
+  box-shadow: 0 10px 28px rgba(8, 14, 28, 0.2); animation: compose-pop-in 120ms ease-out;
 }
+.link-peek img { cursor: zoom-in; }
+.link-peek-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.link-peek-zoom { flex: none; display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 4px 10px; font-size: 12.5px; font-weight: 600; }
+@media (pointer: coarse) { .link-peek-zoom { min-height: 40px; padding: 6px 14px; } }
 .link-peek img { display: block; max-width: 100%; max-height: min(220px, 40vh); width: auto; height: auto; object-fit: contain; border-radius: 6px; background: #fff; align-self: center; }
 .link-peek-cap { font-size: 12.5px; font-weight: 600; color: var(--ink); overflow-wrap: anywhere; }
 .link-peek-tip { font-size: 11.5px; color: var(--muted); }
