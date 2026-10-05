@@ -2269,6 +2269,11 @@ body:not(.has-document) #printPreviewMenuItem, body:not(.has-document) #pageSetu
 /* Odstępy między stronami w Edycji (page-breaks.js): niewidoczny odstęp przed pierwszym blokiem
    strony + pas przerwy w kolorze tła obszaru, wystający poza kartkę (krawędzie dwóch arkuszy) */
 .dwb-page-gap { display: block; height: 0; margin: 0; padding: 0; border: 0; user-select: none; }
+/* granica w środku akapitu (jak w Wordzie): „dystans” o zerowej szerokości do linijki granicy,
+   pod nim pas pełnej szerokości — wiersze akapitu, które by na niego wpadły, schodzą pod niego */
+.dwb-page-gap-spacer { float: left; width: 0; height: 0; margin: 0; padding: 0; border: 0; user-select: none; }
+/* szerszy o znacznik akapitu (pasek 6 px z lewej) — kolor kartki zakrywa podświetlenie na marginesach */
+.dwb-page-gap.dwb-gap-split { float: left; clear: left; width: calc(100% + 24px); margin-left: -12px; }
 .dwb-page-gap-band {
   position: absolute; left: -24px; right: -24px; z-index: 1; user-select: none; cursor: row-resize;
   background: var(--bg, #e9edf3);
@@ -2282,8 +2287,8 @@ body:not(.has-document) #printPreviewMenuItem, body:not(.has-document) #pageSetu
 }
 .dwb-page-break { pointer-events: auto; cursor: row-resize; }
 section.docx.dwb-gapped { min-height: var(--dwb-sec-min) !important; }
-.doc-reflow-mode .dwb-page-gap, .doc-reflow-mode .dwb-page-gap-band { display: none; }
-@media print { .dwb-page-gap, .dwb-page-gap-band { display: none !important; } }
+.doc-reflow-mode .dwb-page-gap, .doc-reflow-mode .dwb-page-gap-spacer, .doc-reflow-mode .dwb-page-gap-band { display: none; }
+@media print { .dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band { display: none !important; } }
 /* karta komentarza w trybie Czytanie — bez przycisków, tylko dyskretna podpowiedź */
 .cc-ro-note { padding: 2px 12px 10px; font-size: 11.5px; color: var(--muted); }
 

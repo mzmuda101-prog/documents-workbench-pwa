@@ -143,6 +143,43 @@ const paraTexts = (xml) => (xml.match(/<w:p[ >][\s\S]*?<\/w:p>/g) || []).map((p)
   const inline = await page.evaluate(() => { const p = document.querySelector("p[data-paste]"); return { text: p?.textContent, bold: [...(p?.querySelectorAll("span") || [])].some((s) => s.textContent === "ważne" && /bold/.test(s.getAttribute("style") || "")), same: !!p }; });
   check("jedno zdanie: w miejscu kursora, pogrubienie, bez przerysowania", inline.same && inline.text === "PRZED Bardzo ważne zdanieZA" && inline.bold, JSON.stringify(inline));
 
+  // ── zwykły tekst w kilku wierszach — jak w Wordzie: każdy wiersz to akapit (2026-10-05) ──
+  await freshPara(page, 3);
+  await paste(page, { "text/plain": "Pierwszy wiersz\r\n\r\nTrzeci\tz tabulatorem\n" });
+  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 15000 });
+  await sleep(600);
+  const { doc: pdoc } = await docXml(page);
+  let pps;
+  // akapity z pustymi (<w:p/>) — pusty wiersz to pusty akapit
+  const allP = (xml) => (xml.match(/<w:p\/>|<w:p[ >][\s\S]*?<\/w:p>/g) || []).map((x) => ({ xml: x, text: (x.match(/<w:t[^>]*>[^<]*/g) || []).map((t) => t.replace(/<w:t[^>]*>/, "")).join("") }));
+  pps = allP(pdoc);
+  const i1 = pps.findIndex((x) => x.text === "PRZED Pierwszy wiersz");
+  check("zwykły tekst, 3 wiersze → 3 akapity (pusty wiersz = pusty akapit, tabulator), tekst za kursorem w ostatnim",
+    i1 >= 0 && pps[i1 + 1]?.text === "" && /Trzeci<\/w:t><w:tab\/><w:t>z tabulatorem<\/w:t>.*ZA<\/w:t>/.test(pps[i1 + 2]?.xml || "") && !/<w:br\/>/.test(pps.slice(i1, i1 + 3).map((x) => x.xml).join("")),
+    JSON.stringify(pps.slice(Math.max(0, i1), i1 + 3).map((x) => x.xml.slice(0, 160))));
+  const caretAt = await page.evaluate(() => { const s = getSelection(); const n = s.anchorNode; const p = (n?.nodeType === 3 ? n.parentElement : n)?.closest?.(".docx-editable-p"); if (!p) return null; const r = document.createRange(); r.selectNodeContents(p); r.setEnd(s.anchorNode, s.anchorOffset); return { before: r.toString().replace(/\t/g, "→").replace(/\u00a0/g, " "), all: p.textContent.replace(/\t/g, "→").replace(/\u00a0/g, " ") }; });
+  check("kursor po wklejeniu: koniec wklejki, przed „ZA”", /^Trzeci.z tabulatorem$/.test(caretAt?.before || "") && /ZA$/.test(caretAt?.all || ""), JSON.stringify(caretAt));
+  await page.evaluate(() => dwbUndo.undo());
+  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 15000 });
+  await sleep(500);
+  pps = paraTexts((await docXml(page)).doc);
+  check("jedno Cofnij zdejmuje wszystkie wklejone akapity", pps.some((x) => x.text === "PRZED ZA") && !pps.some((x) => /Pierwszy wiersz|z tabulatorem/.test(x.text)));
+  // w punkt listy: kolejne wiersze = kolejne punkty tej samej listy
+  await page.evaluate(() => {
+    document.querySelectorAll("p[data-paste]").forEach((x) => delete x.dataset.paste);
+    const p = [...document.querySelectorAll(".docx-editable-p")].find((x) => x.textContent === "krok dwa");
+    p.dataset.paste = "1";
+    placeCaret(p, p.textContent.length);
+  });
+  await paste(page, { "text/plain": " i pół\nkrok trzy\nkrok cztery" });
+  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 15000 });
+  await sleep(600);
+  pps = paraTexts((await docXml(page)).doc);
+  const numOf = (t) => (pps.find((x) => x.text === t)?.xml.match(/<w:numId w:val="(\d+)"\/>/) || [])[1];
+  check("wklejenie w punkt listy: kolejne wiersze to kolejne punkty tej samej listy",
+    numOf("krok dwa i pół") && numOf("krok dwa i pół") === numOf("krok trzy") && numOf("krok trzy") === numOf("krok cztery"),
+    JSON.stringify(["krok dwa i pół", "krok trzy", "krok cztery"].map((t) => [t, numOf(t)])));
+
   check("brak błędów JS", !errors.length, errors.slice(0, 3).join(" | "));
   await browser.close();
   const failed = results.filter((r) => !r.ok);

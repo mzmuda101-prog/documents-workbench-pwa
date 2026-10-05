@@ -1154,9 +1154,10 @@ async function applyPasteBlocksInZip(zip, xml, edit) {
 
   // wzór zwykłego akapitu: akapit z kursorem bez stylu nagłówka, listy, sekcji, podziału strony
   const origPPr = composeDirectChild(p, "pPr");
+  // zwykły tekst w kilku wierszach (keepPara): format akapitu z kursorem zostaje (lista, styl), jak w Wordzie
   const plainPPr = () => {
     const np = origPPr ? origPPr.cloneNode(true) : null;
-    if (np) ["pStyle", "numPr", "sectPr", "pageBreakBefore", "outlineLvl", "pBdr", "keepNext"].forEach((k) => composeSetPPrChild(np, k, null));
+    if (np) (edit.keepPara ? ["sectPr", "pageBreakBefore"] : ["pStyle", "numPr", "sectPr", "pageBreakBefore", "outlineLvl", "pBdr", "keepNext"]).forEach((k) => composeSetPPrChild(np, k, null));
     return np;
   };
   // listy: kolejne punkty (bez list kontrolnych) = jedna lista z numeracją od 1

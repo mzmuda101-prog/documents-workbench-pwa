@@ -10,7 +10,9 @@
 //     przerysowaniu), więc powrót na miejsce obcinało do jego dołu;
 //  2) Enter / Backspace (bez „input”, wysokość ostatniej kartki stała) nie przeliczały granic
 //     stron — tekst wjeżdżał pod pas „str. N” albo zostawała pusta dziura;
-//  3) pusty / nowy akapit miał krój APLIKACJI (Space Grotesk 12 pt), nie dokumentu (Calibri 11).
+//  3) pusty / nowy akapit miał krój APLIKACJI (Space Grotesk 12 pt), nie dokumentu (Calibri 11);
+//  4) (decyzja Mateusza) długi akapit dzieli się między strony jak w Wordzie — dawniej cały szedł
+//     na następną stronę i zostawiał dziurę.
 // Plik budowany w teście: docDefaults Calibri 11 pt, ~3 strony tekstu, na końcu lista punktowana.
 
 const pw = require("playwright");
@@ -92,6 +94,28 @@ async function run() {
     return { ok: !bad.length && !orphan, bad: [...new Set(bad)].slice(0, 3), orphan, bands: bands.length };
   });
 
+  // granice w środku akapitu: wiersz po granicy na górnym marginesie nowej strony, przed nią ≥ 2 wiersze
+  const splitInfo = () => page.evaluate(() => {
+    const out = [];
+    document.querySelectorAll(".dwb-page-gap.dwb-gap-split").forEach((g) => {
+      const sec = g.closest("section.docx");
+      const sr = sec.getBoundingClientRect();
+      const sc = sr.height / sec.offsetHeight || 1;
+      const padT = parseFloat(getComputedStyle(sec).paddingTop);
+      const bands = [...sec.querySelectorAll(".dwb-page-gap-band")].map((b) => ({ top: parseFloat(b.style.top), h: parseFloat(b.style.height) }));
+      const p = g.nextElementSibling;
+      const r = document.createRange(); r.selectNodeContents(p);
+      const rects = [...r.getClientRects()].filter((q) => q.height > 0).sort((a, b) => a.top - b.top);
+      const lines = [];
+      rects.forEach((q) => { const l = lines[lines.length - 1]; if (l && q.top < l.bottom - 2) l.bottom = Math.max(l.bottom, q.bottom); else lines.push({ top: q.top, bottom: q.bottom }); });
+      const k = +g.dataset.line;
+      const loc = (y) => (y - sr.top) / sc;
+      // pas przerwy tuż nad wierszem po granicy
+      const band = lines[k] ? bands.filter((x) => x.top + x.h <= loc(lines[k].top)).sort((x, y) => y.top - x.top)[0] : null;
+      out.push({ line: k, lines: lines.length, topDiff: band && lines[k] ? Math.round(loc(lines[k].top) - (band.top + band.h) - padT) : null, prevAbove: band && lines[k - 1] ? loc(lines[k - 1].bottom) <= band.top : null, dbg: band && lines[k - 1] && [Math.round(loc(lines[k - 1].bottom)), band.top, Math.round(loc(lines[k].top)), lines.map((l) => Math.round(loc(l.top)))] });
+    });
+    return out;
+  });
   // ── 3) krój pustego akapitu = krój dokumentu ──
   const last = "Bóg nam udostępnia";
   await caretAtEnd(last);
@@ -124,6 +148,8 @@ async function run() {
   // ── 2) Enter / Backspace przy granicy strony: odstęp idzie za akapitami ──
   const g0 = await gapsOk();
   check("na starcie: odstępy między stronami są, tekst nie leży pod pasem", g0.ok && g0.bands >= 1, JSON.stringify(g0));
+  const sp0 = await splitInfo();
+  check("długi akapit dzieli się między strony jak w Wordzie: ≥ 2 wiersze przed granicą, dalszy wiersz na górnym marginesie następnej strony", sp0.length >= 1 && sp0.every((x) => x.line >= 2 && x.lines - x.line >= 2 && x.prevAbove && Math.abs(x.topDiff) <= 3), JSON.stringify(sp0));
   // pierwszy akapit strony 2 (ten, przed którym stoi odstęp)
   const startP2 = await page.evaluate(() => document.querySelector(".dwb-page-gap")?.nextElementSibling?.textContent.slice(0, 10));
   // kilka pustych akapitów na końcu strony 1 (Enter na początku pierwszego akapitu strony 2)

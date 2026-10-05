@@ -374,7 +374,9 @@ const dwbPaste = (() => {
     return true;
   }
 
-  async function apply(p, blocks) {
+  // opts.keepPara — zwykły tekst w kilku wierszach: nowe akapity z formatem akapitu z kursorem
+  // (styl, lista, wcięcia — jak „Zachowaj tylko tekst” w Wordzie), nie jako zwykły tekst
+  async function apply(p, blocks, opts = {}) {
     const inNote = !!p.dataset.noteKey;
     const single = blocks.length === 1 && blocks[0].type === "p";
     if (inNote || single) {
@@ -399,7 +401,7 @@ const dwbPaste = (() => {
     const base = {};
     ["fontFamily", "fontSize", "color"].forEach((k) => { if (at[k]) base[k] = at[k]; });
     const edit = {
-      op: "pasteBlocks", index, offset, lang: currentLang,
+      op: "pasteBlocks", index, offset, lang: currentLang, keepPara: !!opts.keepPara,
       blocks: blocks.map((b) => ({
         ...b,
         runs: (b.runs || []).map((r) => (r.break ? { break: true } : { text: r.text, ...runStyle(r, base) })),

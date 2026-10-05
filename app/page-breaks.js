@@ -17,11 +17,15 @@
 // Odstępy między stronami (domyślnie, decyzja 2026-10-04): jak „Układ wydruku” w Wordzie —
 // dolny margines strony, przerwa między kartkami i górny margines następnej. Robi to niewidoczny
 // odstęp (div.dwb-page-gap, nieedytowalny) PRZED pierwszym blokiem nowej strony, a pas przerwy
-// (.dwb-page-gap-band) rysuje się nad nim. Gdy strona kończy się w środku akapitu, w Edycji cały
-// akapit przechodzi na następną stronę (odstęp w środku akapitu wymagałby elementu w edytowanym
-// tekście) — druk i Podgląd wydruku dalej dzielą dokładnie jak Word. Akapit/tabela dłuższe niż
-// strona: zostaje sama kreska. Opcja „Ukryj biały obszar” (jak w Wordzie, też dwuklik w przerwę)
-// = dawna kreska styku kartek.
+// (.dwb-page-gap-band) rysuje się nad nim. Gdy strona kończy się w środku akapitu, akapit dzieli
+// się jak w Wordzie (decyzja Mateusza 2026-10-05; dawniej cały akapit szedł na następną stronę
+// i zostawiał dziurę): przed akapitem stoją dwa niewidoczne elementy pływające (float) — pusty
+// „dystans” do linijki granicy i pas pełnej szerokości, który spycha wiersze od niej w dół.
+// W edytowanym akapicie nic nie przybywa (kursor, zaznaczanie, zapis bez zmian). Wyjątki Worda
+// zostają: wiersze razem, wdowy, sieroty, „razem z następnym”. Tabela przechodzi w całości, gdy
+// się mieści. Druk i Podgląd wydruku dzielą osobno (print-preview.js), też jak Word. Akapit
+// niedzielony (tabela, akapit-pojemnik) dłuższy niż strona: zostaje sama kreska. Opcja „Ukryj
+// biały obszar” (jak w Wordzie, też dwuklik w przerwę) = dawna kreska styku kartek.
 
 const dwbPageBreaks = (() => {
   const KEY = "dwb-page-breaks-v1";
@@ -48,7 +52,7 @@ const dwbPageBreaks = (() => {
   }
 
   function clear(h = host()) {
-    h?.querySelectorAll(".dwb-page-break, .dwb-page-gap, .dwb-page-gap-band").forEach((el) => el.remove());
+    h?.querySelectorAll(".dwb-page-break, .dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band").forEach((el) => el.remove());
     h?.querySelectorAll("section.dwb-gapped").forEach((sec) => { sec.classList.remove("dwb-gapped"); sec.style.removeProperty("--dwb-sec-min"); });
   }
 
@@ -80,6 +84,35 @@ const dwbPageBreaks = (() => {
   }
   const hasClass = (el, set) => !!el && [...el.classList].some((c) => set.has(c));
 
+  // Wiersze tekstu elementu: [[góra, dół], …] w układzie okna (prostokąty znaków złączone w linijki)
+  function textLines(el, range = document.createRange()) {
+    range.selectNodeContents(el);
+    const rects = [...range.getClientRects()].filter((r) => r.height > 0).sort((a, b) => a.top - b.top);
+    if (!rects.length) return [];
+    const lines = [];
+    let top = rects[0].top;
+    let bottom = rects[0].bottom;
+    for (const r of rects.slice(1)) {
+      if (r.top < bottom - 2) { bottom = Math.max(bottom, r.bottom); continue; } // ta sama linijka
+      lines.push([top, bottom]);
+      top = r.top;
+      bottom = r.bottom;
+    }
+    lines.push([top, bottom]);
+    return lines;
+  }
+
+  // Czy wiersze akapitu opłyną odstęp pływający przed nim: akapit i jego pojemniki aż do <article>
+  // to zwykłe bloki (flex, grid, tabela, overflow ≠ visible to osobny kontekst — taki akapit
+  // przeszedłby pod pas w całości, więc granica idzie przed nim jak dawniej).
+  function canSplit(el, article) {
+    for (let x = el; x && x !== article; x = x.parentElement) {
+      const cs = getComputedStyle(x);
+      if (!/^(block|list-item)$/.test(cs.display) || cs.overflow !== "visible" || cs.cssFloat !== "none" || /^(absolute|fixed)$/.test(cs.position)) return false;
+    }
+    return true;
+  }
+
   // Linijki treści kartki (y w układzie kartki, bez zoomu): akapity rozbite na wiersze tekstu,
   // wiersz tabeli jako całość. Każda linijka wie, z którego akapitu jest i którym jest wierszem.
   function lineUnits(article, secTop, scale) {
@@ -99,23 +132,12 @@ const dwbPageBreaks = (() => {
         return;
       }
       if (el.closest("table")) return;
-      range.selectNodeContents(el);
-      const rects = [...range.getClientRects()].filter((r) => r.height > 0).sort((a, b) => a.top - b.top);
-      if (!rects.length) {
+      const lines = textLines(el, range);
+      if (!lines.length) {
         const r = el.getBoundingClientRect();
         if (r.height) add(el, [[r.top, r.bottom]]);
         return;
       }
-      const lines = [];
-      let top = rects[0].top;
-      let bottom = rects[0].bottom;
-      for (const r of rects.slice(1)) {
-        if (r.top < bottom - 2) { bottom = Math.max(bottom, r.bottom); continue; } // ta sama linijka
-        lines.push([top, bottom]);
-        top = r.top;
-        bottom = r.bottom;
-      }
-      lines.push([top, bottom]);
       add(el, lines);
     });
     return out.sort((a, b) => a.top - b.top);
@@ -188,16 +210,26 @@ const dwbPageBreaks = (() => {
       if (k > first) {
         let b = pageStartIndex(u, k, first);
         let block = null;
+        let line = 0; // > 0: granica w środku akapitu, przed jego wierszem nr line
         if (blockBreaks) {
-          // granica na początku bloku: akapit / tabela przechodzi w całości (gdy się mieści na stronie)
-          const head = u[b].row ? u.findIndex((x) => x.row && topBlock(x.el, article) === topBlock(u[b].el, article)) : b - u[b].i;
-          if (head > first) b = head;
-          const whole = u[b].row ? u[b] === u.find((x) => x.row && topBlock(x.el, article) === topBlock(u[b].el, article)) : u[b].i === 0;
-          if (whole) block = topBlock(u[b].el, article);
+          if (u[b].row) {
+            // tabela przechodzi w całości (gdy się mieści na stronie)
+            const head = u.findIndex((x) => x.row && topBlock(x.el, article) === topBlock(u[b].el, article));
+            if (head > first) b = head;
+            if (u[b] === u.find((x) => x.row && topBlock(x.el, article) === topBlock(u[b].el, article))) block = topBlock(u[b].el, article);
+          } else if (u[b].i === 0) {
+            block = topBlock(u[b].el, article);
+          } else if (canSplit(u[b].el, article)) {
+            block = topBlock(u[b].el, article); // akapit dzieli się jak w Wordzie
+            line = u[b].i;
+          } else {
+            const head = b - u[b].i; // akapit, którego wiersze nie opłyną odstępu — w całości
+            if (head > first) { b = head; block = topBlock(u[b].el, article); }
+          }
         }
         const prevBottom = u[b - 1]?.bottom;
         const y = prevBottom != null && prevBottom <= u[b].top ? (prevBottom + u[b].top) / 2 : u[b].top;
-        out.cuts.push({ y, top: u[b].top, block });
+        out.cuts.push({ y, top: u[b].top, h: u[b].bottom - u[b].top, block, line, el: u[b].el });
         first = b;
         limit = u[b].top + bodyH;
         k = b - 1; // od nowej strony sprawdzamy jeszcze raz
@@ -251,13 +283,20 @@ const dwbPageBreaks = (() => {
         const label = t("pageBreakLabel", { n: page });
         if (gaps && cut.block) {
           const block = cut.block;
+          const move = sheetTop + res.pageH + GAP + res.padT - (cut.top + shift); // pierwsza linijka nowej strony
+          if (cut.line) {
+            // w środku akapitu: pas pływający od linijki granicy (at), wysokość dociągana po wstawieniu
+            items.push({ kind: "gap", block, line: cut.line, el: cut.el, at: Math.round((cut.top + shift) * 10) / 10, inset: Math.round(Math.max(1, cut.h / 2) * 10) / 10, height: Math.round(move * 10) / 10, shift: move, bandTop: Math.round(sheetTop + res.pageH), label });
+            shift += move;
+            sheetTop += res.pageH + GAP;
+            continue;
+          }
           let prev = block.previousElementSibling;
-          while (prev?.classList.contains("dwb-page-gap")) prev = prev.previousElementSibling;
+          while (prev?.matches(".dwb-page-gap, .dwb-page-gap-spacer")) prev = prev.previousElementSibling;
           const mb = prev ? Math.max(0, parseFloat(getComputedStyle(prev).marginBottom) || 0) : 0;
           const mt = Math.max(0, parseFloat(getComputedStyle(block).marginTop) || 0);
-          const move = sheetTop + res.pageH + GAP + res.padT - (cut.top + shift); // pierwsza linijka nowej strony
           // z odstępem między blokami ich marginesy już się nie łączą (mb + mt zamiast max)
-          items.push({ kind: "gap", block, height: Math.max(0, Math.round((move - Math.min(mb, mt)) * 10) / 10), shift: move, bandTop: Math.round(sheetTop + res.pageH), label });
+          items.push({ kind: "gap", block, line: 0, height: Math.max(0, Math.round((move - Math.min(mb, mt)) * 10) / 10), shift: move, bandTop: Math.round(sheetTop + res.pageH), label });
           shift += move;
           sheetTop += res.pageH + GAP;
         } else {
@@ -275,10 +314,12 @@ const dwbPageBreaks = (() => {
       const wg = items.filter((x) => x.kind === "gap");
       const ws = items.filter((x) => x.kind === "seam");
       return gapEls.length === wg.length && bands.length === wg.length && seams.length === ws.length
-        && wg.every((x, i) => gapEls[i].nextElementSibling === x.block && Math.abs(parseFloat(gapEls[i].style.height) - x.height) < 0.6 && bands[i].dataset.label === x.label && parseFloat(bands[i].style.top) === x.bandTop)
+        && wg.every((x, i) => gapEls[i].nextElementSibling === x.block && (gapEls[i].dataset.line || "0") === String(x.line)
+          && (x.line ? Math.abs((parseFloat(gapEls[i].dataset.at) || 0) - x.at) < 0.6 && Math.abs((parseFloat(gapEls[i].dataset.shift) || 0) - x.shift) < 0.6 : Math.abs(parseFloat(gapEls[i].style.height) - x.height) < 0.6)
+          && bands[i].dataset.label === x.label && parseFloat(bands[i].style.top) === x.bandTop)
         && ws.every((x, i) => parseFloat(seams[i].style.top) === x.top && seams[i].dataset.label === x.label)
         && (sec.style.getPropertyValue("--dwb-sec-min") || "") === (minH ? `${minH}px` : "");
-    }) && h.querySelectorAll(".dwb-page-gap, .dwb-page-gap-band, .dwb-page-break").length === want.reduce((n, w) => n + w.items.reduce((m, x) => m + (x.kind === "gap" ? 2 : 1), 0), 0);
+    }) && h.querySelectorAll(".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-break").length === want.reduce((n, w) => n + w.items.reduce((m, x) => m + (x.kind === "gap" ? (x.line ? 3 : 2) : 1), 0), 0);
     if (same) return;
     // zmiana: akapit widoczny u góry zostaje na swoim miejscu na ekranie (jak zakotwiczenie przewijania);
     // tuż po przerysowaniu — akapit sprzed przerysowania (document.js, reloadFromBytes)
@@ -292,6 +333,7 @@ const dwbPageBreaks = (() => {
       el.dataset.hintEn = I18N.en[gaps ? "pageGapHint" : "pageSeamHint"];
       el.dataset.hintDelay = "0.8";
     };
+    const splits = []; // odstępy w środku akapitów — do dociągnięcia po wstawieniu wszystkiego
     want.forEach(({ sec, items, minH }) => {
       items.forEach((x) => {
         if (x.kind === "gap") {
@@ -301,7 +343,19 @@ const dwbPageBreaks = (() => {
           if (editable) gap.contentEditable = "false";
           gap.style.height = `${x.height}px`;
           gap.dataset.shift = String(x.shift);
-          x.block.before(gap);
+          if (x.line) {
+            const spacer = document.createElement("div");
+            spacer.className = "dwb-page-gap-spacer";
+            spacer.setAttribute("aria-hidden", "true");
+            if (editable) spacer.contentEditable = "false";
+            gap.classList.add("dwb-gap-split");
+            gap.dataset.line = String(x.line);
+            gap.dataset.at = String(x.at);
+            // kolor kartki: zakrywa podświetlenie akapitu z kursorem na marginesach stron
+            gap.style.background = getComputedStyle(sec).backgroundColor;
+            x.block.before(spacer, gap);
+            splits.push({ sec, spacer, gap, x });
+          } else x.block.before(gap);
           const band = document.createElement("div");
           band.className = "dwb-page-gap-band";
           band.setAttribute("aria-hidden", "true");
@@ -328,12 +382,30 @@ const dwbPageBreaks = (() => {
         sec.style.setProperty("--dwb-sec-min", `${minH}px`);
       }
     });
+    splits.forEach(fitSplit);
     if (typeof syncPageScaleHeightNow === "function") syncPageScaleHeightNow(); // inaczej przewinięcie niżej obcina stary, krótszy obszar
     if (pending) restoreDocScrollAnchor(pending);
     else if (anchor && docViewportEl) {
       const d = anchor.el.getBoundingClientRect().top - anchor.top;
       if (Math.abs(d) > 0.5) docViewportEl.scrollTop += d;
     }
+  }
+
+  // Odstęp w środku akapitu: „dystans” tak wysoki, żeby pas zaczął się w połowie linijki granicy
+  // (at + inset; na samej jej górze zaokrąglenie potrafiło zepchnąć też linijkę wyżej — Chromium),
+  // a pas tak wysoki, żeby ta linijka wypadła na początku treści następnej strony (at + shift).
+  // Mierzone po wstawieniu (pas spycha całe pole wiersza, a liczymy po prostokątach znaków —
+  // różnica to interlinia nad tekstem). Po kolei: każdy odstęp przesuwa tylko to, co za nim.
+  function fitSplit({ sec, spacer, gap, x }) {
+    // położenie kartki mierzone przy każdym odczycie: zmiana wysokości potrafi przesunąć przewinięcie
+    // (zakotwiczenie przewijania przeglądarki) między pomiarami
+    const local = (y) => { const r = sec.getBoundingClientRect(); return (y - r.top) / (r.height / sec.offsetHeight || 1); };
+    const top0 = local(gap.getBoundingClientRect().top);
+    spacer.style.height = `${Math.max(0, Math.round((x.at + x.inset - top0) * 10) / 10)}px`;
+    const ln = textLines(x.el)[x.line];
+    if (!ln) return;
+    const err = local(ln[0]) - (x.at + x.shift);
+    if (Math.abs(err) > 0.3) gap.style.height = `${Math.max(0, Math.round((x.height - err) * 10) / 10)}px`;
   }
 
   // Pierwszy akapit widoczny w obszarze dokumentu i jego położenie na ekranie.
@@ -396,7 +468,7 @@ const dwbPageBreaks = (() => {
     // (ostatnia kartka ma wysokość pełnych stron) — obserwator rozmiaru milczał. Odstęp strony
     // zostawał przy starym akapicie: tekst wjeżdżał pod pas „str. N” albo zostawała pusta dziura
     // (zgłoszenie 2026-10-05). Każda zmiana akapitów → przeliczenie; własne odstępy pomijamy.
-    const ours = (n) => n.nodeType === 1 && n.matches?.(".dwb-page-gap, .dwb-page-gap-band, .dwb-page-break");
+    const ours = (n) => n.nodeType === 1 && n.matches?.(".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-break");
     new MutationObserver((records) => {
       if (records.some((r) => [...r.addedNodes, ...r.removedNodes].some((n) => !ours(n)))) schedule(150);
     }).observe(docCanvasEl, { childList: true, subtree: true });

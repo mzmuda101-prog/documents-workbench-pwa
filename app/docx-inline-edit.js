@@ -756,10 +756,13 @@ function asUndoStep(label, fn) {
   return typeof dwbUndo !== "undefined" && dwbUndo.record ? dwbUndo.record(label, fn) : fn();
 }
 
-// Wklejanie: czysty tekst w formacie miejsca kursora (jak „Wklej tylko tekst” w Wordzie).
+// Wklejanie: czysty tekst w formacie miejsca kursora (jak „Zachowaj tylko tekst” w Wordzie).
 // Bez tego przeglądarka wklejała surowy HTML z Worda/strony — obce style, a akapity z
 // wklejanego tekstu jako <p> w środku akapitu (rozjeżdżało numerację akapitów z plikiem).
-// Kolejne wiersze = łamania wiersza (jak Shift+Enter), całość = jeden krok cofania.
+// Jeden wiersz — w miejscu kursora, bez przerysowania. Kilka wierszy — jak w Wordzie każdy to
+// osobny akapit z formatem akapitu, w który wklejamy (w liście: kolejne punkty), puste wiersze
+// = puste akapity (decyzja Mateusza 2026-10-05; dawniej łamania wiersza w jednym akapicie).
+// Całość = jeden krok cofania.
 function onDocPaste(e) {
   if (readOnlyMode) return;
   // wklejenie w miejsce zaznaczenia kilku akapitów: najpierw usuwamy zaznaczenie (doc-selection.js)
@@ -778,6 +781,11 @@ function onDocPaste(e) {
   if (text == null) return;
   e.preventDefault();
   const lines = text.replace(/\r\n?/g, "\n").replace(/\n+$/, "").split("\n");
+  if (lines.length > 1 && typeof dwbPaste !== "undefined") {
+    const blocks = lines.map((line) => ({ type: "p", runs: line ? [{ text: line }] : [] }));
+    dwbPaste.apply(p, blocks, { keepPara: true }).catch((err) => log(`Wklejanie: ${err.message || err}`, "error"));
+    return;
+  }
   asUndoStep("undoOpPaste", () => {
     lines.forEach((line, i) => {
       if (i) document.execCommand("insertLineBreak");
