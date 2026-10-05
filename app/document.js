@@ -61,6 +61,30 @@ async function ingestFile(file, options = {}) {
     }
     return window.dwbPdfImport.convertFile(file, options);
   }
+  if (type === "image") {
+    // Zdjęcie(a) dokumentu: kartka wykryta, perspektywa wyprostowana, tło wybielone → PDF w pamięci
+    // → ta sama konwersja co PDF (z pytaniem o OCR). file._photos = kilka zdjęć jako jeden dokument.
+    const photos = file._photos || [file];
+    try {
+      await Promise.all([loadLazyScript("app/pdf-import.js"), loadLazyScript("app/photo-import.js")]);
+    } catch (_) {
+      toast(t("libsMissingToast"), "error");
+      return false;
+    }
+    setLoading(true, t("photoPreparing", { n: photos.length }));
+    let made;
+    try {
+      const base = (file.name || "zdjecie").replace(/\.[^.]+$/, "");
+      made = await window.dwbPhotoImport.toPdf(photos, `${base}.pdf`);
+    } catch (e) {
+      log(String(e?.message || e), "error");
+      toast(t(/heic|heif/i.test(photos.map((f) => f.name).join(" ")) ? "photoHeicUnsupported" : "photoDecodeFailed"), "error");
+      return false;
+    } finally {
+      setLoading(false);
+    }
+    return window.dwbPdfImport.convertFile(made.file, { ...options, handle: null, photo: { pages: made.pages, cropped: made.cropped, name: file.name } });
+  }
   if (type !== "docx") {
     if (/\.doc$/i.test(file.name || "")) toast(t("docOldFormat"), "warning");
     else toast(t("unsupportedType"), "warning");

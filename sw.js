@@ -1,4 +1,4 @@
-const CACHE_VERSION = "20261005-04";
+const CACHE_VERSION = "20261005-07";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
@@ -87,6 +87,7 @@ const SHELL_ASSETS = [
   `./app/pdf-docx.js?v=${ASSET_V}`,
   `./app/pdf-fonts.js?v=${ASSET_V}`,
   `./app/pdf-ocr.js?v=${ASSET_V}`,
+  `./app/photo-import.js?v=${ASSET_V}`,
   `./app/pdf-convert.js?v=${ASSET_V}`,
 ];
 

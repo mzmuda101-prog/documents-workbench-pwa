@@ -39,12 +39,33 @@ const dwbOpenDocs = (() => {
   const sameStamp = (a, b) => !!(a && b && a.name === b.name && a.size === b.size && a.lastModified === b.lastModified);
   const queue = (fn) => (job = job.then(fn, fn));
 
+  // PDF i zdjęcia nie są otwierane „w miejscu” — za każdym razem powstaje z nich nowy .docx
+  const CONVERTED = new Set(["pdf", "image"]);
+  const OPENABLE = new Set(["docx", "pdf", "image"]);
+
+  // Kilka zdjęć wybranych naraz = strony JEDNEGO dokumentu (tak się fotografuje wielostronicowe
+  // pismo). Plik-zastępca niesie zdjęcia w _photos (document.js ingestFile).
+  function groupPhotos(list) {
+    const photos = list.filter((it) => detectFileType(it.file.name, it.file.type) === "image");
+    if (photos.length < 2) return list;
+    const first = photos[0].file;
+    const base = (first.name || "zdjecie").replace(/\.[^.]+$/, "");
+    const set = new File([], `${base} (${photos.length} ${t("photoPagesShort")}).jpg`, { type: "image/jpeg", lastModified: first.lastModified });
+    set._photos = photos.map((it) => it.file);
+    const out = [];
+    for (const it of list) {
+      if (it === photos[0]) out.push({ file: set });
+      else if (!photos.includes(it)) out.push(it);
+    }
+    return out;
+  }
+
   async function sameHandle(a, b) {
     if (!a || !b || typeof a.isSameEntry !== "function") return false;
     try { return await a.isSameEntry(b); } catch (_) { return false; }
   }
   async function findOpen(file, handle) {
-    if (detectFileType(file?.name, file?.type) === "pdf") return null;
+    if (CONVERTED.has(detectFileType(file?.name, file?.type))) return null;
     for (const d of docs) {
       if (d.pdf) continue;
       if (handle && (await sameHandle(handle, d.handle))) return d;
@@ -122,11 +143,11 @@ const dwbOpenDocs = (() => {
   // ── nowe pliki ─────────────────────────────────────────────────────────────
   // items: [{ file, handle? }] — pierwszy otwiera się od razu, reszta czeka jako karty.
   async function openFiles(items) {
-    const list = (items || []).filter((it) => it && it.file);
+    const list = groupPhotos((items || []).filter((it) => it && it.file));
     if (!list.length) return false;
     if (list.length === 1) {
       const type = detectFileType(list[0].file.name, list[0].file.type);
-      if (type !== "docx" && type !== "pdf") return window.ingestFile(list[0].file); // komunikat „nieobsługiwany”
+      if (!OPENABLE.has(type)) return window.ingestFile(list[0].file); // komunikat „nieobsługiwany”
     }
     let first = null;
     const waiting = [];
@@ -139,13 +160,13 @@ const dwbOpenDocs = (() => {
         continue;
       }
       const type = detectFileType(it.file.name, it.file.type);
-      if (type !== "docx" && type !== "pdf") continue;
+      if (!OPENABLE.has(type)) continue;
       if (room <= 0) {
         toast(t("docTabsLimit", { n: OPEN_DOCS_MAX }), "warning");
         break;
       }
       room--;
-      const d = { id: `t${++seq}`, name: it.file.name, handle: it.handle || null, stamp: fileStamp(it.file), file: it.file, bytes: null, dirty: false, draft: null, anchor: null, pdf: type === "pdf" };
+      const d = { id: `t${++seq}`, name: it.file.name, handle: it.handle || null, stamp: fileStamp(it.file), file: it.file, bytes: null, dirty: false, draft: null, anchor: null, pdf: CONVERTED.has(type) };
       if (!first) first = d;
       else waiting.push(d);
     }
@@ -225,12 +246,12 @@ const dwbOpenDocs = (() => {
       dot.setAttribute("aria-hidden", "true");
       const name = document.createElement("span");
       name.className = "doc-tab-name";
-      name.textContent = d.name.replace(/\.(docx|pdf)$/i, "");
+      name.textContent = d.name.replace(/\.(docx|pdf|jpe?g|png|webp|heic|heif)$/i, "");
       btn.append(dot, name);
       if (d.pdf && d.file) {
         const badge = document.createElement("span");
         badge.className = "doc-tab-kind";
-        badge.textContent = "PDF";
+        badge.textContent = detectFileType(d.name, d.file.type) === "image" ? "FOTO" : "PDF"; // czeka na konwersję
         badge.setAttribute("aria-hidden", "true");
         btn.append(badge);
       }
@@ -366,7 +387,7 @@ const dwbOpenDocs = (() => {
         }
         if (ok) {
           const type = detectFileType(file?.name, file?.type);
-          const d = { id: `t${++seq}`, name: currentFileName, handle: fileHandle || null, stamp: options.handle || type === "pdf" ? null : fileStamp(file), file: null, bytes: null, dirty: false, draft: null, anchor: null, pdf: type === "pdf" };
+          const d = { id: `t${++seq}`, name: currentFileName, handle: fileHandle || null, stamp: options.handle || CONVERTED.has(type) ? null : fileStamp(file), file: null, bytes: null, dirty: false, draft: null, anchor: null, pdf: CONVERTED.has(type) };
           const at = prev ? docs.indexOf(prev) + 1 : docs.length;
           docs.splice(at, 0, d);
           activeId = d.id;

@@ -117,6 +117,50 @@ async function makePdfs() {
   const shot = await page.screenshot({ type: "jpeg", quality: 85 });
   await page.setContent(`<html><body style="margin:0"><img src="data:image/jpeg;base64,${shot.toString("base64")}" style="width:210mm;height:297mm;display:block"></body></html>`, { waitUntil: "load" });
   await page.pdf({ path: path.join(TMP, "skan.pdf"), width: "210mm", height: "297mm", margin: { top: 0, bottom: 0, left: 0, right: 0 }, printBackground: true });
+  // skan tabeli obrócony o 180° + 3° (kartka odwrotnie i krzywo w skanerze) — prostowanie + tabela Worda
+  await page.setViewportSize({ width: 794, height: 1123 });
+  await page.setContent(`<!doctype html><html lang="pl"><head><meta charset="utf-8"><style>body{margin:70px;font-family:Arial;font-size:15px;color:#111}table{border-collapse:collapse;width:100%}td,th{border:1.5px solid #222;padding:8px 10px;text-align:left}th{background:#ddd}</style></head><body><h2>Protokół przekazania sprzętu</h2><table><tr><th>Nazwa</th><th>Numer seryjny</th><th>Stan</th></tr><tr><td>Wiertarka udarowa</td><td>WU-2231-778</td><td>sprawna</td></tr><tr><td>Szlifierka kątowa</td><td>SK-0912-114</td><td>uszkodzona osłona</td></tr><tr><td>Poziomica laserowa</td><td>PL-5520-031</td><td>sprawna</td></tr></table><p>Przekazał: Jan Kowalczyk. Odebrał: Zofia Wójcik.</p></body></html>`, { waitUntil: "load" });
+  const tshot = (await page.screenshot({ type: "png" })).toString("base64");
+  const rotated = await page.evaluate(async (src) => {
+    const im = new Image();
+    im.src = "data:image/png;base64," + src;
+    await im.decode();
+    const W = 1654, H = 2339; // ~200 dpi
+    const c = Object.assign(document.createElement("canvas"), { width: W, height: H });
+    const x = c.getContext("2d");
+    x.fillStyle = "#fff"; x.fillRect(0, 0, W, H);
+    x.translate(W / 2, H / 2); x.rotate(Math.PI + (3 * Math.PI) / 180);
+    x.drawImage(im, -W / 2, -H / 2, W, H);
+    return c.toDataURL("image/jpeg", 0.8);
+  }, tshot);
+  await page.setContent(`<html><body style="margin:0"><img src="${rotated}" style="width:210mm;height:297mm;display:block"></body></html>`, { waitUntil: "load" });
+  await page.pdf({ path: path.join(TMP, "skan-tabela.pdf"), width: "210mm", height: "297mm", margin: { top: 0, bottom: 0, left: 0, right: 0 }, printBackground: true });
+  // zdjęcia kartek telefonem: strona obrócona o kilka stopni na ciemnym blacie, ciepłe światło
+  for (const [name, text, ang] of [["foto-1", "Zawiadomienie o zebraniu wspólnoty mieszkaniowej", 7], ["foto-2", "Porządek obrad i głosowanie nad uchwałami", -5]]) {
+    await page.setViewportSize({ width: 794, height: 1123 });
+    await page.setContent(`<!doctype html><html lang="pl"><head><meta charset="utf-8"><style>body{margin:80px;font-family:Arial;font-size:20px;color:#111}</style></head><body><h2>${text}</h2><p>Zebranie odbędzie się w środę o godzinie osiemnastej w świetlicy osiedlowej. Prosimy o punktualne przybycie.</p></body></html>`, { waitUntil: "load" });
+    const shotP = (await page.screenshot({ type: "png" })).toString("base64");
+    const photo = await page.evaluate(async ({ src, ang }) => {
+      const im = new Image();
+      im.src = "data:image/png;base64," + src;
+      await im.decode();
+      const c = Object.assign(document.createElement("canvas"), { width: 1500, height: 2000 });
+      const x = c.getContext("2d");
+      x.fillStyle = "#4a3424"; x.fillRect(0, 0, 1500, 2000);
+      x.translate(750, 1000); x.rotate((ang * Math.PI) / 180);
+      x.fillStyle = "#f3eee2"; x.fillRect(-560, -790, 1120, 1580);
+      x.globalCompositeOperation = "multiply";
+      x.drawImage(im, -560, -790, 1120, 1580);
+      return c.toDataURL("image/jpeg", 0.85);
+    }, { src: shotP, ang });
+    fs.writeFileSync(path.join(TMP, `${name}.jpg`), Buffer.from(photo.split(",")[1], "base64"));
+  }
+  // tekst zamieniony na krzywe (Ghostscript -dNoOutputFonts) — gdy gs jest na komputerze
+  await page.setContent(`<!doctype html><html lang="pl"><head><meta charset="utf-8"><style>body{margin:70px;font-family:Arial;font-size:16px}</style></head><body><h2>Zagrożenie atakiem terrorystycznym</h2><p>W razie zauważenia podejrzanego pakunku nie wolno go dotykać. Należy niezwłocznie powiadomić przełożonego i służby ochrony obiektu, a następnie oddalić się na bezpieczną odległość.</p></body></html>`, { waitUntil: "load" });
+  await page.pdf({ path: path.join(TMP, "krzywe-zrodlo.pdf"), format: "A4" });
+  try {
+    require("child_process").execFileSync("gs", ["-q", "-o", path.join(TMP, "tekst-krzywe.pdf"), "-sDEVICE=pdfwrite", "-dNoOutputFonts", path.join(TMP, "krzywe-zrodlo.pdf")]);
+  } catch (_) { /* brak gs — test pominięty */ }
   await browser.close();
   fs.writeFileSync(path.join(TMP, "zepsuty.pdf"), Buffer.from("%PDF-1.7\nto nie jest prawdziwy pdf\n%%EOF"));
 }
@@ -378,11 +422,60 @@ async function run() {
   const noocr = await docxState(page);
   check("skan: „Zostaw jako obraz” = sam obraz, bez tekstu", noocr.media >= 1 && !/Lista obecności/.test(noocr.text), noocr.text.slice(0, 80));
 
+  // --- 5b. skan tabeli do góry nogami i krzywo: strona wyprostowana, tabela Worda z komórkami
+  page.on("dialog", (d) => d.accept().catch(() => {}));
+  const closeTabs = () => page.evaluate(() => { for (const d of dwbOpenDocs.list()) if (!d.active) dwbOpenDocs.closeTab(d.id); });
+  await page.evaluate(() => { setDirtyState(false); window.__conv = null; });
+  await closeTabs();
+  await page.setInputFiles("#fileInput", path.join(TMP, "skan-tabela.pdf"));
+  await page.waitForSelector("#pdfConvOcrYes", { state: "visible", timeout: 30000 });
+  await page.click("#pdfConvOcrYes");
+  await page.waitForFunction(() => window.__conv, null, { timeout: 120000 });
+  await page.waitForTimeout(300);
+  const st5 = await docxState(page);
+  const tbRep = await page.evaluate(() => window.__conv.report);
+  check("skan do góry nogami i krzywo: strona wyprostowana, tekst rozpoznany", tbRep.straightened === 1 && /Protokół przekazania sprzętu/.test(st5.text) && /Szlifierka kątowa/.test(st5.text) && /Zofia Wójcik/.test(st5.text), JSON.stringify({ st: tbRep.straightened, t: st5.text.replace(/\s+/g, " ").slice(0, 160) }));
+  // (numery seryjne mają pewność 87–92% — zależą od progu OCR, więc nie są tu sprawdzane)
+  check("skan tabeli: prawdziwa tabela Worda, komórki osobno (Nazwa, Numer seryjny, uszkodzona osłona)", st5.tables >= 1 && ["Nazwa", "Numer seryjny", "uszkodzona osłona"].every((x) => st5.paras.some((p) => p.trim() === x)), JSON.stringify(st5.paras.filter((p) => p.trim()).slice(0, 14)));
+
+  // --- 5c. tekst jako krzywe (bez znaków w PDF): pytanie o rozpoznanie, tekst zamiast kształtów
+  if (fs.existsSync(path.join(TMP, "tekst-krzywe.pdf"))) {
+    await page.evaluate(() => { setDirtyState(false); window.__conv = null; });
+    await closeTabs();
+    await page.setInputFiles("#fileInput", path.join(TMP, "tekst-krzywe.pdf"));
+    await page.waitForSelector("#pdfConvOcrYes", { state: "visible", timeout: 30000 });
+    const askTxt = await page.textContent("#pdfConvAskText");
+    await page.click("#pdfConvOcrYes");
+    await page.waitForFunction(() => window.__conv, null, { timeout: 120000 });
+    await page.waitForTimeout(300);
+    const cv = await docxState(page);
+    const cvRep = await page.evaluate(() => window.__conv.report);
+    check("tekst-krzywe: pytanie mówi o tekście jako rysunku, rozpoznany tekst w dokumencie", /rysunek/.test(askTxt) && cvRep.curvePages === 1 && /Zagrożenie atakiem terrorystycznym/.test(cv.text) && /podejrzanego pakunku/.test(cv.text), JSON.stringify({ ask: askTxt.slice(0, 40), cp: cvRep.curvePages, t: cv.text.slice(0, 120) }));
+    // kształty liter zastąpione tekstem: warstwa grafiki pusta (nic nie leży pod tekstem)
+    check("tekst-krzywe: kształty liter usunięte (bez warstwy grafiki pod tekstem)", cv.media === 0, `obrazy: ${cv.media}`);
+  }
+
+  // --- 5d. dwa zdjęcia kartek naraz = JEDEN dokument, 2 strony (kartka wykryta i wyprostowana)
+  await page.evaluate(() => { setDirtyState(false); window.__conv = null; });
+  await closeTabs();
+  const tabsBefore = await page.evaluate(() => dwbOpenDocs.list().length);
+  await page.setInputFiles("#fileInput", [path.join(TMP, "foto-1.jpg"), path.join(TMP, "foto-2.jpg")]);
+  await page.waitForSelector("#pdfConvOcrYes", { state: "visible", timeout: 60000 });
+  const photoAsk = await page.textContent("#pdfConvAskText");
+  await page.click("#pdfConvOcrYes");
+  await page.waitForFunction(() => window.__conv, null, { timeout: 120000 });
+  await page.waitForTimeout(400);
+  const ph = await docxState(page);
+  const phInfo = await page.evaluate(() => ({ name: currentFileName, tabs: dwbOpenDocs.list().length }));
+  check("zdjęcia: pytanie mówi o zdjęciu dokumentu", /zdjęcie dokumentu/.test(photoAsk), photoAsk);
+  check("dwa zdjęcia naraz: jeden dokument (jedna nowa karta), 2 strony, nazwa „foto-1 (2 str.).docx”", phInfo.tabs === tabsBefore + 1 && ph.pageBreaks >= 1 && /^foto-1 \(2 str\.\)\.docx$/.test(phInfo.name), JSON.stringify({ ...phInfo, pb: ph.pageBreaks, before: tabsBefore }));
+  const phText = ph.text.replace(/\s+/g, " ");
+  check("zdjęcia: tekst obu kartek rozpoznany (obrót i blat nie przeszkadzają)", /Zawiadomienie o zebraniu/.test(phText) && /Porządek obrad/.test(phText) && /świetlicy osiedlowej/.test(phText), phText.slice(0, 200));
+
   // --- 6. opcjonalnie: próbki spoza repo
   const dir = process.env.PDF_SAMPLES;
   if (dir && fs.existsSync(dir)) {
     // każda konwersja to nowa karta (open-docs.js) — zamknij poprzednie, limit to 12
-    page.on("dialog", (d) => d.accept());
     const closeOthers = () => page.evaluate(() => { for (const d of dwbOpenDocs.list()) if (!d.active) dwbOpenDocs.closeTab(d.id); });
     await closeOthers();
     for (const f of fs.readdirSync(dir).filter((n) => /\.pdf$/i.test(n))) {
@@ -400,7 +493,7 @@ async function run() {
   }
 
   await browser.close();
-  fs.rmSync(TMP, { recursive: true, force: true });
+  if (!process.env.KEEP) fs.rmSync(TMP, { recursive: true, force: true }); // KEEP=1: PDF-y testu zostają (diagnoza)
   // ostrzeżenia pdf.js o brakujących czcionkach systemowych nie są błędami aplikacji
   const realErrors = errors.filter((e) => !/Warning|standardFontDataUrl|font/i.test(e));
   if (realErrors.length) check("bez błędów w konsoli", false, realErrors.join(" | ").slice(0, 400));

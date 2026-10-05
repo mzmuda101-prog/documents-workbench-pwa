@@ -243,6 +243,41 @@
    *                            glyphFixes(page, raw) → Map|null, onProgress(i, n, phase),
    *                            signal: { cancelled }, maxPages }
    */
+  // OCR wyprostował stronę (krzywy skan, kartka bokiem / do góry nogami): rozpoznane słowa są
+  // w układzie wyprostowanej strony, więc strona dostaje jej wymiary, a obraz skanu — obrót wokół
+  // środka (rotateM: punkt strony → punkt wyprostowanej strony, stosuje go encodeImage).
+  // Reszta starej strony (niewidoczne znaki, drobne kreski) jest w starym układzie — pomijamy ją.
+  function straightenScanPage(raw, scanImg, R) {
+    const t = (R.deg * Math.PI) / 180, c = Math.cos(t), s = Math.sin(t);
+    scanImg.rotateM = [c, s, -s, c, R.w / 2 - (c * R.ow / 2 - s * R.oh / 2), R.h / 2 - (s * R.ow / 2 + c * R.oh / 2)];
+    scanImg.clipped = { x0: 0, y0: 0, x1: R.w, y1: R.h };
+    scanImg.paper = R.paper; // rogi po obrocie w kolorze papieru
+    raw.width = R.w;
+    raw.height = R.h;
+    raw.images = [scanImg];
+    raw.glyphs = [];
+    for (const k of ["rects", "lines", "graphics", "annotations"]) if (Array.isArray(raw[k])) raw[k] = [];
+  }
+
+  // Strona z tekstem-krzywymi: (prawie) bez znaków, za to ≥ 40 małych kształtów (wielkości liter).
+  function looksLikeOutlinedText(raw, visible) {
+    const small = raw.graphics.filter((g) => g.kind === "fill" && g.y1 - g.y0 > 1 && g.y1 - g.y0 <= 40 && g.x1 - g.x0 <= 60).length;
+    return small >= 40 && visible < small * 0.05;
+  }
+  // Kształt (litera-rysunek) leży w ramce rozpoznanego słowa — znika, bo zastępuje go tekst.
+  // Kształty nierozpoznane (logo, pismo, słowo poniżej progu pewności) zostają na stronie.
+  function coveredByWords(g, boxes) {
+    const area = Math.max(0.01, (g.x1 - g.x0) * (g.y1 - g.y0));
+    const cx = (g.x0 + g.x1) / 2, gh = Math.max(0.01, g.y1 - g.y0);
+    for (const b of boxes) {
+      const ix = Math.min(g.x1, b.x1 + 0.8) - Math.max(g.x0, b.x0 - 0.8), iy = Math.min(g.y1, b.y1 + 0.8) - Math.max(g.y0, b.y0 - 0.8);
+      if (ix > 0 && iy > 0 && ix * iy >= area * 0.7) return true;
+      // środek kształtu w ramce słowa i większość wysokości w jej pasie (ramki OCR bywają ciasne)
+      if (iy >= gh * 0.6 && cx >= b.x0 - 0.5 && cx <= b.x1 + 0.5) return true;
+    }
+    return false;
+  }
+
   async function convertPdf(pdfDoc, env) {
     const n = Math.min(pdfDoc.numPages, env.maxPages || Infinity);
     const fontCache = new Map();
@@ -251,6 +286,17 @@
     const t0 = Date.now();
     const pageObjs = [];
     let ocrChoice = null; // null = jeszcze nie pytano
+    // OCR w potoku: strona startuje od razu, a czekamy dopiero, gdy w toku jest `ocrLimit` stron —
+    // przygotowanie kolejnej (wątek główny) idzie równolegle z rozpoznawaniem poprzedniej (wątki
+    // tesseracta). Wynik zmienia `raw` danej strony w miejscu, więc kolejność stron zostaje.
+    const ocrLimit = Math.max(1, env.ocrParallel || 1);
+    const inflight = [];
+    const queueOcr = async (job) => {
+      const p = job();
+      p.catch(() => {}); // błąd i tak wyjdzie przy await poniżej
+      inflight.push(p);
+      if (inflight.length >= ocrLimit) await inflight.shift();
+    };
     for (let i = 1; i <= n; i++) {
       if (env.signal?.cancelled) throw new CancelledError();
       env.onProgress?.(i, n, "read");
@@ -274,20 +320,56 @@
           if (env.signal?.cancelled) throw new CancelledError();
           if (ocrChoice) {
             env.onProgress?.(i, n, "ocr");
+            await queueOcr(async () => {
             const res = await env.ocrPage(page, raw, (status, p) => env.onProgress?.(i, n, "ocr", p));
             if (res && res.glyphs.length) {
+              if (res.rotate) straightenScanPage(raw, scanImg, res.rotate);
               raw.glyphs.push(...res.glyphs);
+              if (res.lines?.length) raw.lines.push(...res.lines);
               scanImg.eraseBoxes = res.eraseBoxes;
               report.ocrPages++;
+              if (res.rotate) report.straightened = (report.straightened || 0) + 1;
             }
-            if (res) report.ocrSkipped = (report.ocrSkipped || 0) + (res.skipped || 0);
+            if (res) {
+              report.ocrSkipped = (report.ocrSkipped || 0) + (res.skipped || 0);
+              report.ocrDoubt = (report.ocrDoubt || 0) + (res.doubtful || 0);
+            }
+            });
           }
+        }
+      }
+      // Tekst zapisany jako rysunek („zamień czcionki na krzywe”, eksport z programów graficznych,
+      // Ghostscript): zero znaków, setki małych kształtów liter. Bez OCR dokument ma „0 słów”.
+      else if (env.ocrPage && looksLikeOutlinedText(raw, visible)) {
+        if (ocrChoice === null) ocrChoice = env.askOcr ? !!(await env.askOcr("curves")) : true;
+        if (env.signal?.cancelled) throw new CancelledError();
+        if (ocrChoice) {
+          env.onProgress?.(i, n, "ocr");
+          // strona wektorowa jest prosta, a linie tabel już są w PDF — bez prostowania i bez linii z obrazu
+          await queueOcr(async () => {
+          const res = await env.ocrPage(page, raw, (status, p) => env.onProgress?.(i, n, "ocr", p), { straighten: false, lines: false });
+          if (res && res.glyphs.length) {
+            if (Array.isArray(window.__dwbOcrTrace)) for (const g of raw.graphics) if (!coveredByWords(g, res.wordBoxes) && res.wordBoxes.some((b) => g.x0 < b.x1 && g.x1 > b.x0 && g.y0 < b.y1 && g.y1 > b.y0)) window.__dwbOcrTrace.push({ left: [g.x0, g.y0, g.x1, g.y1].map((v) => +v.toFixed(1)), box: res.wordBoxes.filter((b) => g.x0 < b.x1 && g.x1 > b.x0 && g.y0 < b.y1 && g.y1 > b.y0).map((b) => [b.x0, b.y0, b.x1, b.y1].map((v) => +v.toFixed(1))) });
+            raw.graphics = raw.graphics.filter((g) => !coveredByWords(g, res.wordBoxes));
+            // kreski liter (i, l, kropki) bywają zapisane jako prostokąty — też znikają (krawędzie tabel są długie, zostają)
+            raw.rects = raw.rects.filter((r) => r.y1 - r.y0 > 40 || r.x1 - r.x0 > 60 || !coveredByWords(r, res.wordBoxes));
+            raw.glyphs.push(...res.glyphs);
+            report.ocrPages++;
+            report.curvePages = (report.curvePages || 0) + 1;
+          }
+          if (res) {
+            report.ocrSkipped = (report.ocrSkipped || 0) + (res.skipped || 0);
+            report.ocrDoubt = (report.ocrDoubt || 0) + (res.doubtful || 0);
+          }
+          });
         }
       }
       raws.push(raw);
       pageObjs.push(page);
       await yieldNow();
     }
+    while (inflight.length) await inflight.shift();
+    if (env.signal?.cancelled) throw new CancelledError();
     report.timings.read = Date.now() - t0;
 
     // Powtarzające się nagłówki/stopki — wycinamy z treści, wstawiamy do nagłówka/stopki Worda.

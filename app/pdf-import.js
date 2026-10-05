@@ -54,7 +54,7 @@
           </div>
         </form>
         <div class="pdfconv-ask hidden" id="pdfConvAsk">
-          <p>${T("Ten PDF to skan (zdjęcie strony). Rozpoznać tekst, żeby dało się go edytować?", "This PDF is a scan (an image of the page). Recognize the text so it can be edited?")}</p>
+          <p id="pdfConvAskText">${T("Ten PDF to skan (zdjęcie strony). Rozpoznać tekst, żeby dało się go edytować?", "This PDF is a scan (an image of the page). Recognize the text so it can be edited?")}</p>
           <p class="pdfconv-ask-sub">${T("Rozpoznawanie (OCR) działa na tym urządzeniu, kilka sekund na stronę. Pismo odręczne zostaje jako obraz.", "Recognition (OCR) runs on this device, a few seconds per page. Handwriting stays as an image.")}</p>
           <div class="pdfconv-ask-row">
             <button class="btn primary" type="button" id="pdfConvOcrYes">${T("Rozpoznaj tekst", "Recognize text")}</button>
@@ -102,9 +102,16 @@
     });
   }
 
-  function askOcr() {
+  // kind: "scan" (obraz strony) albo "curves" (tekst zapisany jako rysunek — same kształty liter)
+  function askOcr(kind = "scan") {
     const d = ensureDialog();
     const box = d.querySelector("#pdfConvAsk");
+    const txt = d.querySelector("#pdfConvAskText");
+    if (txt) txt.textContent = kind === "photo"
+      ? T("To zdjęcie dokumentu (kartka wyprostowana). Rozpoznać tekst, żeby dało się go edytować?", "This is a photo of a document (page straightened). Recognize the text so it can be edited?")
+      : kind === "curves"
+      ? T("Tekst w tym PDF jest zapisany jako rysunek (kształty liter, bez znaków). Rozpoznać go, żeby dało się go edytować i przeszukiwać?", "The text in this PDF is stored as drawings (letter shapes, no characters). Recognize it so it can be edited and searched?")
+      : T("Ten PDF to skan (zdjęcie strony). Rozpoznać tekst, żeby dało się go edytować?", "This PDF is a scan (an image of the page). Recognize the text so it can be edited?");
     box.classList.remove("hidden");
     const yes = d.querySelector("#pdfConvOcrYes"), no = d.querySelector("#pdfConvOcrNo");
     setTimeout(() => yes.focus(), 30);
@@ -122,9 +129,21 @@
     });
   }
 
-  async function ocrPage(page, raw, onProgress) {
+  // Ile stron OCR naraz: komputer (mysz, ≥ 4 rdzenie, ≥ 4 GB) — 2 wątki, ok. 2× szybciej przy
+  // wielu stronach; telefon/tablet — 1 (iOS ma ostry limit pamięci kanw, a strona to kilka kanw).
+  const OCR_PARALLEL = (() => {
+    try {
+      const coarse = window.matchMedia("(pointer: coarse)").matches;
+      return !coarse && (navigator.hardwareConcurrency || 2) >= 4 && (navigator.deviceMemory || 8) >= 4 ? 2 : 1;
+    } catch (_) {
+      return 1;
+    }
+  })();
+
+  async function ocrPage(page, raw, onProgress, opts = {}) {
     if (!window.DWPdfOcr) await loadLazyScript("app/pdf-ocr.js");
-    return window.DWPdfOcr.recognizePage(page, raw, { onProgress, signal: currentSignal });
+    window.DWPdfOcr.setParallel(window.__dwbOcrParallel || OCR_PARALLEL); // __dwbOcrParallel: miernik ocr:score
+    return window.DWPdfOcr.recognizePage(page, raw, { ...opts, onProgress, signal: currentSignal });
   }
   let currentSignal = null;
 
@@ -255,12 +274,14 @@
     const c = OffscreenCanvasOr(cw, ch);
     const ctx = c.getContext("2d");
     if (srcInfo.opaque && img.kind !== "mask") {
-      ctx.fillStyle = "#fff";
+      ctx.fillStyle = img.rotateM && img.paper ? `rgb(${img.paper.join(",")})` : "#fff";
       ctx.fillRect(0, 0, cw, ch);
     }
     ctx.imageSmoothingQuality = "high";
     // piksel obrazu (px, py) → jednostka (px/w, 1 − py/h) → strona (macierz z PDF) → kanwa
-    const A = mul([s, 0, 0, s, -box.x0 * s, -box.y0 * s], mul(img.matrix, [1 / srcInfo.w, 0, 0, -1 / srcInfo.h, 0, 1]));
+    // rotateM: skan wyprostowany przez OCR (pdf-convert straightenScanPage) — strona → strona prosta
+    const M = mul(img.rotateM || [1, 0, 0, 1, 0, 0], mul(img.matrix, [1 / srcInfo.w, 0, 0, -1 / srcInfo.h, 0, 1]));
+    const A = mul([s, 0, 0, s, -box.x0 * s, -box.y0 * s], M);
     ctx.setTransform(A[0], A[1], A[2], A[3], A[4], A[5]);
     ctx.drawImage(srcInfo.src, 0, 0);
     if (img.eraseBoxes) {
@@ -566,7 +587,7 @@
       }, 0);
     };
     cancelBtn.addEventListener("click", onCancel);
-    d.querySelector("#pdfConvFile").textContent = file.name || "dokument.pdf";
+    d.querySelector("#pdfConvFile").textContent = options.photo?.name || file.name || "dokument.pdf";
     d.querySelector("#pdfConvPass").classList.add("hidden");
     setProgress(0.02, T("Wczytywanie silnika PDF…", "Loading the PDF engine…"));
     if (!d.open) {
@@ -616,8 +637,9 @@
         encodeImage,
         renderVectors,
         glyphFixes,
-        askOcr,
+        askOcr: (kind) => askOcr(options.photo && kind !== "curves" ? "photo" : kind),
         ocrPage,
+        ocrParallel: window.__dwbOcrParallel || OCR_PARALLEL,
         signal,
         title,
         lang: "pl-PL",
@@ -646,9 +668,10 @@
         if (r.tables) parts.push(`${r.tables} ${plural(r.tables, "tabela", "tabele", "tabel", "table", "tables")}`);
         if (r.images) parts.push(`${r.images} ${plural(r.images, "obraz", "obrazy", "obrazów", "image", "images")}`);
         const secs = ((performance.now() - t0) / 1000).toFixed(1);
-        toast(`${T("Przekonwertowano PDF", "PDF converted")}: ${parts.join(", ")} (${secs} s). ${T("Zapisz jako .docx.", "Save it as .docx.")}`, "success");
+        toast(`${options.photo ? T(options.photo.pages > 1 ? `Zdjęcia (${options.photo.pages}) zamienione na dokument` : "Zdjęcie zamienione na dokument", "Photo(s) converted to a document") : T("Przekonwertowano PDF", "PDF converted")}: ${parts.join(", ")} (${secs} s). ${T("Zapisz jako .docx.", "Save it as .docx.")}`, "success");
         if (r.suspectChars) toast(T(`${r.suspectChars} ${plural(r.suspectChars, "znak mógł", "znaki mogły", "znaków mogło")} się źle odczytać z PDF — ${r.suspectChars === 1 ? "jest zaznaczony" : "są zaznaczone"} na żółto. Sprawdź je.`, `${r.suspectChars} character(s) may have been read incorrectly — highlighted in yellow.`), "warning");
         if (r.ocrPages) toast(T(`Rozpoznano druk na ${r.ocrPages} ${plural(r.ocrPages, "stronie", "stronach", "stronach")} — sprawdź go, OCR bywa omylny.`, `Printed text recognized on ${r.ocrPages} page(s) — please check it, OCR can make mistakes.`), "info");
+        if (r.ocrDoubt) toast(T(`${r.ocrDoubt} ${plural(r.ocrDoubt, "słowo rozpoznane", "słowa rozpoznane", "słów rozpoznanych")} z mniejszą pewnością ${r.ocrDoubt === 1 ? "jest zaznaczone" : "są zaznaczone"} na żółto — sprawdź je z oryginałem.`, `${r.ocrDoubt} word(s) recognized with lower confidence are highlighted in yellow — check them against the original.`), "warning");
         if (r.ocrSkipped) toast(T(`${r.ocrSkipped} ${plural(r.ocrSkipped, "fragment", "fragmenty", "fragmentów")} (np. pismo odręczne) ${r.ocrSkipped === 1 ? "został" : "zostało"} jako obraz, bez zmian — tego jeszcze nie rozpoznajemy.`, `${r.ocrSkipped} fragment(s) (e.g. handwriting) kept unchanged as image — not recognized yet.`), "info");
         if (r.scannedPages && !r.ocrPages && !r.ocrLayerPages) {
           toast(T(`${r.scannedPages === r.pages ? "To skan" : `${r.scannedPages} ${plural(r.scannedPages, "strona to skan", "strony to skany", "stron to skany")}`} — wstawiony jako obraz (bez rozpoznawania tekstu).`, `${r.scannedPages} scanned page(s) — inserted as images (no text recognition).`), "info");

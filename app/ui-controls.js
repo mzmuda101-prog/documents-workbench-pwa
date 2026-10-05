@@ -254,16 +254,16 @@ async function openFilePicker() {
       const handles = await window.showOpenFilePicker({
         mode: "readwrite",
         types: [{
-          description: "Word / PDF",
-          accept: { "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"], "application/pdf": [".pdf"] },
+          description: "Word / PDF / zdjęcie",
+          accept: { "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"], "application/pdf": [".pdf"], "image/*": [".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"] },
         }],
         multiple: true, // kilka plików = kilka kart (app/open-docs.js)
       });
       const items = [];
       for (const handle of handles) {
         const file = await handle.getFile();
-        // PDF zamienia się w nowy .docx — uchwyt do PDF-a nie może służyć do „Zapisz”
-        items.push(/\.pdf$/i.test(file.name) ? { file } : { file, handle });
+        // PDF/zdjęcie zamienia się w nowy .docx — jego uchwyt nie może służyć do „Zapisz”
+        items.push(detectFileType(file.name, file.type) !== "docx" ? { file } : { file, handle });
       }
       if (typeof openDocumentFiles === "function") await openDocumentFiles(items);
       else await ingestFile(items[0].file, items[0].handle ? { handle: items[0].handle } : {});
@@ -447,6 +447,23 @@ const closeDocPanelBtn = document.getElementById("closeDocPanelBtn");
 if (closeDocPanelBtn) closeDocPanelBtn.addEventListener("click", requestCloseDocument);
 if (loadBtn) loadBtn.addEventListener("click", openFilePicker);
 if (loadSampleBtn) loadSampleBtn.addEventListener("click", () => loadSampleDocument("przewodnik"));
+// „Zdjęcie dokumentu”: aparat na telefonie/tablecie (capture), na komputerze wybór zdjęć.
+// Kilka zdjęć naraz = jeden dokument z kilkoma stronami (open-docs.js groupPhotos).
+const photoDocBtn = document.getElementById("photoDocBtn");
+const photoInput = document.getElementById("photoInput");
+if (photoDocBtn && photoInput) {
+  photoDocBtn.addEventListener("click", () => {
+    if (typeof confirmDiscardChanges === "function" && !confirmDiscardChanges()) return;
+    photoInput.click();
+  });
+  photoInput.addEventListener("change", () => {
+    const files = Array.from(photoInput.files || []);
+    photoInput.value = "";
+    if (!files.length) return;
+    if (typeof openDocumentFiles === "function") openDocumentFiles(files.map((file) => ({ file })));
+    else ingestFile(files[0]);
+  });
+}
 if (saveBtn) saveBtn.addEventListener("click", saveDocument);
 if (saveAsBtn) saveAsBtn.addEventListener("click", saveDocumentAs);
 if (fileInput) {

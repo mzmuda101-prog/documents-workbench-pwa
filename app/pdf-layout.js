@@ -858,9 +858,10 @@
       strike: !!g.strike,
       hScale: g.xScale && Math.abs(g.xScale - 1) > 0.05 ? Math.round(g.xScale * 100) : null,
       spacing: g.fitSpacing && Math.abs(g.fitSpacing) >= 2 ? g.fitSpacing : null,
+      hl: !!g.doubt, // słowo z OCR o mniejszej pewności — żółte „do sprawdzenia”
     };
     if (s.vert) s.size = Math.round(size * 2 / 1.0) / 2; // indeks: zachowaj prawdziwy rozmiar
-    s.key = [s.font, s.size, s.bold, s.italic, s.color, s.vert, s.underline, s.strike, s.hScale, s.spacing].join("|");
+    s.key = [s.font, s.size, s.bold, s.italic, s.color, s.vert, s.underline, s.strike, s.hScale, s.spacing, s.hl].join("|");
     return s;
   }
 

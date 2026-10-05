@@ -1,6 +1,6 @@
 // Core runtime: DOM refs, shared state, and base UI helpers.
 
-const APP_BUILD_VERSION = "20261005-04";
+const APP_BUILD_VERSION = "20261005-07";
 
 const IS_LOW_POWER = (() => {
   try {
@@ -221,6 +221,8 @@ function detectFileType(name, mime) {
   const lower = (name || "").toLowerCase();
   if (lower.endsWith(".docx") || mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return "docx";
   if (lower.endsWith(".pdf") || mime === "application/pdf") return "pdf";
+  // zdjęcie dokumentu (app/photo-import.js → PDF → OCR); HEIC odczyta tylko Safari
+  if (/\.(jpe?g|png|webp|heic|heif)$/.test(lower) || /^image\/(jpeg|png|webp|heic|heif)$/.test(mime || "")) return "image";
   return "";
 }
 

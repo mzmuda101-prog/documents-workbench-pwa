@@ -32,6 +32,22 @@
         ],
         "application/pdf": [
           ".pdf"
+        ],
+        "image/jpeg": [
+          ".jpg",
+          ".jpeg"
+        ],
+        "image/png": [
+          ".png"
+        ],
+        "image/webp": [
+          ".webp"
+        ],
+        "image/heic": [
+          ".heic"
+        ],
+        "image/heif": [
+          ".heif"
         ]
       },
       "launch_type": "multiple-clients"
@@ -52,7 +68,18 @@
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             ".docx",
             "application/pdf",
-            ".pdf"
+            ".pdf",
+            "image/jpeg",
+            "image/png",
+            "image/webp",
+            "image/heic",
+            "image/heif",
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".webp",
+            ".heic",
+            ".heif"
           ]
         }
       ]

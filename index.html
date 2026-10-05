@@ -16,7 +16,7 @@
     <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png" />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin.woff2" crossorigin />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin-ext.woff2" crossorigin />
-    <link rel="stylesheet" href="styles/app.css?v=20261005-04" />
+    <link rel="stylesheet" href="styles/app.css?v=20261005-07" />
   </head>
   <body>
     <!-- Pierwszy przystanek Tab: skok prosto do dokumentu (panel to kilkadziesiąt kontrolek). -->
@@ -153,9 +153,9 @@
                       <polyline points="9 14 12 11 15 14" />
                     </svg>
                   </div>
-                  <p class="drop-text"><span data-i18n="dropText">Przeciągnij plik</span> <strong>.docx</strong> / <strong>.pdf</strong></p>
+                  <p class="drop-text"><span data-i18n="dropText">Przeciągnij plik</span> <strong>.docx</strong> / <strong>.pdf</strong> / <strong>.jpg</strong></p>
                   <span class="drop-btn" data-i18n="dropOr">lub kliknij tutaj</span>
-                  <input id="fileInput" type="file" multiple accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pdf,application/pdf" hidden />
+                  <input id="fileInput" type="file" multiple accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pdf,application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif" hidden />
                 </label>
                 <div class="file-name hidden" id="fileName">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -169,6 +169,10 @@
                   <button class="btn" id="loadSampleBtn" type="button" data-i18n="loadSample">Przykład</button>
                 </div>
                 <button class="btn" id="newDocBtn" type="button" data-i18n="newDocMenu">Nowy dokument…</button>
+                <!-- Telefon/tablet: od razu aparat (capture); komputer: wybór zdjęć. Kartka jest
+                     wykrywana i prostowana, tekst rozpoznawany (app/photo-import.js). -->
+                <button class="btn" id="photoDocBtn" type="button" data-i18n="photoDoc" data-hint data-hint-pl="Zdjęcie kartki → dokument: aparat (telefon, tablet) albo wybór zdjęć. Kartka zostanie wyprostowana, a tekst rozpoznany." data-hint-en="Photo of a page → document: camera (phone, tablet) or pick photos. The page is straightened and the text recognized." data-hint-delay="0.7">Zdjęcie dokumentu</button>
+                <input id="photoInput" type="file" accept="image/*" capture="environment" multiple hidden />
                 <div class="btn-row stack-divider">
                   <button class="btn" id="saveBtn" type="button" data-i18n="save" disabled>Zapisz</button>
                   <button class="btn" id="saveAsBtn" type="button" data-i18n="saveAs" disabled>Zapisz jako</button>
@@ -942,46 +946,46 @@
         <p class="newdoc-foot" data-i18n="newDocFoot">Plik powstaje na tym urządzeniu. „Zapisz” zapyta, gdzie go zapisać.</p>
       </form>
     </dialog>
-    <script defer src="app/core.js?v=20261005-04"></script>
-    <script defer src="app/language.js?v=20261005-04"></script>
-    <script defer src="app/docx-metadata.js?v=20261005-04"></script>
-    <script defer src="app/docx-revisions.js?v=20261005-04"></script>
-    <script defer src="app/docx-forms.js?v=20261005-04"></script>
-    <script defer src="app/doc-links.js?v=20261005-04"></script>
-    <script defer src="app/docx-patch.js?v=20261005-04"></script>
-    <script defer src="app/docx-compose.js?v=20261005-04"></script>
-    <script defer src="app/template-tokens.js?v=20261005-04"></script>
-    <script defer src="app/docx-run-styles.js?v=20261005-04"></script>
-    <script defer src="app/docx-inline-edit.js?v=20261005-04"></script>
-    <script defer src="app/doc-notes.js?v=20261005-04"></script>
-    <script defer src="app/paste-rich.js?v=20261005-04"></script>
-    <script defer src="app/document.js?v=20261005-04"></script>
-    <script defer src="app/docx-render-fixes.js?v=20261005-04"></script>
-    <script defer src="app/docx-viewer.js?v=20261005-04"></script>
-    <script defer src="app/analysis.js?v=20261005-04"></script>
-    <script defer src="app/structure-panel.js?v=20261005-04"></script>
-    <script defer src="app/grammar-style.js?v=20261005-04"></script>
-    <script defer src="app/placeholders.js?v=20261005-04"></script>
-    <script defer src="app/snippets.js?v=20261005-04"></script>
-    <script defer src="app/snippet-suggest.js?v=20261005-04"></script>
-    <script defer src="app/doc-caret-nav.js?v=20261005-04"></script>
-    <script defer src="app/doc-selection.js?v=20261005-04"></script>
-    <script defer src="app/print-preview.js?v=20261005-04"></script>
-    <script defer src="app/edit-tools.js?v=20261005-04"></script>
-    <script defer src="app/mobile-doc-zoom.js?v=20261005-04"></script>
-    <script defer src="app/ui-controls.js?v=20261005-04"></script>
-    <script defer src="app/lazy-features.js?v=20261005-04"></script>
-    <script defer src="app/app-frame.js?v=20261005-04"></script>
-    <script defer src="app/touch.js?v=20261005-04"></script>
-    <script defer src="app/pinch-zoom.js?v=20261005-04"></script>
-    <script defer src="app/page-breaks.js?v=20261005-04"></script>
-    <script defer src="app/undo.js?v=20261005-04"></script>
-    <script defer src="app/compose-ui.js?v=20261005-04"></script>
-    <script defer src="app/drafts.js?v=20261005-04"></script>
-    <script defer src="app/open-docs.js?v=20261005-04"></script>
-    <script defer src="app/view-mode.js?v=20261005-04"></script>
-    <script defer src="app/keyboard.js?v=20261005-04"></script>
-    <script defer src="app/launch-files.js?v=20261005-04"></script>
-    <script defer src="app/bootstrap.js?v=20261005-04"></script>
+    <script defer src="app/core.js?v=20261005-07"></script>
+    <script defer src="app/language.js?v=20261005-07"></script>
+    <script defer src="app/docx-metadata.js?v=20261005-07"></script>
+    <script defer src="app/docx-revisions.js?v=20261005-07"></script>
+    <script defer src="app/docx-forms.js?v=20261005-07"></script>
+    <script defer src="app/doc-links.js?v=20261005-07"></script>
+    <script defer src="app/docx-patch.js?v=20261005-07"></script>
+    <script defer src="app/docx-compose.js?v=20261005-07"></script>
+    <script defer src="app/template-tokens.js?v=20261005-07"></script>
+    <script defer src="app/docx-run-styles.js?v=20261005-07"></script>
+    <script defer src="app/docx-inline-edit.js?v=20261005-07"></script>
+    <script defer src="app/doc-notes.js?v=20261005-07"></script>
+    <script defer src="app/paste-rich.js?v=20261005-07"></script>
+    <script defer src="app/document.js?v=20261005-07"></script>
+    <script defer src="app/docx-render-fixes.js?v=20261005-07"></script>
+    <script defer src="app/docx-viewer.js?v=20261005-07"></script>
+    <script defer src="app/analysis.js?v=20261005-07"></script>
+    <script defer src="app/structure-panel.js?v=20261005-07"></script>
+    <script defer src="app/grammar-style.js?v=20261005-07"></script>
+    <script defer src="app/placeholders.js?v=20261005-07"></script>
+    <script defer src="app/snippets.js?v=20261005-07"></script>
+    <script defer src="app/snippet-suggest.js?v=20261005-07"></script>
+    <script defer src="app/doc-caret-nav.js?v=20261005-07"></script>
+    <script defer src="app/doc-selection.js?v=20261005-07"></script>
+    <script defer src="app/print-preview.js?v=20261005-07"></script>
+    <script defer src="app/edit-tools.js?v=20261005-07"></script>
+    <script defer src="app/mobile-doc-zoom.js?v=20261005-07"></script>
+    <script defer src="app/ui-controls.js?v=20261005-07"></script>
+    <script defer src="app/lazy-features.js?v=20261005-07"></script>
+    <script defer src="app/app-frame.js?v=20261005-07"></script>
+    <script defer src="app/touch.js?v=20261005-07"></script>
+    <script defer src="app/pinch-zoom.js?v=20261005-07"></script>
+    <script defer src="app/page-breaks.js?v=20261005-07"></script>
+    <script defer src="app/undo.js?v=20261005-07"></script>
+    <script defer src="app/compose-ui.js?v=20261005-07"></script>
+    <script defer src="app/drafts.js?v=20261005-07"></script>
+    <script defer src="app/open-docs.js?v=20261005-07"></script>
+    <script defer src="app/view-mode.js?v=20261005-07"></script>
+    <script defer src="app/keyboard.js?v=20261005-07"></script>
+    <script defer src="app/launch-files.js?v=20261005-07"></script>
+    <script defer src="app/bootstrap.js?v=20261005-07"></script>
   </body>
 </html>

@@ -54,6 +54,7 @@
     "test:compose": "node scripts/compose-playwright.js && ENGINE=webkit node scripts/compose-playwright.js && node scripts/compose2-playwright.js && ENGINE=webkit node scripts/compose2-playwright.js && node scripts/compose3-playwright.js && ENGINE=webkit node scripts/compose3-playwright.js && node scripts/compose4-playwright.js && ENGINE=webkit node scripts/compose4-playwright.js",
     "test:visual": "node scripts/visual-audit-playwright.js",
     "pdf:score": "node scripts/pdf-score.js",
+    "ocr:score": "node scripts/ocr-score.js",
     "test:align": "node scripts/align-playwright.js && ENGINE=webkit node scripts/align-playwright.js",
     "test:nested": "node scripts/nested-tables-playwright.js && ENGINE=webkit node scripts/nested-tables-playwright.js",
     "test:paste": "node scripts/paste-rich-playwright.js && ENGINE=webkit node scripts/paste-rich-playwright.js",

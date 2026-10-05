@@ -25,7 +25,7 @@ function initFileLaunch() {
         const items = [];
         for (const handle of handles) {
           const file = await handle.getFile();
-          items.push(/\.pdf$/i.test(file.name) ? { file } : { file, handle });
+          items.push(detectFileType(file.name, file.type) !== "docx" ? { file } : { file, handle });
         }
         if (typeof openDocumentFiles === "function") await openDocumentFiles(items);
         else await ingestFile(items[0].file, items[0].handle ? { handle: items[0].handle } : {});
