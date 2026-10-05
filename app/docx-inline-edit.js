@@ -906,7 +906,11 @@ function splitParagraphDomAtCaret(p) {
   caretOutOfIsland(range, p);
   const tailRange = document.createRange();
   tailRange.setStart(range.startContainer, range.startOffset);
-  tailRange.setEndAfter(p.lastChild || p);
+  // koniec TREŚCI akapitu. Dawniej setEndAfter(p.lastChild || p): w pustym akapicie (bez węzłów —
+  // puste akapity z pliku, akapit po przerysowaniu) zakres kończył się ZA akapitem i wycinał jego
+  // kopię → akapit w akapicie; podgląd miał o akapit więcej niż plik, a wpisany dalej tekst
+  // był w podglądzie dwa razy (zgłoszenie 2026-10-05: Enter po wyjściu z listy na końcu dokumentu)
+  tailRange.setEnd(p, p.childNodes.length);
   const tail = tailRange.extractContents();
   const newP = p.cloneNode(false);
   newP.className = p.className;

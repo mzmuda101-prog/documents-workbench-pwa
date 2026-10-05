@@ -437,6 +437,19 @@ function syncPageScaleBox() {
   shell.style.height = `${Math.ceil(canvas.offsetHeight * z)}px`;
 }
 
+// Wysokość obszaru przewijania = wysokość płótna (po skalowaniu) — od razu, bez czekania na
+// obserwator. Przed przewinięciem na zapamiętane miejsce po zmianie wysokości (odstępy stron
+// dołożone po przerysowaniu): obserwator poprawia ją dopiero klatkę później, więc przewinięcie
+// lądowało na dole starego, krótszego obszaru — przy końcu dokumentu widok uciekał o strony
+// w górę (Enter/Backspace w pustym punkcie listy, zgłoszenie 2026-10-05).
+function syncPageScaleHeightNow() {
+  const shell = docZoomShellEl;
+  if (!shell?.classList.contains("is-page-scaled") || !docCanvasEl) return;
+  const z = parseFloat(docCanvasEl.style.getPropertyValue("--doc-zoom")) || 1;
+  const h = `${Math.ceil(docCanvasEl.offsetHeight * z)}px`;
+  if (shell.style.height !== h) shell.style.height = h;
+}
+
 // Wysokość płótna zmienia się sama (pisanie, obrazy, przebudowa) — obszar przewijania za nią.
 let _pageBoxObserver = null;
 function ensurePageBoxObserver() {
@@ -448,11 +461,7 @@ function ensurePageBoxObserver() {
     if (raf) return;
     raf = requestAnimationFrame(() => {
       raf = 0;
-      const shell = docZoomShellEl;
-      if (!shell?.classList.contains("is-page-scaled")) return;
-      const z = parseFloat(docCanvasEl.style.getPropertyValue("--doc-zoom")) || 1;
-      const h = `${Math.ceil(docCanvasEl.offsetHeight * z)}px`;
-      if (shell.style.height !== h) shell.style.height = h;
+      syncPageScaleHeightNow();
     });
   });
   _pageBoxObserver.observe(docCanvasEl);

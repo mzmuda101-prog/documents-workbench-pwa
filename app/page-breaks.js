@@ -328,6 +328,7 @@ const dwbPageBreaks = (() => {
         sec.style.setProperty("--dwb-sec-min", `${minH}px`);
       }
     });
+    if (typeof syncPageScaleHeightNow === "function") syncPageScaleHeightNow(); // inaczej przewinięcie niżej obcina stary, krótszy obszar
     if (pending) restoreDocScrollAnchor(pending);
     else if (anchor && docViewportEl) {
       const d = anchor.el.getBoundingClientRect().top - anchor.top;
@@ -391,6 +392,14 @@ const dwbPageBreaks = (() => {
     }).observe(docCanvasEl);
     docCanvasEl.addEventListener("input", () => schedule(400));
     docCanvasEl.addEventListener("load", (e) => { if (e.target.tagName === "IMG") schedule(200); }, true);
+    // Enter / Backspace / sklejanie akapitów nie wysyłają „input”, a wysokość płótna często stoi
+    // (ostatnia kartka ma wysokość pełnych stron) — obserwator rozmiaru milczał. Odstęp strony
+    // zostawał przy starym akapicie: tekst wjeżdżał pod pas „str. N” albo zostawała pusta dziura
+    // (zgłoszenie 2026-10-05). Każda zmiana akapitów → przeliczenie; własne odstępy pomijamy.
+    const ours = (n) => n.nodeType === 1 && n.matches?.(".dwb-page-gap, .dwb-page-gap-band, .dwb-page-break");
+    new MutationObserver((records) => {
+      if (records.some((r) => [...r.addedNodes, ...r.removedNodes].some((n) => !ours(n)))) schedule(150);
+    }).observe(docCanvasEl, { childList: true, subtree: true });
   }
   document.fonts?.ready?.then(() => schedule(0));
 

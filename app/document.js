@@ -269,6 +269,7 @@ function restoreDocScrollAnchor(anchor) {
   if (!vp || !anchor || typeof docBodyParagraphs !== "function") return false;
   const p = docBodyParagraphs(docCanvasEl)[anchor.index];
   if (!p) return false;
+  if (typeof syncPageScaleHeightNow === "function") syncPageScaleHeightNow(); // obszar już tak wysoki jak płótno
   const r = p.getBoundingClientRect();
   vp.scrollTop += r.top + anchor.frac * r.height - anchor.gap - vp.getBoundingClientRect().top;
   return true;

@@ -220,6 +220,43 @@ function layoutTabStops(host) {
   return done;
 }
 
+// docx-preview daje domyślny krój i rozmiar dokumentu (docDefaults, style akapitów) tylko
+// fragmentom tekstu: „.docx span { font-family: Calibri; font-size: 11pt }”,
+// „p.docx_heading1 span { … }”. Sam akapit dziedziczył krój APLIKACJI — pusty akapit, nowy po
+// Enterze i tekst wpisany w nim bez fragmentu wyglądały jak „Space Grotesk 12 pt” (pasek też tak
+// pokazywał), choć w pliku i w Wordzie to Calibri 11 pt; puste akapity miały też inną wysokość
+// niż w Wordzie (granice stron). Te same cechy kopiujemy na akapit — tuż za oryginałem, żeby
+// kolejność (styl domyślny → style akapitów) się nie zmieniła.
+const RUN_DEFAULT_PROPS = ["font-family", "font-size", "font-weight", "font-style", "color"];
+function applyRunDefaultsToParagraphs(host) {
+  if (!host) return 0;
+  let n = 0;
+  host.querySelectorAll("style").forEach((el) => {
+    let sheet;
+    try { sheet = el.sheet; } catch (_) { sheet = null; }
+    if (!sheet?.cssRules) return;
+    for (let i = sheet.cssRules.length - 1; i >= 0; i--) {
+      const rule = sheet.cssRules[i];
+      if (rule.type !== 1 || !rule.selectorText) continue;
+      const sels = rule.selectorText.split(",").map((s) => s.trim());
+      // tylko „X span” (nie „span.docx_hyperlink” — styl znakowy) — X = .docx albo p.<styl akapitu>
+      if (!sels.every((s) => / span$/.test(s))) continue;
+      const targets = sels.map((s) => {
+        const base = s.slice(0, -" span".length).trim();
+        return /(^|\s)p\.[\w-]+$/.test(base) ? base : /^\.[\w-]+$/.test(base) ? `${base} p` : null;
+      });
+      if (targets.some((s) => !s)) continue;
+      const decl = RUN_DEFAULT_PROPS.map((prop) => {
+        const v = rule.style.getPropertyValue(prop);
+        return v ? `${prop}: ${v};` : "";
+      }).join(" ").trim();
+      if (!decl) continue;
+      try { sheet.insertRule(`${targets.join(", ")} { ${decl} }`, i + 1); n++; } catch (_) { /* nieznany selektor */ }
+    }
+  });
+  return n;
+}
+
 function wordLineFactor(fontFamily) {
   const first = String(fontFamily || "").split(",")[0].trim().replace(/^["']|["']$/g, "").toLowerCase();
   return WORD_LINE_FACTORS[first] || 1.17;
