@@ -1299,7 +1299,8 @@ const composeUi = (() => {
     input.click();
   }
 
-  // Karta obrazu: klik w obraz w Edycji — rozmiar (suwak, % szerokości tekstu), wyrównanie, opis, usuń.
+  // Karta obrazu: klik w obraz w Edycji — rozmiar (suwak, % szerokości tekstu), wyrównanie, podgląd
+  // (imageViewer: pół / cały ekran, przybliżanie), opis, usuń.
   let imgCard = null; // { el, img, p }
   function hideImageCard() {
     if (!imgCard) return;
@@ -1357,7 +1358,7 @@ const composeUi = (() => {
       <span class="tb-sep" aria-hidden="true"></span>
       <button type="button" class="tb-btn" data-align="left"></button><button type="button" class="tb-btn" data-align="center"></button><button type="button" class="tb-btn" data-align="right"></button>
       <span class="tb-sep" aria-hidden="true"></span>
-      <button type="button" class="tb-btn ic-alt"></button><button type="button" class="tb-btn ic-del"></button>`;
+      <button type="button" class="tb-btn ic-view"></button><button type="button" class="tb-btn ic-alt"></button><button type="button" class="tb-btn ic-del"></button>`;
     const range = el.querySelector("input");
     const val = el.querySelector(".image-size-val");
     range.value = String(Math.round(pct0 / 5) * 5);
@@ -1410,6 +1411,10 @@ const composeUi = (() => {
       b.innerHTML = alignSvg(b.dataset.align);
       b.addEventListener("click", () => imageEdit(imgCard.index, { action: "align", align: b.dataset.align }));
     });
+    const view = el.querySelector(".ic-view");
+    hint(view, "imageView");
+    view.innerHTML = ICON('<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16" y2="16"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>');
+    view.addEventListener("click", () => { if (typeof imageViewer !== "undefined") imageViewer.open(imgCard.img); });
     const alt = el.querySelector(".ic-alt");
     hint(alt, "imageAlt");
     alt.innerHTML = '<span class="ic-alt-text">ALT</span>';
@@ -2370,8 +2375,23 @@ const composeUi = (() => {
     e.preventDefault();
     showImageCard(img);
   });
+  // Podgląd obrazu na cały ekran: dwuklik w Edycji, zwykły klik / stuknięcie w Czytaniu
+  // (obraz w linku dalej działa jak link).
+  docCanvasEl?.addEventListener("dblclick", (e) => {
+    const img = e.target.closest?.(".docx-preview-host img");
+    if (!img || readOnlyMode || typeof imageViewer === "undefined") return;
+    e.preventDefault();
+    imageViewer.open(img);
+  });
+  docCanvasEl?.addEventListener("click", (e) => {
+    const img = e.target.closest?.(".docx-preview-host img");
+    if (!img || !readOnlyMode || e.button > 0 || img.closest("a[href]") || typeof imageViewer === "undefined") return;
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed && sel.toString().trim()) return; // zaznaczanie tekstu
+    imageViewer.open(img);
+  });
   document.addEventListener("pointerdown", (e) => {
-    if (!imgCard || imgCard.el.contains(e.target) || e.target === imgCard.img || pop?.el.contains(e.target)) return;
+    if (!imgCard || imgCard.el.contains(e.target) || e.target === imgCard.img || pop?.el.contains(e.target) || e.target.closest?.(".image-viewer")) return;
     hideImageCard();
   }, true);
   document.addEventListener("keydown", (e) => {

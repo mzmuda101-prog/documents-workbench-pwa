@@ -2036,6 +2036,100 @@ p.dwb-exact img { vertical-align: baseline; }
   .image-card > .tb-sep:first-of-type { display: none; }
 }
 
+/* ── podgląd obrazu (image-viewer.js): pół ekranu / całe okno / pełny ekran, przybliżanie ── */
+.ic-view svg { width: 17px; height: 17px; }
+.doc-canvas:not(.edit-mode) .docx-preview-host img:not(a img) { cursor: zoom-in; }
+.image-viewer {
+  position: fixed; inset: 0; z-index: 9500; display: flex; flex-direction: column;
+  background: rgba(8, 11, 18, 0.94); color: #eef2f8; opacity: 0; transition: opacity 140ms ease-out;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+}
+.image-viewer[hidden] { display: none; }
+.image-viewer.iv-ready { opacity: 1; }
+/* pół ekranu: panel z prawej (w poziomie) albo na dole (w pionie); dokument obok dalej działa */
+.image-viewer.iv-half {
+  inset: 0 0 0 auto; width: var(--iv-side-w, 50vw); border-left: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: -12px 0 32px rgba(8, 14, 28, 0.28); background: rgba(12, 16, 25, 0.97);
+}
+@media (orientation: portrait), (max-width: 700px) {
+  .image-viewer.iv-half {
+    inset: auto 0 0 0; width: auto; min-width: 0; height: var(--iv-bottom-h, 50dvh); border-left: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.14); box-shadow: 0 -12px 32px rgba(8, 14, 28, 0.28);
+    border-radius: 14px 14px 0 0;
+  }
+}
+html.iv-open-full, html.iv-open-full body { overflow: hidden; }
+html.iv-side .app { margin-right: var(--iv-side-app, 50vw); }
+/* uchwyt granicy panelu „Pół ekranu”: lewa krawędź (obok) albo górna (na dole) */
+.iv-split { display: none; position: absolute; z-index: 3; touch-action: none; }
+.image-viewer.iv-half .iv-split { display: flex; align-items: center; justify-content: center; left: -7px; top: 0; bottom: 0; width: 14px; cursor: col-resize; }
+.iv-split-grip { width: 4px; height: 44px; border-radius: 2px; background: rgba(255, 255, 255, 0.34); transition: background 120ms, transform 120ms; }
+.iv-split:hover .iv-split-grip, .image-viewer.iv-resizing .iv-split-grip { background: var(--accent-2); transform: scale(1.15); }
+.iv-split:focus-visible { outline: none; }
+.iv-split:focus-visible .iv-split-grip { background: var(--accent-2); box-shadow: 0 0 0 3px rgba(126, 179, 232, 0.35); }
+.image-viewer.iv-resizing, .image-viewer.iv-resizing * { cursor: inherit; }
+.image-viewer.iv-resizing { transition: none; }
+@media (orientation: portrait), (max-width: 700px) {
+  .image-viewer.iv-half .iv-split { left: 0; right: 0; top: -2px; bottom: auto; width: auto; height: 22px; cursor: row-resize; }
+  .image-viewer.iv-half .iv-split-grip { width: 44px; height: 4px; }
+  .image-viewer.iv-half .iv-bar { padding-top: 14px; }
+}
+@media (pointer: coarse) { .image-viewer.iv-half .iv-split { width: 26px; left: -13px; } }
+@media (pointer: coarse) and ((orientation: portrait) or (max-width: 700px)) { .image-viewer.iv-half .iv-split { width: auto; left: 0; height: 26px; } }
+.image-viewer:focus { outline: none; }
+.iv-bar {
+  flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 14px; min-height: 52px;
+  background: rgba(255, 255, 255, 0.04); border-bottom: 1px solid rgba(255, 255, 255, 0.08); position: relative; z-index: 2;
+}
+.iv-info { flex: 1 1 48px; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.iv-count { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.iv-cap { font-size: 12px; color: rgba(238, 242, 248, 0.7); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.iv-cap[hidden], .iv-count[hidden], .iv-info[hidden] { display: none; }
+/* przyciski w jednym rzędzie — na wąsko przewijane w bok z wygaszeniem krawędzi */
+.iv-tools {
+  flex: 0 1 auto; min-width: 0; margin-left: auto; display: flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 10px, #000 calc(100% - 10px), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 10px, #000 calc(100% - 10px), transparent 100%);
+  padding: 0 8px;
+}
+.iv-tools::-webkit-scrollbar { display: none; }
+.iv-btn, .iv-zoom-val {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 38px; height: 38px; padding: 0 6px;
+  border: 0; border-radius: 10px; background: none; color: inherit; font: inherit; cursor: pointer;
+}
+.iv-btn[hidden] { display: none; }
+.iv-btn:hover, .iv-zoom-val:hover { background: rgba(255, 255, 255, 0.1); }
+.iv-btn:focus-visible, .iv-zoom-val:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 1px; }
+.iv-btn-text { font-size: 12.5px; font-weight: 800; letter-spacing: .02em; }
+.iv-zoom-val { min-width: 54px; font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.iv-close { margin-left: 2px; }
+@media (max-width: 520px) { .iv-bar { padding-left: 10px; gap: 4px; } .iv-count { font-size: 12px; } }
+.iv-sep { flex: none; width: 1px; height: 20px; margin: 0 4px; background: rgba(255, 255, 255, 0.16); }
+.iv-stage { position: relative; flex: 1 1 auto; overflow: hidden; touch-action: none; cursor: grab; }
+.image-viewer.iv-grabbing .iv-stage { cursor: grabbing; }
+.iv-img {
+  position: absolute; left: 0; top: 0; max-width: none; transform-origin: 0 0; will-change: transform;
+  background: repeating-conic-gradient(#d9dde4 0 25%, #fff 0 50%) 0 0 / 16px 16px; /* przezroczystość PNG */
+  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.45); -webkit-user-drag: none;
+}
+.iv-nav {
+  position: absolute; top: 50%; z-index: 2; width: 44px; height: 44px; margin-top: 12px; border-radius: 50%;
+  background: rgba(20, 26, 38, 0.72); border: 1px solid rgba(255, 255, 255, 0.16); backdrop-filter: blur(6px);
+}
+.iv-nav:hover { background: rgba(40, 50, 70, 0.9); }
+.iv-nav-prev { left: max(10px, env(safe-area-inset-left)); }
+.iv-nav-next { right: max(10px, env(safe-area-inset-right)); }
+.iv-hint {
+  position: absolute; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); z-index: 2; transform: translateX(-50%);
+  max-width: calc(100% - 32px); padding: 7px 12px; border-radius: 999px; background: rgba(20, 26, 38, 0.82);
+  font-size: 12.5px; text-align: center; color: rgba(238, 242, 248, 0.9); opacity: 0; pointer-events: none; transition: opacity 240ms;
+}
+.iv-hint.on { opacity: 1; }
+@media (pointer: coarse) { .iv-btn, .iv-zoom-val { min-width: 42px; height: 42px; } }
+@media (prefers-reduced-motion: reduce) { .image-viewer, .iv-hint { transition: none; } }
+@media print { .image-viewer { display: none !important; } }
+
 /* ── Etap 4: kolor czcionki i wyróżnienie ── */
 .color-btn { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 0 7px; }
 .color-btn-a { font-weight: 800; font-size: 14px; line-height: 1; }
