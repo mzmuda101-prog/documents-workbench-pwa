@@ -87,6 +87,19 @@ function setParagraphText(pEl, text) {
   });
 }
 
+// Kopia właściwości akapitu (w:pPr) do NOWEGO akapitu: śledzone zmiany w środku (w:pPrChange,
+// wstawiony/usunięty znak akapitu w:rPr/w:ins|w:del…) dostają nowe numery. Ten sam w:id w dwóch
+// akapitach to błąd schematu (walidator Open XML SDK: „should have unique value”, 2026-10-05:
+// Enter w akapicie ze śledzoną zmianą formatu). Numery od największego w:id w części + 1.
+function freshRevisionIds(el, doc) {
+  const withId = (root) => Array.from(root.getElementsByTagNameNS(W_NS, "*")).filter((n) => n.hasAttributeNS(W_NS, "id"));
+  const mine = withId(el);
+  if (!mine.length) return;
+  let next = 0;
+  for (const n of withId(doc.documentElement)) next = Math.max(next, parseInt(n.getAttributeNS(W_NS, "id"), 10) || 0);
+  mine.forEach((n) => n.setAttributeNS(W_NS, "w:id", String(++next)));
+}
+
 function splitParagraphInXml(xml, index, beforeText, afterText, beforeRuns, afterRuns, nextNormal) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xml, "application/xml");
@@ -101,7 +114,7 @@ function splitParagraphInXml(xml, index, beforeText, afterText, beforeRuns, afte
   // o tej samej nazwie i zdublowane zakresy komentarzy (Word zgłasza błąd pliku).
   const newP = doc.createElementNS(W_NS, "w:p");
   const pPrSrc = Array.from(p.childNodes).find((n) => n.localName === "pPr" && n.namespaceURI === W_NS);
-  if (pPrSrc) newP.appendChild(pPrSrc.cloneNode(true));
+  if (pPrSrc) freshRevisionIds(newP.appendChild(pPrSrc.cloneNode(true)), doc);
   if (afterRuns?.length) applyRunsToParagraphXml(newP, afterRuns);
   else setParagraphText(newP, afterText);
   if (p.nextSibling) p.parentNode.insertBefore(newP, p.nextSibling);
@@ -759,6 +772,23 @@ function repairFontNames(xml) {
 //    gubił wpisany tekst. Word czyta XML bez BOM tak samo.
 //  • zepsute nazwy krojów ze starszych wersji („DM Sans&quot;”) — podgląd pokazuje właściwy krój.
 // Zwraca te same bajty, gdy nie ma czego naprawiać.
+// Nowe dokumenty z aplikacji (do 2026-10-05) miały w settings.xml w:themeFontLang PRZED w:compat —
+// schemat Office wymaga odwrotnie (walidator Open XML SDK: „unexpected child element compat”).
+// Przenosimy go za compat (i za docVars / rsids / mathPr / attachedSchema, które też go poprzedzają).
+function repairSettingsOrder(xml) {
+  const lang = /<w:themeFontLang\b[^>]*\/>/.exec(xml);
+  const compat = xml.indexOf("<w:compat");
+  if (!lang || compat < 0 || lang.index > compat) return xml;
+  const rest = xml.slice(0, lang.index) + xml.slice(lang.index + lang[0].length);
+  const ends = [/<\/w:compat>/g, /<w:compat\s*\/>/g, /<\/w:docVars>/g, /<\/w:rsids>/g, /<\/m:mathPr>/g, /<w:attachedSchema\b[^>]*\/>/g].map((re) => {
+    let at = -1;
+    for (const m of rest.matchAll(re)) at = m.index + m[0].length;
+    return at;
+  });
+  const at = Math.max(...ends);
+  return at < 0 ? xml : rest.slice(0, at) + lang[0] + rest.slice(at);
+}
+
 async function repairDocxFontNames(bytes) {
   if (!window.JSZip || !bytes) return bytes;
   try {
@@ -769,6 +799,7 @@ async function repairDocxFontNames(bytes) {
       const part = await zip.file(f).async("string");
       let fixed = part.charCodeAt(0) === 0xfeff ? part.slice(1) : part;
       if (/^word\/(document|header\d*|footer\d*|footnotes|endnotes|comments|styles)\.xml$/.test(f)) fixed = repairFontNames(fixed);
+      if (f === "word/settings.xml") fixed = repairSettingsOrder(fixed);
       if (fixed !== part) { zip.file(f, fixed); changed = true; }
     }
     return changed ? await zip.generateAsync({ type: "uint8array", compression: "DEFLATE", compressionOptions: { level: 6 } }) : bytes;

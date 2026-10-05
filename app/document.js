@@ -241,6 +241,10 @@ function rerenderKeepingEdits(opts = {}) {
     // to samo miejsce w dokumencie: ten sam akapit u góry (Widok mobilny ⇄ desktopowy
     // zawija tekst inaczej, więc sama proporcja przewinięcia potrafiła odjechać o strony)
     if (!restoreDocScrollAnchor(anchor)) vp.scrollTop = ratio * Math.max(0, vp.scrollHeight - vp.clientHeight);
+    // świeży render nie ma jeszcze odstępów między stronami — bez nich krótki dokument (albo
+    // miejsce przy końcu) obcinał przewinięcie; page-breaks wraca do tego akapitu po ich dołożeniu
+    // (jak po reloadFromBytes; zmiana widoku gestem szczypania na krótkim dokumencie, 2026-10-05)
+    else renderScrollAnchor = { anchor, until: performance.now() + 2500 };
   }).catch((e) => log(String(e?.message || e), "error"));
   return relayoutJob;
 }

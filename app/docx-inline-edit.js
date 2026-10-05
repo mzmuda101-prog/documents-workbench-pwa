@@ -456,6 +456,44 @@ function onInlineParagraphInput() {
   if (!readOnlyMode) setDirtyState(true);
 }
 
+// Zamiana słowa przez przeglądarkę: podpowiedź z paska klawiatury (iPhone, Android), poprawka
+// pisowni z menu pod prawym przyciskiem, autokorekta. Nowe słowo jest w e.dataTransfer (e.data
+// bywa puste), a zamieniany zakres w e.getTargetRanges() — kursor może stać gdzie indziej.
+// Dawniej brany był e.data → pusty tekst wstawiany w miejsce zaznaczonego słowa: słowo znikało,
+// zostawała dziura (zgłoszenie Mateusza 2026-10-05, telefon i komputer). Teraz: zakres z
+// przeglądarki, stare słowo usunięte, nowe w formacie tego miejsca (jak przy pisaniu).
+function replaceWordFromInput(e, p) {
+  const text = e.data || e.dataTransfer?.getData("text/plain") || "";
+  if (!text) return; // nie wiemy, co wstawić — niech zrobi to przeglądarka
+  const target = e.getTargetRanges?.()?.[0];
+  const sel = window.getSelection();
+  let range = null;
+  if (target && p.contains(target.startContainer) && p.contains(target.endContainer)) {
+    range = document.createRange();
+    range.setStart(target.startContainer, target.startOffset);
+    range.setEnd(target.endContainer, target.endOffset);
+  } else if (sel?.rangeCount && !sel.isCollapsed && p.contains(sel.getRangeAt(0).startContainer)) {
+    range = sel.getRangeAt(0).cloneRange(); // bez zakresu od przeglądarki — zaznaczone słowo
+  }
+  // bez zakresu i bez zaznaczenia nie wiemy, które słowo zamienić — robi to przeglądarka (wie)
+  if (!range) return;
+  e.preventDefault();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  // format jak u początku zamienianego słowa (nie spacji przed nim)
+  const at = range.cloneRange();
+  at.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(at);
+  const style = getInheritedRunStyleAtCaret(p);
+  sel.removeAllRanges();
+  sel.addRange(range);
+  if (runStyleHasProps(style)) insertStyledTextAtCaret(text, style, p);
+  else insertTextAtCaret(text);
+  onInlineParagraphInput();
+  p.dispatchEvent(new Event("input", { bubbles: true })); // jak po zwykłym pisaniu (granice stron, szkic)
+}
+
 function onParagraphBeforeInput(e) {
   if (readOnlyMode) return;
   // zaznaczenie przez kilka akapitów, Backspace na granicy akapitów itp. (doc-selection.js)
@@ -464,6 +502,7 @@ function onParagraphBeforeInput(e) {
   if (e.inputType !== "insertText" && e.inputType !== "insertReplacementText") return;
   const p = docCaretParagraph(e.target);
   if (!p) return;
+  if (e.inputType === "insertReplacementText") { replaceWordFromInput(e, p); return; }
   const ch = e.data || "";
 
   if (ch && getSnippetExpandMode() === "auto" && SNIPPET_EXPAND_DELIMITER_RE.test(ch)) {

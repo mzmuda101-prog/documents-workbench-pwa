@@ -168,7 +168,16 @@ async function run() {
   const pg = await state(page);
   const topAfter = await page.evaluate(() => { const vp = document.getElementById("docViewport"); const t = vp.getBoundingClientRect().top; return collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).findIndex((p) => p.getBoundingClientRect().bottom > t + 1); });
   check("po puszczeniu: strony, cała kartka na szerokość, bez przewijania w bok", !pg.reflow && pg.zoom < 0.6 && pg.sw <= 1, JSON.stringify(pg));
-  check("…w tym samym miejscu dokumentu", topBefore > 0 && Math.abs(topAfter - topBefore) <= 1, `${topBefore} → ${topAfter}`);
+  // akapit z góry ekranu wraca na górę; gdy w Widoku desktopowym dokument jest tak krótki, że się nie da
+  // (koniec przewijania) — widok na samym dole, a ten akapit widoczny na ekranie
+  const reach = await page.evaluate((i) => {
+    const vp = document.getElementById("docViewport");
+    const r = vp.getBoundingClientRect();
+    const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[i];
+    const pr = p?.getBoundingClientRect();
+    return { atEnd: Math.abs(vp.scrollTop - (vp.scrollHeight - vp.clientHeight)) <= 2, visible: !!pr && pr.top >= r.top - 1 && pr.bottom <= r.bottom + 1, st: vp.scrollTop, sh: vp.scrollHeight, ch: vp.clientHeight, pTop: pr && Math.round(pr.top - r.top), shell: document.getElementById("docZoomShell").style.height, canvasH: docCanvasEl.offsetHeight, zoom: docCanvasEl.style.getPropertyValue("--doc-zoom") };
+  }, topBefore);
+  check("…w tym samym miejscu dokumentu", topBefore > 0 && (Math.abs(topAfter - topBefore) <= 1 || (reach.atEnd && reach.visible)), `${topBefore} → ${topAfter} ${JSON.stringify(reach)}`);
   check("dół zakresu stron 25%", await page.evaluate(() => getZoomLimits().min === 0.25));
   await page.evaluate(() => setViewLayoutPref("auto"));
   await page.waitForTimeout(800);

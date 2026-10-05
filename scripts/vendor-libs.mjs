@@ -121,8 +121,32 @@ function patchBundle() {
   const rePage = /createPageElement\((\w+),(\w+)\)\{var (\w+)=this\.createElement\("section",\{className:\1\}\);/;
   if (!rePage.test(src)) throw new Error("łatka vAlign strony: wzorzec createPageElement nie pasuje");
   src = src.replace(rePage, (m, cls, props, el) => `${m}${props}&&${props}.vAlign&&${props}.vAlign!=="top"&&(${el}.dataset.dwbVAlign=${props}.vAlign);`);
-  fs.writeFileSync(OUT, src);
   console.log("  ✅  łatka: wyrównanie strony w pionie (sectPr w:vAlign)");
+
+  // 9) Listy dzielące jedną definicję (w:abstractNum) — Word tworzy nowy w:num przy każdym
+  //    „zacznij od nowa” i przy wklejaniu list. docx-preview mapował abstractNum → JEDEN numId
+  //    (ostatni), więc tylko ostatnia lista dostawała style (kropka/numer, wcięcie); pozostałe
+  //    stały przy lewym marginesie bez znaczników (wykryte porównaniem z PDF-em z Worda,
+  //    npm run word:compare, 2026-10-05: wykład Mateusza — 16 z 17 list bez kropek).
+  //    Teraz: poziomy definicji dla KAŻDEGO w:num; w:lvlOverride (startOverride / własny w:lvl)
+  //    uwzględnione. Licznik: lista z nadpisaniem liczy od nowa (własny licznik), listy bez
+  //    nadpisania jednej definicji dzielą licznik — numeracja idzie dalej, jak w Wordzie.
+  const reNum = /parseNumberingFile\((\w+)\)\{var (\w+)=\[\],(\w+)=\{\},(\w+)=\[\];for\(let (\w+) of (\w+)\.elements\(\1\)\)switch\(\5\.localName\)\{case"abstractNum":[\s\S]*?return \2\.forEach\(\w+=>\w+\.id=\3\[\w+\.id\]\),\2\}/;
+  const mNum = src.match(reNum);
+  if (!mNum) throw new Error("łatka list: wzorzec parseNumberingFile nie pasuje (nowa wersja docx-preview?)");
+  const X = mNum[6];
+  src = src.replace(reNum, (_, T) => `parseNumberingFile(${T}){var __abs={},__nums=[],__bul=[],__out=[];for(let __e of ${X}.elements(${T}))switch(__e.localName){case"abstractNum":__abs[${X}.attr(__e,"abstractNumId")]=this.parseAbstractNumbering(__e,__bul);break;case"numPicBullet":__bul.push(this.parseNumberingPicBullet(__e));break;case"num":{let __ov={},__has=!1;for(let __l of ${X}.elements(__e))if(__l.localName=="lvlOverride"){let __s=${X}.element(__l,"startOverride"),__v=${X}.element(__l,"lvl");__ov[${X}.intAttr(__l,"ilvl")]={start:__s?${X}.intAttr(__s,"val"):null,lvl:__v};__has=!0}__nums.push({id:${X}.attr(__e,"numId"),abs:${X}.elementAttr(__e,"abstractNumId","val"),ov:__ov,has:__has});break}}for(let __n of __nums)for(let __x of __abs[__n.abs]||[]){let __o=__n.ov[__x.level],__c=__o&&__o.lvl?this.parseNumberingLevel(__n.id,__o.lvl,__bul):{...__x,id:__n.id};__o&&__o.start!=null&&(__c.start=__o.start);__c.cid=__n.has?__n.id:"a"+__n.abs;__out.push(__c)}return __out}`);
+  const reCnt = /let (\w+)=this\.numberingCounter\((\w+)\.id,\2\.level\),(\w+)=\1\+" "\+\(\2\.start-1\);/;
+  if (!reCnt.test(src)) throw new Error("łatka list: wzorzec numberingCounter w renderNumbering nie pasuje");
+  src = src.replace(reCnt, (_, J, K, KT) => `let ${J}=this.numberingCounter(${K}.cid??${K}.id,${K}.level),${KT}=${J}+" "+(${K}.start-1);`);
+  const reLvlTxt = /this\.levelTextToContent\((\w+)\.levelText,\1\.suff,\1\.id,/;
+  if (!reLvlTxt.test(src)) throw new Error("łatka list: wzorzec levelTextToContent nie pasuje");
+  src = src.replace(reLvlTxt, (_, K) => `this.levelTextToContent(${K}.levelText,${K}.suff,${K}.cid??${K}.id,`);
+  const rePush = /(\w+)\.push\((\w+)\),(\w+)\+=this\.styleToString\(`\$\{(\w+)\}:before`,\{content:this\.levelTextToContent/;
+  if (!rePush.test(src)) throw new Error("łatka list: wzorzec counter-reset nie pasuje");
+  src = src.replace(rePush, (_, O, KT, R, J) => `${O}.includes(${KT})||${O}.push(${KT}),${R}+=this.styleToString(\`\${${J}}:before\`,{content:this.levelTextToContent`);
+  console.log("  ✅  łatka: listy dzielące definicję (każdy w:num ze stylami, lvlOverride, wspólny licznik)");
+  fs.writeFileSync(OUT, src);
 }
 
 // pdf.js (konwersja PDF → DOCX): moduł główny + worker + wasm (obrazy JPEG2000/JBIG2, profile

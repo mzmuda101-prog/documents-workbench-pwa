@@ -130,10 +130,14 @@ FAMILIES = [
     ("Cousine", "cousine", ["Cousine"], False),
     ("Gelasio", "gelasio", ["Gelasio"], False),
     # bez darmowego odpowiednika — najbliższy: Calibri Light ≈ Carlito (1,3% szerszy),
-    # Aptos ≈ Arial/Arimo (3,5% szerszy; Carlito byłby 6% węższy)
+    # Aptos ≈ Arial/Arimo zmniejszony do 96% (sam Arial 3–5% szerszy od Aptosa w PDF-ie z Worda,
+    # Carlito 5–6% węższy — pomiar npm run word:compare 2026-10-05). Prawdziwy Aptos z urządzenia
+    # dokłada app/docx-viewer.js (FontFace z local) — tu bez local("Aptos"), bo size-adjust
+    # zmniejszyłby i jego.
     ("Calibri Light", "carlito", ["Calibri Light"], True),
-    ("Aptos", "arimo", ["Aptos", "Arial"], True),
+    ("Aptos", "arimo", ["Arial"], True),
 ]
+SIZE_ADJUST = {"Aptos": "96%"}
 
 
 def cp_set(spec):
@@ -255,9 +259,10 @@ def css_block(core_range, ext_range):
             for part, rng in parts:
                 url = f'url("../assets/fonts/doc/{clone}-{tag}-{part}-{SUFFIX}.woff2") format("woff2")'
                 src = f"{src_local}, {url}" if src_local else url
+                adjust = f" size-adjust: {SIZE_ADJUST[family]};" if family in SIZE_ADJUST else ""
                 lines.append(
                     f'@font-face {{ font-family: "{family}"; font-style: {style}; font-weight: {weight}; '
-                    f"font-display: swap; src: {src}; unicode-range: {rng}; }}"
+                    f"font-display: swap; src: {src};{adjust} unicode-range: {rng}; }}"
                 )
     lines.append("/* <<< doc-fonts */")
     return "\n".join(lines)

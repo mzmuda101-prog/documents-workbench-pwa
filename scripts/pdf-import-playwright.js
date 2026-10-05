@@ -14,6 +14,8 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { APP_URL } = require("./docx-test-helpers");
+const ooxml = require("./ooxml-validate");
+const converted = []; // DOCX-y z konwersji — na końcu walidator schematu Office (gdy jest .NET)
 
 const ENGINE = process.env.ENGINE === "webkit" ? "webkit" : "chromium";
 const results = [];
@@ -237,7 +239,16 @@ async function convert(page, file, { timeout = 60000 } = {}) {
   await page.waitForFunction(() => window.__conv, null, { timeout });
   await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && !!document.querySelector(".docx-preview-host p"), null, { timeout: 30000 });
   await page.waitForTimeout(300);
+  await keepDocx(page, path.basename(file, ".pdf"));
   return page.evaluate(() => window.__conv);
+}
+
+// bieżący dokument (wynik konwersji) do katalogu testu — na końcu walidator schematu
+async function keepDocx(page, name) {
+  const b64 = await page.evaluate(() => { const b = originalFileBytes; let s = ""; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000)); return btoa(s); });
+  const out = path.join(TMP, `wynik-${converted.length + 1}-${name}.docx`);
+  fs.writeFileSync(out, Buffer.from(b64, "base64"));
+  converted.push(out);
 }
 
 async function run() {
@@ -408,6 +419,7 @@ async function run() {
   await page.waitForTimeout(400);
   const ocrMs = Date.now() - t2;
   const ocr = await docxState(page);
+  await keepDocx(page, "skan-ocr");
   const rep = await page.evaluate(() => window.__conv.report);
   check("skan: rozpoznany tekst z polskimi literami", /Lista obecności/.test(ocr.text) && /usprawiedliwione/.test(ocr.text) && /Zażółć/.test(ocr.text), ocr.text.replace(/\s+/g, " ").slice(0, 160));
   check("skan: obraz tła zostaje (kolory, linie), raport OCR", ocr.media >= 1 && rep.ocrPages === 1, JSON.stringify({ media: ocr.media, ocr: rep.ocrPages }));
@@ -420,6 +432,7 @@ async function run() {
   await page.waitForFunction(() => window.__conv, null, { timeout: 60000 });
   await page.waitForTimeout(300);
   const noocr = await docxState(page);
+  await keepDocx(page, "skan-obraz");
   check("skan: „Zostaw jako obraz” = sam obraz, bez tekstu", noocr.media >= 1 && !/Lista obecności/.test(noocr.text), noocr.text.slice(0, 80));
 
   // --- 5b. skan tabeli do góry nogami i krzywo: strona wyprostowana, tabela Worda z komórkami
@@ -433,6 +446,7 @@ async function run() {
   await page.waitForFunction(() => window.__conv, null, { timeout: 120000 });
   await page.waitForTimeout(300);
   const st5 = await docxState(page);
+  await keepDocx(page, "skan-tabela");
   const tbRep = await page.evaluate(() => window.__conv.report);
   check("skan do góry nogami i krzywo: strona wyprostowana, tekst rozpoznany", tbRep.straightened === 1 && /Protokół przekazania sprzętu/.test(st5.text) && /Szlifierka kątowa/.test(st5.text) && /Zofia Wójcik/.test(st5.text), JSON.stringify({ st: tbRep.straightened, t: st5.text.replace(/\s+/g, " ").slice(0, 160) }));
   // (numery seryjne mają pewność 87–92% — zależą od progu OCR, więc nie są tu sprawdzane)
@@ -449,6 +463,7 @@ async function run() {
     await page.waitForFunction(() => window.__conv, null, { timeout: 120000 });
     await page.waitForTimeout(300);
     const cv = await docxState(page);
+    await keepDocx(page, "tekst-krzywe");
     const cvRep = await page.evaluate(() => window.__conv.report);
     check("tekst-krzywe: pytanie mówi o tekście jako rysunku, rozpoznany tekst w dokumencie", /rysunek/.test(askTxt) && cvRep.curvePages === 1 && /Zagrożenie atakiem terrorystycznym/.test(cv.text) && /podejrzanego pakunku/.test(cv.text), JSON.stringify({ ask: askTxt.slice(0, 40), cp: cvRep.curvePages, t: cv.text.slice(0, 120) }));
     // kształty liter zastąpione tekstem: warstwa grafiki pusta (nic nie leży pod tekstem)
@@ -466,6 +481,7 @@ async function run() {
   await page.waitForFunction(() => window.__conv, null, { timeout: 120000 });
   await page.waitForTimeout(400);
   const ph = await docxState(page);
+  await keepDocx(page, "zdjecia");
   const phInfo = await page.evaluate(() => ({ name: currentFileName, tabs: dwbOpenDocs.list().length }));
   check("zdjęcia: pytanie mówi o zdjęciu dokumentu", /zdjęcie dokumentu/.test(photoAsk), photoAsk);
   check("dwa zdjęcia naraz: jeden dokument (jedna nowa karta), 2 strony, nazwa „foto-1 (2 str.).docx”", phInfo.tabs === tabsBefore + 1 && ph.pageBreaks >= 1 && /^foto-1 \(2 str\.\)\.docx$/.test(phInfo.name), JSON.stringify({ ...phInfo, pb: ph.pageBreaks, before: tabsBefore }));
@@ -493,6 +509,10 @@ async function run() {
   }
 
   await browser.close();
+  // DOCX z PDF-a tworzy w całości aplikacja — ma być zgodny ze schematem Office co do joty
+  if (ooxml.available() && converted.length) {
+    for (const v of ooxml.validate(converted)) check(`schemat Office: ${path.basename(v.file)}`, v.ok, v.error || `${v.errors.length}: ${v.errors.slice(0, 4).map(ooxml.short).join(" | ")}`);
+  } else console.log("ℹ️  bez sprawdzania schematu (brak .NET — brew install dotnet)");
   if (!process.env.KEEP) fs.rmSync(TMP, { recursive: true, force: true }); // KEEP=1: PDF-y testu zostają (diagnoza)
   // ostrzeżenia pdf.js o brakujących czcionkach systemowych nie są błędami aplikacji
   const realErrors = errors.filter((e) => !/Warning|standardFontDataUrl|font/i.test(e));

@@ -4,7 +4,8 @@
 // Dla każdego pliku: (1) otwiera się bez błędów, (2) samo wejście w Edycję bez pisania nie
 // zmienia pliku, (3) po dopisaniu słowa w jednym akapicie zapis jest poprawnym XML-em, tekst =
 // stary tekst + słowo, a liczby rysunków, tabel, komentarzy, przypisów, pól, linków, zakładek
-// i akapitów się zgadzają, (4) zapisany plik otwiera się ponownie bez błędów.
+// i akapitów się zgadzają, (4) zapisany plik otwiera się ponownie bez błędów, (5) zapis nie dokłada
+// błędów schematu Office (Open XML SDK, scripts/ooxml-validate.js — gdy jest .NET).
 // Pliki NIE leżą w repo: lista ścieżek z pliku podanego w argumencie albo ~/.dwb-docx-samples.txt.
 // Użycie: node scripts/docx-roundtrip.js [lista.txt]   |   ENGINE=webkit
 
@@ -13,6 +14,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { APP_URL } = require("./docx-test-helpers");
+const ooxml = require("./ooxml-validate");
 
 const ENGINE = process.env.ENGINE === "webkit" ? "webkit" : "chromium";
 const LIST = process.argv[2] || path.join(os.homedir(), ".dwb-docx-samples.txt");
@@ -22,6 +24,9 @@ async function run() {
   const files = fs.readFileSync(LIST, "utf8").split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#") && fs.existsSync(l));
   const browser = await pw[ENGINE].launch({ headless: true });
   const report = [];
+  const schema = ooxml.available();
+  if (!schema) console.log("ℹ️  bez sprawdzania schematu (brak .NET — brew install dotnet)");
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "dwb-roundtrip-"));
   for (const file of files) {
     const name = path.basename(file);
     const context = await browser.newContext({ serviceWorkers: "block", viewport: { width: 1300, height: 900 } });
@@ -101,6 +106,16 @@ async function run() {
           while (i < plain.length && plain[i] === before.text[i]) i++;
           r.problems.push(`TEKST ZMIENIONY POZA DOPISKIEM przy „${before.text.slice(Math.max(0, i - 20), i + 20)}” → „${plain.slice(Math.max(0, i - 20), i + 20)}”`);
         }
+        // (5) schemat Office: tylko błędy, których nie było w oryginale
+        if (schema) {
+          const out = path.join(tmp, "zapis.docx");
+          const b64 = await page.evaluate(async () => { const b = await buildDocumentForSave(); let s = ""; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode(...b.subarray(i, i + 0x8000)); return btoa(s); });
+          fs.writeFileSync(out, Buffer.from(b64, "base64"));
+          const [vo, vs] = ooxml.validate([file, out]);
+          const added = ooxml.newErrors(vo, vs);
+          if (vs.error) r.problems.push("SCHEMAT: zapis nie otwiera się w Open XML SDK — " + vs.error);
+          else if (added.length) r.problems.push(`SCHEMAT: ${added.length} nowych błędów — ${added.slice(0, 3).map(ooxml.short).join(" | ")}`);
+        }
         // (4) zapisany plik otwiera się ponownie
         await page.evaluate(async () => {
           const bytes = await buildDocumentForSave();
@@ -120,6 +135,7 @@ async function run() {
     await context.close();
   }
   await browser.close();
+  fs.rmSync(tmp, { recursive: true, force: true });
   const bad = report.filter((r) => r.problems.length).length;
   console.log(`\n${bad ? "❌" : "✅"} Zapis prawdziwych plików [${ENGINE}]: ${report.length - bad}/${report.length} bez problemów`);
   process.exit(bad ? 1 : 0);

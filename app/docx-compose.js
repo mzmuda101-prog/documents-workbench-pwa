@@ -414,7 +414,7 @@ async function createComposeDocx(kind = "blank", lang = "pl") {
   zip.file("word/styles.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="${W_NS}">${COMPOSE_DOC_DEFAULTS.replace('w:val="pl-PL"', `w:val="${langTag}"`)}${styleXml.join("")}</w:styles>`);
   zip.file("word/settings.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:settings xmlns:w="${W_NS}"><w:defaultTabStop w:val="708"/><w:characterSpacingControl w:val="doNotCompress"/><w:themeFontLang w:val="${langTag}"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`);
+<w:settings xmlns:w="${W_NS}"><w:defaultTabStop w:val="708"/><w:characterSpacingControl w:val="doNotCompress"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat><w:themeFontLang w:val="${langTag}"/></w:settings>`);
   zip.file("docProps/core.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title></dc:title><dc:creator></dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`);
   zip.file("docProps/app.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -648,6 +648,14 @@ async function composeEnsurePart(zip, path, rootXml, contentType, relType) {
   return rootXml;
 }
 
+// Miejsce w numbering.xml zgodne ze schematem: numPicBullet* → abstractNum* → num* → numIdMacAtCleanup.
+// Dawniej w:num szło na sam koniec — w pliku z Worda na Macu (w:numIdMacAtCleanup na końcu) za
+// tym elementem, czyli błąd schematu (walidator Open XML SDK, audyt prawdziwych plików 2026-10-05).
+function composeNumberingInsert(root, el) {
+  const before = el.localName === "abstractNum" ? (composeDirectChild(root, "num") || composeDirectChild(root, "numIdMacAtCleanup")) : composeDirectChild(root, "numIdMacAtCleanup");
+  root.insertBefore(el, before || null);
+}
+
 function composeNumberingIndex(numDoc) {
   const abstracts = new Map(); // abstractNumId → { el, name }
   Array.from(numDoc.getElementsByTagNameNS(W_NS, "abstractNum")).forEach((a) => {
@@ -697,11 +705,10 @@ async function applyListInZip(zip, xml, edit) {
   // definicja (abstractNum) tego rodzaju
   let absId = Array.from(idx.abstracts.entries()).find(([, a]) => a.name === COMPOSE_LIST_NAMES[kind])?.[0];
   const root = numDoc.documentElement;
-  const firstNum = composeDirectChild(root, "num");
   if (absId == null) {
     absId = String(Array.from(idx.abstracts.keys()).reduce((m, k) => Math.max(m, parseInt(k, 10) || 0), -1) + 1);
     const frag = composeParse(`<w:numbering xmlns:w="${W_NS}">${composeAbstractNumXml(kind, absId)}</w:numbering>`);
-    root.insertBefore(numDoc.importNode(frag.documentElement.firstChild, true), firstNum); // abstractNum przed num (schemat)
+    composeNumberingInsert(root, numDoc.importNode(frag.documentElement.firstChild, true)); // abstractNum przed num (schemat)
   }
   const newNum = (restart) => {
     const id = String(Array.from(idx.nums.keys()).reduce((m, k) => Math.max(m, parseInt(k, 10) || 0), 0) + 1);
@@ -712,7 +719,7 @@ async function applyListInZip(zip, xml, edit) {
       ov.appendChild(composeEl(numDoc, "startOverride", { val: 1 }));
       num.appendChild(ov);
     }
-    root.appendChild(num);
+    composeNumberingInsert(root, num);
     idx.nums.set(id, absId);
     return id;
   };
@@ -1194,7 +1201,7 @@ async function applyPasteBlocksInZip(zip, xml, edit) {
           else { const [fmt, text] = COMPOSE_NUMFMT[i % 3]; lvls += `<w:lvl w:ilvl="${i}"><w:start w:val="1"/><w:numFmt w:val="${fmt}"/><w:lvlText w:val="${text.replace("L", i + 1)}"/><w:lvlJc w:val="left"/>${ind}</w:lvl>`; }
         });
         const frag = composeParse(`<w:numbering xmlns:w="${W_NS}"><w:abstractNum w:abstractNumId="${absId}"><w:nsid w:val="${nsid}"/><w:multiLevelType w:val="hybridMultilevel"/><w:name w:val="${name}"/>${lvls}</w:abstractNum></w:numbering>`);
-        root.insertBefore(numDoc.importNode(frag.documentElement.firstChild, true), composeDirectChild(root, "num"));
+        composeNumberingInsert(root, numDoc.importNode(frag.documentElement.firstChild, true));
         numIdx.abstracts.set(absId, { el: null, name });
       }
       const numId = String(Array.from(numIdx.nums.keys()).reduce((m, k) => Math.max(m, parseInt(k, 10) || 0), 0) + 1);
@@ -1203,7 +1210,7 @@ async function applyPasteBlocksInZip(zip, xml, edit) {
       const ov = composeEl(numDoc, "lvlOverride", { ilvl: 0 });
       ov.appendChild(composeEl(numDoc, "startOverride", { val: 1 }));
       num.appendChild(ov);
-      root.appendChild(num);
+      composeNumberingInsert(root, num);
       numIdx.nums.set(numId, absId);
       group.forEach((b) => listNum.set(b, numId));
     }
@@ -1298,6 +1305,8 @@ async function applyPasteBlocksInZip(zip, xml, edit) {
     const node = n.el || n;
     parent.insertBefore(node, anchor);
     if (n.el) applyRunsToParagraphXml(n.el, n.content);
+    // kopia pPr akapitu z kursorem w nowym akapicie — śledzone zmiany z nowymi numerami (już w dokumencie)
+    if (n.el && n.el !== p) { const pr = composeDirectChild(n.el, "pPr"); if (pr) freshRevisionIds(pr, doc); }
   });
   // znacznik końca sekcji należy do ostatniego akapitu
   if (lastPara.el !== p) composeMoveSectPr(p, lastPara.el);
@@ -1419,6 +1428,7 @@ function composeBlankCell(doc, tc) {
     const c = pPr.cloneNode(true);
     Array.from(c.childNodes).filter((n) => ["sectPr", "numPr"].includes(n.localName)).forEach((n) => c.removeChild(n));
     np.appendChild(c);
+    freshRevisionIds(c, doc);
   }
   nc.appendChild(np);
   return nc;
