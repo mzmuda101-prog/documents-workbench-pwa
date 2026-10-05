@@ -86,20 +86,92 @@ function paragraphCommentLock(xp) {
   return deep ? "lockField" : null;
 }
 
+// Rysunki w akapicie jako „wyspy” (jak przypisy i komentarze): fragment z samym rysunkiem wraca
+// przy zapisie akapitu dokładnie taki, jak w pliku — pisanie obok go nie gubi. Dawniej każdy akapit
+// z rysunkiem był tylko do odczytu (np. tytuł strony z PDF → DOCX, bo warstwa grafiki strony jest
+// przypięta do pierwszego akapitu; logo przypięte do akapitu w piśmie z Worda).
+// Blokada zostaje, gdy wyspa mogłaby coś zgubić: rysunek we wspólnym fragmencie z tekstem, w linku
+// albo polu (fragment nie jest bezpośrednio w akapicie), z polem tekstowym (jego akapity mają
+// własną edycję — stara kopia z wyspy nadpisałaby zmiany).
+const OBJECT_TAGS = ["drawing", "pict", "object"];
+const OBJECT_RUN_KIDS = new Set(["rPr", "drawing", "pict", "object", "AlternateContent", "lastRenderedPageBreak"]);
+function objectRunOf(o) {
+  let n = o.parentNode;
+  while (n && !(n.localName === "r" && n.namespaceURI === W_NS)) n = n.parentNode;
+  return n;
+}
+function isObjectRun(r) {
+  return r?.localName === "r" && OBJECT_TAGS.some((tag) => r.getElementsByTagNameNS(W_NS, tag).length);
+}
+function paragraphObjectLock(xp) {
+  const objs = OBJECT_TAGS.flatMap((tag) => Array.from(xp.getElementsByTagNameNS(W_NS, tag)));
+  if (!objs.length) return null;
+  for (const o of objs) {
+    const r = objectRunOf(o);
+    if (!r || r.parentNode !== xp) return "lockObject";
+    if (Array.from(r.childNodes).some((n) => n.nodeType === 1 && !OBJECT_RUN_KIDS.has(n.localName))) return "lockObject";
+    if (r.getElementsByTagNameNS(W_NS, "txbxContent").length) return "lockObject";
+  }
+  return null;
+}
+// Rysunek „w linii tekstu” (wp:inline) — w podglądzie leży w akapicie i płynie z tekstem.
+function isInlineObjectRun(r) {
+  return Array.from(r.getElementsByTagNameNS("*", "inline")).some((n) => /wordprocessingDrawing/.test(n.namespaceURI || ""))
+    && !Array.from(r.getElementsByTagNameNS("*", "anchor")).some((n) => /wordprocessingDrawing/.test(n.namespaceURI || ""));
+}
+// Rysunki w linii w podglądzie (po kolei): najwyższy element akapitu z obrazem, bez pływających.
+function previewInlineObjects(el) {
+  const out = [];
+  el.querySelectorAll("img, svg, canvas").forEach((m) => {
+    if (m.closest("svg") && m.tagName.toLowerCase() !== "svg") return; // wnętrze rysunku SVG
+    let w = m;
+    while (w.parentElement && w.parentElement !== el) w = w.parentElement;
+    if (w.parentElement !== el || out.includes(w)) return;
+    for (let a = m; a && a !== el; a = a.parentElement) if (/absolute|fixed/.test(getComputedStyle(a).position)) return;
+    out.push(w);
+  });
+  return out;
+}
+
 // Znaczniki komentarza w podglądzie: puste <span data-cm> w tych samych miejscach tekstu co w pliku
 // (podgląd ich nie rysuje). Zapis akapitu oddaje je jako „wyspy” — komentarz nie ginie przy pisaniu.
 // noteLabels — długości numerów przypisów (odnośnik / numer na początku przypisu) w kolejności:
 // w pliku mają zerową długość, a w podglądzie numer to tekst — przesuwa położenia za nim.
 function stampCommentMarks(xp, el, nextKey, noteLabels = []) {
   const parts = paragraphXmlParts(xp);
-  if (!parts.some((n) => n.localName !== "r" || isCommentReferenceRun(n))) return;
-  el.querySelectorAll('span[data-cm]:not([data-cm-kind="note"])').forEach((x) => x.remove());
+  if (!parts.some((n) => n.localName !== "r" || isCommentReferenceRun(n) || isObjectRun(n))) return;
+  el.querySelectorAll('span[data-cm]:not([data-cm-kind="note"]):not([data-cm-kind="obj"])').forEach((x) => x.remove());
+  // rysunki w linii: wyspą jest sam obraz w podglądzie (usunięcie go usuwa go z pliku, jak w Wordzie),
+  // o ile liczba się zgadza; inaczej pusty znacznik w miejscu fragmentu (rysunek zostaje w pliku)
+  const inlineRuns = parts.filter((n) => isObjectRun(n) && isInlineObjectRun(n));
+  const inlineEls = inlineRuns.length ? previewInlineObjects(el) : [];
+  const bindInline = inlineRuns.length && inlineEls.length === inlineRuns.length;
+  let inlineAt = 0;
   let offset = 0;
   let noteAt = 0;
   const groups = new Map(); // przesunięcie → [znaczniki po kolei]
   parts.forEach((n) => {
     if (n.localName === "sdt") { offset += ffText(ffKid(n, "sdtContent")).length; return; }
     if (noteRunKind(n)) { offset += noteLabels[noteAt++] || 0; return; }
+    if (isObjectRun(n)) {
+      const key = nextKey();
+      docIslandXml.set(key, new XMLSerializer().serializeToString(n));
+      if (bindInline && isInlineObjectRun(n)) {
+        const w = inlineEls[inlineAt++];
+        w.dataset.cm = key;
+        w.dataset.cmKind = "obj";
+        w.contentEditable = "false";
+        return;
+      }
+      const span = document.createElement("span");
+      span.dataset.cm = key;
+      span.dataset.cmKind = "obj-mark";
+      span.contentEditable = "false";
+      span.className = "cm-mark";
+      if (!groups.has(offset)) groups.set(offset, []);
+      groups.get(offset).push(span);
+      return;
+    }
     if (n.localName !== "r" || isCommentReferenceRun(n)) {
       const key = nextKey();
       docIslandXml.set(key, new XMLSerializer().serializeToString(n));
@@ -205,7 +277,9 @@ async function markLockedParagraphs(bytes) {
     if (!el) return;
     if (!boxes.has(xp.parentNode)) boxes.set(xp.parentNode, String(boxes.size));
     el.dataset.box = boxes.get(xp.parentNode);
-    const hit = INLINE_LOCK_TAGS.find(([tag]) => xp.getElementsByTagNameNS(W_NS, tag).length);
+    // rysunki: wyspy, gdy się da (paragraphObjectLock) — wtedy blokują tylko inne powody
+    const objLock = paragraphObjectLock(xp);
+    const hit = INLINE_LOCK_TAGS.find(([tag, why]) => (why !== "lockObject" || objLock) && xp.getElementsByTagNameNS(W_NS, tag).length);
     let lock = formParagraphLock(xp) || hit?.[1] || paragraphPageBreakLock(xp) || paragraphNestedRunLock(xp) || paragraphCommentLock(xp); // pole formularza Worda: docx-forms.js
     if (!lock && !stampParagraphLinks(xp, el)) lock = "lockLink";
     if (!lock) {
@@ -512,6 +586,7 @@ function scheduleFormatSync() {
 }
 
 function syncFormatIndicators() {
+  syncBiuButtons();
   const fmt = originalFileBytes ? currentTextFormat() : null;
   const sizeSel = document.getElementById("fmtFontSize");
   const famSel = document.getElementById("fmtFontFamily");
@@ -1014,8 +1089,80 @@ function applyInlineStructuralEdit(edit) {
 function execInlineFormat(command) {
   if (readOnlyMode) return;
   if (!restoreDocCaret()) return; // przycisk na pasku / w panelu — wracamy do zaznaczenia w tekście
+  // Bez zaznaczenia (jak w Wordzie): przełącza format DALSZEGO pisania w tym miejscu. Dawniej szło
+  // przez execCommand, którego stan przeglądarki nasze wstawianie liter ignorowało — za pogrubionym
+  // słowem nie dało się zacząć pisać bez pogrubienia (Ctrl/⌘+B „nic nie robiło”).
+  const range = docSelectionRange({ remembered: false });
+  if (range?.collapsed && (range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement)?.closest?.(".docx-editable-p")) {
+    const on = formatFlagsAt(range)[command];
+    setTypingStyle({ [command]: !on });
+    syncFormatIndicators();
+    return;
+  }
   document.execCommand(command, false, null);
   onInlineParagraphInput();
+  syncFormatIndicators();
+}
+
+// Pogrubienie/kursywa/podkreślenie tak, jak WIDAĆ (styl obliczony — też ze stylu akapitu, np.
+// nagłówek): przy kursorze — znak, którego format dostanie pisanie, + format dalszego pisania;
+// przy zaznaczeniu — włączone, gdy obejmuje CAŁY zaznaczony tekst (jak przyciski w Wordzie).
+function underlinedEl(el) {
+  for (let a = el; a && !a.classList?.contains("docx-editable-p"); a = a.parentElement) {
+    if (/underline/.test(getComputedStyle(a).textDecorationLine || "")) return true;
+    if (a.localName === "p") break;
+  }
+  return false;
+}
+function flagsOfEl(el) {
+  if (!el) return { bold: false, italic: false, underline: false };
+  const cs = getComputedStyle(el);
+  const w = cs.fontWeight === "bold" ? 700 : parseInt(cs.fontWeight, 10) || 400;
+  return { bold: w >= 600, italic: /italic|oblique/.test(cs.fontStyle), underline: underlinedEl(el) };
+}
+function formatFlagsAt(range) {
+  if (!range) return { bold: false, italic: false, underline: false };
+  const elOf = (n) => (n?.nodeType === 1 ? n : n?.parentElement);
+  if (range.collapsed) {
+    const p = elOf(range.startContainer)?.closest(".docx-editable-p");
+    const src = p ? caretStyleSourceNode(p, range.startContainer, range.startOffset) : range.startContainer;
+    const f = flagsOfEl(elOf(src));
+    const pending = currentTypingStyle();
+    ["bold", "italic", "underline"].forEach((k) => { if (pending && pending[k] != null) f[k] = !!pending[k]; });
+    return f;
+  }
+  const out = { bold: true, italic: true, underline: true };
+  let any = false;
+  const root = range.commonAncestorContainer.nodeType === 1 ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (!range.intersectsNode(n) || !/\S/.test(n.data) || !isDocTextNode(n)) continue;
+    if (n === range.endContainer && range.endOffset === 0) continue;
+    if (n === range.startContainer && range.startOffset >= n.length) continue;
+    any = true;
+    const f = flagsOfEl(n.parentElement);
+    ["bold", "italic", "underline"].forEach((k) => { if (!f[k]) out[k] = false; });
+  }
+  return any ? out : { bold: false, italic: false, underline: false };
+}
+
+// Przyciski B / I / U „wciśnięte”, gdy format jest włączony (kursor, zaznaczenie, Ctrl/⌘+B).
+// W karcie komentarza — stan edytora komentarza (execCommand).
+function syncBiuButtons() {
+  const ids = { bold: "fmtBold", italic: "fmtItalic", underline: "fmtUnderline" };
+  const ed = document.activeElement?.closest?.(".cf-rich");
+  let flags = null;
+  if (ed) {
+    flags = {};
+    Object.keys(ids).forEach((k) => { try { flags[k] = document.queryCommandState(k); } catch (_) { flags[k] = false; } });
+  } else if (originalFileBytes && !readOnlyMode) flags = formatFlagsAt(docSelectionRange());
+  Object.entries(ids).forEach(([k, id]) => {
+    const b = document.getElementById(id);
+    if (!b) return;
+    const on = !!flags?.[k];
+    b.classList.toggle("is-on", on);
+    b.setAttribute("aria-pressed", on ? "true" : "false");
+  });
 }
 
 // Format znakowy dla zaznaczenia (też przez kilka akapitów) albo — bez zaznaczenia — dla dalszego

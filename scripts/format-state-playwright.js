@@ -1,0 +1,149 @@
+// format-state-playwright.js — B / I / U bez zaznaczenia i „wciśnięte” przyciski (2026-10-05).
+//
+// Zgłoszenie Mateusza: za pogrubionym słowem nie da się dopisać tekstu bez pogrubienia (nawet bez
+// spacji) — Ctrl/⌘+B „nic nie robi”, wszystko dalej jest pogrubione. Przyczyna: przy samym kursorze
+// Ctrl/⌘+B szło przez execCommand, a nasze wstawianie liter brało format z sąsiedniego znaku.
+// Teraz B/I/U bez zaznaczenia przełączają format DALSZEGO pisania (jak w Wordzie), a wyłączenie
+// wychodzi poza fragment (też podkreślenie). Przyciski B/I/U pokazują stan (is-on, aria-pressed).
+// ENGINE=webkit (Safari/iPad).
+
+const pw = require("playwright");
+const JSZip = require("jszip");
+const { APP_URL } = require("./docx-test-helpers");
+
+const ENGINE = process.env.ENGINE === "webkit" ? "webkit" : "chromium";
+const MOD = process.platform === "darwin" ? "Meta" : "Control";
+const results = [];
+const check = (name, ok, detail) => results.push({ name, ok: !!ok, detail });
+const idle = (page) => page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && !inlineLocksPending, null, { timeout: 20000 }).then(() => page.waitForTimeout(400));
+
+// fragmenty pierwszego akapitu z tekstem w zapisanym pliku: [tekst, b, u]
+const savedRuns = (page, needle) => page.evaluate(async (needle) => {
+  const z = await JSZip.loadAsync(await buildDocumentForSave());
+  const doc = new DOMParser().parseFromString(await z.file("word/document.xml").async("string"), "application/xml");
+  const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+  const p = [...doc.getElementsByTagNameNS(W, "p")].find((x) => x.textContent.includes(needle));
+  if (!p) return [];
+  const on = (rPr, tag) => { const e = rPr?.getElementsByTagNameNS(W, tag)[0]; return !!e && !["0", "false", "none"].includes(e.getAttributeNS(W, "val") || e.getAttribute("w:val") || ""); };
+  const out = [];
+  for (const r of p.getElementsByTagNameNS(W, "r")) {
+    const t = [...r.getElementsByTagNameNS(W, "t")].map((x) => x.textContent).join("");
+    if (!t) continue;
+    const rPr = r.getElementsByTagNameNS(W, "rPr")[0];
+    const b = on(rPr, "b"), u = on(rPr, "u");
+    const last = out[out.length - 1];
+    if (last && last[1] === b && last[2] === u) last[0] += t; else out.push([t, b, u]);
+  }
+  return out;
+}, needle);
+const btn = (page) => page.evaluate(() => ({ b: document.getElementById("fmtBold").classList.contains("is-on"), u: document.getElementById("fmtUnderline").classList.contains("is-on"), aria: document.getElementById("fmtBold").getAttribute("aria-pressed") }));
+
+async function run() {
+  const browser = await pw[ENGINE].launch({ headless: true });
+  const context = await browser.newContext({ serviceWorkers: "block", viewport: { width: 1280, height: 900 } });
+  await context.addInitScript(() => sessionStorage.setItem("introPlayed", "true"));
+  const page = await context.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  page.on("dialog", (d) => d.accept());
+  await page.goto(APP_URL, { waitUntil: "load" });
+  await page.evaluate(() => document.getElementById("heroSplash")?.remove());
+  await page.evaluate(() => composeUi.createNew("blank"));
+  await page.waitForSelector(".docx-preview-host p.docx-editable-p", { timeout: 20000 });
+  await idle(page);
+
+  // ── 1. pisanie z przełączaniem: zwykły → Ctrl/⌘+B → gruby → Ctrl/⌘+B → dalej ─────────
+  await page.keyboard.type("Zwykły ");
+  check("przycisk B zgaszony w zwykłym tekście", !(await btn(page)).b, JSON.stringify(await btn(page)));
+  await page.keyboard.press(`${MOD}+b`);
+  await page.waitForTimeout(150);
+  const afterOn = await btn(page);
+  check("Ctrl/⌘+B bez zaznaczenia: przycisk B od razu „wciśnięty” (aria-pressed)", afterOn.b && afterOn.aria === "true", JSON.stringify(afterOn));
+  await page.keyboard.type("gruby");
+  await page.keyboard.press(`${MOD}+b`);
+  await page.waitForTimeout(150);
+  check("drugi Ctrl/⌘+B: przycisk B zgaszony", !(await btn(page)).b, JSON.stringify(await btn(page)));
+  await page.keyboard.type("dalej");
+  await page.waitForTimeout(300);
+  let runs = await savedRuns(page, "Zwykły");
+  check("plik: „Zwykły ” zwykły, „gruby” pogrubiony, „dalej” zwykły (bez spacji)", JSON.stringify(runs) === JSON.stringify([["Zwykły ", false, false], ["gruby", true, false], ["dalej", false, false]]), JSON.stringify(runs));
+
+  // ── 2. zgłoszenie: kursor na końcu ISTNIEJĄCEGO pogrubionego słowa → Ctrl/⌘+B → pisanie ──────
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Przed ");
+  await page.keyboard.press(`${MOD}+b`);
+  await page.keyboard.type("POGRUBIONE");
+  await page.keyboard.press(`${MOD}+b`);
+  await page.keyboard.type(" po.");
+  await idle(page);
+  // kliknięcie w środek pogrubionego słowa → B świeci; kursor na jego końcu
+  const pos = await page.evaluate(() => {
+    const p = [...document.querySelectorAll(".docx-preview-host p.docx-editable-p")].find((x) => x.textContent.includes("POGRUBIONE"));
+    const r = document.createRange();
+    const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const i = n.data.indexOf("POGRUB");
+      if (i >= 0) { r.setStart(n, i + 3); r.setEnd(n, i + 4); const b = r.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; }
+    }
+    return null;
+  });
+  await page.mouse.click(pos.x, pos.y);
+  await page.waitForTimeout(250);
+  check("kursor w pogrubionym słowie: przycisk B „wciśnięty”", (await btn(page)).b, JSON.stringify(await btn(page)));
+  await page.evaluate(() => {
+    const p = [...document.querySelectorAll(".docx-preview-host p.docx-editable-p")].find((x) => x.textContent.includes("POGRUBIONE"));
+    const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const i = n.data.indexOf("POGRUBIONE");
+      if (i >= 0) { const r = document.createRange(); r.setStart(n, i + 10); r.collapse(true); const s = getSelection(); s.removeAllRanges(); s.addRange(r); return; }
+    }
+  });
+  await page.waitForTimeout(200);
+  await page.keyboard.press(`${MOD}+b`);
+  await page.keyboard.type("xyz");
+  await page.waitForTimeout(300);
+  runs = await savedRuns(page, "POGRUBIONE");
+  check("za pogrubionym słowem, Ctrl/⌘+B, pisanie bez spacji: „xyz” NIE pogrubione", JSON.stringify(runs) === JSON.stringify([["Przed ", false, false], ["POGRUBIONE", true, false], ["xyz po.", false, false]]), JSON.stringify(runs));
+
+  // ── 3. podkreślenie: Ctrl/⌘+U wyłącza je dla dalszego pisania (tekst poza fragmentem) ──────
+  await page.evaluate(() => { const p = [...document.querySelectorAll(".docx-preview-host p.docx-editable-p")].find((x) => x.textContent.includes("POGRUBIONE")); placeCaret(p, p.textContent.length); });
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Tekst ");
+  await page.keyboard.press(`${MOD}+u`);
+  await page.keyboard.type("podkreślony");
+  check("Ctrl/⌘+U: przycisk U „wciśnięty”", (await btn(page)).u, JSON.stringify(await btn(page)));
+  await page.keyboard.press(`${MOD}+u`);
+  await page.keyboard.type("koniec");
+  await page.waitForTimeout(300);
+  runs = await savedRuns(page, "podkreślony");
+  check("podkreślenie wyłączone w trakcie pisania: „koniec” bez podkreślenia", JSON.stringify(runs) === JSON.stringify([["Tekst ", false, false], ["podkreślony", false, true], ["koniec", false, false]]), JSON.stringify(runs));
+
+  // ── 4. zaznaczenie całego pogrubionego słowa → B „wciśnięty”; przycisk B zdejmuje pogrubienie ──
+  await page.evaluate(() => {
+    const p = [...document.querySelectorAll(".docx-preview-host p.docx-editable-p")].find((x) => x.textContent.includes("gruby"));
+    const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      const i = n.data.indexOf("gruby");
+      if (i >= 0) { const r = document.createRange(); r.setStart(n, i); r.setEnd(n, i + 5); const s = getSelection(); s.removeAllRanges(); s.addRange(r); return; }
+    }
+  });
+  await page.waitForTimeout(250);
+  check("zaznaczone pogrubione słowo: przycisk B „wciśnięty”", (await btn(page)).b, JSON.stringify(await btn(page)));
+  await page.click("#fmtBold");
+  await page.waitForTimeout(300);
+  runs = await savedRuns(page, "Zwykły");
+  check("przycisk B na zaznaczeniu zdejmuje pogrubienie, przycisk gaśnie", !(await btn(page)).b && runs.every((r) => !r[1]), JSON.stringify({ runs, b: await btn(page) }));
+
+  await browser.close();
+  const real = errors.filter((e) => !/ResizeObserver/.test(e));
+  if (real.length) check("bez błędów w konsoli", false, real.join(" | ").slice(0, 400));
+  let failed = 0;
+  for (const r of results) {
+    if (!r.ok) failed++;
+    console.log(`${r.ok ? "✅" : "❌"} ${r.name}${r.ok ? "" : `  (${r.detail || ""})`}`);
+  }
+  console.log(`\n${failed ? "❌" : "✅"} Format B/I/U [${ENGINE}]: ${results.length - failed}/${results.length}`);
+  process.exit(failed ? 1 : 0);
+}
+
+run().catch((e) => { console.error(e); process.exit(1); });

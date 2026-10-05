@@ -1847,6 +1847,7 @@ const composeUi = (() => {
   function runRich(cmd) {
     try { document.execCommand("styleWithCSS", false, false); } catch (_) { /* Safari bez tej opcji */ }
     document.execCommand(cmd, false, null);
+    if (typeof syncFormatIndicators === "function") syncFormatIndicators(); // B/I/U „wciśnięte” od razu
   }
   const activeCommentEditor = () => {
     const ed = pop?.el.querySelector(".cf-rich");

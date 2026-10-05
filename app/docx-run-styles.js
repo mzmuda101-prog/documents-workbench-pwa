@@ -491,7 +491,33 @@ function applyRunsToPreviewParagraph(pEl, runs) {
 const docLinkHrefs = new Map();
 
 function runStyleHasProps(style) {
-  return !!(style?.bold || style?.italic || style?.underline || style?.strike || style?.color || style?.fontFamily || style?.fontSize || style?.highlight);
+  return !!(style?.bold || style?.italic || style?.underline || style?.strike || style?.color || style?.fontFamily || style?.fontSize || style?.highlight)
+    || styleTurnsOff(style); // np. pogrubienie WYŁĄCZONE (Ctrl/⌘+B bez zaznaczenia) — też format do wstawienia
+}
+
+// Format „wyłączony” dla dalszego pisania (pogrubienie/kursywa/podkreślenie = false).
+function styleTurnsOff(style) {
+  return style?.bold === false || style?.italic === false || style?.underline === false || style?.strike === false;
+}
+
+// Wyjście z fragmentów tekstu (<span>, <b>…) w miejscu kursora aż do akapitu: fragmenty dzielone
+// są na „przed” i „za”, a kursor ląduje między nimi, bezpośrednio w akapicie. Potrzebne, gdy
+// dalsze pisanie ma WYŁĄCZYĆ format otaczającego fragmentu — podkreślenia rodzica nie da się
+// zdjąć stylem dziecka (text-decoration się „rysuje przez”), a pogrubienie z <b> też by zostało.
+// Linków i wysp nie rozcina (pisanie w linku zostaje w linku). Zwraca znacznik miejsca.
+function breakOutOfRunsAtCaret(range, rootEl) {
+  const marker = document.createTextNode("");
+  range.insertNode(marker);
+  const SPLITTABLE = new Set(["span", "b", "strong", "i", "em", "u", "s", "strike"]);
+  for (let parent = marker.parentElement; parent && parent !== rootEl && SPLITTABLE.has(parent.localName) && parent.getAttribute("contenteditable") !== "false"; parent = marker.parentElement) {
+    const tail = parent.cloneNode(false);
+    while (marker.nextSibling) tail.appendChild(marker.nextSibling);
+    parent.after(marker);
+    marker.after(tail);
+    if (!tail.textContent) tail.remove();
+    if (!parent.textContent) parent.remove();
+  }
+  return marker;
 }
 
 function accumulateElementStyle(el, style) {
@@ -556,6 +582,18 @@ function insertStyledTextAtCaret(text, style, rootEl) {
   if (rootEl && !rootEl.contains(range.startContainer)) return false;
   range.deleteContents();
   const css = runStyleToCss(style || {});
+  // wyłączony format (bez zaznaczenia: Ctrl/⌘+B w pogrubionym słowie) — tekst poza fragmentem,
+  // z pełnym formatem miejsca (krój, rozmiar, kolor) poza wyłączoną cechą
+  if (styleTurnsOff(style)) {
+    const sc0 = range.startContainer;
+    const prev0 = sc0.nodeType === 1 ? sc0.childNodes[range.startOffset - 1] : null;
+    if (!(prev0?.localName === "span" && prev0.getAttribute("style") === css && prev0.lastChild?.nodeType === 3)) {
+      const marker = breakOutOfRunsAtCaret(range, rootEl || range.startContainer.parentElement?.closest("p"));
+      range.setStartBefore(marker);
+      range.collapse(true);
+      marker.remove();
+    }
+  }
   // kolejna litera tuż za fragmentem w tym samym stylu — dopisz do niego (dawniej każda litera
   // dostawała własny <span>; zapis i tak je sklejał, ale podgląd puchł przy dłuższym pisaniu)
   const sc = range.startContainer;

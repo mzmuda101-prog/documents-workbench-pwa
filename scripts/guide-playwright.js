@@ -69,8 +69,9 @@ async function run() {
   check("tabela i listy są", r.tables === 1 && r.lists >= 4, `${r.tables} tab, ${r.lists} list`);
   // Etap 2: linki i proste pola formularza w zdaniu nie blokują akapitu (model akapitu je zachowuje)
   // od 2026-10-04 akapit z odnośnikiem do przypisu też edytowalny (odnośnik = „wyspa”, doc-notes.js)
-  check("zablokowane: zmiana, odsyłacz, obraz (linki, pola w zdaniu i przypisy edytowalne)",
-    !r.locked.lockLink && !r.locked.lockForm && !r.locked.lockNote && r.locked.lockField === 1 && r.locked.lockTracked === 1 && r.locked.lockObject === 1 && Object.keys(r.locked).length === 3, JSON.stringify(r.locked));
+  // od 2026-10-05 także akapit z obrazem (obraz = wyspa, docx-inline-edit.js paragraphObjectLock)
+  check("zablokowane: zmiana, odsyłacz (linki, pola w zdaniu, przypisy i obrazy edytowalne)",
+    !r.locked.lockLink && !r.locked.lockForm && !r.locked.lockNote && !r.locked.lockObject && r.locked.lockField === 1 && r.locked.lockTracked === 1 && Object.keys(r.locked).length === 2, JSON.stringify(r.locked));
   check("formularz: tekst, lista, data, pole wyboru", r.forms === "text,dropdown,date,checkbox", r.forms);
   check("spis treści: 14 linków do rozdziałów + odsyłacz do „Zapisu”", r.toc === 14 && r.xref === "#_Guide12", `${r.toc} ${r.xref}`);
 

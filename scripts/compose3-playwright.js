@@ -120,7 +120,9 @@ async function run() {
   const mediaSize = media.length ? (await zip.file(media[0]).async("uint8array")).length : 0;
   const imgDims = await page.evaluate(() => { const i = document.querySelector(".docx-preview-host img"); return [i.naturalWidth, i.naturalHeight]; });
   check("zdjęcie 3000 px zmniejszone do 2400 px (JPEG), plik w word/media", media.length === 1 && /\.jpe?g$/.test(media[0]) && imgDims[0] === 2400 && mediaSize > 0, JSON.stringify({ media, imgDims, mediaSize }));
-  check("akapit z obrazem bez ramki „tylko do odczytu”", await page.evaluate(() => getComputedStyle(document.querySelector(".docx-preview-host img").closest("p")).outlineColor === "rgba(0, 0, 0, 0)"));
+  const imgP = await page.evaluate(() => { const p = document.querySelector(".docx-preview-host img").closest("p"); const cs = getComputedStyle(p); return { outline: cs.outlineColor, style: cs.outlineStyle, lock: p.dataset.lock || null, cls: p.className, focus: p.matches(":focus-within"), act: document.activeElement?.className }; });
+  // od 2026-10-05 akapit z obrazem jest edytowalny (obraz = wyspa) — ani blokady, ani jej ramki
+  check("akapit z obrazem bez ramki „tylko do odczytu” (edytowalny, obraz jako wyspa)", !imgP.lock && (imgP.style === "none" || imgP.outline === "rgba(0, 0, 0, 0)"), JSON.stringify(imgP));
   await page.click(".docx-preview-host img");
   const card = await page.evaluate(() => ({ open: !!document.querySelector(".image-card"), val: document.querySelector(".image-size-val")?.textContent, sel: document.querySelector(".docx-preview-host img").classList.contains("img-selected") }));
   check("klik w obraz → karta obrazu (100%), obraz zaznaczony", card.open && card.val === "100%" && card.sel, JSON.stringify(card));
