@@ -1221,6 +1221,9 @@ function setListLevelOnDom(p, level) {
     p.classList.remove("docx-bullet-l0", "docx-bullet-l1", "docx-bullet-l2");
     p.classList.add(`docx-bullet-l${level % 3}`);
   }
+  // W mobilnym reflow wcięcie jest przeliczone na styl inline. Po zmianie klasy poziomu
+  // odświeżamy ten pojedynczy punkt, aby Tab / „Głębiej” było widoczne bez czekania na render.
+  if (typeof refreshMobileReflowIndent === "function") refreshMobileReflowIndent(p);
 }
 
 function applyDomListLevel(edit) {

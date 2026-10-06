@@ -113,13 +113,21 @@ function syncNetworkBadge() {
 function syncSidebarHandle() {
   if (!panelHandle) return;
   const sidebar = document.querySelector(".sidebar");
-  if (!sidebar) return;
   const open = isSidebarOpen();
-  if (open) {
+  panelHandle.textContent = "";
+  panelHandle.setAttribute("aria-expanded", open ? "true" : "false");
+  panelHandle.setAttribute("aria-label", open ? t("sidebarCloseAria") : t("sidebarOpenAria"));
+  panelHandle.setAttribute("data-hint-pl", open ? "Schowaj sidebar" : "Wysuń sidebar");
+  panelHandle.setAttribute("data-hint-en", open ? "Hide the sidebar" : "Open the sidebar");
+  panelHandle.style.setProperty("--handle-open-label", `"${t("sidebarHandleLabel")}"`);
+  panelHandle.style.setProperty("--handle-close-label", `"${t("sidebarHandleCloseLabel")}"`);
+  panelHandle.style.setProperty("--handle-hide-panel-label", `"${t("sidebarHandleHideLabel")}"`);
+  if (open && sidebar) {
     const rect = sidebar.getBoundingClientRect();
-    panelHandle.style.left = `${Math.max(8, rect.right + 6)}px`;
+    const overlap = 8; // [EN] sit on the sidebar’s right edge, same as Sheet
+    panelHandle.style.left = `${Math.max(8, Math.round(rect.right - overlap))}px`;
   } else {
-    panelHandle.style.left = "";
+    panelHandle.style.removeProperty("left");
   }
 }
 
@@ -506,6 +514,7 @@ window.addEventListener("resize", () => {
   syncDocViewportHeight();
   syncLangSwitchPill();
   if (typeof onViewportChange === "function") onViewportChange();
+  if (typeof syncSidebarHandle === "function") syncSidebarHandle();
 });
 
 wireFileDrop();

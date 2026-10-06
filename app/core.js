@@ -151,7 +151,11 @@ function setSidebarOpen(open) {
   if (sidebarScrim) sidebarScrim.classList.toggle("hidden", !open);
   const mobile = window.matchMedia("(max-width: 768px)").matches;
   document.body.style.overflow = open && mobile ? "hidden" : "";
-  if (typeof syncSidebarHandle === "function") syncSidebarHandle();
+  if (typeof syncSidebarHandle === "function") {
+    syncSidebarHandle();
+    requestAnimationFrame(() => syncSidebarHandle());
+    window.setTimeout(() => syncSidebarHandle(), 270);
+  }
 }
 
 function toggleSidebar() {

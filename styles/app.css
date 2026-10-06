@@ -35,6 +35,7 @@
   --accent-light: rgba(214, 230, 247, 0.92);
   --accent-2: #7eb3e8;
   --accent-border: #b8d4f0;
+  --on-accent: #fff; /* [EN] text on filled accent — same handle recipe as Sheet */
 
   --success: #1a7a4a;
   --success-bg: #e8f7ef;
@@ -369,27 +370,92 @@ body.splashing {
 .sidebar-scrim { position: fixed; inset: 0; border: 0; background: rgba(12, 20, 36, 0.12); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); z-index: 25; cursor: pointer; }
 .sidebar-scrim.hidden { display: none; }
 
+/* Uchwyt panelu — ten sam kształt i pozycja co w Sheet Workbench (kolory zostają Documents). */
 .sidebar-handle {
-  position: fixed; top: 50%; left: clamp(8px, 1.2vw + 6px, 15px); transform: translateY(-50%);
-  width: clamp(40px, 2.6vw + 34px, 48px); height: clamp(96px, 11vh + 36px, 112px);
-  border-radius: 18px; border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
-  background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 72%, transparent) 0%, color-mix(in srgb, var(--panel) 88%, transparent) 100%);
-  color: var(--accent); cursor: pointer; z-index: 31; overflow: hidden;
-  box-shadow: var(--shadow-sm); backdrop-filter: blur(6px);
-  transition: left var(--t-slow), border-color var(--t), background var(--t), transform var(--t);
+  position: fixed;
+  top: 50%;
+  left: clamp(8px, 1.2vw + 6px, 15px); /* [EN] Closed position overridden to edge; open set inline from sidebar rect */
+  transform: translateY(-50%);
+  width: clamp(40px, 2.6vw + 34px, 52px);
+  height: clamp(96px, 11vh + 36px, 120px);
+  border-radius: clamp(16px, 2vw + 10px, 22px);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 72%, transparent) 0%, color-mix(in srgb, var(--panel) 82%, transparent) 100%);
+  color: var(--accent);
+  cursor: pointer;
+  box-shadow:
+    0 18px 34px color-mix(in srgb, var(--ink) 12%, transparent),
+    0 4px 12px color-mix(in srgb, var(--ink) 8%, transparent),
+    inset 0 1px 0 rgba(255,255,255,0.55),
+    inset 0 -1px 0 rgba(0,0,0,0.06);
+  opacity: 0.76;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  z-index: 31;
+  overflow: hidden;
+  transition:
+    left var(--t-slow),
+    opacity var(--t),
+    color var(--t),
+    border-color var(--t),
+    background var(--t),
+    box-shadow var(--t),
+    transform var(--t);
 }
-.sidebar-handle:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); background: color-mix(in srgb, var(--accent-light) 60%, var(--panel)); }
+.sidebar-handle:hover {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent-light) 76%, white) 0%, color-mix(in srgb, var(--panel) 92%, white) 100%);
+  box-shadow:
+    0 22px 42px color-mix(in srgb, var(--ink) 18%, transparent),
+    0 6px 16px color-mix(in srgb, var(--ink) 10%, transparent),
+    inset 0 1px 0 rgba(255,255,255,0.72),
+    inset 0 -1px 0 rgba(0,0,0,0.05);
+  opacity: 0.92;
+}
+.sidebar-handle:focus-visible {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+}
 .sidebar-handle::before {
-  content: ">"; position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-  font-size: 15px; font-weight: 700; line-height: 1; pointer-events: none;
+  content: ">";
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 20px;
+  height: 20px;
+  padding: 0 4px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--panel) 68%, white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.46);
+  pointer-events: none;
 }
 .sidebar-handle::after {
-  content: "Panel"; position: absolute; top: calc(50% + 8px); left: 50%;
-  transform: translate(-50%, -50%) rotate(-90deg); font-size: 9px; letter-spacing: 0.14em;
-  text-transform: uppercase; font-weight: 700; white-space: nowrap; pointer-events: none;
+  content: var(--handle-open-label, "Wysuń");
+  position: absolute;
+  top: calc(50% + 8px);
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-90deg);
+  transform-origin: center;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
 }
+.sidebar-open .sidebar-handle::after { content: var(--handle-close-label, "Schowaj"); }
 .sidebar-open .sidebar-handle::before { content: "<"; top: 10px; }
-.sidebar-open .sidebar-handle::after { content: "Schowaj"; }
+.sidebar-open .sidebar-handle:hover { transform: translateY(-50%) scale(1.01); }
 
 .main { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
 .panel {
@@ -919,9 +985,7 @@ html.is-mobile body.has-document .doc-panel {
     opacity: 1;
     pointer-events: auto;
   }
-  html.is-mobile .sidebar-handle { display: none; }
   html.is-mobile.sidebar-open .sidebar-handle {
-    display: block;
     top: auto;
     bottom: max(14px, var(--safe-bottom));
     left: 50% !important;
@@ -929,25 +993,19 @@ html.is-mobile body.has-document .doc-panel {
     height: 44px;
     transform: translateX(-50%);
     border-radius: 999px;
-    border-color: color-mix(in srgb, var(--accent) 10%, white);
-    background: color-mix(in srgb, var(--accent) 92%, black);
-    color: white;
-    opacity: 0.88;
-    box-shadow: 0 18px 38px rgba(18, 30, 23, 0.28);
+    box-shadow: 0 18px 38px color-mix(in srgb, var(--ink) 28%, transparent);
   }
   html.is-mobile.sidebar-open .sidebar-handle:hover {
     transform: translateX(-50%) translateY(-1px);
   }
   html.is-mobile.sidebar-open .sidebar-handle::before {
     content: "×"; top: 50%; left: 18px; transform: translateY(-50%);
-    border-color: rgba(255, 255, 255, 0.32); background: rgba(255, 255, 255, 0.16); color: white;
   }
   html.is-mobile.sidebar-open .sidebar-handle::after {
-    content: "Schowaj panel"; top: 50%; left: 54%; transform: translate(-50%, -50%);
+    content: var(--handle-hide-panel-label, "Schowaj panel");
+    top: 50%; left: 54%; transform: translate(-50%, -50%);
     letter-spacing: 0.04em; font-size: 11px;
   }
-  html[lang="en"].is-mobile.sidebar-open .sidebar-handle::after,
-  html.is-mobile[lang="en"].sidebar-open .sidebar-handle::after { content: "Hide panel"; }
 }
 
 /* =====================================================================
@@ -1083,6 +1141,42 @@ details.panel > summary .panel-title { flex: 1; }
 :root.sidebar-docked .sidebar-scrim { display: none; }
 /* otwarty panel zamyka « w panelu albo ⚙ — wystający uchwyt leżałby na dokumencie */
 :root.sidebar-docked.sidebar-open .sidebar-handle { display: none; }
+
+/* Zamknięty: wąski pasek przy krawędzi (Sheet, 2026-09-28 — jeden wygląd na każdej szerokości). */
+:root:not(.sidebar-open) .sidebar-handle {
+  left: 0 !important;
+  width: 22px;
+  border-left: 0;
+  border-radius: 0 14px 14px 0;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+}
+:root:not(.sidebar-open) .sidebar-handle::before {
+  min-width: 16px;
+  height: 16px;
+  padding: 0;
+  font-size: 12px;
+}
+:root:not(.sidebar-open) .sidebar-handle::after { font-size: 9px; }
+
+/* Otwarty: pełny akcent, napis czytelny — bez przezroczystości (lekcja z Sheet). */
+:root.sidebar-open .sidebar-handle {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  opacity: 1;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--accent) 38%, transparent), 0 2px 6px color-mix(in srgb, var(--ink) 18%, transparent);
+}
+:root.sidebar-open .sidebar-handle:hover { background: var(--accent-h); border-color: var(--accent-h); }
+:root.sidebar-open .sidebar-handle::before {
+  border-color: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--on-accent);
+}
+:root.sidebar-open .sidebar-handle:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); }
 :root.sidebar-docked.frame-ready .main { transition: margin-left var(--t-slow); }
 :root.sidebar-docked.sidebar-open .main { margin-left: calc(var(--sidebar-w, 320px) + 14px); }
 /* limit szerokości rośnie o panel — dokument nie traci miejsca na dużych ekranach */

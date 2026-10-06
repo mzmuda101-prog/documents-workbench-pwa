@@ -12,6 +12,11 @@ const I18N = {
     offline: "Offline",
     panelOpen: "Zamknij panel",
     panelClosed: "Panel",
+    sidebarCloseAria: "Schowaj panel narzędzi",
+    sidebarOpenAria: "Otwórz panel narzędzi",
+    sidebarHandleLabel: "Wysuń",
+    sidebarHandleCloseLabel: "Schowaj",
+    sidebarHandleHideLabel: "Schowaj panel",
     noFile: "Brak pliku",
     loadingGeneric: "Ładowanie…",
     loadingFile: "Wczytywanie dokumentu…",
@@ -884,6 +889,11 @@ const I18N = {
     offline: "Offline",
     panelOpen: "Close panel",
     panelClosed: "Panel",
+    sidebarCloseAria: "Hide the tools panel",
+    sidebarOpenAria: "Open the tools panel",
+    sidebarHandleLabel: "Open",
+    sidebarHandleCloseLabel: "Hide",
+    sidebarHandleHideLabel: "Hide panel",
     noFile: "No file",
     loadingGeneric: "Loading…",
     loadingFile: "Loading document…",
@@ -1789,6 +1799,7 @@ function applyLanguage() {
   if (typeof syncViewLayoutUi === "function") syncViewLayoutUi();
   if (typeof dwbPageBreaks !== "undefined") dwbPageBreaks.schedule(0); // „str. N” / „p. N”
   if (typeof refreshFontFamilyList === "function") refreshFontFamilyList(); // grupy listy krojów
+  if (typeof syncSidebarHandle === "function") syncSidebarHandle();
 }
 
 function setLanguage(lang) {

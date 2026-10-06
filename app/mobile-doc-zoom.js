@@ -315,6 +315,22 @@ function softenReflowIndents(host) {
   });
 }
 
+// Zmiana poziomu listy aktualizuje klasę docx-preview od razu, żeby Tab dawał natychmiastową
+// odpowiedź. W widoku mobilnym poprzedni poziom był jednak już zapisany jako style inline przez
+// softenReflowIndents, więc nowa klasa nie mogła zmienić jego margin-left. Odsłaniamy reguły
+// nowego poziomu, a następnie ponownie zapamiętujemy je jako wcięcia reflow.
+function refreshMobileReflowIndent(p) {
+  if (!p || !shouldUseMobileReflow()) return;
+  const host = p.closest?.(".docx-preview-host");
+  if (!host) return;
+  INDENT_PROPS.forEach(([, css, variable]) => {
+    p.style.removeProperty(css);
+    p.style.removeProperty(variable);
+  });
+  delete p.dataset.dwbInd;
+  softenReflowIndents(host);
+}
+
 // ── miejsce w dokumencie (akapit u góry) — na zmianę widoku i obrót ────────────
 // Zmiana zoomu przyciskiem / suwakiem / „Dopasuj” zostaje w tym samym miejscu dokumentu,
 // jak w Wordzie (gest palcami trzyma punkt pod palcami sam — pinch-zoom.js). W poziomie
