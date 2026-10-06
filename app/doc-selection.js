@@ -356,14 +356,51 @@ const dwbSel = (() => {
   function onCut(e) {
     const range = selRange();
     const info = range && !range.collapsed ? analyze(range) : null;
-    if (!info?.rawCross || readOnlyMode) return;
+    if (!info || readOnlyMode) return;
+    // Znaczniki komentarza są niewidocznymi wyspami, więc zwykły HTML schowka kopiował tylko
+    // zaznaczony tekst. Gdy wycinany jest CAŁY komentowany fragment, rozszerzamy wycinek o jego
+    // start, koniec i odwołanie. Wklejanie w tym samym dokumencie odtworzy je z własnego formatu
+    // schowka — komentarz przechodzi wraz z tekstem zamiast znikać przy następnym zapisie.
+    const cutRange = expandRangeToWholeComments(range);
+    const cutInfo = analyze(cutRange);
+    if (!cutInfo) return;
     e.preventDefault();
     const box = document.createElement("div");
-    box.appendChild(range.cloneContents());
+    box.appendChild(cutRange.cloneContents());
     box.querySelectorAll('[contenteditable], .dwb-page-break').forEach((el) => { if (el.classList.contains("dwb-page-break")) el.remove(); else el.removeAttribute("contenteditable"); });
+    // Natywny Selection zachowuje separator między akapitami; Range#toString go pomija.
     e.clipboardData?.setData("text/plain", window.getSelection().toString());
     e.clipboardData?.setData("text/html", box.innerHTML);
-    asUndoStep("undoOpCut", () => deleteSpan(info));
+    if (box.querySelector("[data-cm-kind='start'], [data-cm-kind='end'], [data-cm-kind='ref']")) {
+      // Typ działa tylko w naszej aplikacji; zewnętrzne programy dalej dostają zwykły HTML/tekst.
+      e.clipboardData?.setData("application/x-dwb-comment-fragment", box.innerHTML);
+    }
+    asUndoStep("undoOpCut", () => deleteSpan(cutInfo));
+  }
+
+  function expandRangeToWholeComments(range) {
+    const h = host();
+    if (!h) return range;
+    const expanded = range.cloneRange();
+    h.querySelectorAll("span[data-cm-kind='start']").forEach((start) => {
+      const id = start.dataset.cmId;
+      const end = h.querySelector(`span[data-cm-kind="end"][data-cm-id="${CSS.escape(id)}"]`);
+      const ref = h.querySelector(`span[data-cm-kind="ref"][data-cm-id="${CSS.escape(id)}"]`);
+      if (!end || !ref) return;
+      const content = document.createRange();
+      content.setStartAfter(start);
+      content.setEndBefore(end);
+      // Tylko pełny zakres komentarza: wycięcie części słowa zachowuje standardowe zachowanie
+      // Worda, zamiast nieoczekiwanie rozszerzać zaznaczenie o resztę komentarza.
+      if (range.compareBoundaryPoints(Range.START_TO_START, content) > 0
+        || range.compareBoundaryPoints(Range.END_TO_END, content) < 0) return;
+      const markers = document.createRange();
+      markers.setStartBefore(start);
+      markers.setEndAfter(ref);
+      if (markers.compareBoundaryPoints(Range.START_TO_START, expanded) < 0) expanded.setStartBefore(start);
+      if (markers.compareBoundaryPoints(Range.END_TO_END, expanded) > 0) expanded.setEndAfter(ref);
+    });
+    return expanded;
   }
 
   docCanvasEl?.addEventListener("cut", onCut);

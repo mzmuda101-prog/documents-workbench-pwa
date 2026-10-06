@@ -45,6 +45,7 @@
     "test:tabs": "node scripts/open-docs-playwright.js && ENGINE=webkit node scripts/open-docs-playwright.js",
     "test:forms": "node scripts/forms-playwright.js && ENGINE=webkit node scripts/forms-playwright.js && node scripts/forms-light-playwright.js && ENGINE=webkit node scripts/forms-light-playwright.js",
     "test:comments": "node scripts/comments2-playwright.js && ENGINE=webkit node scripts/comments2-playwright.js",
+    "test:comments-cut": "node scripts/comments-cut-paste-playwright.js && ENGINE=webkit node scripts/comments-cut-paste-playwright.js",
     "test:image": "node scripts/image-card-playwright.js && ENGINE=webkit node scripts/image-card-playwright.js && node scripts/image-viewer-playwright.js && ENGINE=webkit node scripts/image-viewer-playwright.js",
     "test:gaps:objects": "node scripts/page-gaps-objects-playwright.js && ENGINE=webkit node scripts/page-gaps-objects-playwright.js",
     "test:linksword": "node scripts/links-word-playwright.js && ENGINE=webkit node scripts/links-word-playwright.js",

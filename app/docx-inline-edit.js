@@ -856,6 +856,12 @@ function onDocPaste(e) {
   if (typeof dwbSel !== "undefined") dwbSel.collapseForInsert();
   const p = docCaretParagraph(e.target);
   if (!p) return;
+  const commentFragment = e.clipboardData?.getData("application/x-dwb-comment-fragment");
+  if (commentFragment && insertInternalCommentFragment(commentFragment)) {
+    e.preventDefault();
+    onInlineParagraphInput();
+    return;
+  }
   // Apple Notes, Markdown, strony WWW, Google Docs, Word: struktura i proste style (paste-rich.js).
   // Zwykły tekst bez formatowania — dalej niżej, jak dawniej.
   const rich = typeof dwbPaste !== "undefined" ? dwbPaste.parse(e.clipboardData) : null;
@@ -880,6 +886,34 @@ function onDocPaste(e) {
     });
   });
   onInlineParagraphInput();
+}
+
+// Własny fragment ze schowka po Wytnij: markerom komentarza odpowiada XML w docIslandXml,
+// więc można je bezpiecznie przenieść wyłącznie wewnątrz tego samego otwartego dokumentu.
+// Nie używamy go dla zwykłego HTML-a z systemowego schowka — zewnętrzna treść nadal przechodzi
+// przez sanitizację w paste-rich.js.
+function insertInternalCommentFragment(html) {
+  const sel = window.getSelection();
+  if (!sel?.rangeCount) return false;
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  const marks = [...template.content.querySelectorAll("[data-cm]")];
+  if (!marks.length || marks.some((mark) => !docIslandXml.has(mark.dataset.cm))) return false;
+  marks.forEach((mark) => {
+    mark.contentEditable = "false";
+    mark.className = "cm-mark";
+  });
+  const range = sel.getRangeAt(0);
+  range.deleteContents();
+  const last = template.content.lastChild;
+  range.insertNode(template.content);
+  if (last) {
+    range.setStartAfter(last);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+  return true;
 }
 
 function insertTextAtCaret(text) {
