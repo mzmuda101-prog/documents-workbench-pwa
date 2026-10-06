@@ -1582,6 +1582,10 @@ function prepareEditableParagraph(p) {
   p.classList.add("docx-editable-p");
   p.classList.toggle("docx-editable-list", isListParagraph(p));
   p.spellcheck = true;
+  // docx-preview rysuje <w:tab/> jako szeroki span z techniczną spacją. Bez wyspy przeglądarka
+  // wpuszczała kursor DO tej spacji: klik w prawą stronę wcięcia wyglądał jak kursor przy innej
+  // literze. Pojedynczy tabulator zachowuje się jak w Wordzie — kursor stoi tylko przed albo za.
+  p.querySelectorAll(".docx-tab").forEach((tab) => { tab.contentEditable = "false"; });
 }
 
 function syncInlineEditMode() {
@@ -1621,6 +1625,10 @@ function syncInlineEditMode() {
     p.classList.toggle("docx-editable-p", editable);
     p.classList.toggle("docx-editable-list", editable && isListParagraph(p));
     p.spellcheck = editable;
+    p.querySelectorAll(".docx-tab").forEach((tab) => {
+      if (editable) tab.contentEditable = "false";
+      else tab.removeAttribute("contenteditable");
+    });
   });
   if (editable) {
     bindInlineEditKeyboard();

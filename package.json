@@ -29,6 +29,7 @@
     "test:metadata": "node scripts/metadata-playwright.js",
     "test:mobile": "node scripts/mobile-playwright.js",
     "test:list-reflow": "node scripts/list-reflow-playwright.js && ENGINE=webkit node scripts/list-reflow-playwright.js",
+    "test:tab-caret": "node scripts/tab-caret-playwright.js && ENGINE=webkit node scripts/tab-caret-playwright.js",
     "test:frame": "node scripts/app-frame-playwright.js && ENGINE=webkit node scripts/app-frame-playwright.js",
     "test:touch": "node scripts/touch-playwright.js && ENGINE=webkit node scripts/touch-playwright.js",
     "test:enter": "node scripts/inline-enter-playwright.js && ENGINE=webkit node scripts/inline-enter-playwright.js",
