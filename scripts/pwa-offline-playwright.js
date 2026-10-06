@@ -20,7 +20,7 @@ const ROOT = path.join(__dirname, "..");
 const PORT = 4191;
 const HOST = "pwa.localhost"; // *.localhost = bezpieczny kontekst (SW działa), ale nie „localhost" z sw.js
 const ORIGIN = `http://${HOST}:${PORT}`;
-const SEMANTIC_MODEL_CACHE = "transformers-cache";
+const SEMANTIC_MODEL_CACHES = ["transformers-cache", "dwb-embeddinggemma-2-q8-v1"];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".png": "image/png", ".webp": "image/webp", ".woff2": "font/woff2", ".mp4": "video/mp4", ".svg": "image/svg+xml", ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document" };
@@ -100,10 +100,12 @@ async function run() {
 
   // 4) Nowe wydanie: inna treść sw.js pod tym samym adresem → przycisk → klik → nowy worker
   // Cache wag modelu nie jest cache'em powłoki i ma przetrwać aktualizację PWA.
-  await page.evaluate(async (cacheName) => {
-    const cache = await caches.open(cacheName);
-    await cache.put("./__semantic-model-cache-test", new Response("kept"));
-  }, SEMANTIC_MODEL_CACHE);
+  await page.evaluate(async (cacheNames) => {
+    await Promise.all(cacheNames.map(async (cacheName) => {
+      const cache = await caches.open(cacheName);
+      await cache.put("./__semantic-model-cache-test", new Response("kept"));
+    }));
+  }, SEMANTIC_MODEL_CACHES);
   const swSrc = fs.readFileSync(path.join(ROOT, "sw.js"), "utf8");
   swOverride = swSrc.replace(/CACHE_VERSION\s*=\s*"[^"]+"/, 'CACHE_VERSION = "29991231-99"');
   await page.reload({ waitUntil: "load" });
@@ -118,14 +120,16 @@ async function run() {
     await page.click("#appUpdateBtn");
     const reloaded = await nav;
     await sleep(500);
-    const state = await page.evaluate(async (cacheName) => ({
+    const state = await page.evaluate(async (cacheNames) => ({
       fresh: !window.__beforeUpdate,
       controlled: !!navigator.serviceWorker.controller,
       newCache: (await caches.keys()).some((k) => k.includes("29991231-99")),
-      modelCacheKept: !!(await (await caches.open(cacheName)).match("./__semantic-model-cache-test")),
-    }), SEMANTIC_MODEL_CACHE);
+      modelCachesKept: (await Promise.all(cacheNames.map(async (cacheName) =>
+        !!(await (await caches.open(cacheName)).match("./__semantic-model-cache-test"))
+      ))).every(Boolean),
+    }), SEMANTIC_MODEL_CACHES);
     check("klik „Aktualizuj”: przeładowanie pod nowym workerem", reloaded && state.fresh && state.controlled && state.newCache, JSON.stringify(state));
-    check("aktualizacja PWA zachowuje pobrany model", state.modelCacheKept, JSON.stringify(state));
+    check("aktualizacja PWA zachowuje pobrane warianty modelu", state.modelCachesKept, JSON.stringify(state));
   }
   swOverride = null;
 

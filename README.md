@@ -12,7 +12,8 @@ Siostrzana aplikacja [Sheet Workbench PWA](../sheet-workbench-pwa/README.md).
 - Inspektor struktury: słowa, akapity, tabele, nawigacja po nagłówkach
 - Wyszukiwanie z podświetleniem
 - **„Znajdź sens” (opcjonalne)**: lokalne wyszukiwanie semantyczne akapitów przez EmbeddingGemma 2.
-  Model tekstowy q4 uruchamia się dopiero po kliknięciu na urządzeniu z WebGPU; indeks ma 256 wymiarów,
+  Domyślny model tekstowy q4 uruchamia się dopiero po kliknięciu na urządzeniu z WebGPU; można świadomie wybrać
+  dokładniejszy q8. Indeks ma 256 wymiarów,
   jest budowany partiami i żyje tylko w pamięci bieżącego dokumentu. Tekst dokumentu nie opuszcza urządzenia
   (pobierane są wyłącznie wagi modelu z Hugging Face). Wagi q4 zapisują się osobno na urządzeniu i przetrwają
   zwykłe aktualizacje PWA; pobranie powtarza się tylko po świadomej zmianie wariantu modelu albo wyczyszczeniu danych strony.

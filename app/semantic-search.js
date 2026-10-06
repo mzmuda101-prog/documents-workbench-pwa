@@ -8,14 +8,19 @@ const semanticReleaseBtn = document.getElementById("semanticReleaseBtn");
 const semanticStatusEl = document.getElementById("semanticStatus");
 const semanticResultsEl = document.getElementById("semanticResults");
 const semanticAvailabilityEl = document.getElementById("semanticAvailability");
+const semanticModelVariantEl = document.getElementById("semanticModelVariant");
+const semanticModelInfoEl = document.getElementById("semanticModelInfo");
 
 const SEMANTIC_BATCH_SIZE = 6;
 const SEMANTIC_MIN_CHARS = 24;
+const SEMANTIC_VARIANT_STORAGE_KEY = "dwbSemanticModelVariant";
+const SEMANTIC_VARIANTS = new Set(["q4", "q8"]);
 let semanticWorker = null;
 let semanticReady = false;
 let semanticIndex = null;
 let semanticRequest = 0;
 let semanticPendingQuery = "";
+let semanticVariant = SEMANTIC_VARIANTS.has(localStorage.getItem(SEMANTIC_VARIANT_STORAGE_KEY)) ? localStorage.getItem(SEMANTIC_VARIANT_STORAGE_KEY) : "q4";
 
 function semanticText(key, vars) { return typeof t === "function" ? t(key, vars) : key; }
 function setSemanticStatus(key, vars) { if (semanticStatusEl) semanticStatusEl.textContent = key ? semanticText(key, vars) : ""; }
@@ -33,10 +38,18 @@ function syncSemanticUi() {
   if (!available) {
     semanticEnableBtn.disabled = true;
     semanticEnableBtn.textContent = semanticText("semanticUnsupported");
-  } else if (!semanticReady) {
+  } else if (semanticReady) {
+    semanticEnableBtn.disabled = true;
+    semanticEnableBtn.textContent = semanticText("semanticRunning");
+  } else {
     semanticEnableBtn.disabled = false;
-    semanticEnableBtn.textContent = semanticText("semanticEnable");
+    semanticEnableBtn.textContent = semanticText("semanticStart");
   }
+  if (semanticModelVariantEl) {
+    semanticModelVariantEl.value = semanticVariant;
+    semanticModelVariantEl.disabled = !available;
+  }
+  if (semanticModelInfoEl) semanticModelInfoEl.textContent = semanticText(semanticVariant === "q8" ? "semanticModelQ8Info" : "semanticModelQ4Info");
   semanticQueryEl.disabled = !semanticReady;
   semanticSearchBtn.disabled = !semanticReady || !originalFileBytes;
   semanticReleaseBtn.disabled = !semanticWorker;
@@ -157,7 +170,7 @@ function workerMessage(data) {
 
 function ensureSemanticWorker() {
   if (semanticWorker) return semanticWorker;
-  semanticWorker = new Worker("app/semantic-search-worker.js?v=20261007-02", { type: "module", name: "dwb-semantic-search" });
+  semanticWorker = new Worker("app/semantic-search-worker.js?v=20261007-03", { type: "module", name: "dwb-semantic-search" });
   semanticWorker.addEventListener("message", ({ data }) => workerMessage(data));
   semanticWorker.addEventListener("error", (event) => {
     setSemanticStatus("semanticError", { message: event.message || semanticText("semanticWorkerError") });
@@ -165,6 +178,22 @@ function ensureSemanticWorker() {
     syncSemanticUi();
   });
   return semanticWorker;
+}
+
+function switchSemanticVariant(nextVariant) {
+  if (!SEMANTIC_VARIANTS.has(nextVariant) || nextVariant === semanticVariant) return;
+  semanticVariant = nextVariant;
+  localStorage.setItem(SEMANTIC_VARIANT_STORAGE_KEY, semanticVariant);
+  semanticRequest += 1;
+  semanticWorker?.terminate();
+  semanticWorker = null;
+  semanticReady = false;
+  semanticIndex = null;
+  semanticPendingQuery = "";
+  clearSemanticHighlights();
+  semanticResultsEl?.replaceChildren();
+  setSemanticStatus("semanticVariantChanged");
+  syncSemanticUi();
 }
 
 function embedSemanticNextBatch() {
@@ -198,7 +227,7 @@ semanticEnableBtn?.addEventListener("click", () => {
   if (!semanticCanRun()) return;
   semanticEnableBtn.disabled = true;
   setSemanticStatus("semanticLoading");
-  ensureSemanticWorker().postMessage({ type: "warmup" });
+  ensureSemanticWorker().postMessage({ type: "warmup", variant: semanticVariant });
   syncSemanticUi();
 });
 
@@ -212,5 +241,6 @@ semanticSearchBtn?.addEventListener("click", () => {
 });
 semanticQueryEl?.addEventListener("keydown", (event) => { if (event.key === "Enter") semanticSearchBtn?.click(); });
 semanticReleaseBtn?.addEventListener("click", () => semanticWorker?.postMessage({ type: "release" }));
+semanticModelVariantEl?.addEventListener("change", () => switchSemanticVariant(semanticModelVariantEl.value));
 
 syncSemanticUi();

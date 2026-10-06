@@ -1,4 +1,4 @@
-const CACHE_VERSION = "20261007-02";
+const CACHE_VERSION = "20261007-03";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
@@ -9,6 +9,7 @@ const DOC_FONT_CACHE = "docs-wb-docfonts-1";
 // Model cache is intentionally independent of CACHE_VERSION. It is changed only when we
 // deliberately ship a new EmbeddingGemma variant; do not evict it during a normal PWA update.
 const SEMANTIC_MODEL_CACHE = "transformers-cache";
+const SEMANTIC_LARGE_MODEL_CACHE = "dwb-embeddinggemma-2-q8-v1";
 // Część „core” (łacina z polskimi znakami) zapisujemy z góry — dokument z Calibri otwarty
 // offline na telefonie i tak łamie się jak w Wordzie. Część „ext” (greka, cyrylica…) — przy użyciu.
 const DOC_FONT_CORE = ["carlito", "caladea", "arimo", "tinos", "cousine", "gelasio"]
@@ -172,7 +173,7 @@ self.addEventListener("activate", (event) => {
     caches.keys().then((keys) =>
       Promise.all(
         keys
-          .filter((key) => key !== APP_CACHE && key !== HEAVY_CACHE && key !== RUNTIME_CACHE && key !== SHARE_CACHE && key !== DOC_FONT_CACHE && key !== SEMANTIC_MODEL_CACHE)
+          .filter((key) => key !== APP_CACHE && key !== HEAVY_CACHE && key !== RUNTIME_CACHE && key !== SHARE_CACHE && key !== DOC_FONT_CACHE && key !== SEMANTIC_MODEL_CACHE && key !== SEMANTIC_LARGE_MODEL_CACHE)
           .map((key) => caches.delete(key))
       )
     )

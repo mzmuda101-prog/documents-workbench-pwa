@@ -5,6 +5,11 @@ const MODEL_ID = "onnx-community/embeddinggemma-2-ONNX";
 // This is Transformers.js' existing persistent browser cache. Keep it stable independently
 // of the PWA shell version, including for users who downloaded the q4 model before this fix.
 const MODEL_CACHE_KEY = "transformers-cache";
+const MODEL_VARIANTS = {
+  q4: { dtype: "q4", cacheKey: MODEL_CACHE_KEY },
+  // `q8` loads model_quantized.onnx: about twice the weights, but still a practical local option.
+  q8: { dtype: "q8", cacheKey: "dwb-embeddinggemma-2-q8-v1" },
+};
 const DIMENSIONS = 256; // Matryoshka: 3x smaller index, near-full text retrieval quality.
 const DOCUMENT_PREFIX = "title: none | text: ";
 const QUERY_PREFIX = "task: search result | query: ";
@@ -12,6 +17,7 @@ const QUERY_PREFIX = "task: search result | query: ";
 let embedder = null;
 let runtime = null;
 let textOnlyConfig = null;
+let activeVariant = "q4";
 
 function post(type, payload = {}, transfer = []) {
   self.postMessage({ type, ...payload }, transfer);
@@ -54,7 +60,8 @@ async function getEmbedder() {
   // must not make a user download the same q4 model again.
   env.useBrowserCache = true;
   env.useWasmCache = true;
-  env.cacheKey = MODEL_CACHE_KEY;
+  const variant = MODEL_VARIANTS[activeVariant] || MODEL_VARIANTS.q4;
+  env.cacheKey = variant.cacheKey;
   // WebGPU avoids a very slow WASM fallback and keeps UI work off the main thread.
   const progress_callback = (event) => {
       if (event.status === "progress") post("progress", { loaded: event.loaded, total: event.total, file: event.file });
@@ -67,7 +74,7 @@ async function getEmbedder() {
     EmbeddingGemma2Model.from_pretrained(MODEL_ID, {
       config: textOnlyConfig,
       device: "webgpu",
-      dtype: "q4",
+      dtype: variant.dtype,
       progress_callback,
     }),
   ]);
@@ -92,6 +99,7 @@ async function embed(texts, kind) {
 self.onmessage = async ({ data }) => {
   try {
     if (data.type === "warmup") {
+      activeVariant = MODEL_VARIANTS[data.variant] ? data.variant : "q4";
       await getEmbedder();
       post("ready");
       return;
