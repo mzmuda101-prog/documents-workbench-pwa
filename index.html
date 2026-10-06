@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <!-- [EN] CSP — offline-first app, locked to 'self'. docx-preview injects <style>
          elements and blob: images from .docx, hence 'unsafe-inline' styles + blob: imgs. -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data: blob:; connect-src 'self'; worker-src 'self'; media-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data: blob:; connect-src 'self' https://huggingface.co https://*.hf.co https://cdn.jsdelivr.net; worker-src 'self'; media-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
     <meta id="pageDescription" name="description" content="Lokalne przeglądanie, edycja i analiza dokumentów Word" />
     <title>Documents Workbench</title>
     <meta name="application-name" content="Documents Workbench" />
@@ -16,7 +16,7 @@
     <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png" />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin.woff2" crossorigin />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin-ext.woff2" crossorigin />
-    <link rel="stylesheet" href="styles/app.css?v=20261006-07" />
+    <link rel="stylesheet" href="styles/app.css?v=20261006-09" />
   </head>
   <body>
     <!-- Pierwszy przystanek Tab: skok prosto do dokumentu (panel to kilkadziesiąt kontrolek). -->
@@ -630,6 +630,28 @@
                 </div>
               </div>
             </details>
+            <details class="panel" id="panel-semantic-search">
+              <summary>
+                <svg class="panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/><path d="M8.5 11h5M11 8.5v5"/></svg>
+                <span class="panel-title" data-i18n="semanticPanel">Znajdź sens</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9" /></svg>
+              </summary>
+              <div class="panel-body stack">
+                <p class="hint" data-i18n="semanticIntro">Szukaj znaczenia, nie dokładnych słów. Model działa tylko na tym urządzeniu; tekst dokumentu nigdzie nie jest wysyłany.</p>
+                <div class="semantic-ready" id="semanticAvailability"></div>
+                <button class="btn primary" id="semanticEnableBtn" type="button" data-i18n="semanticEnable">Pobierz i uruchom model</button>
+                <label class="field">
+                  <span data-i18n="semanticQueryLabel">Czego szukasz?</span>
+                  <input id="semanticQuery" type="search" autocomplete="off" disabled data-i18n-placeholder="semanticQueryPlaceholder" placeholder="np. termin wypowiedzenia" />
+                </label>
+                <div class="btn-row">
+                  <button class="btn primary" id="semanticSearchBtn" type="button" disabled data-i18n="semanticSearch">Znajdź podobne fragmenty</button>
+                  <button class="btn" id="semanticReleaseBtn" type="button" disabled data-i18n="semanticRelease">Zwolnij pamięć</button>
+                </div>
+                <div class="hint" id="semanticStatus" aria-live="polite"></div>
+                <div class="semantic-results" id="semanticResults" aria-live="polite"></div>
+              </div>
+            </details>
           </section>
 
           <section class="sidebar-group" id="group-view">
@@ -951,48 +973,49 @@
         <p class="newdoc-foot" data-i18n="newDocFoot">Plik powstaje na tym urządzeniu. „Zapisz” zapyta, gdzie go zapisać.</p>
       </form>
     </dialog>
-    <script defer src="app/core.js?v=20261006-07"></script>
-    <script defer src="app/language.js?v=20261006-07"></script>
-    <script defer src="app/docx-metadata.js?v=20261006-07"></script>
-    <script defer src="app/docx-revisions.js?v=20261006-07"></script>
-    <script defer src="app/docx-forms.js?v=20261006-07"></script>
-    <script defer src="app/doc-links.js?v=20261006-07"></script>
-    <script defer src="app/docx-patch.js?v=20261006-07"></script>
-    <script defer src="app/docx-compose.js?v=20261006-07"></script>
-    <script defer src="app/template-tokens.js?v=20261006-07"></script>
-    <script defer src="app/docx-run-styles.js?v=20261006-07"></script>
-    <script defer src="app/docx-inline-edit.js?v=20261006-07"></script>
-    <script defer src="app/doc-notes.js?v=20261006-07"></script>
-    <script defer src="app/paste-rich.js?v=20261006-07"></script>
-    <script defer src="app/document.js?v=20261006-07"></script>
-    <script defer src="app/docx-render-fixes.js?v=20261006-07"></script>
-    <script defer src="app/docx-viewer.js?v=20261006-07"></script>
-    <script defer src="app/analysis.js?v=20261006-07"></script>
-    <script defer src="app/structure-panel.js?v=20261006-07"></script>
-    <script defer src="app/grammar-style.js?v=20261006-07"></script>
-    <script defer src="app/placeholders.js?v=20261006-07"></script>
-    <script defer src="app/snippets.js?v=20261006-07"></script>
-    <script defer src="app/snippet-suggest.js?v=20261006-07"></script>
-    <script defer src="app/doc-caret-nav.js?v=20261006-07"></script>
-    <script defer src="app/doc-selection.js?v=20261006-07"></script>
-    <script defer src="app/print-preview.js?v=20261006-07"></script>
-    <script defer src="app/edit-tools.js?v=20261006-07"></script>
-    <script defer src="app/mobile-doc-zoom.js?v=20261006-07"></script>
-    <script defer src="app/ui-controls.js?v=20261006-07"></script>
-    <script defer src="app/lazy-features.js?v=20261006-07"></script>
-    <script defer src="app/app-frame.js?v=20261006-07"></script>
-    <script defer src="app/touch.js?v=20261006-07"></script>
-    <script defer src="app/pinch-zoom.js?v=20261006-07"></script>
-    <script defer src="app/page-breaks.js?v=20261006-07"></script>
-    <script defer src="app/undo.js?v=20261006-07"></script>
-    <script defer src="app/compose-ui.js?v=20261006-07"></script>
-    <script defer src="app/self-check.js?v=20261006-07"></script>
-    <script defer src="app/image-viewer.js?v=20261006-07"></script>
-    <script defer src="app/drafts.js?v=20261006-07"></script>
-    <script defer src="app/open-docs.js?v=20261006-07"></script>
-    <script defer src="app/view-mode.js?v=20261006-07"></script>
-    <script defer src="app/keyboard.js?v=20261006-07"></script>
-    <script defer src="app/launch-files.js?v=20261006-07"></script>
-    <script defer src="app/bootstrap.js?v=20261006-07"></script>
+    <script defer src="app/core.js?v=20261006-09"></script>
+    <script defer src="app/language.js?v=20261006-09"></script>
+    <script defer src="app/docx-metadata.js?v=20261006-09"></script>
+    <script defer src="app/docx-revisions.js?v=20261006-09"></script>
+    <script defer src="app/docx-forms.js?v=20261006-09"></script>
+    <script defer src="app/doc-links.js?v=20261006-09"></script>
+    <script defer src="app/docx-patch.js?v=20261006-09"></script>
+    <script defer src="app/docx-compose.js?v=20261006-09"></script>
+    <script defer src="app/template-tokens.js?v=20261006-09"></script>
+    <script defer src="app/docx-run-styles.js?v=20261006-09"></script>
+    <script defer src="app/docx-inline-edit.js?v=20261006-09"></script>
+    <script defer src="app/doc-notes.js?v=20261006-09"></script>
+    <script defer src="app/paste-rich.js?v=20261006-09"></script>
+    <script defer src="app/document.js?v=20261006-09"></script>
+    <script defer src="app/docx-render-fixes.js?v=20261006-09"></script>
+    <script defer src="app/docx-viewer.js?v=20261006-09"></script>
+    <script defer src="app/analysis.js?v=20261006-09"></script>
+    <script defer src="app/structure-panel.js?v=20261006-09"></script>
+    <script defer src="app/semantic-search.js?v=20261006-09"></script>
+    <script defer src="app/grammar-style.js?v=20261006-09"></script>
+    <script defer src="app/placeholders.js?v=20261006-09"></script>
+    <script defer src="app/snippets.js?v=20261006-09"></script>
+    <script defer src="app/snippet-suggest.js?v=20261006-09"></script>
+    <script defer src="app/doc-caret-nav.js?v=20261006-09"></script>
+    <script defer src="app/doc-selection.js?v=20261006-09"></script>
+    <script defer src="app/print-preview.js?v=20261006-09"></script>
+    <script defer src="app/edit-tools.js?v=20261006-09"></script>
+    <script defer src="app/mobile-doc-zoom.js?v=20261006-09"></script>
+    <script defer src="app/ui-controls.js?v=20261006-09"></script>
+    <script defer src="app/lazy-features.js?v=20261006-09"></script>
+    <script defer src="app/app-frame.js?v=20261006-09"></script>
+    <script defer src="app/touch.js?v=20261006-09"></script>
+    <script defer src="app/pinch-zoom.js?v=20261006-09"></script>
+    <script defer src="app/page-breaks.js?v=20261006-09"></script>
+    <script defer src="app/undo.js?v=20261006-09"></script>
+    <script defer src="app/compose-ui.js?v=20261006-09"></script>
+    <script defer src="app/self-check.js?v=20261006-09"></script>
+    <script defer src="app/image-viewer.js?v=20261006-09"></script>
+    <script defer src="app/drafts.js?v=20261006-09"></script>
+    <script defer src="app/open-docs.js?v=20261006-09"></script>
+    <script defer src="app/view-mode.js?v=20261006-09"></script>
+    <script defer src="app/keyboard.js?v=20261006-09"></script>
+    <script defer src="app/launch-files.js?v=20261006-09"></script>
+    <script defer src="app/bootstrap.js?v=20261006-09"></script>
   </body>
 </html>

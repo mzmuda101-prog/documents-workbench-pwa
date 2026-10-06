@@ -211,6 +211,7 @@ async function renderCurrentDocument() {
     if (typeof resetInlineDirtyAfterRender === "function") resetInlineDirtyAfterRender();
     documentStructure = analyzeDocumentDom(docCanvasEl);
     renderStructurePanel(documentStructure);
+    if (typeof semanticDocumentRendered === "function") semanticDocumentRendered();
     if (searchQueryEl?.value.trim()) runDocumentSearch();
     setupInlineEditingAfterRender();
     if (typeof syncMobileDocZoomAfterRender === "function") syncMobileDocZoomAfterRender();

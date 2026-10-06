@@ -11,6 +11,10 @@ Siostrzana aplikacja [Sheet Workbench PWA](../sheet-workbench-pwa/README.md).
 - **Edycja inline (WYSIWYG)** — kliknij akapit w trybie edycji, zapis przez ZIP-patch
 - Inspektor struktury: słowa, akapity, tabele, nawigacja po nagłówkach
 - Wyszukiwanie z podświetleniem
+- **„Znajdź sens” (opcjonalne)**: lokalne wyszukiwanie semantyczne akapitów przez EmbeddingGemma 2.
+  Model tekstowy q4 uruchamia się dopiero po kliknięciu na urządzeniu z WebGPU; indeks ma 256 wymiarów,
+  jest budowany partiami i żyje tylko w pamięci bieżącego dokumentu. Tekst dokumentu nie opuszcza urządzenia
+  (pobierane są wyłącznie wagi modelu z Hugging Face).
 - Narzędzia edycji: znajdź i zamień, wielkość liter, trim/spacje, prefiks/sufiks
 - Zapis: w miejscu (FSA) lub „Zapisz jako” / pobranie
 - PWA: service worker, tryb offline po pierwszym załadowaniu

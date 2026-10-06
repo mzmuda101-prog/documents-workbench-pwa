@@ -96,6 +96,7 @@
     "playwright": "1.60.0"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.3.1",
     "@tesseract.js-data/pol": "^1.0.0",
     "docx-preview": "^0.3.7",
     "jszip": "^3.10.1",
