@@ -101,6 +101,7 @@
     if (!hl?.length && !precise) return false;
     hl?.forEach((el) => el.classList.remove("search-hit", "search-hit-active"));
     if (precise) { CSS.highlights.delete("dwb-find"); CSS.highlights.delete("dwb-find-active"); }
+    rootEl.classList.remove("find-precise");
     if (typeof frMatches !== "undefined") { frMatches = []; frActiveIndex = -1; }
     if (typeof appFrame !== "undefined") appFrame.syncPanelCounts();
     // fraza zostaje w polu, ale bez „0” — to nie brak wyników, tylko schowane podświetlenia
@@ -108,6 +109,17 @@
     if (pos) { pos.textContent = ""; pos.classList.remove("is-empty"); }
     lastScanQuery = "";
     return true;
+  }
+
+  // Escape is a genuine exit from a result: it must work even when focus is still in the
+  // search field or inside an editable paragraph. CSS Highlights are not a native text
+  // selection, so clear both kinds of visual selection here.
+  function dismissDocumentSelection() {
+    const clearedSearch = clearSearchHighlights();
+    const selection = window.getSelection?.();
+    const hasDocumentSelection = !!selection?.rangeCount && !selection.isCollapsed && !!docCanvasEl?.contains(selection.anchorNode);
+    if (hasDocumentSelection) selection.removeAllRanges();
+    return clearedSearch || hasDocumentSelection;
   }
 
   // ── główna obsługa klawiszy ────────────────────────────────────────────────
@@ -146,9 +158,9 @@
     if (e.key === "Escape") {
       if (document.querySelector(".app-menu:not([hidden])")) return; // menu ⋯ ma własne Esc
       if (a?.closest?.(".docx-editable-p, .docx-edit-root")) { e.preventDefault(); docViewportEl.focus({ preventScroll: true }); return; }
+      if (dismissDocumentSelection()) { e.preventDefault(); return; }
       if (inFormField(a)) return; // pola: Esc należy do nich (np. czyszczenie szukajki ustawień)
       if (!rootEl.classList.contains("sidebar-docked") && isSidebarOpen()) { e.preventDefault(); setSidebarOpen(false); panelToggle?.focus(); return; }
-      if (clearSearchHighlights()) { e.preventDefault(); return; }
       if (dwbView.isActive()) { e.preventDefault(); dwbView.set(false); }
     }
   });
