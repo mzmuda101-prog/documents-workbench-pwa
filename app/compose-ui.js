@@ -2041,7 +2041,11 @@ const composeUi = (() => {
     if (!h) return [];
     const out = [];
     h.querySelectorAll('span[data-cm-kind="start"]').forEach((sp) => {
-      const end = h.querySelector(`span[data-cm-kind="end"][data-cm-id="${CSS.escape(sp.dataset.cmId)}"]`);
+      // Ten sam komentarz może być przeniesiony przez Kopiuj/Wklej do kolejnego miejsca.
+      // querySelector brał wtedy zawsze PIERWSZY koniec zakresu i podświetlał cały tekst między
+      // kopiami. Szukamy najbliższego końca tego samego komentarza PO bieżącym początku.
+      const end = [...h.querySelectorAll(`span[data-cm-kind="end"][data-cm-id="${CSS.escape(sp.dataset.cmId)}"]`)]
+        .find((candidate) => !!(sp.compareDocumentPosition(candidate) & Node.DOCUMENT_POSITION_FOLLOWING));
       if (!end) return;
       const r = document.createRange();
       r.setStartAfter(sp);

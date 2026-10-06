@@ -381,6 +381,23 @@ const dwbSel = (() => {
     }
   }
 
+  // Przeglądarka nie wkłada znaczników komentarza do zwykłego HTML-a schowka. Dla kopiowania
+  // pełnego komentowanego fragmentu dodajemy nasz typ pomocniczy; poza aplikacją nadal trafia
+  // zwyczajny tekst/HTML, a częściowe zaznaczenie działa jak standardowe kopiowanie.
+  function onCopy(e) {
+    const range = selRange();
+    if (!range || range.collapsed) return;
+    const copyRange = expandRangeToWholeComments(range);
+    const box = document.createElement("div");
+    box.appendChild(copyRange.cloneContents());
+    box.querySelectorAll('[contenteditable], .dwb-page-break').forEach((el) => { if (el.classList.contains("dwb-page-break")) el.remove(); else el.removeAttribute("contenteditable"); });
+    if (!box.querySelector("[data-cm-kind='start'], [data-cm-kind='end'], [data-cm-kind='ref']")) return;
+    e.preventDefault();
+    e.clipboardData?.setData("text/plain", window.getSelection().toString());
+    e.clipboardData?.setData("text/html", box.innerHTML);
+    e.clipboardData?.setData("application/x-dwb-comment-fragment", box.innerHTML);
+  }
+
   function expandRangeToWholeComments(range) {
     const h = host();
     if (!h) return range;
@@ -407,6 +424,7 @@ const dwbSel = (() => {
   }
 
   docCanvasEl?.addEventListener("cut", onCut);
+  docCanvasEl?.addEventListener("copy", onCopy);
   docCanvasEl?.addEventListener("compositionstart", () => { if (!readOnlyMode) collapseForInsert(); });
   // przeciągnięcie zaznaczenia kilku akapitów przeniosłoby węzły podglądu — nie pozwalamy
   docCanvasEl?.addEventListener("dragstart", (e) => {

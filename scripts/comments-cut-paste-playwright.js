@@ -27,7 +27,7 @@ async function run() {
   await page.evaluate(() => {
     const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[0];
     const from = p.textContent.indexOf("zaznaczony");
-    const r = formDomRange(p, from, from + "zaznaczony fragment".length);
+    const r = formDomRange(p, from, from + "zaznaczony".length);
     p.closest(".docx-edit-root").focus();
     getSelection().removeAllRanges();
     getSelection().addRange(r);
@@ -40,19 +40,26 @@ async function run() {
 
   const result = await page.evaluate(async () => {
     const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[0];
-    const from = p.textContent.indexOf("zaznaczony");
-    const r = formDomRange(p, from, from + "zaznaczony fragment".length);
+    // Kopiujemy CAŁE zdanie, chociaż komentarz był tylko na jednym słowie.
+    // To odtwarza przypadek, w którym zakres komentarza rozszerzał się po wklejeniu.
+    const r = formDomRange(p, 0, p.textContent.length);
     getSelection().removeAllRanges();
     getSelection().addRange(r);
     const clip = new DataTransfer();
-    docEditRoot().dispatchEvent(new ClipboardEvent("cut", { clipboardData: clip, bubbles: true, cancelable: true }));
+    docEditRoot().dispatchEvent(new ClipboardEvent("copy", { clipboardData: clip, bubbles: true, cancelable: true }));
+    const atEnd = document.createRange();
+    atEnd.selectNodeContents(p);
+    atEnd.collapse(false);
+    getSelection().removeAllRanges();
+    getSelection().addRange(atEnd);
     docEditRoot().dispatchEvent(new ClipboardEvent("paste", { clipboardData: clip, bubbles: true, cancelable: true }));
     const bytes = await buildDocumentForSave();
     const zip = await JSZip.loadAsync(bytes);
     const xml = await zip.file("word/document.xml").async("string");
     const comments = await zip.file("word/comments.xml").async("string");
     const ranges = [...document.querySelectorAll("span[data-cm-kind='start']")].map((start) => {
-      const end = document.querySelector(`span[data-cm-kind="end"][data-cm-id="${CSS.escape(start.dataset.cmId)}"]`);
+      const end = [...document.querySelectorAll(`span[data-cm-kind="end"][data-cm-id="${CSS.escape(start.dataset.cmId)}"]`)]
+        .find((candidate) => !!(start.compareDocumentPosition(candidate) & Node.DOCUMENT_POSITION_FOLLOWING));
       if (!end) return { id: start.dataset.cmId, text: "" };
       const range = document.createRange();
       range.setStartAfter(start);
@@ -73,8 +80,8 @@ async function run() {
 
   await browser.close();
   if (errors.length) throw new Error(errors.join("\n"));
-  const moved = result.ranges.length === 1 && result.ranges[0].text === "zaznaczony fragment";
-  if (result.starts !== 1 || result.ends !== 1 || result.refs !== 1 || !result.comment || !moved
+  const moved = result.ranges.length === 2 && result.ranges.every((range) => range.text === "zaznaczony");
+  if (result.starts !== 2 || result.ends !== 2 || result.refs !== 2 || !result.comment || !moved
     || (result.highlightRanges !== null && result.highlightRanges < 1)) {
     throw new Error(`Komentarz zgubiony po Wytnij/Wklej: ${JSON.stringify(result)}`);
   }
