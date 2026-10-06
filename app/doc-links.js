@@ -152,24 +152,70 @@ function docImageCaption(p) {
   }
   return "";
 }
-function docImageLabel(p, n) {
-  const img = p?.querySelector?.("img");
-  const own = (p?.textContent || "").replace(/\s+/g, " ").trim();
-  return docImageCaption(p) || own || (img?.getAttribute("alt") || "").trim() || (n ? t("linkImageN", { n }) : t("linkGroupImages"));
+// Obrazy dokumentu w kolejności pliku, KAŻDY osobno: także kilka obrazów w jednym akapicie i obraz
+// w drugiej połówce akapitu przeciętego podziałem strony (data-dwb-cont — to dalej ten sam akapit
+// pliku). Dawniej brany był tylko pierwszy obraz akapitu, więc np. obraz za łamaniem wiersza albo
+// za podziałem strony w ogóle nie trafiał na listę celów linku (4 obrazy w pliku, 3 na liście).
+// → [{ img, part (<p> z obrazem), p (akapit pliku), paraIndex, nth (który obraz w akapicie, od 0), count }]
+// nth liczy tak samo jak zapis (docx-compose.js: composeImageRuns — fragmenty z a:blip / v:imagedata).
+function docParagraphParts(host) {
+  const out = [];
+  let main = null;
+  let index = -1;
+  (host?.querySelectorAll("section.docx > article p") || []).forEach((part) => {
+    if (part.hasAttribute("data-dwb-cont")) { if (!main) return; } else { main = part; index++; }
+    out.push({ part, p: main, paraIndex: index });
+  });
+  return out;
 }
-// Obraz, do którego prowadzi zakładka: w akapicie-celu albo obraz, którego podpisem jest cel
-// (odsyłacz Worda do „Rysunek 2” wskazuje podpis pod obrazem).
+function docImageTargets(host) {
+  const out = [];
+  const perPara = new Map();
+  docParagraphParts(host).forEach(({ part, p, paraIndex }) => {
+    part.querySelectorAll("img").forEach((img) => {
+      if (img.closest("p") !== part) return; // obraz w akapicie zagnieżdżonym (pole tekstowe) liczy jego akapit
+      const nth = perPara.get(p) || 0;
+      perPara.set(p, nth + 1);
+      out.push({ img, part, p, paraIndex, nth });
+    });
+  });
+  out.forEach((x) => { x.count = perPara.get(x.p); });
+  return out;
+}
+// Podpis obrazu: podpis pod/nad akapitem albo tekst akapitu — tylko gdy obraz jest w akapicie sam
+// (przy kilku obrazach w akapicie nie wiadomo, do którego należy); dalej tekst alternatywny, „Obraz N”.
+function docImageLabel(p, n, img = p?.querySelector?.("img"), count = 1) {
+  const own = count > 1 ? "" : (p?.textContent || "").replace(/\s+/g, " ").trim();
+  return (count > 1 ? "" : docImageCaption(p)) || own || (img?.getAttribute("alt") || "").trim() || (n ? t("linkImageN", { n }) : t("linkGroupImages"));
+}
+// Obraz, do którego prowadzi zakładka: pierwszy obraz ZA zakładką w tym samym akapicie pliku
+// (zakładka stoi tuż przed obrazem albo na początku akapitu z obrazem) albo obraz, którego
+// podpisem jest cel (odsyłacz Worda do „Rysunek 2” wskazuje podpis pod obrazem).
+// Wołane dla każdego linku przy rysowaniu — tylko części jednego akapitu, bez liczenia całego dokumentu.
 function linkTargetImage(id) {
-  const p = linkTargetEl(id)?.closest?.("p");
+  const el = linkTargetEl(id);
+  const p = el?.closest?.("p");
   if (!p) return null;
-  const own = p.querySelector("img");
-  if (own) return { img: own, p };
+  const all = Array.from(docCanvasEl?.querySelectorAll(".docx-preview-host section.docx > article p") || []);
+  let i = all.indexOf(p);
+  while (i > 0 && all[i].hasAttribute("data-dwb-cont")) i--;
+  const parts = [];
+  for (let k = Math.max(0, i); k < all.length && (k === i || all[k].hasAttribute("data-dwb-cont")); k++) parts.push(all[k]);
+  const imgs = parts.flatMap((part) => Array.from(part.querySelectorAll("img")).filter((img) => img.closest("p") === part));
+  const own = imgs.find((img) => el.compareDocumentPosition(img) & Node.DOCUMENT_POSITION_FOLLOWING);
+  if (own) return { img: own, p: own.closest("p"), count: imgs.length };
   const text = (p.textContent || "").replace(/\s+/g, " ").trim();
   for (const sib of [p.previousElementSibling, p.nextElementSibling]) {
     const img = sib?.tagName === "P" ? sib.querySelector("img") : null;
-    if (img && text && docImageCaption(sib) === text) return { img, p: sib };
+    if (img && text && docImageCaption(sib) === text) return { img, p: sib, count: 1 };
   }
   return null;
+}
+// Podpis obrazu-celu do okienka podglądu — ten sam co na liście celów linku („Obraz N” = N-ty w dokumencie).
+function linkTargetImageLabel(hit) {
+  const targets = docImageTargets(docCanvasEl?.querySelector(".docx-preview-host"));
+  const n = targets.findIndex((x) => x.img === hit.img) + 1;
+  return docImageLabel(hit.p, n || undefined, hit.img, hit.count);
 }
 
 const linkPeek = { el: null, a: null, img: null, timer: 0, hideTimer: 0, touchTimer: 0, touchShown: false, pending: null };
@@ -210,7 +256,7 @@ function showLinkPeek(a, touch = false) {
   img.alt = hit.img.getAttribute("alt") || "";
   const cap = document.createElement("div");
   cap.className = "link-peek-cap";
-  cap.textContent = docImageLabel(hit.p);
+  cap.textContent = linkTargetImageLabel(hit);
   const tip = document.createElement("div");
   tip.className = "link-peek-tip";
   tip.textContent = t(touch ? "linkPeekGoTouch" : "linkPeekGo");
@@ -279,7 +325,8 @@ function linkGoBack() {
 function jumpToLinkTarget(id) {
   const target = linkTargetEl(id);
   if (!target) { toast(t("linkTargetMissing"), "info"); return; }
-  const el = target.closest("p, td, li") || target;
+  // link do obrazu: przewijamy do samego obrazu (drugi obraz akapitu, obraz za podziałem strony)
+  const el = linkTargetImage(id)?.img || target.closest("p, td, li") || target;
   const before = docViewportEl?.scrollTop || 0;
   jumpToStructureItem({ el, id: "link" }, { silentSelect: true });
   setTimeout(() => el.classList.remove("search-hit", "search-hit-active"), 2200);

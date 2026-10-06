@@ -573,28 +573,34 @@ const composeUi = (() => {
 
   function linkHeadings() {
     const s = documentStructure || (docCanvasEl ? analyzeDocumentDom(docCanvasEl) : null);
-    return (s?.headings || []).filter((h) => h.source !== "guess" && Number.isFinite(h.paraIndex));
+    return (s?.headings || []).filter((h) => h.source !== "guess" && Number.isFinite(h.paraIndex))
+      .map((h) => ({ ...h, key: String(h.paraIndex) }));
   }
 
   // Obrazy jako cele linku „W dokumencie” (Word: Link → Miejsce w tym dokumencie → zakładka przy
-  // rysunku; odsyłacz do rysunku). Zakładka trafia do akapitu z obrazem — klik w link skacze do
-  // obrazu, a najechanie pokazuje jego podgląd bez skoku (doc-links.js).
+  // rysunku; odsyłacz do rysunku). Każdy obraz osobno (kilka w akapicie, obraz za podziałem strony —
+  // docImageTargets); zakładka staje tuż przed TYM obrazem — klik w link skacze do obrazu, a najechanie
+  // pokazuje jego podgląd bez skoku (doc-links.js).
   function linkImages() {
-    const paras = collectPreviewParagraphElements(host());
-    const out = [];
-    paras.forEach((p, i) => {
-      const img = p.querySelector("img");
-      if (!img) return;
-      out.push({ paraIndex: i, label: typeof docImageLabel === "function" ? docImageLabel(p, out.length + 1) : t("linkImageN", { n: out.length + 1 }), image: true });
-    });
-    return out;
+    return docImageTargets(host()).map((x, i) => ({
+      paraIndex: x.paraIndex, nth: x.nth, key: `${x.paraIndex}:${x.nth}`, image: true,
+      label: docImageLabel(x.part, i + 1, x.img, x.count),
+    }));
   }
 
-  // „#zakładka” → akapit-cel (indeks), żeby okienko pokazało wybrany nagłówek
-  function linkTargetParaIndex(link) {
-    if (!link.startsWith("#") || typeof linkTargetEl !== "function") return -1;
-    const p = linkTargetEl(link.slice(1))?.closest?.("p");
-    return p ? resolveParaIndex(p) : -1;
+  // „#zakładka” → klucz celu na liście (nagłówek: indeks akapitu, obraz: „akapit:który”), żeby okienko
+  // pokazało wybrany cel
+  function linkTargetKey(link) {
+    if (!link.startsWith("#")) return "";
+    const id = link.slice(1);
+    const hit = linkTargetImage(id);
+    if (hit) {
+      const x = docImageTargets(host()).find((it) => it.img === hit.img);
+      if (x) return `${x.paraIndex}:${x.nth}`;
+    }
+    const p = linkTargetEl(id)?.closest?.("p");
+    const i = p ? resolveParaIndex(p) : -1;
+    return i >= 0 ? String(i) : "";
   }
 
   function normalizeUrl(v) {
@@ -608,8 +614,8 @@ const composeUi = (() => {
 
   function linkShownTarget(link) {
     if (link.startsWith("#")) {
-      const p = typeof linkTargetEl === "function" ? linkTargetEl(link.slice(1))?.closest?.("p") : null;
-      const label = (p?.querySelector("img") && typeof docImageLabel === "function" ? docImageLabel(p) : (p?.textContent || "")).replace(/\s+/g, " ").trim().slice(0, 50);
+      const hit = linkTargetImage(link.slice(1));
+      const label = (hit ? linkTargetImageLabel(hit) : (linkTargetEl(link.slice(1))?.closest?.("p")?.textContent || "")).replace(/\s+/g, " ").trim().slice(0, 50);
       return label ? t("linkToPlace", { label }) : t("linkTabDoc");
     }
     return link.startsWith("rel:") ? (docLinkHrefs.get(link) || "") : link;
@@ -626,7 +632,7 @@ const composeUi = (() => {
       el.setAttribute("role", "dialog");
       el.setAttribute("aria-label", t("linkTitle"));
       const heads = [...linkHeadings(), ...linkImages()];
-      const targetIdx = linkTargetParaIndex(ctx.link);
+      const targetKey = linkTargetKey(ctx.link);
       const docMode = ctx.link.startsWith("#");
       const url = ctx.link && !docMode ? linkShownTarget(ctx.link) : "";
       el.innerHTML = `
@@ -660,9 +666,9 @@ const composeUi = (() => {
         const key = h.image ? "linkGroupImages" : "linkGroupHeadings";
         if (!groups[key]) { groups[key] = document.createElement("optgroup"); groups[key].label = t(key); sel.appendChild(groups[key]); }
         const o = document.createElement("option");
-        o.value = String(h.paraIndex);
+        o.value = h.key;
         o.textContent = `${h.image ? "" : "  ".repeat(Math.max(0, (h.level || 1) - 1))}${h.label}`.slice(0, 80);
-        if (h.paraIndex === targetIdx) o.selected = true;
+        if (h.key === targetKey) o.selected = true;
         groups[key].appendChild(o);
       });
       const none = el.querySelector(".lf-none");
@@ -697,10 +703,11 @@ const composeUi = (() => {
         const edit = { op: "link", index: ctx.index, start: ctx.start, end: ctx.end };
         let label = "";
         if (mode === "doc") {
-          const idx = parseInt(sel.value, 10);
-          if (!heads.length || !Number.isInteger(idx)) { toast(t("linkNoHeadings"), "info"); return; }
-          edit.targetIndex = idx;
-          label = heads.find((h) => h.paraIndex === idx)?.label || "";
+          const h = heads.find((x) => x.key === sel.value);
+          if (!h) { toast(t("linkNoHeadings"), "info"); return; }
+          edit.targetIndex = h.paraIndex;
+          if (h.image) edit.targetImage = h.nth;
+          label = h.label || "";
         } else {
           const href = normalizeUrl(urlIn.value);
           if (!href) { toast(t("linkBadUrl"), "warning"); urlIn.focus(); return; }

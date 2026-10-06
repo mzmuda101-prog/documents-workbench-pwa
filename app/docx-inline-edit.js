@@ -176,6 +176,11 @@ function stampCommentMarks(xp, el, nextKey, noteLabels = []) {
   let offset = 0;
   let noteAt = 0;
   const groups = new Map(); // przesunięcie → [znaczniki po kolei]
+  // Znaczniki o zerowej długości tuż przy obrazie w linii (zakładka-cel linku „do obrazu”, zakres
+  // komentarza na obrazie) idą obok TEGO obrazu, nie na położenie w tekście — przy obrazach po
+  // łamaniu wiersza położenie wypadało po drugiej stronie obrazu, akapit wychodził „zmieniony”
+  // i zapis przenosił zakładkę za obraz (link do obrazu prowadził w złe miejsce).
+  let afterObj = null; // { el: ostatni węzeł za obrazem, offset }
   parts.forEach((n) => {
     if (n.localName === "sdt") { offset += ffText(ffKid(n, "sdtContent")).length; return; }
     if (noteRunKind(n)) { offset += noteLabels[noteAt++] || 0; return; }
@@ -188,6 +193,9 @@ function stampCommentMarks(xp, el, nextKey, noteLabels = []) {
         w.dataset.cm = key;
         w.dataset.cmKind = "obj";
         w.contentEditable = "false";
+        (groups.get(offset) || []).forEach((sp) => w.before(sp)); // znaczniki przed obrazem w pliku
+        groups.delete(offset);
+        afterObj = { el: w, offset };
         return;
       }
       const span = document.createElement("span");
@@ -209,10 +217,12 @@ function stampCommentMarks(xp, el, nextKey, noteLabels = []) {
         : n.localName === "bookmarkStart" ? "bm-start" : "bm-end"; // zakładka — osobne numery id niż komentarze
       span.contentEditable = "false";
       span.className = "cm-mark";
+      if (afterObj?.offset === offset) { afterObj.el.after(span); afterObj.el = span; return; }
       if (!groups.has(offset)) groups.set(offset, []);
       groups.get(offset).push(span);
       return;
     }
+    afterObj = null;
     Array.from(n.childNodes).forEach((c) => {
       if (c.localName === "t") offset += (c.textContent || "").length;
       else if (c.localName === "br" || c.localName === "tab") offset += 1;

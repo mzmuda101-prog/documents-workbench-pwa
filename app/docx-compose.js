@@ -524,21 +524,54 @@ async function finalizeComposeParts(zip, xml) {
 // { index, start, end, href? | targetIndex?, text?, remove? } — przesunięcia w tekście akapitu
 // (łamanie wiersza = 1 znak, jak previewRunsToPlainText). targetIndex = akapit-cel w dokumencie
 // (nagłówek): dostaje zakładkę (istniejąca zostaje użyta), link prowadzi do „#zakładka”.
-function composeEnsureBookmark(doc, p) {
-  const own = Array.from(p.childNodes).find((n) => n.localName === "bookmarkStart" && n.namespaceURI === W_NS
-    && !/^_GoBack$/.test(n.getAttributeNS(W_NS, "name")));
-  if (own) return own.getAttributeNS(W_NS, "name");
+// targetImage = który obraz w akapicie-celu (od 0, jak docImageTargets w podglądzie): zakładka
+// obejmuje fragment z TYM obrazem (Word: zaznacz obraz → Zakładka) — przy kilku obrazach w akapicie
+// albo obrazie za podziałem strony link prowadzi do właściwego, nie do początku akapitu.
+const composeIsBookmarkStart = (n) => n?.localName === "bookmarkStart" && n.namespaceURI === W_NS && !/^_GoBack$/.test(n.getAttributeNS(W_NS, "name"));
+// Fragmenty (w:r) z obrazem w akapicie — w kolejności, bez akapitów zagnieżdżonych (pole tekstowe).
+function composeImageRuns(p) {
+  return Array.from(p.getElementsByTagNameNS(W_NS, "r")).filter((r) => {
+    for (let a = r.parentNode; a && a !== p; a = a.parentNode) if (a.localName === "p" && a.namespaceURI === W_NS) return false;
+    return Array.from(r.getElementsByTagName("*")).some((n) => n.localName === "blip" || n.localName === "imagedata");
+  });
+}
+// Zakładka tuż przed fragmentem (pomijając inne znaczniki zakładek między nimi).
+function composeBookmarkBefore(run) {
+  for (let n = run.previousSibling; n; n = n.previousSibling) {
+    if (n.nodeType !== 1) continue;
+    if (composeIsBookmarkStart(n)) return n;
+    if (!(n.namespaceURI === W_NS && /^bookmark(Start|End)$/.test(n.localName))) return null;
+  }
+  return null;
+}
+function composeNewBookmark(doc) {
   const all = Array.from(doc.getElementsByTagNameNS(W_NS, "bookmarkStart"));
   const names = new Set(all.map((b) => b.getAttributeNS(W_NS, "name")));
   const maxId = all.reduce((m, b) => Math.max(m, parseInt(b.getAttributeNS(W_NS, "id"), 10) || 0), 0);
   let name;
   do { name = `_Ref${String(Math.floor(1e8 + Math.random() * 9e8))}`; } while (names.has(name));
   const id = String(maxId + 1);
-  const start = composeEl(doc, "bookmarkStart", { id, name });
-  const end = composeEl(doc, "bookmarkEnd", { id });
+  return { name, start: composeEl(doc, "bookmarkStart", { id, name }), end: composeEl(doc, "bookmarkEnd", { id }) };
+}
+function composeEnsureBookmark(doc, p) {
+  // zakładka akapitu — nie ta, która stoi przy obrazie (cel linku do obrazu)
+  const imageRuns = new Set(composeImageRuns(p));
+  const own = Array.from(p.childNodes).find((n) => composeIsBookmarkStart(n) && ![...imageRuns].some((r) => composeBookmarkBefore(r) === n));
+  if (own) return own.getAttributeNS(W_NS, "name");
+  const { name, start, end } = composeNewBookmark(doc);
   const pPr = composeDirectChild(p, "pPr");
   p.insertBefore(start, pPr ? pPr.nextSibling : p.firstChild);
   p.appendChild(end);
+  return name;
+}
+function composeEnsureImageBookmark(doc, p, nth) {
+  const run = composeImageRuns(p)[nth];
+  if (!run) return composeEnsureBookmark(doc, p);
+  const own = composeBookmarkBefore(run);
+  if (own) return own.getAttributeNS(W_NS, "name");
+  const { name, start, end } = composeNewBookmark(doc);
+  run.parentNode.insertBefore(start, run);
+  run.parentNode.insertBefore(end, run.nextSibling);
   return name;
 }
 
@@ -579,7 +612,7 @@ function applyLinkInXml(xml, edit) {
     if (Number.isInteger(edit.targetIndex)) {
       const target = paragraphs[edit.targetIndex];
       if (!target) return { xml, count: 0 };
-      link = `#${composeEnsureBookmark(doc, target)}`;
+      link = `#${Number.isInteger(edit.targetImage) ? composeEnsureImageBookmark(doc, target, edit.targetImage) : composeEnsureBookmark(doc, target)}`;
     } else {
       link = String(edit.href || "").trim();
     }
