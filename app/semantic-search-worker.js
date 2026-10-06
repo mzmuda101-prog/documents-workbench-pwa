@@ -2,9 +2,9 @@
 // The model and all document text stay in the browser; only model files are fetched from HF.
 
 const MODEL_ID = "onnx-community/embeddinggemma-2-ONNX";
-// This names the persistent on-device download, independently of the PWA shell version.
-// Bump it only when deliberately shipping a different model or quantization.
-const MODEL_CACHE_KEY = "dwb-embeddinggemma-2-q4-v1";
+// This is Transformers.js' existing persistent browser cache. Keep it stable independently
+// of the PWA shell version, including for users who downloaded the q4 model before this fix.
+const MODEL_CACHE_KEY = "transformers-cache";
 const DIMENSIONS = 256; // Matryoshka: 3x smaller index, near-full text retrieval quality.
 const DOCUMENT_PREFIX = "title: none | text: ";
 const QUERY_PREFIX = "task: search result | query: ";

@@ -1,4 +1,4 @@
-const CACHE_VERSION = "20261007-01";
+const CACHE_VERSION = "20261007-02";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
@@ -8,7 +8,7 @@ const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
 const DOC_FONT_CACHE = "docs-wb-docfonts-1";
 // Model cache is intentionally independent of CACHE_VERSION. It is changed only when we
 // deliberately ship a new EmbeddingGemma variant; do not evict it during a normal PWA update.
-const SEMANTIC_MODEL_CACHE = "dwb-embeddinggemma-2-q4-v1";
+const SEMANTIC_MODEL_CACHE = "transformers-cache";
 // Część „core” (łacina z polskimi znakami) zapisujemy z góry — dokument z Calibri otwarty
 // offline na telefonie i tak łamie się jak w Wordzie. Część „ext” (greka, cyrylica…) — przy użyciu.
 const DOC_FONT_CORE = ["carlito", "caladea", "arimo", "tinos", "cousine", "gelasio"]

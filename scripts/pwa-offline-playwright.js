@@ -20,7 +20,7 @@ const ROOT = path.join(__dirname, "..");
 const PORT = 4191;
 const HOST = "pwa.localhost"; // *.localhost = bezpieczny kontekst (SW działa), ale nie „localhost" z sw.js
 const ORIGIN = `http://${HOST}:${PORT}`;
-const SEMANTIC_MODEL_CACHE = "dwb-embeddinggemma-2-q4-v1";
+const SEMANTIC_MODEL_CACHE = "transformers-cache";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".png": "image/png", ".webp": "image/webp", ".woff2": "font/woff2", ".mp4": "video/mp4", ".svg": "image/svg+xml", ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document" };
