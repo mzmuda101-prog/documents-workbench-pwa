@@ -6,9 +6,9 @@ const MODEL_ID = "onnx-community/embeddinggemma-2-ONNX";
 // of the PWA shell version, including for users who downloaded the q4 model before this fix.
 const MODEL_CACHE_KEY = "transformers-cache";
 const MODEL_VARIANTS = {
-  q4: { dtype: "q4", cacheKey: MODEL_CACHE_KEY },
+  q4: { dtype: "q4", cacheKey: MODEL_CACHE_KEY, files: ["model_q4.onnx", "model_q4.onnx_data", "tokenizer.json", "tokenizer_config.json"] },
   // `q8` loads model_quantized.onnx: about twice the weights, but still a practical local option.
-  q8: { dtype: "q8", cacheKey: "dwb-embeddinggemma-2-q8-v1" },
+  q8: { dtype: "q8", cacheKey: "dwb-embeddinggemma-2-q8-v1", files: ["model_quantized.onnx", "model_quantized.onnx_data", "tokenizer.json", "tokenizer_config.json"] },
 };
 const DIMENSIONS = 256; // Matryoshka: 3x smaller index, near-full text retrieval quality.
 const DOCUMENT_PREFIX = "title: none | text: ";
@@ -21,6 +21,14 @@ let activeVariant = "q4";
 
 function post(type, payload = {}, transfer = []) {
   self.postMessage({ type, ...payload }, transfer);
+}
+
+async function variantIsCached(name) {
+  const variant = MODEL_VARIANTS[name] || MODEL_VARIANTS.q4;
+  if (!self.caches) return false;
+  const cache = await caches.open(variant.cacheKey);
+  const requests = await cache.keys();
+  return variant.files.every((file) => requests.some((request) => request.url.includes(`/${file}`)));
 }
 
 function truncateAndNormalize(values) {
@@ -98,6 +106,11 @@ async function embed(texts, kind) {
 
 self.onmessage = async ({ data }) => {
   try {
+    if (data.type === "cache-status") {
+      const variant = MODEL_VARIANTS[data.variant] ? data.variant : "q4";
+      post("cache-status", { variant, cached: await variantIsCached(variant) });
+      return;
+    }
     if (data.type === "warmup") {
       activeVariant = MODEL_VARIANTS[data.variant] ? data.variant : "q4";
       await getEmbedder();
