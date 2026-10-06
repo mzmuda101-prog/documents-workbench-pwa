@@ -11,13 +11,20 @@ const {
 const STYLED_DOCX = path.resolve(__dirname, "../docs/samples/styled-sample.docx");
 
 async function ensureStyledFixture() {
-  if (fs.existsSync(STYLED_DOCX)) return;
   const JSZip = require("jszip");
+  if (fs.existsSync(STYLED_DOCX)) {
+    try {
+      const existing = await JSZip.loadAsync(fs.readFileSync(STYLED_DOCX));
+      const xml = await existing.file("word/document.xml")?.async("string");
+      // w:rPr has a schema-defined child order: color must precede size.
+      if (xml?.includes('<w:b/><w:color w:val="FF0000"/><w:sz w:val="28"/>')) return;
+    } catch (_) { /* rebuild a missing or malformed fixture below */ }
+  }
   const DOCUMENT = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
   <w:body>
     <w:p>
-      <w:r><w:rPr><w:b/><w:sz w:val="28"/><w:color w:val="FF0000"/></w:rPr><w:t>Red bold</w:t></w:r>
+      <w:r><w:rPr><w:b/><w:color w:val="FF0000"/><w:sz w:val="28"/></w:rPr><w:t>Red bold</w:t></w:r>
       <w:r><w:rPr><w:i/><w:u w:val="single"/></w:rPr><w:t> italic underline</w:t></w:r>
       <w:r><w:rPr><w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/></w:rPr><w:t> mono</w:t></w:r>
     </w:p>
