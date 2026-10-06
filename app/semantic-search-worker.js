@@ -32,9 +32,10 @@ async function getEmbedder() {
   if (!navigator.gpu) throw new Error("WebGPU is unavailable");
   // Dynamic import means a load failure is reported back to the panel instead of killing the
   // module worker before it can explain what happened.
-  // Keep the optional runtime off the release payload. The version is pinned, and this CDN
-  // serves the upstream browser bundle with its own immutable cache key.
-  runtime ||= import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.1/dist/transformers.web.min.js");
+  // Keep the optional runtime off the release payload. esm.sh resolves the browser bundle's
+  // `onnxruntime-web/webgpu` dependency to an ESM URL; the plain npm CDN file leaves that
+  // bare specifier unresolved in a static PWA.
+  runtime ||= import("https://esm.sh/@huggingface/transformers@4.3.1");
   const { AutoTokenizer, EmbeddingGemma2Model, env, mean_pooling } = await runtime;
   if (!textOnlyConfig) {
     const response = await fetch(`https://huggingface.co/${MODEL_ID}/raw/main/config.json`);

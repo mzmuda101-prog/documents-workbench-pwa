@@ -157,7 +157,7 @@ function workerMessage(data) {
 
 function ensureSemanticWorker() {
   if (semanticWorker) return semanticWorker;
-  semanticWorker = new Worker("app/semantic-search-worker.js?v=20261006-09", { type: "module", name: "dwb-semantic-search" });
+  semanticWorker = new Worker("app/semantic-search-worker.js?v=20261006-10", { type: "module", name: "dwb-semantic-search" });
   semanticWorker.addEventListener("message", ({ data }) => workerMessage(data));
   semanticWorker.addEventListener("error", (event) => {
     setSemanticStatus("semanticError", { message: event.message || semanticText("semanticWorkerError") });
