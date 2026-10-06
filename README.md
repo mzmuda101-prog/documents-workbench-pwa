@@ -14,7 +14,8 @@ Siostrzana aplikacja [Sheet Workbench PWA](../sheet-workbench-pwa/README.md).
 - **„Znajdź sens” (opcjonalne)**: lokalne wyszukiwanie semantyczne akapitów przez EmbeddingGemma 2.
   Model tekstowy q4 uruchamia się dopiero po kliknięciu na urządzeniu z WebGPU; indeks ma 256 wymiarów,
   jest budowany partiami i żyje tylko w pamięci bieżącego dokumentu. Tekst dokumentu nie opuszcza urządzenia
-  (pobierane są wyłącznie wagi modelu z Hugging Face).
+  (pobierane są wyłącznie wagi modelu z Hugging Face). Wagi q4 zapisują się osobno na urządzeniu i przetrwają
+  zwykłe aktualizacje PWA; pobranie powtarza się tylko po świadomej zmianie wariantu modelu albo wyczyszczeniu danych strony.
 - Narzędzia edycji: znajdź i zamień, wielkość liter, trim/spacje, prefiks/sufiks
 - Zapis: w miejscu (FSA) lub „Zapisz jako” / pobranie
 - PWA: service worker, tryb offline po pierwszym załadowaniu

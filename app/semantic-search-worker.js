@@ -2,6 +2,9 @@
 // The model and all document text stay in the browser; only model files are fetched from HF.
 
 const MODEL_ID = "onnx-community/embeddinggemma-2-ONNX";
+// This names the persistent on-device download, independently of the PWA shell version.
+// Bump it only when deliberately shipping a different model or quantization.
+const MODEL_CACHE_KEY = "dwb-embeddinggemma-2-q4-v1";
 const DIMENSIONS = 256; // Matryoshka: 3x smaller index, near-full text retrieval quality.
 const DOCUMENT_PREFIX = "title: none | text: ";
 const QUERY_PREFIX = "task: search result | query: ";
@@ -47,6 +50,11 @@ async function getEmbedder() {
     textOnlyConfig.audio_config = null;
   }
   env.allowLocalModels = false;
+  // Cache model weights and ONNX Runtime persistently in the browser. Releasing app UI updates
+  // must not make a user download the same q4 model again.
+  env.useBrowserCache = true;
+  env.useWasmCache = true;
+  env.cacheKey = MODEL_CACHE_KEY;
   // WebGPU avoids a very slow WASM fallback and keeps UI work off the main thread.
   const progress_callback = (event) => {
       if (event.status === "progress") post("progress", { loaded: event.loaded, total: event.total, file: event.file });
