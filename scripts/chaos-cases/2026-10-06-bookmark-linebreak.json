@@ -1,0 +1,50 @@
+{
+ "note": "2026-10-06: klik w słowo → zakładka → Shift+Enter. Shift+Enter tuż przed znacznikiem zakładki dawał 2 łamania; po Cofnij/Ponów zakładka przesuwała się o liczbę łamań (formDomRange nie liczył <br>).",
+ "doc": "blank",
+ "steps": [
+  "klik w akapit 2 (znak 2)",
+  "zakładka „Zakl_1”",
+  "Shift+Enter"
+ ],
+ "actions": [
+  {
+   "name": "click",
+   "r": [
+    0.234498,
+    0.204339,
+    0.319946,
+    0.337064,
+    0.028583,
+    0.388149,
+    0.617284,
+    0.689742
+   ]
+  },
+  {
+   "name": "bookmark",
+   "r": [
+    0.045828,
+    0.238924,
+    0.59491,
+    0.649244,
+    0.841561,
+    0.111881,
+    0.379053,
+    0.739476
+   ]
+  },
+  {
+   "name": "shiftEnter",
+   "r": [
+    0.40969,
+    0.66745,
+    0.835968,
+    0.110479,
+    0.815569,
+    0.266152,
+    0.217606,
+    0.306848
+   ]
+  }
+ ]
+}

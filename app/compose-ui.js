@@ -406,6 +406,11 @@ const composeUi = (() => {
       onPick: () => openLinkForm(insertBtn),
     });
     popItem(el, {
+      label: t("insertBookmark"), desc: t("insertBookmarkDesc"), kbd: "Ctrl/⌘+Shift+F5",
+      icon: ICON('<path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>'),
+      onPick: () => openBookmarkForm(insertBtn),
+    });
+    popItem(el, {
       label: t("insertComment"), desc: t("insertCommentDesc"), kbd: "Ctrl/⌘+Alt+M",
       icon: ICON('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="13" y2="13"/>'),
       onPick: () => openCommentForm(insertBtn),
@@ -574,53 +579,83 @@ const composeUi = (() => {
   function linkHeadings() {
     const s = documentStructure || (docCanvasEl ? analyzeDocumentDom(docCanvasEl) : null);
     return (s?.headings || []).filter((h) => h.source !== "guess" && Number.isFinite(h.paraIndex))
-      .map((h) => ({ ...h, key: String(h.paraIndex) }));
+      .map((h) => ({ ...h, key: `h:${h.paraIndex}`, group: "linkGroupHeadings" }));
   }
 
   // Obrazy jako cele linku „W dokumencie” (Word: Link → Miejsce w tym dokumencie → zakładka przy
   // rysunku; odsyłacz do rysunku). Każdy obraz osobno (kilka w akapicie, obraz za podziałem strony —
   // docImageTargets); zakładka staje tuż przed TYM obrazem — klik w link skacze do obrazu, a najechanie
-  // pokazuje jego podgląd bez skoku (doc-links.js).
+  // pokazuje jego podgląd bez skoku (doc-links.js). U nas lista ma miniatury (Word — same nazwy).
   function linkImages() {
     return docImageTargets(host()).map((x, i) => ({
-      paraIndex: x.paraIndex, nth: x.nth, key: `${x.paraIndex}:${x.nth}`, image: true,
+      paraIndex: x.paraIndex, nth: x.nth, key: `i:${x.paraIndex}:${x.nth}`, image: true, group: "linkGroupImages", img: x.img,
       label: docImageLabel(x.part, i + 1, x.img, x.count),
     }));
   }
 
-  // „#zakładka” → klucz celu na liście (nagłówek: indeks akapitu, obraz: „akapit:który”), żeby okienko
-  // pokazało wybrany cel
-  function linkTargetKey(link) {
+  // „#zakładka” → klucz miejsca na liście: „top”, obraz „i:akapit:który”, widoczna zakładka
+  // „b:nazwa”, nagłówek „h:akapit” — żeby „Zmień link” pokazał wybrany cel
+  function linkTargetKey(link, bookmarks = []) {
     if (!link.startsWith("#")) return "";
     const id = link.slice(1);
+    if (id === "_top") return "top";
     const hit = linkTargetImage(id);
     if (hit) {
       const x = docImageTargets(host()).find((it) => it.img === hit.img);
-      if (x) return `${x.paraIndex}:${x.nth}`;
+      if (x) return `i:${x.paraIndex}:${x.nth}`;
     }
+    if (bookmarks.some((b) => b.name === id && !b.hidden)) return `b:${id}`;
     const p = linkTargetEl(id)?.closest?.("p");
     const i = p ? resolveParaIndex(p) : -1;
-    return i >= 0 ? String(i) : "";
+    return i >= 0 ? `h:${i}` : "";
   }
 
+  const EMAIL_RE = /^[^\s@<>()",;:]+@[^\s@<>()",;:]+\.[^\s@<>()",;:]{2,}$/;
   function normalizeUrl(v) {
     const s = String(v || "").trim();
     if (!s) return "";
     if (LINK_OK_RE.test(s)) return s;
-    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)) return `mailto:${s}`;
-    if (/^[\w-]+(\.[\w-]+)+(:\d+)?([/?#].*)?$/.test(s)) return `https://${s}`;
+    if (EMAIL_RE.test(s)) return `mailto:${s}`;
+    if (/^www\./i.test(s) || /^[\w-]+(\.[\w-]+)+(:\d+)?([/?#].*)?$/.test(s)) return `https://${s}`;
     return "";
+  }
+  // mailto:adres?subject=… → { address, subject } (Word: zakładka „Adres e-mail”: adres + temat)
+  function parseMailto(href) {
+    const m = /^mailto:([^?]*)(?:\?(.*))?$/i.exec(href || "");
+    if (!m) return null;
+    let subject = "";
+    try { subject = new URLSearchParams(m[2] || "").get("subject") || ""; } catch (_) { /* zostaje pusty */ }
+    let address = m[1];
+    try { address = decodeURIComponent(address); } catch (_) { /* surowy */ }
+    return { address, subject };
   }
 
   function linkShownTarget(link) {
     if (link.startsWith("#")) {
+      if (link === "#_top") return t("linkToPlace", { label: t("linkTop") });
       const hit = linkTargetImage(link.slice(1));
       const label = (hit ? linkTargetImageLabel(hit) : (linkTargetEl(link.slice(1))?.closest?.("p")?.textContent || "")).replace(/\s+/g, " ").trim().slice(0, 50);
       return label ? t("linkToPlace", { label }) : t("linkTabDoc");
     }
-    return link.startsWith("rel:") ? (docLinkHrefs.get(link) || "") : link;
+    const href = link.startsWith("rel:") ? (docLinkHrefs.get(link) || "") : link;
+    return href.replace(/^mailto:/i, "");
   }
 
+  // Ostatnio używane adresy (Word: „Ostatnio używane pliki/strony”) — podpowiedzi pola adresu.
+  const RECENT_LINKS_KEY = "dwb.recentLinks";
+  function recentLinks() {
+    try { return JSON.parse(localStorage.getItem(RECENT_LINKS_KEY) || "[]").filter((x) => typeof x === "string"); } catch (_) { return []; }
+  }
+  function rememberLink(href) {
+    if (!/^https?:/i.test(href)) return;
+    try { localStorage.setItem(RECENT_LINKS_KEY, JSON.stringify([href, ...recentLinks().filter((x) => x !== href)].slice(0, 12))); } catch (_) { /* bez pamięci */ }
+  }
+  const foldText = (s) => String(s || "").normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+
+  // Okienko „Link” (Ctrl/⌘+K) — jak „Wstaw hiperłącze” w Wordzie: tekst do wyświetlenia, rodzaj
+  // celu (strona WWW / to miejsce w dokumencie / adres e-mail z tematem), etykietka ekranowa.
+  // Miejsca w dokumencie: Początek dokumentu, Nagłówki, Zakładki (jak Word) + u nas Obrazy
+  // z miniaturami i szukanie po nazwie (↑ ↓ wybiera, Enter wstawia, dwuklik = wstaw).
   function openLinkForm(anchor) {
     if (readOnlyMode) return;
     const ctx = linkContext();
@@ -628,69 +663,195 @@ const composeUi = (() => {
     hideLinkCard();
     closePop();
     openPop(anchor || insertBtn, (el) => {
-      el.classList.add("compose-pop-form");
+      el.classList.add("compose-pop-form", "compose-pop-link");
       el.setAttribute("role", "dialog");
-      el.setAttribute("aria-label", t("linkTitle"));
-      const heads = [...linkHeadings(), ...linkImages()];
-      const targetKey = linkTargetKey(ctx.link);
-      const docMode = ctx.link.startsWith("#");
-      const url = ctx.link && !docMode ? linkShownTarget(ctx.link) : "";
+      el.setAttribute("aria-label", t(ctx.a ? "linkTitleEdit" : "linkTitle"));
+      // zakładki z pamięci (od razu); po zmianie pliku — dociągane i lista odświeża się sama
+      let bookmarks = docBookmarksNow() || [];
+      const buildPlaces = () => [
+        { key: "top", group: "linkGroupTop", label: t("linkTop") },
+        ...linkHeadings(),
+        ...bookmarks.filter((b) => !b.hidden).map((b) => ({ key: `b:${b.name}`, group: "linkGroupBookmarks", label: b.name, sub: b.text, bookmark: b.name })),
+        ...linkImages(),
+      ];
+      let places = buildPlaces();
+      const curHref = ctx.link.startsWith("rel:") ? (docLinkHrefs.get(ctx.link) || "") : ctx.link;
+      const mail = parseMailto(curHref);
+      // nowy link na zaznaczonym adresie / e-mailu — od razu w polu (Word robi to samo)
+      const selText = ctx.text.trim();
+      let mode = ctx.link.startsWith("#") ? "doc" : mail ? "mail" : "web";
+      if (!ctx.link && EMAIL_RE.test(selText)) mode = "mail";
+      let selKey = linkTargetKey(ctx.link, bookmarks);
       el.innerHTML = `
         <div class="compose-cap"></div>
         <label class="compose-field"><span></span><input type="text" class="lf-text" autocomplete="off"></label>
         <div class="seg lf-mode" role="group">
-          <button type="button" data-mode="web"></button><button type="button" data-mode="doc"></button>
+          <button type="button" data-mode="web"></button><button type="button" data-mode="doc"></button><button type="button" data-mode="mail"></button>
         </div>
-        <label class="compose-field lf-web"><span></span><input type="url" class="lf-url" inputmode="url" autocomplete="url" autocapitalize="off" spellcheck="false" enterkeyhint="done"></label>
-        <label class="compose-field lf-doc"><span></span><select class="lf-target"></select></label>
-        <p class="compose-note lf-none" hidden></p>
+        <label class="compose-field lf-web"><span></span><input type="url" class="lf-url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done" list="lf-recent"><datalist id="lf-recent"></datalist></label>
+        <div class="lf-doc">
+          <input type="search" class="lf-find" autocomplete="off" spellcheck="false" enterkeyhint="done">
+          <div class="lf-places" role="listbox"></div>
+        </div>
+        <label class="compose-field lf-mail"><span></span><input type="email" class="lf-addr" inputmode="email" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+        <label class="compose-field lf-mail"><span></span><input type="text" class="lf-subject" autocomplete="off"></label>
+        <button type="button" class="lf-tip-toggle"></button>
+        <label class="compose-field lf-tip" hidden><span></span><input type="text" class="lf-tip-in" maxlength="255" autocomplete="off"></label>
         <div class="compose-actions">
           <button type="button" class="btn lf-remove" hidden></button>
           <span class="compose-actions-gap"></span>
           <button type="button" class="btn lf-cancel"></button>
           <button type="button" class="btn primary lf-ok"></button>
         </div>`;
-      el.querySelector(".compose-cap").textContent = t("linkTitle");
-      const [textLbl, webLbl, docLbl] = el.querySelectorAll(".compose-field > span");
-      textLbl.textContent = t("linkText");
-      webLbl.textContent = t("linkTabWeb");
-      docLbl.textContent = t("linkTabDoc");
+      el.querySelector(".compose-cap").textContent = t(ctx.a ? "linkTitleEdit" : "linkTitle");
+      const lbl = (sel, key) => { el.querySelector(sel).closest(".compose-field").querySelector("span").textContent = t(key); };
+      lbl(".lf-text", "linkText");
+      lbl(".lf-url", "linkAddress");
+      lbl(".lf-addr", "linkMailAddress");
+      lbl(".lf-subject", "linkMailSubject");
+      lbl(".lf-tip-in", "linkTip");
       const textIn = el.querySelector(".lf-text");
       const urlIn = el.querySelector(".lf-url");
-      const sel = el.querySelector(".lf-target");
+      const addrIn = el.querySelector(".lf-addr");
+      const subjIn = el.querySelector(".lf-subject");
+      const tipIn = el.querySelector(".lf-tip-in");
+      const findIn = el.querySelector(".lf-find");
+      const list = el.querySelector(".lf-places");
       textIn.value = ctx.text;
-      urlIn.value = url;
+      textIn.placeholder = t("linkTextPlaceholder");
       urlIn.placeholder = t("linkUrlPlaceholder");
-      const groups = {};
-      heads.forEach((h) => {
-        const key = h.image ? "linkGroupImages" : "linkGroupHeadings";
-        if (!groups[key]) { groups[key] = document.createElement("optgroup"); groups[key].label = t(key); sel.appendChild(groups[key]); }
-        const o = document.createElement("option");
-        o.value = h.key;
-        o.textContent = `${h.image ? "" : "  ".repeat(Math.max(0, (h.level || 1) - 1))}${h.label}`.slice(0, 80);
-        if (h.key === targetKey) o.selected = true;
-        groups[key].appendChild(o);
+      addrIn.placeholder = t("linkMailPlaceholder");
+      findIn.placeholder = t("linkFindPlace");
+      findIn.setAttribute("aria-label", t("linkFindPlace"));
+      if (mode === "web") urlIn.value = curHref || (normalizeUrl(selText) && !EMAIL_RE.test(selText) ? selText : "");
+      if (mail) { addrIn.value = mail.address; subjIn.value = mail.subject; } else if (mode === "mail") addrIn.value = selText;
+      const startUrl = urlIn.value;
+      // podpowiedzi adresu: ostatnio używane + adresy już obecne w dokumencie
+      const dl = el.querySelector("#lf-recent");
+      const inDoc = [...docLinkHrefs.values()].filter((h) => /^https?:/i.test(h));
+      [...new Set([...recentLinks(), ...inDoc])].slice(0, 20).forEach((h) => { const o = document.createElement("option"); o.value = h; dl.appendChild(o); });
+      // etykietka ekranowa: zwinięta, jak przycisk „Etykietka ekranowa…” w Wordzie
+      const tipToggle = el.querySelector(".lf-tip-toggle");
+      const tipBox = el.querySelector(".lf-tip");
+      tipIn.value = ctx.a?.dataset.dwbTip || "";
+      tipIn.placeholder = t("linkTipPlaceholder");
+      tipToggle.textContent = t("linkTipToggle");
+      const showTip = () => { tipBox.hidden = false; tipToggle.hidden = true; };
+      if (tipIn.value) showTip();
+      tipToggle.addEventListener("click", () => { showTip(); tipIn.focus(); });
+
+      // ── lista miejsc ──
+      const renderPlaces = () => {
+        const q = foldText(findIn.value.trim());
+        list.replaceChildren();
+        let shown = 0;
+        let group = "";
+        places.forEach((pl) => {
+          if (q && !foldText(`${pl.label} ${pl.sub || ""}`).includes(q)) return;
+          if (pl.group !== group) {
+            group = pl.group;
+            const g = document.createElement("div");
+            g.className = "lf-group";
+            g.setAttribute("role", "presentation");
+            g.textContent = t(group);
+            list.appendChild(g);
+          }
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "lf-place";
+          b.setAttribute("role", "option");
+          b.dataset.key = pl.key;
+          b.setAttribute("aria-selected", String(pl.key === selKey));
+          b.classList.toggle("is-on", pl.key === selKey);
+          if (pl.level > 1) b.style.paddingLeft = `${8 + (pl.level - 1) * 14}px`;
+          if (pl.img) {
+            const th = document.createElement("img");
+            th.className = "lf-thumb";
+            th.alt = "";
+            th.src = pl.img.currentSrc || pl.img.src;
+            b.appendChild(th);
+          }
+          const tx = document.createElement("span");
+          tx.className = "lf-place-text";
+          const main = document.createElement("span");
+          main.className = "lf-place-label";
+          main.textContent = pl.label.slice(0, 90);
+          tx.appendChild(main);
+          if (pl.sub) {
+            const sub = document.createElement("span");
+            sub.className = "lf-place-sub";
+            sub.textContent = pl.sub.slice(0, 80);
+            tx.appendChild(sub);
+          }
+          b.appendChild(tx);
+          b.addEventListener("click", () => pick(pl.key));
+          b.addEventListener("dblclick", () => { pick(pl.key); submit(); });
+          list.appendChild(b);
+          shown++;
+        });
+        if (!shown) {
+          const none = document.createElement("p");
+          none.className = "compose-note lf-empty";
+          none.textContent = t("linkFindNone");
+          list.appendChild(none);
+        }
+      };
+      const pick = (key, scroll = false) => {
+        selKey = key;
+        list.querySelectorAll(".lf-place").forEach((b) => {
+          const on = b.dataset.key === key;
+          b.classList.toggle("is-on", on);
+          b.setAttribute("aria-selected", String(on));
+          if (on && scroll) b.scrollIntoView({ block: "nearest" });
+        });
+      };
+      findIn.addEventListener("input", () => {
+        renderPlaces();
+        // jedno trafienie albo wybrany poza wynikami → pierwszy widoczny
+        const vis = [...list.querySelectorAll(".lf-place")];
+        if (vis.length && !vis.some((b) => b.dataset.key === selKey)) pick(vis[0].dataset.key);
       });
-      const none = el.querySelector(".lf-none");
-      none.textContent = t("linkNoHeadings");
-      const [webBtn, docBtn] = el.querySelectorAll(".lf-mode button");
-      webBtn.textContent = t("linkTabWeb");
-      docBtn.textContent = t("linkTabDoc");
-      let mode = docMode ? "doc" : "web";
+      findIn.addEventListener("keydown", (e) => {
+        if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+        e.preventDefault();
+        const vis = [...list.querySelectorAll(".lf-place")];
+        if (!vis.length) return;
+        const i = vis.findIndex((b) => b.dataset.key === selKey);
+        const next = e.key === "ArrowDown" ? Math.min(vis.length - 1, i + 1) : Math.max(0, i < 0 ? 0 : i - 1);
+        pick(vis[next].dataset.key, true);
+      });
+      renderPlaces();
+      if (!docBookmarksNow()) {
+        docBookmarksFresh().then((list) => {
+          if (pop?.el !== el) return;
+          bookmarks = list;
+          places = buildPlaces();
+          if (!selKey || selKey.startsWith("h:")) selKey = linkTargetKey(ctx.link, bookmarks) || selKey;
+          renderPlaces();
+        });
+      }
+
+      const btns = el.querySelectorAll(".lf-mode button");
+      ["linkTabWeb", "linkTabDocShort", "linkTabMail"].forEach((k, i) => { btns[i].textContent = t(k); });
       const setMode = (m) => {
         mode = m;
-        webBtn.classList.toggle("is-on", m === "web");
-        docBtn.classList.toggle("is-on", m === "doc");
-        webBtn.setAttribute("aria-pressed", String(m === "web"));
-        docBtn.setAttribute("aria-pressed", String(m === "doc"));
+        btns.forEach((b) => {
+          const on = b.dataset.mode === m;
+          b.classList.toggle("is-on", on);
+          b.setAttribute("aria-pressed", String(on));
+        });
         el.querySelector(".lf-web").hidden = m !== "web";
-        el.querySelector(".lf-doc").hidden = m !== "doc" || !heads.length;
-        none.hidden = m !== "doc" || !!heads.length;
+        el.querySelector(".lf-doc").hidden = m !== "doc";
+        el.querySelectorAll(".lf-mail").forEach((x) => { x.hidden = m !== "mail"; });
+        if (m === "doc") list.querySelector(".lf-place.is-on")?.scrollIntoView({ block: "nearest" });
       };
-      webBtn.addEventListener("click", () => { setMode("web"); urlIn.focus(); });
-      docBtn.addEventListener("click", () => { setMode("doc"); sel.focus(); });
+      btns.forEach((b) => b.addEventListener("click", () => {
+        setMode(b.dataset.mode);
+        if (b.dataset.mode !== "doc" || !matchMedia("(pointer: coarse)").matches) ({ web: urlIn, doc: findIn, mail: addrIn })[b.dataset.mode].focus();
+      }));
       setMode(mode);
-      (mode === "web" ? urlIn : sel).dataset.autofocus = "1";
+      // dotyk: lista miejsc bez klawiatury ekranowej (zasłoniłaby listę) — szukanie po stuknięciu
+      if (mode !== "doc" || !matchMedia("(pointer: coarse)").matches) ({ web: urlIn, doc: findIn, mail: addrIn })[mode].dataset.autofocus = "1";
       const removeBtn = el.querySelector(".lf-remove");
       removeBtn.textContent = t("linkRemove");
       removeBtn.hidden = !ctx.a;
@@ -700,18 +861,33 @@ const composeUi = (() => {
       const ok = el.querySelector(".lf-ok");
       ok.textContent = ctx.a ? t("linkSave") : t("linkInsert");
       const submit = () => {
-        const edit = { op: "link", index: ctx.index, start: ctx.start, end: ctx.end };
+        const edit = { op: "link", index: ctx.index, start: ctx.start, end: ctx.end, tooltip: tipIn.value.trim() };
         let label = "";
         if (mode === "doc") {
-          const h = heads.find((x) => x.key === sel.value);
-          if (!h) { toast(t("linkNoHeadings"), "info"); return; }
-          edit.targetIndex = h.paraIndex;
-          if (h.image) edit.targetImage = h.nth;
-          label = h.label || "";
+          const pl = places.find((x) => x.key === selKey);
+          if (!pl) { toast(t("linkPickPlace"), "info"); findIn.focus(); return; }
+          if (pl.key === "top") edit.anchor = "_top";
+          else if (pl.bookmark) edit.anchor = pl.bookmark;
+          else {
+            edit.targetIndex = pl.paraIndex;
+            if (pl.image) edit.targetImage = pl.nth;
+          }
+          label = pl.label;
+        } else if (mode === "mail") {
+          const addr = addrIn.value.trim().replace(/^mailto:/i, "");
+          if (!EMAIL_RE.test(addr)) { toast(t("linkBadMail"), "warning"); addrIn.focus(); return; }
+          const subject = subjIn.value.trim();
+          edit.href = `mailto:${addr}${subject ? `?subject=${encodeURIComponent(subject)}` : ""}`;
+          label = addr;
         } else {
-          const href = normalizeUrl(urlIn.value);
-          if (!href) { toast(t("linkBadUrl"), "warning"); urlIn.focus(); return; }
-          edit.href = href;
+          // ten sam adres co był — to samo powiązanie w pliku (bez nowego wpisu w relacjach)
+          if (ctx.link.startsWith("rel:") && urlIn.value.trim() === startUrl.trim() && startUrl) edit.ref = ctx.link;
+          else {
+            const href = normalizeUrl(urlIn.value);
+            if (!href) { toast(t("linkBadUrl"), "warning"); urlIn.focus(); return; }
+            edit.href = href;
+            rememberLink(href);
+          }
           label = urlIn.value.trim();
         }
         let text = textIn.value;
@@ -724,6 +900,203 @@ const composeUi = (() => {
       el.addEventListener("keydown", (e) => {
         if (e.key === "Enter" && e.target.closest("input")) { e.preventDefault(); submit(); }
       });
+    });
+  }
+
+  // ── zakładki: okienko „Zakładka” (Word: Wstaw → Zakładka, Ctrl+Shift+F5) ─────
+  // Nazwa (litera na początku, litery/cyfry/„_”, do 40 znaków), lista zakładek sortowana wg nazwy
+  // albo położenia, „Ukryte zakładki” (_Toc, _Ref… Worda), Dodaj / Usuń / Przejdź do. Dodaj z nazwą,
+  // która już jest = przeniesienie zakładki (jak w Wordzie). U nas dodatkowo: nazwa podpowiadana
+  // z zaznaczonego tekstu, objęty tekst przy każdej zakładce i ostrzeżenie przed usunięciem
+  // zakładki, do której prowadzą linki (Word usuwa bez słowa — linki przestają działać).
+  const BOOKMARK_RE = /^[\p{L}][\p{L}\p{N}_]{0,39}$/u;
+  function bookmarkNameFrom(text) {
+    const s = String(text || "").trim().replace(/\s+/g, "_").replace(/[^\p{L}\p{N}_]/gu, "").replace(/^[^\p{L}]+/u, "");
+    return s.slice(0, 40);
+  }
+  // Zaznaczenie (albo kursor) jako { from, to } w akapitach pliku; whole = któryś akapit tylko do
+  // odczytu → zakładka obejmie całe akapity (zapis nie przepisuje akapitu z polem, zmianami itp.).
+  function bookmarkRange() {
+    const p = caretParagraph();
+    if (!p) return null;
+    const sel = window.getSelection();
+    const range = sel?.rangeCount ? sel.getRangeAt(0) : null;
+    const paraOf = (node) => (node?.nodeType === 1 ? node : node?.parentElement)?.closest?.("p");
+    let pA = range && paraOf(range.startContainer);
+    let pB = range && paraOf(range.endContainer);
+    if (!pA || !docCanvasEl.contains(pA)) pA = p;
+    if (!pB || !docCanvasEl.contains(pB)) pB = pA;
+    const iA = resolveParaIndex(pA);
+    const iB = resolveParaIndex(pB);
+    if (iA < 0 || iB < 0) return null;
+    const whole = !pA.classList.contains("docx-editable-p") || !pB.classList.contains("docx-editable-p");
+    const oA = range && pA.contains(range.startContainer) ? textOffset(pA, range.startContainer, range.startOffset) : 0;
+    const oB = range && pB.contains(range.endContainer) ? textOffset(pB, range.endContainer, range.endOffset) : oA;
+    return { from: { index: iA, offset: whole ? 0 : oA }, to: { index: iB, offset: whole ? 0 : oB }, whole, text: range && !range.collapsed ? range.toString() : "", caret: { paraIndex: iB, offset: oB } };
+  }
+
+  function openBookmarkForm(anchor, opts = {}) {
+    if (readOnlyMode) return;
+    const where = bookmarkRange();
+    if (!where) return;
+    hideLinkCard();
+    closePop();
+    openPop(anchor || insertBtn, (el) => {
+      el.classList.add("compose-pop-form", "compose-pop-link", "compose-pop-bm");
+      el.setAttribute("role", "dialog");
+      el.setAttribute("aria-label", t("bmTitle"));
+      let all = docBookmarksNow() || [];
+      let sort = opts.sort || "name";
+      let showHidden = !!opts.hidden;
+      let selName = opts.select || "";
+      let armedDelete = "";
+      el.innerHTML = `
+        <div class="compose-cap"></div>
+        <label class="compose-field"><span></span><input type="text" class="bm-name" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="40" enterkeyhint="done"></label>
+        <p class="compose-note bm-name-msg" hidden></p>
+        <div class="lf-places bm-list" role="listbox"></div>
+        <div class="bm-row">
+          <span class="bm-sort-lbl"></span>
+          <div class="seg bm-sort" role="group"><button type="button" data-sort="name"></button><button type="button" data-sort="pos"></button></div>
+          <label><input type="checkbox" class="bm-hidden"><span></span></label>
+        </div>
+        <p class="bm-info" aria-live="polite"></p>
+        <div class="compose-actions">
+          <button type="button" class="btn bm-delete"></button>
+          <button type="button" class="btn bm-go"></button>
+          <span class="compose-actions-gap"></span>
+          <button type="button" class="btn bm-close"></button>
+          <button type="button" class="btn primary bm-add"></button>
+        </div>`;
+      el.querySelector(".compose-cap").textContent = t("bmTitle");
+      el.querySelector(".compose-field > span").textContent = t("bmName");
+      const nameIn = el.querySelector(".bm-name");
+      const msg = el.querySelector(".bm-name-msg");
+      const list = el.querySelector(".bm-list");
+      const info = el.querySelector(".bm-info");
+      const addBtn = el.querySelector(".bm-add");
+      const delBtn = el.querySelector(".bm-delete");
+      const goBtn = el.querySelector(".bm-go");
+      el.querySelector(".bm-sort-lbl").textContent = t("bmSortBy");
+      const sortBtns = el.querySelectorAll(".bm-sort button");
+      sortBtns[0].textContent = t("bmSortName");
+      sortBtns[1].textContent = t("bmSortPos");
+      el.querySelector(".bm-hidden").checked = showHidden;
+      el.querySelector(".bm-hidden + span").textContent = t("bmHidden");
+      addBtn.textContent = t("bmAdd");
+      delBtn.textContent = t("bmDelete");
+      goBtn.textContent = t("bmGo");
+      el.querySelector(".bm-close").textContent = t("bmClose");
+      nameIn.placeholder = t("bmNamePlaceholder");
+      nameIn.value = selName || bookmarkNameFrom(where.text);
+
+      const visible = () => {
+        const xs = all.filter((b) => showHidden || !b.hidden);
+        return sort === "name" ? [...xs].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })) : xs;
+      };
+      const render = () => {
+        list.replaceChildren();
+        sortBtns.forEach((b) => { const on = b.dataset.sort === sort; b.classList.toggle("is-on", on); b.setAttribute("aria-pressed", String(on)); });
+        const xs = visible();
+        xs.forEach((bm) => {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "lf-place";
+          b.setAttribute("role", "option");
+          b.dataset.name = bm.name;
+          const on = bm.name === selName;
+          b.classList.toggle("is-on", on);
+          b.setAttribute("aria-selected", String(on));
+          const tx = document.createElement("span");
+          tx.className = "lf-place-text";
+          const main = document.createElement("span");
+          main.className = "lf-place-label";
+          main.textContent = bm.name;
+          tx.appendChild(main);
+          const sub = document.createElement("span");
+          sub.className = "lf-place-sub";
+          sub.textContent = [bm.text ? `„${bm.text.slice(0, 60)}”` : t("bmEmptySpot"), bm.links ? t("bmLinksN", { n: bm.links }) : ""].filter(Boolean).join(" · ");
+          tx.appendChild(sub);
+          b.appendChild(tx);
+          b.addEventListener("click", () => { selName = bm.name; nameIn.value = bm.name; armedDelete = ""; refresh(); });
+          b.addEventListener("dblclick", () => { selName = bm.name; go(); });
+          list.appendChild(b);
+        });
+        if (!xs.length) {
+          const none = document.createElement("p");
+          none.className = "compose-note lf-empty";
+          none.textContent = t(all.length ? "bmNoneVisible" : "bmNone");
+          list.appendChild(none);
+        }
+      };
+      const refresh = () => {
+        const name = nameIn.value.trim();
+        const valid = BOOKMARK_RE.test(name);
+        const exists = all.find((b) => b.name === name);
+        selName = exists ? name : ""; // jak w Wordzie: wpisana nazwa = wybór na liście
+        msg.hidden = !name || valid;
+        msg.className = "compose-note bm-name-msg bm-name-err";
+        msg.textContent = name && !valid ? t(/\s/.test(name) ? "bmNameSpaces" : /^[^\p{L}]/u.test(name) ? "bmNameLetter" : name.length > 40 ? "bmNameLong" : "bmNameChars") : "";
+        addBtn.disabled = !valid;
+        addBtn.textContent = exists ? t("bmMove") : t("bmAdd");
+        const cur = all.find((b) => b.name === selName);
+        delBtn.disabled = !cur;
+        goBtn.disabled = !cur;
+        info.classList.toggle("is-warn", !!armedDelete);
+        info.textContent = armedDelete ? t("bmDeleteWarn", { n: cur?.links || 0 })
+          : exists ? t("bmExists") : cur?.links ? t("bmLinksInfo", { n: cur.links }) : "";
+        delBtn.textContent = armedDelete ? t("bmDeleteConfirm") : t("bmDelete");
+        list.querySelectorAll(".lf-place").forEach((b) => {
+          const on = b.dataset.name === selName;
+          b.classList.toggle("is-on", on);
+          b.setAttribute("aria-selected", String(on));
+        });
+      };
+      const go = () => {
+        if (!selName) return;
+        closePop();
+        if (typeof jumpToLinkTarget === "function") jumpToLinkTarget(selName);
+      };
+      const add = async () => {
+        const name = nameIn.value.trim();
+        if (!BOOKMARK_RE.test(name)) { nameIn.focus(); refresh(); return; }
+        closePop();
+        await runFileEdit({ op: "bookmark", action: "add", name, from: where.from, to: where.to, whole: where.whole }, where.caret);
+        toast(t("bmAdded", { name }), "success");
+      };
+      const del = async () => {
+        const cur = all.find((b) => b.name === selName);
+        if (!cur) return;
+        if (cur.links && armedDelete !== cur.name) { armedDelete = cur.name; refresh(); return; }
+        closePop();
+        await runFileEdit({ op: "bookmark", action: "delete", name: cur.name }, where.caret);
+        // jak w Wordzie: okienko zostaje (tu: otwiera się ponownie na odświeżonej liście, po
+        // przerysowaniu dokumentu i powrocie kursora — inaczej przerysowanie je zamykało)
+        await whenEditable();
+        await new Promise((r) => requestAnimationFrame(r));
+        openBookmarkForm(anchor, { sort, hidden: showHidden });
+      };
+      sortBtns.forEach((b) => b.addEventListener("click", () => { sort = b.dataset.sort; render(); refresh(); }));
+      el.querySelector(".bm-hidden").addEventListener("change", (e) => { showHidden = e.target.checked; render(); refresh(); });
+      nameIn.addEventListener("input", () => { armedDelete = ""; refresh(); });
+      addBtn.addEventListener("click", add);
+      delBtn.addEventListener("click", del);
+      goBtn.addEventListener("click", go);
+      el.querySelector(".bm-close").addEventListener("click", () => closePop());
+      el.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && e.target === nameIn) { e.preventDefault(); add(); }
+      });
+      render();
+      refresh();
+      nameIn.dataset.autofocus = "1";
+      if (!docBookmarksNow()) {
+        docBookmarksFresh().then((list) => {
+          if (pop?.el !== el) return;
+          all = list;
+          render();
+          refresh();
+        });
+      }
     });
   }
 
@@ -754,8 +1127,10 @@ const composeUi = (() => {
     el.className = "link-card";
     el.setAttribute("role", "toolbar");
     el.setAttribute("aria-label", t("linkTitle"));
-    el.innerHTML = `<span class="link-card-target"></span><button type="button" class="tb-btn lc-open"></button><button type="button" class="tb-btn lc-edit"></button><button type="button" class="tb-btn lc-remove"></button>`;
+    el.innerHTML = `<span class="link-card-target"></span><button type="button" class="tb-btn lc-open"></button><button type="button" class="tb-btn lc-copy"></button><button type="button" class="tb-btn lc-edit"></button><button type="button" class="tb-btn lc-remove"></button>`;
     el.querySelector(".link-card-target").textContent = linkShownTarget(link) || href;
+    if (a.dataset.dwbTip) el.querySelector(".link-card-target").title = a.dataset.dwbTip;
+    const ext = link.startsWith("#") ? "" : (link.startsWith("rel:") ? (docLinkHrefs.get(link) || "") : link);
     const btn = (cls, key, svg, fn) => {
       const b = el.querySelector(cls);
       b.setAttribute("aria-label", t(key));
@@ -767,6 +1142,13 @@ const composeUi = (() => {
       b.addEventListener("click", fn);
     };
     btn(".lc-open", "linkOpen", '<path d="M14 3h7v7"/><path d="M10 14 21 3"/><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/>', () => openLink(link, href));
+    // Word: „Kopiuj hiperłącze” — tu adres (link w dokumencie nie ma adresu do skopiowania)
+    if (ext) {
+      btn(".lc-copy", "linkCopy", '<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/>', async () => {
+        const v = ext.replace(/^mailto:/i, "");
+        try { await navigator.clipboard.writeText(v); toast(t("linkCopied"), "success"); } catch (_) { toast(v, "info"); }
+      });
+    } else el.querySelector(".lc-copy").remove();
     btn(".lc-edit", "linkEdit", '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>', () => openLinkForm(insertBtn));
     btn(".lc-remove", "linkRemove", '<path d="M18.84 12.25l1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M5.17 11.75l-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71"/><line x1="8" y1="2" x2="8" y2="5"/><line x1="2" y1="8" x2="5" y2="8"/><line x1="16" y1="19" x2="16" y2="22"/><line x1="19" y1="16" x2="22" y2="16"/>', () => {
       const ctx = linkContext();
@@ -2437,6 +2819,129 @@ const composeUi = (() => {
   // klik poza dokumentem i poza kartą (pasek, panel) — karta Czytania znika
   document.addEventListener("pointerdown", (e) => { if (cCard?.ro && !cCard.el.contains(e.target) && !docCanvasEl?.contains(e.target)) hideCommentCard(); }, true);
 
+  // ── linki przy pisaniu i wklejaniu (Word: Autoformatowanie podczas pisania) ──
+  // 1) Wpisany adres (http(s)://…, www.…) albo e-mail + spacja / Enter / Tab = link. Osobny krok
+  //    Cofnij: Ctrl/⌘+Z zaraz potem zdejmuje sam link, tekst zostaje (jak „Cofnij automatyczne
+  //    hiperłącze” w Wordzie). Kropka/przecinek na końcu zdania nie wchodzi w adres.
+  // 2) Pisanie tuż za linkiem albo tuż przed nim nie przedłuża linku (jak w Wordzie) — przeglądarka
+  //    dopisywała litery do <a>, więc link „rósł” o następne słowa.
+  // 3) Wklejony sam adres = link; wklejony na zaznaczony tekst = ten tekst staje się linkiem
+  //    (u nas dodatkowo — Word wkleiłby adres w miejsce tekstu).
+  const AUTO_URL_RE = /(?:^|[\s(\[„"'«])((?:https?:\/\/|www\.)[^\s<>"„”«»]+|[\p{L}\p{N}._%+-]+@[\p{L}\p{N}.-]+\.\p{L}{2,})$/u;
+  const TRAIL_PUNCT_RE = /[.,;:!?)\]}"'”»…]+$/u;
+  function autoLinkHref(word) {
+    if (/@/.test(word) && !/^https?:/i.test(word)) return EMAIL_RE.test(word) ? `mailto:${word}` : "";
+    const href = /^www\./i.test(word) ? `https://${word}` : word;
+    try { return /^https?:\/\/[^/\s.]+\.[^/\s]+/i.test(href) && new URL(href) ? href : ""; } catch (_) { return ""; }
+  }
+  // Tekst tuż przed kursorem w węźle tekstowym (bez znaku, który właśnie wpisano: back = 1).
+  function autoLinkAtCaret(back) {
+    const sel = window.getSelection();
+    if (!sel?.isCollapsed || !sel.rangeCount) return null;
+    const node = sel.focusNode;
+    if (node?.nodeType !== 3) return null;
+    const el = node.parentElement;
+    if (!el || el.closest("a, [contenteditable=false], .doc-xref") || !el.closest(".docx-editable-p")) return null;
+    const end = sel.focusOffset - back;
+    if (end <= 0) return null;
+    const m = AUTO_URL_RE.exec(node.data.slice(0, end));
+    if (!m) return null;
+    let word = m[1];
+    const parens = (word.match(/\(/g) || []).length;
+    const trail = word.match(TRAIL_PUNCT_RE)?.[0] || "";
+    // nawias zamykający należy do adresu, gdy adres ma otwierający (np. Wikipedia „…_(film)”)
+    let cut = trail.length;
+    if (parens && trail.startsWith(")")) cut = trail.length - 1;
+    if (cut) word = word.slice(0, word.length - cut);
+    const href = autoLinkHref(word);
+    if (!href) return null;
+    const start = end - m[1].length;
+    return { node, start, len: word.length, href, caretAt: sel.focusOffset };
+  }
+  function wrapAutoLink(hit) {
+    const p = hit.node.parentElement.closest(".docx-editable-p");
+    asUndoStep("undoOpLink", () => {
+      const urlNode = hit.node.splitText(hit.start);
+      const rest = urlNode.splitText(hit.len);
+      const a = document.createElement("a");
+      a.className = "dwb-link";
+      a.setAttribute("href", hit.href);
+      a.dataset.dwbLink = hit.href;
+      urlNode.replaceWith(a);
+      a.appendChild(urlNode);
+      const sel = window.getSelection();
+      const r = document.createRange();
+      r.setStart(rest, Math.max(0, Math.min(rest.length, hit.caretAt - hit.start - hit.len)));
+      r.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(r);
+    });
+    if (typeof onInlineParagraphInput === "function") onInlineParagraphInput();
+    try {
+      if (!sessionStorage.getItem("dwbAutoLinkTold")) { sessionStorage.setItem("dwbAutoLinkTold", "1"); toast(t("linkAutoUndo"), "info"); }
+    } catch (_) { /* bez pamięci sesji */ }
+    return p;
+  }
+  // spacja (też twarda, którą wstawia Chrome na końcu wiersza) — po wpisaniu
+  docCanvasEl?.addEventListener("input", (e) => {
+    if (readOnlyMode || e.isComposing || e.inputType !== "insertText" || !/^[\s ]$/.test(e.data || "")) return;
+    const hit = autoLinkAtCaret(1);
+    if (hit) wrapAutoLink(hit);
+  });
+  // Enter / Tab — przed ich obsługą (podział akapitu czyta już akapit z linkiem)
+  document.addEventListener("keydown", (e) => {
+    if (readOnlyMode || e.isComposing || (e.key !== "Enter" && e.key !== "Tab") || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!docCaretParagraph(e.target)) return;
+    const hit = autoLinkAtCaret(0);
+    if (hit) wrapAutoLink(hit);
+  }, true);
+  // pisanie na krawędzi linku: tekst obok <a>, nie w nim
+  docCanvasEl?.addEventListener("beforeinput", (e) => {
+    if (readOnlyMode || e.isComposing || e.inputType !== "insertText" || !e.data) return;
+    const sel = window.getSelection();
+    if (!sel?.isCollapsed || !sel.rangeCount) return;
+    const node = sel.focusNode;
+    const a = (node?.nodeType === 1 ? node : node?.parentElement)?.closest?.("a[href]");
+    if (!a || a.classList.contains("doc-xref") || !a.closest(".docx-editable-p")) return;
+    const r = document.createRange();
+    r.selectNodeContents(a);
+    const atEnd = sel.getRangeAt(0).compareBoundaryPoints(Range.END_TO_END, r) >= 0;
+    const atStart = sel.getRangeAt(0).compareBoundaryPoints(Range.START_TO_START, r) <= 0;
+    if (!atEnd && !atStart) return;
+    e.preventDefault();
+    const side = atEnd ? a.nextSibling : a.previousSibling;
+    let tn = side?.nodeType === 3 ? side : null;
+    if (!tn) { tn = document.createTextNode(""); a.parentNode.insertBefore(tn, atEnd ? a.nextSibling : a); }
+    const at = atEnd ? 0 : tn.length;
+    tn.insertData(at, e.data);
+    const c = document.createRange();
+    c.setStart(tn, at + e.data.length);
+    c.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(c);
+    tn.parentElement?.closest(".docx-editable-p")?.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: e.data }));
+  });
+  // wklejony adres → link (zaznaczony tekst → link z tym tekstem)
+  docCanvasEl?.addEventListener("paste", (e) => {
+    if (readOnlyMode || e.clipboardData?.files?.length) return;
+    const raw = (e.clipboardData?.getData("text/plain") || "").trim();
+    if (!raw || /\s/.test(raw) || raw.length > 2000) return;
+    const href = autoLinkHref(raw.replace(/^mailto:/i, "")) || (/^mailto:/i.test(raw) && EMAIL_RE.test(raw.slice(7)) ? raw : "");
+    if (!href || !docCaretParagraph(e.target)) return;
+    const ctx = linkContext();
+    if (!ctx || ctx.a) return; // w istniejącym linku — zwykłe wklejanie
+    // zaznaczenie przez kilka akapitów — zwykłe wklejanie (najpierw usuwa zaznaczenie)
+    const r0 = window.getSelection()?.rangeCount ? window.getSelection().getRangeAt(0) : null;
+    if (r0 && (!ctx.p.contains(r0.startContainer) || !ctx.p.contains(r0.endContainer))) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    const edit = { op: "link", index: ctx.index, start: ctx.start, end: ctx.end, href };
+    const text = ctx.start === ctx.end ? raw.replace(/^mailto:/i, "") : ctx.text;
+    if (ctx.start === ctx.end) edit.text = text;
+    rememberLink(href);
+    runFileEdit(edit, { paraIndex: ctx.index, offset: ctx.start + text.length });
+  }, true);
+
   // Wklejony obraz (zrzut ekranu, skopiowane zdjęcie) — w miejscu kursora, jak „Wstaw → Obraz”.
   docCanvasEl?.addEventListener("paste", (e) => {
     if (readOnlyMode) return;
@@ -2515,6 +3020,16 @@ const composeUi = (() => {
     openLinkForm(insertBtn);
   }, true);
 
+  // Ctrl/⌘+Shift+F5 = Zakładka (jak w Wordzie)
+  document.addEventListener("keydown", (e) => {
+    if (!(e.ctrlKey || e.metaKey) || !e.shiftKey || e.altKey || e.key !== "F5") return;
+    if (readOnlyMode || !originalFileBytes) return;
+    if (!docCaretParagraph(e.target) && !lastDocCaret) return;
+    e.preventDefault();
+    e.stopPropagation();
+    openBookmarkForm(insertBtn);
+  }, true);
+
   // Ctrl/⌘+Enter w tekście = podział strony (jak w Wordzie). Przed obsługą Entera w akapicie.
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.isComposing) return;
@@ -2551,5 +3066,5 @@ const composeUi = (() => {
     document.getElementById(id)?.addEventListener("click", openNewDialog);
   });
 
-  return { openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, plainStyleAt, isBoxParagraph, openLinkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
+  return { openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
 })();

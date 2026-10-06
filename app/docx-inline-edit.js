@@ -159,6 +159,28 @@ function stampSymbolIslands(xp, el, nextKey) {
   return null;
 }
 
+// Miejsce w podglądzie dla położenia w tekście akapitu LICZONEGO JAK ZAPIS (model akapitu:
+// łamanie wiersza = 1 znak). formDomRange liczy tylko węzły tekstu, a docx-preview rysuje
+// <w:br/> z pliku jako <br> (bez tekstu) — znacznik zakładki/komentarza za łamaniem wiersza lądował
+// o tyle znaków dalej, ile łamań było przed nim, a następny zapis przenosił go w pliku
+// (znalezione testem chaos: klik w słowo → zakładka → Shift+Enter → Cofnij/Ponów).
+function modelDomRange(el, at) {
+  let pos = 0;
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (n.nodeType === 1) {
+      if (n.tagName !== "BR" || n.dataset.dwbPh) continue; // znacznik Shift+Enter tylko dla oka
+      if (pos === at) { const r = document.createRange(); r.setStartBefore(n); r.collapse(true); return r; }
+      pos += 1;
+      continue;
+    }
+    const len = n.data.length;
+    if (at <= pos + len) { const r = document.createRange(); r.setStart(n, at - pos); r.collapse(true); return r; }
+    pos += len;
+  }
+  return null;
+}
+
 // Znaczniki komentarza w podglądzie: puste <span data-cm> w tych samych miejscach tekstu co w pliku
 // (podgląd ich nie rysuje). Zapis akapitu oddaje je jako „wyspy” — komentarz nie ginie przy pisaniu.
 // noteLabels — długości numerów przypisów (odnośnik / numer na początku przypisu) w kolejności:
@@ -231,7 +253,7 @@ function stampCommentMarks(xp, el, nextKey, noteLabels = []) {
   groups.forEach((spans, at) => {
     const frag = document.createDocumentFragment();
     spans.forEach((sp) => frag.appendChild(sp));
-    const range = at > 0 ? formDomRange(el, at, at) : null;
+    const range = at > 0 ? modelDomRange(el, at) : null;
     // tuż za numerem przypisu położenie wypada W JEGO tekście — znacznik idzie za wyspę
     const inNote = range && (range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement)?.closest?.('[data-cm-kind="note"]');
     if (inNote && el.contains(inNote)) { range.setStartAfter(inNote); range.collapse(true); }
@@ -265,6 +287,21 @@ function paragraphNestedRunLock(xp) {
     return parent.localName === "hyperlink" ? "lockLink" : "lockField";
   }
   return null;
+}
+
+// Etykietka ekranowa linku (w:tooltip, Word: „Etykietka ekranowa…”) — podgląd jej nie rysuje;
+// <a> dostaje ją do podpowiedzi po najechaniu i do okienka „Zmień link”. Każdy akapit, też tylko do odczytu.
+function stampLinkTips(xp, el) {
+  const links = Array.from(xp.getElementsByTagNameNS(W_NS, "hyperlink")).filter((n) => n.getElementsByTagNameNS(W_NS, "t").length);
+  const anchors = Array.from(el.querySelectorAll("a[href]:not(.doc-xref)"));
+  if (!links.length || links.length !== anchors.length) return;
+  links.forEach((h, i) => {
+    const tip = h.getAttributeNS(W_NS, "tooltip") || "";
+    const a = anchors[i];
+    if (!tip) { delete a.dataset.dwbTip; return; }
+    a.dataset.dwbTip = tip;
+    if (!a.dataset.dwbImgLink) { a.dataset.hint = ""; a.dataset.hintPl = tip; a.dataset.hintEn = tip; }
+  });
 }
 
 // Linki w podglądzie ↔ w pliku (w tej samej kolejności): <a> dostaje odwołanie z pliku,
@@ -318,6 +355,7 @@ async function markLockedParagraphs(bytes) {
     const objLock = paragraphObjectLock(xp);
     const hit = INLINE_LOCK_TAGS.find(([tag, why]) => (why !== "lockObject" || objLock) && xp.getElementsByTagNameNS(W_NS, tag).length);
     let lock = formParagraphLock(xp) || hit?.[1] || paragraphSymbolLock(xp) || paragraphPageBreakLock(xp) || paragraphNestedRunLock(xp) || paragraphCommentLock(xp); // pole formularza Worda: docx-forms.js
+    stampLinkTips(xp, el);
     if (!lock && !stampParagraphLinks(xp, el)) lock = "lockLink";
     if (!lock) {
       const keys = Array.from(xp.childNodes).filter((n) => islandKey.has(n)).map((n) => islandKey.get(n));
@@ -505,7 +543,7 @@ function replaceWordFromInput(e, p) {
 }
 
 function onParagraphBeforeInput(e) {
-  if (readOnlyMode) return;
+  if (readOnlyMode || e.defaultPrevented) return; // już obsłużone (np. pisanie na krawędzi linku — compose-ui.js)
   // zaznaczenie przez kilka akapitów, Backspace na granicy akapitów itp. (doc-selection.js)
   if (typeof dwbSel !== "undefined" && dwbSel.beforeInput(e)) return;
   if (e.isComposing) return;
@@ -856,6 +894,47 @@ function insertTextAtCaret(text) {
   return true;
 }
 
+// Shift+Enter = JEDNO łamanie wiersza. execCommand("insertLineBreak") przy white-space: pre-wrap
+// wstawiał na końcu akapitu (i tuż przed znacznikiem zakładki/komentarza) DWA znaki „\n” — żeby
+// nowy wiersz był widoczny — i oba szły do pliku: w Wordzie pusty wiersz za dużo (test chaos).
+// Tu: jeden „\n”, a gdy za nim nie ma nic widocznego — znacznik <br data-dwb-ph> tylko dla oka
+// (pomijany przy zapisie: extractRunsFromPreviewParagraph, modelDomRange).
+function insertLineBreakAtCaret(p) {
+  const sel = window.getSelection();
+  if (!sel?.rangeCount) return false;
+  const range = sel.getRangeAt(0);
+  if (!range.collapsed) range.deleteContents();
+  caretOutOfIsland(range, p);
+  let tn;
+  let at;
+  if (range.startContainer.nodeType === 3) {
+    tn = range.startContainer;
+    at = range.startOffset;
+    tn.insertData(at, "\n");
+  } else {
+    tn = document.createTextNode("\n");
+    at = 0;
+    range.insertNode(tn);
+  }
+  const caret = document.createRange();
+  caret.setStart(tn, at + 1);
+  caret.collapse(true);
+  const tail = document.createRange();
+  tail.setStart(tn, at + 1);
+  tail.setEnd(p, p.childNodes.length);
+  const frag = tail.cloneContents();
+  const visibleAfter = (frag.textContent || "").length > 0 || !!frag.querySelector?.("img, svg, canvas, br:not([data-dwb-ph]), .docx-tab, [data-cm-kind='obj']");
+  if (!visibleAfter && !frag.querySelector?.("br[data-dwb-ph]")) {
+    const ph = document.createElement("br");
+    ph.dataset.dwbPh = "1";
+    if (at + 1 < tn.length) tn.splitText(at + 1);
+    tn.parentNode.insertBefore(ph, tn.nextSibling);
+  }
+  sel.removeAllRanges();
+  sel.addRange(caret);
+  return true;
+}
+
 function focusParagraphAtOffset(paraIndex, offset) {
   const host = docCanvasEl?.querySelector(".docx-preview-host");
   const el = collectPreviewParagraphElements(host)[paraIndex];
@@ -1020,11 +1099,7 @@ function placeCaret(el, offset) {
 async function handleInlineEnter(p, paraIndex, e) {
   if (e.shiftKey) {
     e.preventDefault();
-    if (document.queryCommandSupported?.("insertLineBreak")) {
-      document.execCommand("insertLineBreak");
-    } else {
-      insertTextAtCaret("\n");
-    }
+    insertLineBreakAtCaret(p);
     onInlineParagraphInput();
     return;
   }

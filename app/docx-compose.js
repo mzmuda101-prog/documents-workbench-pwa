@@ -609,7 +609,13 @@ function applyLinkInXml(xml, edit) {
   if (!p) return { xml, count: 0 };
   let link = null;
   if (!edit.remove) {
-    if (Number.isInteger(edit.targetIndex)) {
+    // gotowa zakładka (Word: Miejsce w tym dokumencie → Zakładki) albo „_top” = Początek dokumentu
+    if (edit.ref && /^rel:/.test(edit.ref)) {
+      link = edit.ref; // niezmieniony adres — to samo powiązanie w pliku
+    } else if (edit.anchor) {
+      if (edit.anchor !== "_top" && !composeFindBookmark(doc, edit.anchor)) return { xml, count: 0 };
+      link = `#${edit.anchor}`;
+    } else if (Number.isInteger(edit.targetIndex)) {
       const target = paragraphs[edit.targetIndex];
       if (!target) return { xml, count: 0 };
       link = `#${Number.isInteger(edit.targetImage) ? composeEnsureImageBookmark(doc, target, edit.targetImage) : composeEnsureBookmark(doc, target)}`;
@@ -638,6 +644,80 @@ function applyLinkInXml(xml, edit) {
     return out;
   });
   applyRunsToParagraphXml(p, [...before, ...middle, ...after]);
+  // etykietka ekranowa (Word: „Etykietka ekranowa…” → w:tooltip) — na linkach tego miejsca
+  if (link && edit.tooltip != null) {
+    const tip = String(edit.tooltip).trim().slice(0, 255);
+    Array.from(p.getElementsByTagNameNS(W_NS, "hyperlink")).forEach((h) => {
+      if (h._dwbLink !== link) return;
+      if (tip) h.setAttributeNS(W_NS, "w:tooltip", tip); else h.removeAttributeNS(W_NS, "tooltip");
+    });
+  }
+  return { xml: composeSerialize(doc), count: 1 };
+}
+
+// ── op "bookmark": zakładki (Word: Wstaw → Zakładka) ─────────────────────────
+// { action: "add", name, from: { index, offset }, to: { index, offset } } — zakładka obejmuje
+//   tekst od–do (kursor bez zaznaczenia = pusty punkt). Ta sama nazwa już jest → zakładka
+//   przenosi się w nowe miejsce (jak w Wordzie: „Dodaj” z istniejącą nazwą).
+// { action: "delete", name } — usuwa zakładkę (tekst zostaje). Linki do niej przestają działać —
+//   okienko ostrzega wcześniej, ile ich jest.
+// Nazwa jak w Wordzie: zaczyna się literą, dalej litery, cyfry i „_”, do 40 znaków.
+const BOOKMARK_NAME_RE = /^[\p{L}][\p{L}\p{N}_]{0,39}$/u;
+function composeFindBookmark(doc, name) {
+  return Array.from(doc.getElementsByTagNameNS(W_NS, "bookmarkStart")).find((b) => b.getAttributeNS(W_NS, "name") === name) || null;
+}
+function composeRemoveBookmark(doc, name) {
+  const start = composeFindBookmark(doc, name);
+  if (!start) return false;
+  const id = start.getAttributeNS(W_NS, "id");
+  Array.from(doc.getElementsByTagNameNS(W_NS, "bookmarkEnd")).filter((e) => e.getAttributeNS(W_NS, "id") === id).forEach((e) => e.parentNode.removeChild(e));
+  start.parentNode.removeChild(start);
+  return true;
+}
+// Znacznik o zerowej długości w miejscu tekstu akapitu (jak zakres komentarza: model akapitu).
+function composeInsertMarker(p, offset, markerXml) {
+  const runs = extractRunsFromParagraphXml(p);
+  const total = previewRunsToPlainText(runs).length;
+  const at = Math.max(0, Math.min(total, offset | 0));
+  const { before, after } = composeSliceRuns(runs, at, at);
+  applyRunsToParagraphXml(p, [...before, { island: markerXml, text: "" }, ...after]);
+}
+function applyBookmarkInXml(xml, edit) {
+  const doc = composeParse(xml);
+  const name = String(edit.name || "");
+  if (edit.action === "delete") return composeRemoveBookmark(doc, name) ? { xml: composeSerialize(doc), count: 1 } : { xml, count: 0 };
+  if (edit.action !== "add" || !BOOKMARK_NAME_RE.test(name)) return { xml, count: 0 };
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  let from = edit.from || {};
+  let to = edit.to || from;
+  if (to.index < from.index || (to.index === from.index && to.offset < from.offset)) [from, to] = [to, from];
+  const pFrom = paragraphs[from.index];
+  const pTo = paragraphs[to.index];
+  if (!pFrom || !pTo) return { xml, count: 0 };
+  composeRemoveBookmark(doc, name); // ta sama nazwa = przeniesienie
+  const all = Array.from(doc.getElementsByTagNameNS(W_NS, "bookmarkStart"));
+  const id = String(all.reduce((m, b) => Math.max(m, parseInt(b.getAttributeNS(W_NS, "id"), 10) || 0), 0) + 1);
+  const esc = name.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  if (edit.whole) {
+    // akapit tylko do odczytu (pole, zmiany, …) — bez przepisywania: zakładka na całe akapity
+    const start = composeEl(doc, "bookmarkStart", { id, name });
+    const end = composeEl(doc, "bookmarkEnd", { id });
+    const pPr = composeDirectChild(pFrom, "pPr");
+    pFrom.insertBefore(start, pPr ? pPr.nextSibling : pFrom.firstChild);
+    pTo.appendChild(end);
+  } else if (pFrom === pTo) {
+    const runs = extractRunsFromParagraphXml(pFrom);
+    const total = previewRunsToPlainText(runs).length;
+    const a = Math.max(0, Math.min(total, from.offset | 0));
+    const b = Math.max(a, Math.min(total, to.offset | 0));
+    const { before, mid, after } = composeSliceRuns(runs, a, b);
+    applyRunsToParagraphXml(pFrom, [...before,
+      { island: `<w:bookmarkStart xmlns:w="${W_NS}" w:id="${id}" w:name="${esc}"/>`, text: "" }, ...mid,
+      { island: `<w:bookmarkEnd xmlns:w="${W_NS}" w:id="${id}"/>`, text: "" }, ...after]);
+  } else {
+    composeInsertMarker(pTo, to.offset, `<w:bookmarkEnd xmlns:w="${W_NS}" w:id="${id}"/>`);
+    composeInsertMarker(pFrom, from.offset, `<w:bookmarkStart xmlns:w="${W_NS}" w:id="${id}" w:name="${esc}"/>`);
+  }
   return { xml: composeSerialize(doc), count: 1 };
 }
 

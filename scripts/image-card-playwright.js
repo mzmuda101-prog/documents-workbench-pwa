@@ -115,9 +115,9 @@ async function run() {
   await page.evaluate(() => { const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[0]; const r = formDomRange(p, 7, 12); p.closest(".docx-edit-root").focus({ preventScroll: true }); getSelection().removeAllRanges(); getSelection().addRange(r); });
   await page.evaluate(() => composeUi.openLinkForm(document.getElementById("insertMenuBtn")));
   await page.click(".lf-mode button[data-mode=doc]");
-  const opts = await page.evaluate(() => [...document.querySelectorAll(".lf-target optgroup")].map((g) => `${g.label}: ${[...g.children].map((o) => o.textContent).join(", ")}`));
+  const opts = await page.evaluate(() => { const out = []; let cur = null; document.querySelectorAll(".lf-places > *").forEach((x) => { if (x.classList.contains("lf-group")) { cur = { label: x.textContent, items: [] }; out.push(cur); } else if (cur && x.classList.contains("lf-place")) cur.items.push(x.querySelector(".lf-place-label").textContent); }); return out.map((g) => `${g.label}: ${g.items.join(", ")}`); });
   check("okienko linku: grupa „Obrazy” z podpisem rysunku", opts.some((o) => /^Obrazy: Rysunek 1\. Niebieski prostokąt/.test(o)), JSON.stringify(opts));
-  await page.selectOption(".lf-target", { label: "Rysunek 1. Niebieski prostokąt" });
+  await page.evaluate((label) => [...document.querySelectorAll(".lf-place")].find((b) => b.querySelector(".lf-place-label").textContent === label)?.click(), "Rysunek 1. Niebieski prostokąt");
   await page.click(".compose-pop-form .lf-ok");
   await idle(page);
   zip = await savedZip(page);

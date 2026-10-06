@@ -740,6 +740,7 @@ function applyEditToXml(xml, edit, opts = {}) {
   if (edit.op === "pageVAlign") return applyPageVAlignInXml(xml, edit); // docx-compose.js
   if (edit.op === "pageSetup") return applyPageSetupInXml(xml, edit); // docx-compose.js
   if (edit.op === "link") return applyLinkInXml(xml, edit);
+  if (edit.op === "bookmark") return applyBookmarkInXml(xml, edit); // docx-compose.js
   if (edit.op === "runStyle") return applyRunStyleInXml(xml, edit);
   if (edit.op === "table") return applyTableInXml(xml, edit);
   if (edit.op === "image") return applyImageInXml(xml, edit);

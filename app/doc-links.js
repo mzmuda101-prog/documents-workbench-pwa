@@ -112,7 +112,14 @@ async function paintDocLinks() {
     const href = a.getAttribute("href") || "";
     if (href.startsWith("#") && linkTargetImage(href.slice(1))) { a.dataset.dwbImgLink = "1"; return; }
     a.dataset.hint = "";
-    if (href.startsWith("#")) {
+    // etykietka ekranowa z pliku (w:tooltip) zamiast adresu — jak w Wordzie
+    if (a.dataset.dwbTip) {
+      a.dataset.hintPl = a.dataset.dwbTip;
+      a.dataset.hintEn = a.dataset.dwbTip;
+    } else if (href === "#_top") {
+      a.dataset.hintPl = "Przejdź na początek dokumentu";
+      a.dataset.hintEn = "Go to the top of the document";
+    } else if (href.startsWith("#")) {
       const target = linkTargetEl(href.slice(1));
       const label = (target?.closest("p")?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 70);
       a.dataset.hintPl = label ? `Przejdź do: ${label}` : "Przejdź do miejsca w dokumencie";
@@ -125,6 +132,60 @@ async function paintDocLinks() {
       a.dataset.hintEn = "This link can't be opened here (local file or unsupported address)";
     }
   });
+}
+
+// Zakładki dokumentu (Word: Wstaw → Zakładka) z pliku, w kolejności dokumentu:
+// [{ name, paraIndex, hidden (nazwa od „_” — ukryta, jak _Toc/_Ref Worda), text (objęty tekst), links }]
+// links = ile linków i odsyłaczy (REF/PAGEREF/HYPERLINK \l) prowadzi do zakładki.
+async function docBookmarks(bytes = originalFileBytes) {
+  const doc = bytes ? await getDocumentXmlDom(bytes) : null;
+  if (!doc) return [];
+  const paras = collectParagraphElements(doc.documentElement, "all");
+  const paraIndexOf = new Map(paras.map((p, i) => [p, i]));
+  const refs = new Map();
+  const addRef = (name) => refs.set(name, (refs.get(name) || 0) + 1);
+  Array.from(doc.getElementsByTagNameNS(W_NS, "hyperlink")).forEach((h) => { const a = h.getAttributeNS(W_NS, "anchor"); if (a) addRef(a); });
+  scanLinkFields(doc).forEach((f) => { if (f.href?.startsWith("#")) addRef(f.href.slice(1)); });
+  const ends = new Map(Array.from(doc.getElementsByTagNameNS(W_NS, "bookmarkEnd")).map((e) => [e.getAttributeNS(W_NS, "id"), e]));
+  const out = [];
+  Array.from(doc.getElementsByTagNameNS(W_NS, "bookmarkStart")).forEach((b) => {
+    const name = b.getAttributeNS(W_NS, "name") || "";
+    if (!name) return;
+    // akapit zakładki: jej akapit albo pierwszy akapit za nią (zakładka między akapitami / nad tabelą)
+    let p = ffClosest(b, "p");
+    if (!p) p = paras.find((x) => b.compareDocumentPosition(x) & Node.DOCUMENT_POSITION_FOLLOWING) || null;
+    let text = "";
+    const end = ends.get(b.getAttributeNS(W_NS, "id"));
+    if (end) {
+      const walker = doc.createTreeWalker(doc.documentElement, NodeFilter.SHOW_ELEMENT);
+      walker.currentNode = b;
+      for (let n = walker.nextNode(), k = 0; n && n !== end && text.length < 80 && k < 4000; n = walker.nextNode(), k++) {
+        if (n.localName === "t" && n.namespaceURI === W_NS) text += n.textContent || "";
+        else if (n.localName === "p" && text) text += " ";
+      }
+    }
+    out.push({ name, paraIndex: p && paraIndexOf.has(p) ? paraIndexOf.get(p) : -1, hidden: name.startsWith("_"), text: text.replace(/\s+/g, " ").trim(), links: refs.get(name) || 0 });
+  });
+  return out;
+}
+
+// Ta sama lista z pamięci, gdy plik się nie zmienił — okienka „Link” i „Zakładka” budują się od
+// razu (na iOS fokus pola musi paść w geście stuknięcia, inaczej nie wysuwa się klawiatura).
+const docBookmarksCache = { bytes: null, list: null, pending: null };
+function docBookmarksNow() {
+  if (docBookmarksCache.bytes === originalFileBytes && docBookmarksCache.list) return docBookmarksCache.list;
+  return null;
+}
+function docBookmarksFresh() {
+  const bytes = originalFileBytes;
+  if (docBookmarksCache.bytes === bytes && docBookmarksCache.list) return Promise.resolve(docBookmarksCache.list);
+  if (docBookmarksCache.pending?.bytes === bytes) return docBookmarksCache.pending.p;
+  const p = docBookmarks(bytes).catch(() => []).then((list) => {
+    if (bytes === originalFileBytes) Object.assign(docBookmarksCache, { bytes, list });
+    return list;
+  });
+  docBookmarksCache.pending = { bytes, p };
+  return p;
 }
 
 function linkTargetEl(id) {
@@ -323,6 +384,13 @@ function linkGoBack() {
 }
 
 function jumpToLinkTarget(id) {
+  // „Początek dokumentu” (Word: w:anchor="_top" — bez zakładki w pliku)
+  if (id === "_top") {
+    const before = docViewportEl?.scrollTop || 0;
+    docViewportEl?.scrollTo({ top: 0, behavior: "smooth" });
+    showLinkBack(before);
+    return;
+  }
   const target = linkTargetEl(id);
   if (!target) { toast(t("linkTargetMissing"), "info"); return; }
   // link do obrazu: przewijamy do samego obrazu (drugi obraz akapitu, obraz za podziałem strony)
@@ -414,6 +482,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const r = origRender.apply(this, args);
       hideLinkBack();
       paintDocLinks().catch(() => {});
+      docBookmarksFresh();
       return r;
     };
   }

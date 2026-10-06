@@ -155,7 +155,7 @@ async function run() {
   await caretEnd(page, i);
   await page.keyboard.press(`${MOD}+KeyK`);
   await page.click(".lf-mode button[data-mode=doc]");
-  await page.selectOption(".lf-target", { label: "Rozdział" });
+  await page.evaluate((label) => [...document.querySelectorAll(".lf-place")].find((b) => b.querySelector(".lf-place-label").textContent === label)?.click(), "Rozdział");
   await page.fill(".lf-text", " (do rozdziału)");
   await page.click(".lf-ok");
   await idle(page);

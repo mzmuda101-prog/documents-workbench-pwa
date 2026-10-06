@@ -58,6 +58,7 @@ const SHELL_ASSETS = [
   `./app/page-breaks.js?v=${ASSET_V}`,
   `./app/undo.js?v=${ASSET_V}`,
   `./app/compose-ui.js?v=${ASSET_V}`,
+  `./app/self-check.js?v=${ASSET_V}`,
   `./app/image-viewer.js?v=${ASSET_V}`,
   `./app/drafts.js?v=${ASSET_V}`,
   `./app/open-docs.js?v=${ASSET_V}`,

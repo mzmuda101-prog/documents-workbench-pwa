@@ -181,6 +181,7 @@ async function saveDocument() {
     await refreshInlineEditBaseline(originalFileBytes);
     setDirtyState(false);
     toast(t("saveDone"), "success");
+    document.dispatchEvent(new CustomEvent("dwb:saved")); // strażnik spójności (self-check.js)
     if (typeof closeMobileSidebarIfOpen === "function") closeMobileSidebarIfOpen();
   } catch (e) {
     log(String(e.message || e), "error");
@@ -220,6 +221,8 @@ async function saveDocumentAs() {
       await refreshInlineEditBaseline(originalFileBytes);
       setDirtyState(false);
       toast(t("saveDone"), "success");
+      document.dispatchEvent(new CustomEvent("dwb:saved"));
+    document.dispatchEvent(new CustomEvent("dwb:saved")); // strażnik spójności (self-check.js)
       if (typeof closeMobileSidebarIfOpen === "function") closeMobileSidebarIfOpen();
       return;
     } catch (e) {
@@ -238,6 +241,7 @@ async function saveDocumentAs() {
   setDirtyState(false);
   // pobranie: przeglądarka (Safari/iPhone) jeszcze pyta „Pobrać?” — nie mówimy „zapisano”
   toast(t("saveDownloaded", { name }), "success");
+  document.dispatchEvent(new CustomEvent("dwb:saved"));
   if (typeof closeMobileSidebarIfOpen === "function") closeMobileSidebarIfOpen();
 }
 

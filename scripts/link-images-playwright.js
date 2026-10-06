@@ -67,7 +67,7 @@ async function linkTo(page, label) {
   await page.evaluate(() => { const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[0]; const r = formDomRange(p, 7, 17); p.closest(".docx-edit-root").focus({ preventScroll: true }); getSelection().removeAllRanges(); getSelection().addRange(r); });
   await page.evaluate(() => composeUi.openLinkForm(document.getElementById("insertMenuBtn")));
   await page.click(".lf-mode button[data-mode=doc]");
-  await page.selectOption(".lf-target", { label });
+  await page.evaluate((label) => [...document.querySelectorAll(".lf-place")].find((b) => b.querySelector(".lf-place-label").textContent === label)?.click(), label);
   await page.click(".compose-pop-form .lf-ok");
   await idle(page);
 }
@@ -102,7 +102,7 @@ async function run() {
   await page.evaluate(() => { const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[0]; const r = formDomRange(p, 7, 17); p.closest(".docx-edit-root").focus({ preventScroll: true }); getSelection().removeAllRanges(); getSelection().addRange(r); });
   await page.evaluate(() => composeUi.openLinkForm(document.getElementById("insertMenuBtn")));
   await page.click(".lf-mode button[data-mode=doc]");
-  const opts = await page.evaluate(() => [...document.querySelectorAll(".lf-target optgroup")].find((g) => g.label === "Obrazy")?.querySelectorAll("option").length || 0);
+  const opts = await page.evaluate(() => [...document.querySelectorAll(".lf-place .lf-thumb")].length);
   check("okienko linku: każdy obraz osobno na liście (5, nie 3)", opts === 5, String(opts));
   await page.click(".compose-pop-form .lf-cancel");
 
@@ -117,7 +117,7 @@ async function run() {
   // okienko istniejącego linku pokazuje wybrany obraz
   await page.evaluate(() => { const a = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[0].querySelector("a"); const r = document.createRange(); r.setStart(a.firstChild.firstChild || a.firstChild, 1); r.collapse(true); a.closest(".docx-edit-root").focus({ preventScroll: true }); getSelection().removeAllRanges(); getSelection().addRange(r); });
   await page.evaluate(() => composeUi.openLinkForm(document.getElementById("insertMenuBtn")));
-  const selLabel = await page.evaluate(() => document.querySelector(".lf-target").selectedOptions[0]?.textContent);
+  const selLabel = await page.evaluate(() => document.querySelector(".lf-place.is-on .lf-place-label")?.textContent);
   check("okienko istniejącego linku: wybrany „Obraz 3”", selLabel === "Obraz 3", selLabel);
   await page.click(".compose-pop-form .lf-cancel");
 

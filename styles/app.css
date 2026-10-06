@@ -1971,6 +1971,48 @@ p.dwb-exact img { vertical-align: baseline; }
 .link-card-target { flex: 1; min-width: 0; font-size: 12.5px; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .link-card .tb-btn { min-width: 32px; height: 32px; border-color: transparent; background: none; }
 .link-card .tb-btn:hover { background: var(--accent-light); }
+
+/* okienko „Link” (jak „Wstaw hiperłącze” w Wordzie): lista miejsc z szukaniem i miniaturami obrazów */
+.compose-pop-link { width: min(380px, calc(100vw - 16px)); max-width: calc(100vw - 16px); }
+.compose-pop-link .seg button { padding: 6px 4px; white-space: nowrap; }
+.lf-doc { display: flex; flex-direction: column; gap: 6px; }
+.lf-find {
+  width: 100%; box-sizing: border-box; height: 34px; padding: 0 10px; border: 1px solid var(--border); border-radius: 10px;
+  background: var(--field); color: var(--text); font: inherit; font-size: 13px;
+}
+.lf-find:focus { outline: none; border-color: var(--border-focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+@media (pointer: coarse) { .lf-find { font-size: 16px; height: 42px; } }
+.lf-places {
+  max-height: min(260px, 36vh); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--border); border-radius: 10px; padding: 4px; background: var(--field);
+}
+.lf-group { padding: 6px 8px 2px; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.lf-place {
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 4px 8px; border: 0; border-radius: 8px;
+  background: none; color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer;
+}
+@media (pointer: coarse) { .lf-place { min-height: 42px; font-size: 15px; } }
+.lf-place:hover { background: var(--accent-light); }
+.lf-place.is-on { background: var(--accent); color: #fff; }
+.lf-place.is-on .lf-place-sub { color: rgba(255, 255, 255, .85); }
+.lf-place-text { display: flex; flex-direction: column; min-width: 0; }
+.lf-place-label, .lf-place-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lf-place-sub { font-size: 11.5px; color: var(--muted); }
+.lf-thumb { flex: none; width: 46px; height: 32px; object-fit: cover; border-radius: 5px; background: var(--border); }
+.lf-empty { padding: 8px; }
+.lf-tip-toggle { align-self: flex-start; text-align: left; border: 0; background: none; padding: 0; color: var(--accent); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.lf-tip-toggle[hidden] { display: none; }
+/* okienko „Zakładka” (Word: Wstaw → Zakładka) */
+.bm-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted-strong); }
+.bm-row .seg { flex: none; }
+.bm-row label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.compose-pop-bm { width: min(420px, calc(100vw - 16px)); }
+.compose-pop-bm .compose-actions { flex-wrap: nowrap; }
+.compose-pop-bm .compose-actions .btn { padding-left: 10px; padding-right: 10px; }
+.bm-info { margin: 0; font-size: 12.5px; color: var(--muted); }
+.bm-info:empty { display: none; }
+.bm-info.is-warn { color: var(--warning); }
+.bm-name-err { color: var(--danger, #c0392b); }
 @media print { .link-card, .compose-pop { display: none !important; } }
 /* podgląd obrazu przy linku do obrazu (doc-links.js) — bez skoku w dokumencie */
 .link-peek {

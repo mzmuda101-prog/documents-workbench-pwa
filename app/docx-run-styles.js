@@ -155,7 +155,7 @@ function extractRunsFromPreviewParagraph(pEl) {
     }
     const tag = node.localName.toLowerCase();
     if (tag === "br") {
-      runs.push({ break: true });
+      if (!node.dataset?.dwbPh) runs.push({ break: true }); // <br data-dwb-ph> = widoczny pusty wiersz po Shift+Enter, nie treść
       return;
     }
     const style = { ...inherited };
@@ -475,13 +475,29 @@ function createRunElement(doc, run) {
 }
 
 // Kolejne fragmenty z tym samym linkiem trafiają do jednego <w:hyperlink>.
-function createHyperlinkElement(doc, link) {
+// keep = atrybuty dawnego linku o tym samym odwołaniu (etykietka ekranowa w:tooltip, ramka
+// w:tgtFrame, w:docLocation) — dawniej każde pisanie w akapicie z linkiem je gubiło.
+const HYPERLINK_KEEP_ATTRS = ["tooltip", "tgtFrame", "docLocation", "history"];
+function createHyperlinkElement(doc, link, keep) {
   const h = doc.createElementNS(W_NS, "w:hyperlink");
   if (link.startsWith("#")) h.setAttributeNS(W_NS, "w:anchor", link.slice(1));
   else if (link.startsWith("rel:")) h.setAttributeNS(R_NS, "r:id", link.slice(4));
   else h.setAttribute("dwb-href", link); // nowy adres — powiązanie dopisze finalizeComposeParts
   h.setAttributeNS(W_NS, "w:history", "1");
+  if (keep) HYPERLINK_KEEP_ATTRS.forEach((k) => { if (keep[k] != null) h.setAttributeNS(W_NS, `w:${k}`, keep[k]); });
   return h;
+}
+function originalHyperlinkAttrs(pEl) {
+  const out = new Map();
+  Array.from(pEl.childNodes).forEach((n) => {
+    if (n.localName !== "hyperlink" || n.namespaceURI !== W_NS) return;
+    const ref = hyperlinkRef(n);
+    if (!ref || out.has(ref)) return;
+    const attrs = {};
+    HYPERLINK_KEEP_ATTRS.forEach((k) => { const v = n.getAttributeNS(W_NS, k); if (v != null && n.hasAttributeNS(W_NS, k)) attrs[k] = v; });
+    out.set(ref, attrs);
+  });
+  return out;
 }
 
 // Oryginalne właściwości fragmentów akapitu (przed przepisaniem): model akapitu zna tylko część
@@ -532,6 +548,7 @@ function runFromOriginal(doc, run, originals) {
 
 function applyRunsToParagraphXml(pEl, runs) {
   const originals = originalRunProps(pEl);
+  const linkAttrs = originalHyperlinkAttrs(pEl);
   // pola-wyspy wracają z listy fragmentów (w swoich miejscach) — stare kontrolki precz
   Array.from(pEl.childNodes).forEach((n) => {
     if (n.namespaceURI !== W_NS) return;
@@ -546,7 +563,13 @@ function applyRunsToParagraphXml(pEl, runs) {
     if (run.island) {
       hl = null;
       const frag = new DOMParser().parseFromString(run.island, "application/xml").documentElement;
-      if (frag && frag.namespaceURI === W_NS && ["sdt", "r", "commentRangeStart", "commentRangeEnd", "bookmarkStart", "bookmarkEnd"].includes(frag.localName)) pEl.appendChild(doc.importNode(frag, true));
+      if (frag && frag.namespaceURI === W_NS && ["sdt", "r", "commentRangeStart", "commentRangeEnd", "bookmarkStart", "bookmarkEnd"].includes(frag.localName)) {
+        const node = doc.importNode(frag, true);
+        // deklaracja xmlns:w z zapisu wyspy — dokument ma ją w korzeniu (bez tego każdy znacznik
+        // dostawał w pliku własną kopię przestrzeni nazw)
+        if (node.getAttributeNS("http://www.w3.org/2000/xmlns/", "w") === W_NS) node.removeAttributeNS("http://www.w3.org/2000/xmlns/", "w");
+        pEl.appendChild(node);
+      }
       return;
     }
     if (run.break) {
@@ -559,7 +582,7 @@ function applyRunsToParagraphXml(pEl, runs) {
     if (!run.text) return;
     if (!run.link) { hl = null; pEl.appendChild(runFromOriginal(doc, run, originals) || createRunElement(doc, run)); return; }
     if (!hl || hl._dwbLink !== run.link) {
-      hl = createHyperlinkElement(doc, run.link);
+      hl = createHyperlinkElement(doc, run.link, linkAttrs.get(run.link));
       hl._dwbLink = run.link;
       pEl.appendChild(hl);
     }

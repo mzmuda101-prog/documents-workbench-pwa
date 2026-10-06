@@ -36,6 +36,7 @@ const UNDO_OP_LABEL = {
   pageBreak: "undoOpPageBreak",
   hrule: "undoOpHrule",
   link: "undoOpLink",
+  bookmark: "undoOpBookmark",
   list: "undoOpList",
   toc: "undoOpToc",
   formInsert: "undoOpFormInsert",
