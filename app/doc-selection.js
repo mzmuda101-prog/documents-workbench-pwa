@@ -376,6 +376,9 @@ const dwbSel = (() => {
       e.clipboardData?.setData("application/x-dwb-comment-fragment", box.innerHTML);
     }
     asUndoStep("undoOpCut", () => deleteSpan(cutInfo));
+    if (box.querySelector("[data-cm-kind='start'], [data-cm-kind='end'], [data-cm-kind='ref']")) {
+      composeUi?.paintCommentHighlights?.();
+    }
   }
 
   function expandRangeToWholeComments(range) {

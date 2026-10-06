@@ -59,6 +59,7 @@ async function run() {
       range.setEndBefore(end);
       return { id: start.dataset.cmId, text: range.toString() };
     });
+    const highlight = CSS.highlights?.get("dwb-comment");
     return {
       text: p.textContent,
       starts: (xml.match(/<w:commentRangeStart\b/g) || []).length,
@@ -66,13 +67,15 @@ async function run() {
       refs: (xml.match(/<w:commentReference\b/g) || []).length,
       comment: comments.includes("Przenoszony komentarz"),
       ranges,
+      highlightRanges: highlight ? highlight.size : null,
     };
   });
 
   await browser.close();
   if (errors.length) throw new Error(errors.join("\n"));
   const moved = result.ranges.length === 1 && result.ranges[0].text === "zaznaczony fragment";
-  if (result.starts !== 1 || result.ends !== 1 || result.refs !== 1 || !result.comment || !moved) {
+  if (result.starts !== 1 || result.ends !== 1 || result.refs !== 1 || !result.comment || !moved
+    || (result.highlightRanges !== null && result.highlightRanges < 1)) {
     throw new Error(`Komentarz zgubiony po Wytnij/Wklej: ${JSON.stringify(result)}`);
   }
   console.log(`✅ comments-cut-paste-playwright passed [${ENGINE}]`);

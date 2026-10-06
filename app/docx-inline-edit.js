@@ -860,6 +860,10 @@ function onDocPaste(e) {
   if (commentFragment && insertInternalCommentFragment(commentFragment)) {
     e.preventDefault();
     onInlineParagraphInput();
+    // CSS Highlight API trzyma obiekty Range, nie obserwuje wstawienia markerów do DOM.
+    // Bez tego kotwica była już poprawna w pliku, ale jej podświetlenie/karta wracały dopiero
+    // po Cofnij lub innym ruchu kursora, który przypadkiem odświeżał zakresy.
+    composeUi?.paintCommentHighlights?.();
     return;
   }
   // Apple Notes, Markdown, strony WWW, Google Docs, Word: struktura i proste style (paste-rich.js).
