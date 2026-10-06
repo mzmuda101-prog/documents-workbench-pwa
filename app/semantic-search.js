@@ -5,6 +5,7 @@ const semanticEnableBtn = document.getElementById("semanticEnableBtn");
 const semanticQueryEl = document.getElementById("semanticQuery");
 const semanticSearchBtn = document.getElementById("semanticSearchBtn");
 const semanticReleaseBtn = document.getElementById("semanticReleaseBtn");
+const semanticClearSelectionBtn = document.getElementById("semanticClearSelectionBtn");
 const semanticStatusEl = document.getElementById("semanticStatus");
 const semanticResultsEl = document.getElementById("semanticResults");
 const semanticAvailabilityEl = document.getElementById("semanticAvailability");
@@ -82,12 +83,17 @@ function dot(a, b) {
 }
 
 function clearSemanticHighlights() {
-  docCanvasEl?.querySelectorAll(".semantic-hit, .semantic-hit-active").forEach((el) => el.classList.remove("semantic-hit", "semantic-hit-active"));
+  const highlights = docCanvasEl?.querySelectorAll(".semantic-hit, .semantic-hit-active");
+  const hadHighlights = !!highlights?.length;
+  highlights?.forEach((el) => el.classList.remove("semantic-hit", "semantic-hit-active"));
+  if (semanticClearSelectionBtn) semanticClearSelectionBtn.hidden = true;
+  return hadHighlights;
 }
 
 function jumpToSemanticResult(result) {
   clearSemanticHighlights();
   result.item.el?.classList.add("semantic-hit", "semantic-hit-active");
+  if (semanticClearSelectionBtn) semanticClearSelectionBtn.hidden = false;
   result.item.el?.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
@@ -112,7 +118,10 @@ function renderSemanticResults(results) {
     button.append(score, text);
     button.addEventListener("click", () => jumpToSemanticResult(result));
     semanticResultsEl.append(button);
-    if (index === 0) result.item.el?.classList.add("semantic-hit");
+    if (index === 0) {
+      result.item.el?.classList.add("semantic-hit");
+      if (semanticClearSelectionBtn) semanticClearSelectionBtn.hidden = false;
+    }
   });
 }
 
@@ -259,6 +268,7 @@ semanticSearchBtn?.addEventListener("click", () => {
 });
 semanticQueryEl?.addEventListener("keydown", (event) => { if (event.key === "Enter") semanticSearchBtn?.click(); });
 semanticReleaseBtn?.addEventListener("click", () => semanticWorker?.postMessage({ type: "release" }));
+semanticClearSelectionBtn?.addEventListener("click", () => clearSemanticHighlights());
 semanticModelVariantEl?.addEventListener("change", () => switchSemanticVariant(semanticModelVariantEl.value));
 semanticPanelEl?.addEventListener("toggle", () => { if (semanticPanelEl.open) refreshSemanticCacheStatus(); });
 

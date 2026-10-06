@@ -157,6 +157,7 @@
     }
     if (e.key === "Escape") {
       if (document.querySelector(".app-menu:not([hidden])")) return; // menu ⋯ ma własne Esc
+      if (typeof clearSemanticHighlights === "function" && clearSemanticHighlights()) { e.preventDefault(); return; }
       if (a?.closest?.(".docx-editable-p, .docx-edit-root")) { e.preventDefault(); docViewportEl.focus({ preventScroll: true }); return; }
       if (dismissDocumentSelection()) { e.preventDefault(); return; }
       if (inFormField(a)) return; // pola: Esc należy do nich (np. czyszczenie szukajki ustawień)
