@@ -1466,6 +1466,37 @@ const composeUi = (() => {
   const cmText = (tw) => (Math.round(tw / TW_PER_CM * 100) / 100).toLocaleString(currentLang === "en" ? "en-GB" : "pl-PL", { maximumFractionDigits: 2 });
   const sameTw = (a, b) => Math.abs(a - b) <= 6;
 
+  // Stały, możliwie nieinwazyjny odczyt układu przy dokumencie. Aktualizuje się po
+  // przerysowaniu oraz po przejściu kursora do innej sekcji, a nie przy każdym znaku.
+  const pageLayoutIndicator = document.getElementById("pageLayoutIndicator");
+  const pageLayoutIndicatorText = document.getElementById("pageLayoutIndicatorText");
+  let layoutIndicatorIndex = -1;
+  let layoutIndicatorJob = 0;
+  async function syncPageLayoutIndicator(force = false) {
+    if (!pageLayoutIndicator || !pageLayoutIndicatorText || !originalFileBytes || currentFileType !== "docx") {
+      if (pageLayoutIndicator) pageLayoutIndicator.hidden = true;
+      layoutIndicatorIndex = -1;
+      return;
+    }
+    const p = typeof restoreDocCaret === "function" ? restoreDocCaret() : null;
+    const index = p ? Math.max(0, resolveParaIndex(p)) : 0;
+    if (!force && index === layoutIndicatorIndex) return;
+    const job = ++layoutIndicatorJob;
+    const doc = await getDocumentXmlDom(originalFileBytes).catch(() => null);
+    if (job !== layoutIndicatorJob || !doc || !originalFileBytes) return;
+    const cur = composeSectionPageSetup(doc, index);
+    if (!cur) return;
+    const size = PAPER_SIZES.find(([, w, h]) => sameTw(Math.min(cur.w, cur.h), w) && sameTw(Math.max(cur.w, cur.h), h));
+    const sizeText = size ? size[0] : `${cmText(cur.w)} × ${cmText(cur.h)} cm`;
+    const orientation = t(cur.orient === "landscape" ? "orientLandscape" : "orientPortrait");
+    const text = t("pageSetupIndicator", { size: sizeText, orientation, tb: cmText(cur.top), lr: cmText(cur.left) });
+    pageLayoutIndicatorText.textContent = text;
+    pageLayoutIndicator.title = `${sizeText} · ${orientation}\n${t("marginCurrent", { t: cmText(cur.top), b: cmText(cur.bottom), l: cmText(cur.left), r: cmText(cur.right) })}`;
+    pageLayoutIndicator.setAttribute("aria-label", pageLayoutIndicator.title.replace("\n", ", "));
+    pageLayoutIndicator.hidden = false;
+    layoutIndicatorIndex = index;
+  }
+
   async function pageSetupAtCaret() {
     const p = typeof restoreDocCaret === "function" ? restoreDocCaret() : null;
     const index = p ? Math.max(0, resolveParaIndex(p)) : 0;
@@ -1508,44 +1539,12 @@ const composeUi = (() => {
     return cur.w - m.left - m.right >= 1440 && cur.h - m.top - m.bottom >= 1440;
   }
 
-  // Krótka karta na początku menu: aktywne opcje niżej nadal są oznaczone, ale Wordowy
-  // podgląd pozwala od razu odczytać bieżący rozmiar, orientację i rzeczywiste marginesy.
-  function appendPageSetupCurrent(el, cur) {
-    const preset = MARGIN_PRESETS.find(([, , m]) => ["top", "bottom", "left", "right"].every((k) => sameTw(m[k], cur[k])));
-    const size = PAPER_SIZES.find(([, w, h]) => sameTw(Math.min(cur.w, cur.h), w) && sameTw(Math.max(cur.w, cur.h), h));
-    const preview = document.createElement("div");
-    preview.className = "page-setup-sheet";
-    preview.dataset.orient = cur.orient;
-    // Nigdy nie pokazuj znikomego ani całkowicie wypełnionego pola — to wskaźnik, nie
-    // rysunek techniczny. Zachowuje jednak proporcje rzeczywistych wartości sekcji.
-    const edge = (v, whole) => `${Math.max(7, Math.min(34, v / whole * 100))}%`;
-    preview.style.setProperty("--ps-top", edge(cur.top, cur.h));
-    preview.style.setProperty("--ps-bottom", edge(cur.bottom, cur.h));
-    preview.style.setProperty("--ps-left", edge(cur.left, cur.w));
-    preview.style.setProperty("--ps-right", edge(cur.right, cur.w));
-    const copy = document.createElement("div");
-    copy.className = "page-setup-current-copy";
-    const title = document.createElement("strong");
-    title.textContent = t("pageSetupCurrent");
-    const summary = document.createElement("span");
-    const sizeText = size ? size[0] : `${cmText(cur.w)} × ${cmText(cur.h)} cm`;
-    summary.textContent = `${sizeText} · ${t(cur.orient === "landscape" ? "orientLandscape" : "orientPortrait")} · ${t(preset?.[1] || "marginCustom")}`;
-    const margins = document.createElement("small");
-    margins.textContent = t("marginCurrent", { t: cmText(cur.top), b: cmText(cur.bottom), l: cmText(cur.left), r: cmText(cur.right) });
-    copy.append(title, summary, margins);
-    const card = document.createElement("div");
-    card.className = "page-setup-current";
-    card.append(preview, copy);
-    el.appendChild(card);
-  }
-
   async function buildPageSetupMenu(el) {
     el.classList.add("compose-pop-insert");
     await mergeInlineEditsIntoBytes().catch(() => {});
     const ctx = await pageSetupAtCaret();
     const cur = ctx.cur || { w: 11906, h: 16838, orient: "portrait", top: 1418, bottom: 1418, left: 1418, right: 1418, sections: 1 };
     const mark = (b, on) => { b.setAttribute("role", "menuitemradio"); b.setAttribute("aria-checked", String(on)); b.classList.toggle("is-current", on); };
-    appendPageSetupCurrent(el, cur);
     popCap(el, t("pageMargins"));
     MARGIN_PRESETS.forEach(([key, label, m]) => {
       const desc = m.left === m.top ? t("marginAll", { v: cmText(m.top) }) : t("marginTBLR", { tb: cmText(m.top), lr: cmText(m.left) });
@@ -3086,6 +3085,8 @@ const composeUi = (() => {
   document.addEventListener("selectionchange", () => {
     if (cCardMuted && performance.now() - lastInputAt > 150) cCardMuted = false;
     queueSync();
+    const sel = window.getSelection();
+    if (!cCardMuted && sel?.anchorNode && docCanvasEl?.contains(sel.anchorNode)) syncPageLayoutIndicator();
   });
 
   dialog?.addEventListener("click", (e) => {
@@ -3102,5 +3103,6 @@ const composeUi = (() => {
     document.getElementById(id)?.addEventListener("click", openNewDialog);
   });
 
-  return { openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
+  syncPageLayoutIndicator(true);
+  return { openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState, syncPageLayoutIndicator };
 })();

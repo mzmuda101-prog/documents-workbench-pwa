@@ -826,6 +826,11 @@
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg>
                   </button>
                 </div>
+                <!-- Dyskretny odczyt układu bieżącej sekcji — bez otwierania menu „Układ”. -->
+                <span class="page-layout-indicator" id="pageLayoutIndicator" hidden>
+                  <svg width="13" height="16" viewBox="0 0 13 16" fill="none" stroke="currentColor" stroke-width="1.25" aria-hidden="true"><rect x="1" y=".75" width="11" height="14.5" rx="1.2"/><rect x="3.1" y="3" width="6.8" height="10" rx=".45" stroke-dasharray="1.4 1.3"/></svg>
+                  <span id="pageLayoutIndicatorText"></span>
+                </span>
                 <!-- Edycja: jeden rząd; gdy się nie mieści — przewija się w bok z wygaszeniem krawędzi.
                      „＋ Wstaw” i wyrównanie otwierają okienka POZA rzędem (compose-ui.js). -->
                 <div class="format-toolbar hidden" id="formatToolbar">
