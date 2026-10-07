@@ -10,14 +10,14 @@ const MODEL_VARIANTS = {
   // `q8` loads model_quantized.onnx: about twice the weights, but still a practical local option.
   q8: { dtype: "q8", cacheKey: "dwb-embeddinggemma-2-q8-v1", files: ["model_quantized.onnx", "model_quantized.onnx_data", "tokenizer.json", "tokenizer_config.json"] },
 };
-const DIMENSIONS = 256; // Matryoshka: 3x smaller index, near-full text retrieval quality.
-const DOCUMENT_PREFIX = "title: none | text: ";
+const DIMENSIONS = new Set([256, 512]);
 const QUERY_PREFIX = "task: search result | query: ";
 
 let embedder = null;
 let runtime = null;
 let textOnlyConfig = null;
 let activeVariant = "q4";
+let activeDimensions = 256;
 
 function post(type, payload = {}, transfer = []) {
   self.postMessage({ type, ...payload }, transfer);
@@ -32,15 +32,15 @@ async function variantIsCached(name) {
 }
 
 function truncateAndNormalize(values) {
-  const out = new Float32Array(DIMENSIONS);
+  const out = new Float32Array(activeDimensions);
   let norm = 0;
-  for (let i = 0; i < DIMENSIONS; i++) {
+  for (let i = 0; i < activeDimensions; i++) {
     const v = Number(values[i] || 0);
     out[i] = v;
     norm += v * v;
   }
   norm = Math.sqrt(norm) || 1;
-  for (let i = 0; i < DIMENSIONS; i++) out[i] /= norm;
+  for (let i = 0; i < activeDimensions; i++) out[i] /= norm;
   return out;
 }
 
@@ -96,7 +96,12 @@ async function getEmbedder() {
 
 async function embed(texts, kind) {
   const model = await getEmbedder();
-  const input = texts.map((text) => (kind === "query" ? QUERY_PREFIX : DOCUMENT_PREFIX) + text);
+  const input = texts.map((entry) => {
+    if (kind === "query") return QUERY_PREFIX + entry;
+    const title = String(entry?.title || "document").replace(/\s+/g, " ").trim();
+    const text = String(entry?.text || "").replace(/\s+/g, " ").trim();
+    return `title: ${title} | text: ${text}`;
+  });
   const tensor = await model(input);
   const vectors = [];
   const stride = tensor.dims[tensor.dims.length - 1];
@@ -113,12 +118,18 @@ self.onmessage = async ({ data }) => {
     }
     if (data.type === "warmup") {
       activeVariant = MODEL_VARIANTS[data.variant] ? data.variant : "q4";
+      activeDimensions = DIMENSIONS.has(Number(data.dimensions)) ? Number(data.dimensions) : 256;
       await getEmbedder();
       post("ready");
       return;
     }
+    if (data.type === "set-dimensions") {
+      activeDimensions = DIMENSIONS.has(Number(data.dimensions)) ? Number(data.dimensions) : 256;
+      post("dimensions-set", { dimensions: activeDimensions });
+      return;
+    }
     if (data.type === "embed-documents") {
-      const vectors = await embed(data.texts || [], "document");
+      const vectors = await embed(data.passages || [], "document");
       const buffers = vectors.map((v) => v.buffer);
       post("document-vectors", { requestId: data.requestId, vectors: buffers }, buffers);
       return;
