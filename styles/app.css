@@ -616,13 +616,13 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
   --dwb-guide-stroke: color-mix(in srgb, #64748b 36%, transparent);
   background:
     repeating-linear-gradient(to right, var(--dwb-guide-stroke) 0 2px, transparent 2px 5px) 0 var(--dwb-guide-top) / var(--dwb-guide-left) 1px no-repeat,
-    repeating-linear-gradient(to right, var(--dwb-guide-stroke) 0 2px, transparent 2px 5px) calc(100% - var(--dwb-guide-right)) var(--dwb-guide-top) / var(--dwb-guide-right) 1px no-repeat,
+    repeating-linear-gradient(to right, var(--dwb-guide-stroke) 0 2px, transparent 2px 5px) right 0 top var(--dwb-guide-top) / var(--dwb-guide-right) 1px no-repeat,
     repeating-linear-gradient(to right, var(--dwb-guide-stroke) 0 2px, transparent 2px 5px) 0 calc(100% - var(--dwb-guide-bottom)) / var(--dwb-guide-left) 1px no-repeat,
-    repeating-linear-gradient(to right, var(--dwb-guide-stroke) 0 2px, transparent 2px 5px) calc(100% - var(--dwb-guide-right)) calc(100% - var(--dwb-guide-bottom)) / var(--dwb-guide-right) 1px no-repeat,
+    repeating-linear-gradient(to right, var(--dwb-guide-stroke) 0 2px, transparent 2px 5px) right 0 bottom var(--dwb-guide-bottom) / var(--dwb-guide-right) 1px no-repeat,
     repeating-linear-gradient(to bottom, var(--dwb-guide-stroke) 0 2px, transparent 2px 5px) var(--dwb-guide-left) 0 / 1px var(--dwb-guide-top) no-repeat,
-    repeating-linear-gradient(to bottom, var(--dwb-guide-stroke) 0 2px, transparent 2px 5px) calc(100% - var(--dwb-guide-right)) 0 / 1px var(--dwb-guide-top) no-repeat,
+    repeating-linear-gradient(to bottom, var(--dwb-guide-stroke) 0 2px, transparent 2px 5px) right calc(var(--dwb-guide-right) - 1px) top 0 / 1px var(--dwb-guide-top) no-repeat,
     repeating-linear-gradient(to bottom, var(--dwb-guide-stroke) 0 2px, transparent 2px 5px) var(--dwb-guide-left) calc(100% - var(--dwb-guide-bottom)) / 1px var(--dwb-guide-bottom) no-repeat,
-    repeating-linear-gradient(to bottom, var(--dwb-guide-stroke) 0 2px, transparent 2px 5px) calc(100% - var(--dwb-guide-right)) calc(100% - var(--dwb-guide-bottom)) / 1px var(--dwb-guide-bottom) no-repeat;
+    repeating-linear-gradient(to bottom, var(--dwb-guide-stroke) 0 2px, transparent 2px 5px) right calc(var(--dwb-guide-right) - 1px) bottom 0 / 1px var(--dwb-guide-bottom) no-repeat;
 }
 .doc-reflow-mode .dwb-page-margin-guide { display: none; }
 @media print { .dwb-page-margin-guide { display: none !important; } }
