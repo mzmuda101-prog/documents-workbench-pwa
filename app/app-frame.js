@@ -145,9 +145,26 @@ const appFrame = (() => {
   heroSaveBtn?.addEventListener("click", clickSave);
 
   // Wpisywanie w podglądzie → dotknięty akapit (delegacja, bez ruszania docx-inline-edit.js).
+  // Licznik słów w nagłówku opiera się na documentStructure, które podczas zwykłego
+  // pisania nie jest przebudowywane. Odświeżamy je po krótkiej pauzie: licznik jest
+  // aktualny, a długi dokument nie jest skanowany po każdym klawiszu.
+  let liveMetaTimer = 0;
+  function scheduleLiveMetaSync() {
+    clearTimeout(liveMetaTimer);
+    liveMetaTimer = setTimeout(() => {
+      liveMetaTimer = 0;
+      if (!originalFileBytes || !docCanvasEl) return;
+      documentStructure = analyzeDocumentDom(docCanvasEl);
+      syncFile();
+    }, 180);
+  }
   docCanvasEl?.addEventListener("input", (e) => {
     const p = docCaretParagraph(e.target);
-    if (p && p.dataset.paraIndex != null) { touchedParas.add(p.dataset.paraIndex); syncSave(); }
+    if (p && p.dataset.paraIndex != null) {
+      touchedParas.add(p.dataset.paraIndex);
+      syncSave();
+      scheduleLiveMetaSync();
+    }
   }, true);
 
   // Jedno miejsce „stan zmian”: setDirtyState. false = zapisane / nowy plik → zeruj licznik.

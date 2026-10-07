@@ -136,12 +136,20 @@ async function desktop(browser) {
 
   // edycja → „Zapisz” z liczbą zmian
   const para = page.locator(".docx-preview-host p", { hasText: "Dokument testowy" }).first();
+  const wordsBeforeEdit = await page.textContent("#statusWords");
   await para.click();
   await page.keyboard.press("End");
   await page.keyboard.type(" (poprawka)");
   await until(page, () => document.getElementById("heroSaveCount").textContent === "1");
   const dirty = await page.evaluate(() => ({ dirty: document.getElementById("heroSaveBtn").classList.contains("is-dirty"), count: document.getElementById("heroSaveCount").textContent, label: document.getElementById("heroSaveBtn").getAttribute("aria-label"), status: document.getElementById("statusDirty").hidden ? "" : document.getElementById("statusDirty").textContent }));
   check("po edycji „Zapisz” niebieski z liczbą zmian (1) + pigułka w pasku stanu", dirty.dirty && dirty.count === "1" && /1 zmiana/.test(dirty.label) && /niezapisane: 1 zmiana/.test(dirty.status), JSON.stringify(dirty));
+  await until(page, (before) => document.getElementById("statusWords").textContent !== before, wordsBeforeEdit);
+  const liveWords = await page.evaluate(() => ({
+    status: document.getElementById("statusWords").textContent,
+    hero: document.getElementById("heroMeta").textContent,
+    expected: analyzeDocumentDom(document.getElementById("docCanvas")).words,
+  }));
+  check("po wpisaniu licznik słów w nagłówku i pasku stanu jest aktualny", liveWords.status.includes(String(liveWords.expected)) && liveWords.hero.includes(String(liveWords.expected)), JSON.stringify(liveWords));
 
   // Ctrl/⌘+S = Zapisz (przechwycone przez apkę, nie przeglądarkę)
   const saveHit = await page.evaluate(() => new Promise((resolve) => {
