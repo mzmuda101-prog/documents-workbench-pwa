@@ -311,12 +311,30 @@
       }
       for (const arr of groups.values()) {
         arr.sort((a, b) => (Math.sin(a.angle) < 0 ? b.y - a.y : a.y - b.y));
-        const f = finishFrag({ glyphs: arr, x0: Math.min(...arr.map((g) => g.x)), x1: Math.max(...arr.map((g) => g.x1)), size: median(arr.map((g) => g.size)) });
-        f.rotated = true;
-        f.y = Math.max(...arr.map((g) => g.y));
-        f.top = Math.min(...arr.map((g) => g.y - g.asc));
-        f.bottom = f.y;
-        frags.push(f);
+        // Ten sam x i kąt nie oznaczają jeszcze jednego napisu: plan zajęć z Excela ma
+        // pionowe nazwy dni w jednej kolumnie. Duża luka na osi pionowej to nowy podpis,
+        // nie dalszy ciąg poprzedniego (np. „czwartek” + „piątek”).
+        const chunks = [];
+        let chunk = [];
+        for (const glyph of arr) {
+          const prev = chunk[chunk.length - 1];
+          const gap = prev ? Math.abs(glyph.y - prev.y) : 0;
+          const limit = prev ? Math.max(prev.size, glyph.size) * 2.4 : Infinity;
+          if (prev && gap > limit) {
+            chunks.push(chunk);
+            chunk = [];
+          }
+          chunk.push(glyph);
+        }
+        if (chunk.length) chunks.push(chunk);
+        for (const part of chunks) {
+          const f = finishFrag({ glyphs: part, x0: Math.min(...part.map((g) => g.x)), x1: Math.max(...part.map((g) => g.x1)), size: median(part.map((g) => g.size)) });
+          f.rotated = true;
+          f.y = Math.max(...part.map((g) => g.y));
+          f.top = Math.min(...part.map((g) => g.y - g.asc));
+          f.bottom = f.y;
+          frags.push(f);
+        }
       }
     }
     return frags;
@@ -1416,6 +1434,52 @@
       for (const [c, gl] of byCell) {
         if (byCell.size === 1) c.frags.push(f);
         else c.frags.push(finishFrag({ glyphs: gl, x0: gl[0].x, x1: gl[gl.length - 1].x1, size: f.size }));
+      }
+    }
+
+    // Plan zajęć z Excela ma bardzo wąską kolumnę z pionowymi nazwami dni. Czasem PDF nie
+    // rysuje poziomej kreski przez jej całą szerokość, więc wykrywacz uznaje dwa dni za jedną
+    // pionowo scalaną komórkę. Gdy w takiej komórce leżą osobne obrócone podpisy, rozdzielamy
+    // ją na najbliższych istniejących wierszach siatki. Dzięki temu „czwartek” i „piątek” nie
+    // trafiają do jednego pola Worda.
+    for (const table of tables) {
+      for (const cell of table.cells.slice()) {
+        const labels = (cell.frags || []).filter((fragment) => fragment.type === "text" && fragment.rotated)
+          .sort((a, b) => a.top - b.top);
+        if (labels.length < 2 || cell.x1 - cell.x0 > 24 || cell.r1 <= cell.r0) continue;
+        const cuts = [];
+        for (let i = 0; i + 1 < labels.length; i++) {
+          const middle = (labels[i].bottom + labels[i + 1].top) / 2;
+          let best = null;
+          for (let row = cell.r0 + 1; row <= cell.r1; row++) {
+            const distance = Math.abs(table.Y[row] - middle);
+            if (!best || distance < best.distance) best = { row, distance };
+          }
+          if (best && !cuts.includes(best.row)) cuts.push(best.row);
+        }
+        if (!cuts.length) continue;
+        cuts.sort((a, b) => a - b);
+        const bounds = [cell.r0, ...cuts, cell.r1 + 1];
+        const pieces = [];
+        for (let i = 0; i + 1 < bounds.length; i++) {
+          const r0 = bounds[i], r1 = bounds[i + 1] - 1;
+          const part = {
+            ...cell,
+            r0, r1,
+            y0: table.Y[r0], y1: table.Y[r1 + 1],
+            frags: [],
+          };
+          pieces.push(part);
+          for (let row = r0; row <= r1; row++) for (let col = cell.c0; col <= cell.c1; col++) table.cellOf[row][col] = part;
+        }
+        for (const fragment of cell.frags) {
+          const middle = (fragment.top + fragment.bottom) / 2;
+          const target = pieces.find((part) => middle >= part.y0 - 1 && middle <= part.y1 + 1)
+            || pieces.reduce((nearest, part) => Math.abs((part.y0 + part.y1) / 2 - middle) < Math.abs((nearest.y0 + nearest.y1) / 2 - middle) ? part : nearest);
+          target.frags.push(fragment);
+        }
+        const at = table.cells.indexOf(cell);
+        table.cells.splice(at, 1, ...pieces);
       }
     }
 

@@ -376,6 +376,9 @@
           tcPr.push(`<w:tcW w:w="${TW(X[cell.c1 + 1] - X[cell.c0])}" w:type="dxa"/>`);
           if (span > 1) tcPr.push(`<w:gridSpan w:val="${span}"/>`);
           if (cell.r1 > cell.r0) tcPr.push(r === cell.r0 ? '<w:vMerge w:val="restart"/>' : "<w:vMerge/>");
+          // Word ma natywny pionowy tekst komórki. To jest stabilniejsze i czytelniejsze niż
+          // łamanie obróconej nazwy dnia w bardzo wąskiej kolumnie planu.
+          if (cell.blocks?.some((block) => block.rotated)) tcPr.push('<w:textDirection w:val="btLr"/>');
           const bd = cell.borders;
           tcPr.push(`<w:tcBorders>${this.borderXml("top", bd.top)}${this.borderXml("left", bd.left)}${this.borderXml("bottom", bd.bottom)}${this.borderXml("right", bd.right)}</w:tcBorders>`);
           if (cell.fill) tcPr.push(`<w:shd w:val="clear" w:color="auto" w:fill="${cell.fill.toUpperCase()}"/>`);
