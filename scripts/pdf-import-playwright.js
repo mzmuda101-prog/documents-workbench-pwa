@@ -119,6 +119,21 @@ async function makePdfs() {
   const shot = await page.screenshot({ type: "jpeg", quality: 85 });
   await page.setContent(`<html><body style="margin:0"><img src="data:image/jpeg;base64,${shot.toString("base64")}" style="width:210mm;height:297mm;display:block"></body></html>`, { waitUntil: "load" });
   await page.pdf({ path: path.join(TMP, "skan.pdf"), width: "210mm", height: "297mm", margin: { top: 0, bottom: 0, left: 0, right: 0 }, printBackground: true });
+  // Plan zajęć z arkusza: pozioma kreska nie dochodzi do wąskiej kolumny dni. PDF-owy
+  // wykrywacz może więc potraktować dwa pola jako jedną komórkę. Pionowe nazwy dni muszą
+  // mimo tego zostać osobnymi polami Worda, z natywnym kierunkiem tekstu (nie „czwartekpiątek”).
+  await page.setContent(`<!doctype html><html lang="pl"><head><meta charset="utf-8"><style>
+    @page { size: A4 landscape; margin: 14mm; }
+    body { font-family: Arial, sans-serif; }
+    table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+    td { border: 1.2pt solid #111; height: 90pt; text-align: center; font-size: 12pt; }
+    .day { width: 20pt; padding: 0; writing-mode: vertical-rl; transform: rotate(180deg); font-weight: bold; }
+    .day.top { border-bottom: 0; } .day.bottom { border-top: 0; }
+  </style></head><body><table>
+    <tr><td class="day top">czwartek</td><td>Laboratorium systemów energetycznych</td></tr>
+    <tr><td class="day bottom">piątek</td><td>Projektowanie instalacji</td></tr>
+  </table></body></html>`, { waitUntil: "load" });
+  await page.pdf({ path: path.join(TMP, "plan-pionowe-dni.pdf"), format: "A4", landscape: true, printBackground: true });
   // skan tabeli obrócony o 180° + 3° (kartka odwrotnie i krzywo w skanerze) — prostowanie + tabela Worda
   await page.setViewportSize({ width: 794, height: 1123 });
   await page.setContent(`<!doctype html><html lang="pl"><head><meta charset="utf-8"><style>body{margin:70px;font-family:Arial;font-size:15px;color:#111}table{border-collapse:collapse;width:100%}td,th{border:1.5px solid #222;padding:8px 10px;text-align:left}th{background:#ddd}</style></head><body><h2>Protokół przekazania sprzętu</h2><table><tr><th>Nazwa</th><th>Numer seryjny</th><th>Stan</th></tr><tr><td>Wiertarka udarowa</td><td>WU-2231-778</td><td>sprawna</td></tr><tr><td>Szlifierka kątowa</td><td>SK-0912-114</td><td>uszkodzona osłona</td></tr><tr><td>Poziomica laserowa</td><td>PL-5520-031</td><td>sprawna</td></tr></table><p>Przekazał: Jan Kowalczyk. Odebrał: Zofia Wójcik.</p></body></html>`, { waitUntil: "load" });
@@ -302,6 +317,23 @@ async function run() {
     return (await z.file("word/document.xml").async("string")).includes("Zażółć");
   });
   check("zapis .docx po konwersji działa", saved, "");
+
+  // --- 1b. Excelowy plan: brak kreski w wąskiej kolumnie nie może złączyć pionowych dni
+  await page.evaluate(() => { setDirtyState(false); });
+  await convert(page, path.join(TMP, "plan-pionowe-dni.pdf"));
+  const verticalDays = await page.evaluate(async () => {
+    const z = await JSZip.loadAsync(originalFileBytes);
+    const doc = await z.file("word/document.xml").async("string");
+    const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+    const xml = new DOMParser().parseFromString(doc, "application/xml");
+    const cells = [...xml.getElementsByTagNameNS(W, "tc")].map((tc) => ({
+      text: [...tc.getElementsByTagNameNS(W, "t")].map((t) => t.textContent).join(""),
+      vertical: !!tc.getElementsByTagNameNS(W, "textDirection").length,
+    }));
+    return { cells, merged: /czwartek\s*piątek|piątek\s*czwartek/i.test(doc) };
+  });
+  const days = verticalDays.cells.filter((c) => /^(czwartek|piątek)$/i.test(c.text.trim()));
+  check("plan zajęć: pionowe dni są osobnymi komórkami Worda, bez sklejania tekstu", !verticalDays.merged && days.length === 2 && days.every((c) => c.vertical), JSON.stringify(verticalDays));
 
   // --- 2. duży plik: płynność
   await page.evaluate(() => { setDirtyState(false); });
