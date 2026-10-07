@@ -320,7 +320,9 @@ const dwbPageBreaks = (() => {
       }
       const guideTops = [0];
       items.forEach((x) => guideTops.push(x.kind === "gap" ? x.bandTop + GAP : x.top));
-      const guides = guideTops.map((top) => ({ top: Math.round((top + res.padT) * 10) / 10, height: res.bodyH, left: res.padL, right: res.padR }));
+      // Nie obrysowujemy całego pola tekstu: na czterech rogach kartki dajemy tylko
+      // prowadnice biegnące OD marginesu do krawędzi arkusza (jak znaki cięcia w DTP).
+      const guides = guideTops.map((top) => ({ top: Math.round(top * 10) / 10, height: res.pageH, insetTop: res.padT, insetBottom: res.padB, insetLeft: res.padL, insetRight: res.padR }));
       want.push({ sec: res.sec, items, guides, minH: gaps && sheetTop > 0 ? Math.ceil(sheetTop + res.pageH) : 0 });
     });
     // bez zmian (np. przeliczenie po przewinięciu, zoomie, skoku) — nic nie ruszamy
@@ -338,7 +340,11 @@ const dwbPageBreaks = (() => {
         && ws.every((x, i) => parseFloat(seams[i].style.top) === x.top && seams[i].dataset.label === x.label)
         && guideEls.length === guides.length
         && guides.every((x, i) => parseFloat(guideEls[i].style.top) === x.top
-          && parseFloat(guideEls[i].style.height) === x.height && parseFloat(guideEls[i].style.left) === x.left && parseFloat(guideEls[i].style.right) === x.right)
+          && parseFloat(guideEls[i].style.height) === x.height
+          && parseFloat(guideEls[i].style.getPropertyValue("--dwb-guide-top")) === x.insetTop
+          && parseFloat(guideEls[i].style.getPropertyValue("--dwb-guide-bottom")) === x.insetBottom
+          && parseFloat(guideEls[i].style.getPropertyValue("--dwb-guide-left")) === x.insetLeft
+          && parseFloat(guideEls[i].style.getPropertyValue("--dwb-guide-right")) === x.insetRight)
         && (sec.style.getPropertyValue("--dwb-sec-min") || "") === (minH ? `${minH}px` : "");
     }) && h.querySelectorAll(".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-break, .dwb-page-margin-guide").length === want.reduce((n, w) => n + w.items.reduce((m, x) => m + (x.kind === "gap" ? (x.line ? 3 : 2) : 1), 0) + w.guides.length, 0);
     if (same) return;
@@ -362,9 +368,13 @@ const dwbPageBreaks = (() => {
         guide.setAttribute("aria-hidden", "true");
         if (editable) guide.contentEditable = "false";
         guide.style.top = `${g.top}px`;
-        guide.style.left = `${g.left}px`;
-        guide.style.right = `${g.right}px`;
+        guide.style.left = "0px";
+        guide.style.right = "0px";
         guide.style.height = `${g.height}px`;
+        guide.style.setProperty("--dwb-guide-top", `${g.insetTop}px`);
+        guide.style.setProperty("--dwb-guide-bottom", `${g.insetBottom}px`);
+        guide.style.setProperty("--dwb-guide-left", `${g.insetLeft}px`);
+        guide.style.setProperty("--dwb-guide-right", `${g.insetRight}px`);
         sec.appendChild(guide);
       });
       items.forEach((x) => {
@@ -500,7 +510,7 @@ const dwbPageBreaks = (() => {
     // (ostatnia kartka ma wysokość pełnych stron) — obserwator rozmiaru milczał. Odstęp strony
     // zostawał przy starym akapicie: tekst wjeżdżał pod pas „str. N” albo zostawała pusta dziura
     // (zgłoszenie 2026-10-05). Każda zmiana akapitów → przeliczenie; własne odstępy pomijamy.
-    const ours = (n) => n.nodeType === 1 && n.matches?.(".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-break");
+    const ours = (n) => n.nodeType === 1 && n.matches?.(".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-break, .dwb-page-margin-guide");
     // Raz na zawsze (zgłoszenie 2026-10-06: „przy różnych manewrach coś wjeżdża, jakby nie było
     // układu strony”): obserwujemy rozmiar KAŻDEGO bloku treści kartki (akapit, tabela, obraz).
     // Cokolwiek zmieni wysokość bloku — suwak obrazu, formatowanie, pole formularza, krój, który
@@ -526,7 +536,7 @@ const dwbPageBreaks = (() => {
       let content = false;
       for (const r of records) {
         if (r.type === "childList") { if ([...r.addedNodes, ...r.removedNodes].some((n) => !ours(n))) content = true; }
-        else if (!ours(r.target) && !r.target.closest?.(".dwb-page-gap-band, .dwb-page-break")) content = true; // styl obrazu, tekst
+        else if (!ours(r.target) && !r.target.closest?.(".dwb-page-gap-band, .dwb-page-break, .dwb-page-margin-guide")) content = true; // styl obrazu, tekst
         if (content) break;
       }
       if (!content) return;

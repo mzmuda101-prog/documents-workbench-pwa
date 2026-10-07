@@ -38,9 +38,9 @@ async function run() {
     const g = document.querySelector(".dwb-page-margin-guide");
     const s = document.querySelector("#docCanvas section.docx");
     const cs = getComputedStyle(s);
-    return { top: g?.style.top, left: g?.style.left, right: g?.style.right, height: g?.style.height, pad: [cs.paddingTop, cs.paddingLeft, cs.paddingRight, cs.paddingBottom] };
+    return { top: g?.style.top, height: g?.style.height, inset: [g?.style.getPropertyValue("--dwb-guide-top"), g?.style.getPropertyValue("--dwb-guide-left"), g?.style.getPropertyValue("--dwb-guide-right"), g?.style.getPropertyValue("--dwb-guide-bottom")], pad: [cs.paddingTop, cs.paddingLeft, cs.paddingRight, cs.paddingBottom] };
   });
-  check("Przy każdej kartce widać dyskretną przerywaną granicę bieżących marginesów", [guide.top, guide.left, guide.right].every((v, i) => Math.abs(parseFloat(v) - parseFloat(guide.pad[i])) < 0.1) && parseFloat(guide.height) > 900, JSON.stringify(guide));
+  check("Przy każdej kartce widać narożne przerywane prowadnice bieżących marginesów", guide.top === "0px" && guide.inset.every((v, i) => Math.abs(parseFloat(v) - parseFloat(guide.pad[i])) < 0.1) && parseFloat(guide.height) > 1000, JSON.stringify(guide));
 
   const undo = async () => { await page.evaluate(() => dwbUndo.undo()); await idle(); };
   const idle = async () => {
@@ -79,9 +79,9 @@ async function run() {
   check("Wąskie: 1,27 cm w pliku (720 tw) i na kartce (48 px)", /w:top="720" w:right="720" w:bottom="720" w:left="720"/.test(sp[0]) && /w:header="709"/.test(sp[0]) && pad === "48px", `${sp[0]} | ${pad}`);
   const narrowGuide = await page.evaluate(() => {
     const g = document.querySelector(".dwb-page-margin-guide");
-    return { top: g?.style.top, left: g?.style.left, right: g?.style.right };
+    return ["--dwb-guide-top", "--dwb-guide-left", "--dwb-guide-right", "--dwb-guide-bottom"].map((p) => g?.style.getPropertyValue(p));
   });
-  check("Prowadnica marginesów aktualizuje się po zmianie układu", narrowGuide.top === "48px" && narrowGuide.left === "48px" && narrowGuide.right === "48px", JSON.stringify(narrowGuide));
+  check("Prowadnica marginesów aktualizuje się po zmianie układu", narrowGuide.every((v) => v === "48px"), JSON.stringify(narrowGuide));
   check("…Cofnij zdejmuje zmianę marginesów", await page.evaluate(() => dwbUndo._debug().undo.slice(-1)[0] === "undoOpPageSetup"));
 
   // ── orientacja obraca kartkę i marginesy ──
