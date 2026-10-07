@@ -33,11 +33,14 @@ async function run() {
   await page.evaluate(() => { readModeEl.checked = false; readModeEl.dispatchEvent(new Event("change")); });
   await page.waitForFunction(() => !readOnlyMode && document.querySelector(".docx-edit-root"), null, { timeout: 10000 });
   await sleep(500);
-  const indicator = await page.evaluate(() => {
-    const el = document.getElementById("pageLayoutIndicator");
-    return { hidden: el?.hidden, text: el?.textContent?.replace(/\s+/g, " ").trim(), title: el?.title };
+  await page.waitForFunction(() => document.querySelector(".dwb-page-margin-guide"), null, { timeout: 10000 });
+  const guide = await page.evaluate(() => {
+    const g = document.querySelector(".dwb-page-margin-guide");
+    const s = document.querySelector("#docCanvas section.docx");
+    const cs = getComputedStyle(s);
+    return { top: g?.style.top, left: g?.style.left, right: g?.style.right, height: g?.style.height, pad: [cs.paddingTop, cs.paddingLeft, cs.paddingRight, cs.paddingBottom] };
   });
-  check("Przy aktywnym dokumencie widać dyskretny odczyt formatu i marginesów", !indicator.hidden && /A4.*Pionowa.*↕ 2,5.*↔ 2,5 cm/.test(indicator.text || "") && /Teraz: G 2,5.*D 2,5.*L 2,5.*P 2,5/.test(indicator.title || ""), JSON.stringify(indicator));
+  check("Przy każdej kartce widać dyskretną przerywaną granicę bieżących marginesów", [guide.top, guide.left, guide.right].every((v, i) => Math.abs(parseFloat(v) - parseFloat(guide.pad[i])) < 0.1) && parseFloat(guide.height) > 900, JSON.stringify(guide));
 
   const undo = async () => { await page.evaluate(() => dwbUndo.undo()); await idle(); };
   const idle = async () => {
@@ -74,6 +77,11 @@ async function run() {
   let sp = await sectPrs();
   const pad = await page.evaluate(() => getComputedStyle(document.querySelector("#docCanvas section.docx")).paddingLeft);
   check("Wąskie: 1,27 cm w pliku (720 tw) i na kartce (48 px)", /w:top="720" w:right="720" w:bottom="720" w:left="720"/.test(sp[0]) && /w:header="709"/.test(sp[0]) && pad === "48px", `${sp[0]} | ${pad}`);
+  const narrowGuide = await page.evaluate(() => {
+    const g = document.querySelector(".dwb-page-margin-guide");
+    return { top: g?.style.top, left: g?.style.left, right: g?.style.right };
+  });
+  check("Prowadnica marginesów aktualizuje się po zmianie układu", narrowGuide.top === "48px" && narrowGuide.left === "48px" && narrowGuide.right === "48px", JSON.stringify(narrowGuide));
   check("…Cofnij zdejmuje zmianę marginesów", await page.evaluate(() => dwbUndo._debug().undo.slice(-1)[0] === "undoOpPageSetup"));
 
   // ── orientacja obraca kartkę i marginesy ──

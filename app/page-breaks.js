@@ -52,7 +52,7 @@ const dwbPageBreaks = (() => {
   }
 
   function clear(h = host()) {
-    h?.querySelectorAll(".dwb-page-break, .dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band").forEach((el) => el.remove());
+    h?.querySelectorAll(".dwb-page-break, .dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-margin-guide").forEach((el) => el.remove());
     h?.querySelectorAll("section.dwb-gapped").forEach((sec) => { sec.classList.remove("dwb-gapped"); sec.style.removeProperty("--dwb-sec-min"); });
   }
 
@@ -198,6 +198,8 @@ const dwbPageBreaks = (() => {
     const cs = getComputedStyle(sec);
     const padT = parseFloat(cs.paddingTop) || 0;
     const padB = parseFloat(cs.paddingBottom) || 0;
+    const padL = parseFloat(cs.paddingLeft) || 0;
+    const padR = parseFloat(cs.paddingRight) || 0;
     const pageW = sec.offsetWidth;
     // wysokość strony = min-height kartki z pliku; przy odstępach min-height kartki to suma stron
     // (klasa dwb-gapped) — wtedy z zapamiętanej wartości
@@ -205,7 +207,7 @@ const dwbPageBreaks = (() => {
     const pageH = parseFloat(sec.dataset.dwbPageH) || pageW * Math.SQRT2;
     const bodyH = pageH - padT - padB;
     const contentTop = (article.getBoundingClientRect().top - secRect.top) / scale;
-    const out = { sec, pageW, pageH, padT, padB, bodyH, contentTop, cuts: [], end: contentTop };
+    const out = { sec, pageW, pageH, padT, padB, padL, padR, bodyH, contentTop, cuts: [], end: contentTop };
     if (!(bodyH > 40)) return out;
     const u = lineUnits(article, secRect.top, scale);
     // Położenia BEZ obecnych odstępów między stronami (każdy przesuwa dalszą treść o data-shift) —
@@ -316,13 +318,17 @@ const dwbPageBreaks = (() => {
           sheetTop = cut.top + shift - res.padT;
         }
       }
-      want.push({ sec: res.sec, items, minH: gaps && sheetTop > 0 ? Math.ceil(sheetTop + res.pageH) : 0 });
+      const guideTops = [0];
+      items.forEach((x) => guideTops.push(x.kind === "gap" ? x.bandTop + GAP : x.top));
+      const guides = guideTops.map((top) => ({ top: Math.round((top + res.padT) * 10) / 10, height: res.bodyH, left: res.padL, right: res.padR }));
+      want.push({ sec: res.sec, items, guides, minH: gaps && sheetTop > 0 ? Math.ceil(sheetTop + res.pageH) : 0 });
     });
     // bez zmian (np. przeliczenie po przewinięciu, zoomie, skoku) — nic nie ruszamy
-    const same = want.every(({ sec, items, minH }) => {
+    const same = want.every(({ sec, items, guides, minH }) => {
       const gapEls = [...sec.querySelectorAll(":scope > article > .dwb-page-gap")];
       const bands = [...sec.querySelectorAll(":scope > .dwb-page-gap-band")];
       const seams = [...sec.querySelectorAll(":scope > .dwb-page-break")];
+      const guideEls = [...sec.querySelectorAll(":scope > .dwb-page-margin-guide")];
       const wg = items.filter((x) => x.kind === "gap");
       const ws = items.filter((x) => x.kind === "seam");
       return gapEls.length === wg.length && bands.length === wg.length && seams.length === ws.length
@@ -330,8 +336,11 @@ const dwbPageBreaks = (() => {
           && (x.line ? Math.abs((parseFloat(gapEls[i].dataset.at) || 0) - x.at) < 0.6 && Math.abs((parseFloat(gapEls[i].dataset.shift) || 0) - x.shift) < 0.6 : Math.abs(parseFloat(gapEls[i].style.height) - x.height) < 0.6)
           && bands[i].dataset.label === x.label && parseFloat(bands[i].style.top) === x.bandTop)
         && ws.every((x, i) => parseFloat(seams[i].style.top) === x.top && seams[i].dataset.label === x.label)
+        && guideEls.length === guides.length
+        && guides.every((x, i) => parseFloat(guideEls[i].style.top) === x.top
+          && parseFloat(guideEls[i].style.height) === x.height && parseFloat(guideEls[i].style.left) === x.left && parseFloat(guideEls[i].style.right) === x.right)
         && (sec.style.getPropertyValue("--dwb-sec-min") || "") === (minH ? `${minH}px` : "");
-    }) && h.querySelectorAll(".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-break").length === want.reduce((n, w) => n + w.items.reduce((m, x) => m + (x.kind === "gap" ? (x.line ? 3 : 2) : 1), 0), 0);
+    }) && h.querySelectorAll(".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-break, .dwb-page-margin-guide").length === want.reduce((n, w) => n + w.items.reduce((m, x) => m + (x.kind === "gap" ? (x.line ? 3 : 2) : 1), 0) + w.guides.length, 0);
     if (same) return;
     // zmiana: akapit widoczny u góry zostaje na swoim miejscu na ekranie (jak zakotwiczenie przewijania);
     // tuż po przerysowaniu — akapit sprzed przerysowania (document.js, reloadFromBytes)
@@ -346,7 +355,18 @@ const dwbPageBreaks = (() => {
       el.dataset.hintDelay = "0.8";
     };
     const splits = []; // odstępy w środku akapitów — do dociągnięcia po wstawieniu wszystkiego
-    want.forEach(({ sec, items, minH }) => {
+    want.forEach(({ sec, items, guides, minH }) => {
+      guides.forEach((g) => {
+        const guide = document.createElement("div");
+        guide.className = "dwb-page-margin-guide";
+        guide.setAttribute("aria-hidden", "true");
+        if (editable) guide.contentEditable = "false";
+        guide.style.top = `${g.top}px`;
+        guide.style.left = `${g.left}px`;
+        guide.style.right = `${g.right}px`;
+        guide.style.height = `${g.height}px`;
+        sec.appendChild(guide);
+      });
       items.forEach((x) => {
         if (x.kind === "gap") {
           const gap = document.createElement("div");

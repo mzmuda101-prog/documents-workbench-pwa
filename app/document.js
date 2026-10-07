@@ -215,7 +215,6 @@ async function renderCurrentDocument() {
     if (searchQueryEl?.value.trim()) runDocumentSearch();
     setupInlineEditingAfterRender();
     if (typeof syncMobileDocZoomAfterRender === "function") syncMobileDocZoomAfterRender();
-    if (typeof composeUi !== "undefined") composeUi.syncPageLayoutIndicator(true);
   } finally {
     clearTimeout(overlayTimer);
     setLoading(false);

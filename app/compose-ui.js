@@ -1466,37 +1466,6 @@ const composeUi = (() => {
   const cmText = (tw) => (Math.round(tw / TW_PER_CM * 100) / 100).toLocaleString(currentLang === "en" ? "en-GB" : "pl-PL", { maximumFractionDigits: 2 });
   const sameTw = (a, b) => Math.abs(a - b) <= 6;
 
-  // Stały, możliwie nieinwazyjny odczyt układu przy dokumencie. Aktualizuje się po
-  // przerysowaniu oraz po przejściu kursora do innej sekcji, a nie przy każdym znaku.
-  const pageLayoutIndicator = document.getElementById("pageLayoutIndicator");
-  const pageLayoutIndicatorText = document.getElementById("pageLayoutIndicatorText");
-  let layoutIndicatorIndex = -1;
-  let layoutIndicatorJob = 0;
-  async function syncPageLayoutIndicator(force = false) {
-    if (!pageLayoutIndicator || !pageLayoutIndicatorText || !originalFileBytes || currentFileType !== "docx") {
-      if (pageLayoutIndicator) pageLayoutIndicator.hidden = true;
-      layoutIndicatorIndex = -1;
-      return;
-    }
-    const p = typeof restoreDocCaret === "function" ? restoreDocCaret() : null;
-    const index = p ? Math.max(0, resolveParaIndex(p)) : 0;
-    if (!force && index === layoutIndicatorIndex) return;
-    const job = ++layoutIndicatorJob;
-    const doc = await getDocumentXmlDom(originalFileBytes).catch(() => null);
-    if (job !== layoutIndicatorJob || !doc || !originalFileBytes) return;
-    const cur = composeSectionPageSetup(doc, index);
-    if (!cur) return;
-    const size = PAPER_SIZES.find(([, w, h]) => sameTw(Math.min(cur.w, cur.h), w) && sameTw(Math.max(cur.w, cur.h), h));
-    const sizeText = size ? size[0] : `${cmText(cur.w)} × ${cmText(cur.h)} cm`;
-    const orientation = t(cur.orient === "landscape" ? "orientLandscape" : "orientPortrait");
-    const text = t("pageSetupIndicator", { size: sizeText, orientation, tb: cmText(cur.top), lr: cmText(cur.left) });
-    pageLayoutIndicatorText.textContent = text;
-    pageLayoutIndicator.title = `${sizeText} · ${orientation}\n${t("marginCurrent", { t: cmText(cur.top), b: cmText(cur.bottom), l: cmText(cur.left), r: cmText(cur.right) })}`;
-    pageLayoutIndicator.setAttribute("aria-label", pageLayoutIndicator.title.replace("\n", ", "));
-    pageLayoutIndicator.hidden = false;
-    layoutIndicatorIndex = index;
-  }
-
   async function pageSetupAtCaret() {
     const p = typeof restoreDocCaret === "function" ? restoreDocCaret() : null;
     const index = p ? Math.max(0, resolveParaIndex(p)) : 0;
@@ -3085,8 +3054,6 @@ const composeUi = (() => {
   document.addEventListener("selectionchange", () => {
     if (cCardMuted && performance.now() - lastInputAt > 150) cCardMuted = false;
     queueSync();
-    const sel = window.getSelection();
-    if (!cCardMuted && sel?.anchorNode && docCanvasEl?.contains(sel.anchorNode)) syncPageLayoutIndicator();
   });
 
   dialog?.addEventListener("click", (e) => {
@@ -3103,6 +3070,5 @@ const composeUi = (() => {
     document.getElementById(id)?.addEventListener("click", openNewDialog);
   });
 
-  syncPageLayoutIndicator(true);
-  return { openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState, syncPageLayoutIndicator };
+  return { openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
 })();

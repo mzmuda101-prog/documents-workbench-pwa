@@ -609,6 +609,14 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
   padding: 2px 7px; border-radius: 999px; white-space: nowrap;
   font: 600 11px/1.3 var(--font); color: #fff; background: color-mix(in srgb, var(--accent) 80%, #334);
 }
+/* Granice obszaru tekstu: odpowiadają bieżącym marginesom strony. Są nakładką,
+   nie wpływają na układ ani nie trafiają do wydruku/zapisu. */
+.dwb-page-margin-guide {
+  position: absolute; box-sizing: border-box; z-index: 1; pointer-events: none; user-select: none;
+  border: 1px dashed color-mix(in srgb, #64748b 34%, transparent); border-radius: 1px;
+}
+.doc-reflow-mode .dwb-page-margin-guide { display: none; }
+@media print { .dwb-page-margin-guide { display: none !important; } }
 .doc-reflow-mode .dwb-page-break { display: none; }
 @media print { .dwb-page-break { display: none !important; } }
 .docx-preview-host {
@@ -1270,16 +1278,6 @@ details.panel > summary .panel-title { flex: 1; }
 .mode-btn:not(.is-active):hover { color: var(--accent); }
 .mode-btn:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent); }
 
-.page-layout-indicator {
-  display: inline-flex; align-items: center; gap: 5px; min-width: 0; padding: 4px 7px;
-  border: 1px solid var(--border-subtle); border-radius: 8px; background: color-mix(in srgb, var(--field) 72%, transparent);
-  color: var(--muted); font-size: 11px; font-weight: 600; line-height: 1.2; white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-.page-layout-indicator svg { flex: none; color: var(--accent); opacity: .82; }
-.page-layout-indicator span { overflow: hidden; text-overflow: ellipsis; }
-.page-layout-indicator[hidden] { display: none; }
-
 .format-toolbar { display: inline-flex; flex-direction: row; align-items: center; gap: 4px; margin: 0; padding-left: 8px; border-left: 1px solid var(--border-subtle); flex: none; }
 .format-toolbar.hidden { display: none !important; }
 .format-btn { min-width: 32px; height: 32px; padding: 0 6px; }
@@ -1795,7 +1793,6 @@ textarea.ff-pop-input { min-height: 4.5em; resize: vertical; }
 .align-btn svg { display: block; }
 @media (max-width: 768px) {
   .format-toolbar { flex-wrap: nowrap; }
-  .page-layout-indicator { display: none !important; }
 }
 
 /* okienko „Wstaw” / wyrównanie — nad dokumentem, kotwiczone pod przyciskiem */
