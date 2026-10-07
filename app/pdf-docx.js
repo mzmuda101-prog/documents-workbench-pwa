@@ -364,7 +364,13 @@
       for (let r = 0; r < nR; r++) {
         let cells = "";
         for (let c = 0; c < nC; ) {
-          const cell = t.cellOf[r][c];
+          // Parser układu normalnie wypełnia całą siatkę. Zachowujemy jednak bezpieczne
+          // domknięcie: nietypowy PDF nie może przerwać konwersji przez pustą komórkę.
+          const cell = t.cellOf?.[r]?.[c] || {
+            r0: r, r1: r, c0: c, c1: c,
+            x0: X[c], x1: X[c + 1], y0: Y[r], y1: Y[r + 1],
+            fill: null, borders: {}, blocks: [],
+          };
           const span = cell.c1 - cell.c0 + 1;
           const tcPr = [];
           tcPr.push(`<w:tcW w:w="${TW(X[cell.c1 + 1] - X[cell.c0])}" w:type="dxa"/>`);

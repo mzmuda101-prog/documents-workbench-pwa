@@ -608,6 +608,14 @@
       cells.push(cell);
       for (let r = g.r0; r <= g.r1; r++) for (let c = g.c0; c <= g.c1; c++) cellOf[r][c] = cell;
     }
+    // W planach z Excela granice łączonych pól potrafią tworzyć niejednoznaczną, nieprostokątną
+    // grupę. Każda pozycja siatki musi jednak dostać komórkę — Word nie ma odpowiednika „dziury”.
+    // Bez tego późniejszy zapis DOCX próbował odczytać c1 z null i przerywał całą konwersję.
+    for (let r = 0; r < nR; r++) for (let c = 0; c < nC; c++) if (!cellOf[r][c]) {
+      const cell = { r0: r, r1: r, c0: c, c1: c };
+      cells.push(cell);
+      cellOf[r][c] = cell;
+    }
     for (const cell of cells) {
       cell.x0 = X[cell.c0]; cell.x1 = X[cell.c1 + 1]; cell.y0 = Y[cell.r0]; cell.y1 = Y[cell.r1 + 1];
       // tło: największe wypełnienie pokrywające środek komórki
