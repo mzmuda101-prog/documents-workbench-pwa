@@ -58,6 +58,12 @@ async function run() {
   await openLayout();
   const menu = await page.evaluate(() => [...document.querySelectorAll(".compose-pop .compose-item")].filter((b) => b.getAttribute("aria-checked") === "true").map((b) => b.dataset.preset || b.dataset.orient || b.dataset.size || b.dataset.v));
   check("„Układ” na pasku: zaznaczone obecne ustawienia (Normalne, pionowa, A4, do góry)", JSON.stringify(menu) === JSON.stringify(["normal", "portrait", "A4", "top"]), JSON.stringify(menu));
+  const currentLayout = await page.evaluate(() => {
+    const card = document.querySelector(".page-setup-current");
+    const sheet = card?.querySelector(".page-setup-sheet");
+    return { text: card?.textContent?.replace(/\s+/g, " ").trim(), orient: sheet?.dataset.orient, top: sheet?.style.getPropertyValue("--ps-top") };
+  });
+  check("„Układ” pokazuje bieżące A4, orientację i marginesy w podglądzie", /Bieżący układ.*A4.*Pionowa.*Normalne.*Teraz: G 2,5.*D 2,5.*L 2,5.*P 2,5/.test(currentLayout.text || "") && currentLayout.orient === "portrait" && !!currentLayout.top, JSON.stringify(currentLayout));
   await page.keyboard.press("Escape");
   await page.click("#insertMenuBtn");
   const insertItems = await page.evaluate(() => [...document.querySelectorAll(".compose-pop-insert .compose-item-label")].map((x) => x.textContent));
