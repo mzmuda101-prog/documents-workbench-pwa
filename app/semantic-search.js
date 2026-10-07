@@ -148,6 +148,8 @@ function renderSemanticResults(results) {
     const text = document.createElement("span");
     text.className = "semantic-result-text";
     text.textContent = result.text;
+    // Karta pokazuje krótki fragment, ale pełna treść pozostaje pod kursorem.
+    text.title = result.text;
     button.append(score, text);
     button.addEventListener("click", () => jumpToSemanticResult(result));
     semanticResultsEl.append(button);
