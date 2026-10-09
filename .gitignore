@@ -53,3 +53,5 @@ Thumbs.db
 
 # ── Czasy testów (runner) ───────────────────────────────────
 .test-timings.json
+.playwright-cli/page-2026-10-09T23-05-07-227Z.yml
+.playwright-cli/page-2026-10-09T23-07-22-339Z.yml
