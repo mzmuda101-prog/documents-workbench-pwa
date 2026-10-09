@@ -1096,8 +1096,55 @@ function splitParagraphDomAtCaret(p) {
 }
 
 function mergeParagraphDom(prev, curr) {
+  // <br data-dwb-ph> = pusta linijka „tylko dla oka” za łamaniem wiersza NA KOŃCU akapitu. Za nią
+  // dochodzi teraz treść — w środku akapitu rysowałaby drugą, nieistniejącą w pliku linijkę
+  // (akapit „⏎” sklejony z „Wstęp” był o linijkę wyższy niż w Wordzie, zgłoszenie 2026-10-09).
+  const tail = curr.textContent.replace(/﻿/g, "") || curr.querySelector("img, svg, canvas, br:not([data-dwb-ph]), [contenteditable=false]");
+  if (tail) prev.querySelectorAll("br[data-dwb-ph]").forEach((ph) => ph.remove());
   while (curr.firstChild) prev.appendChild(curr.firstChild);
   curr.remove();
+}
+
+// Kursor w miejscu sklejenia akapitów — przed pierwszym przeniesionym węzłem (join), a gdy
+// doklejony akapit był pusty: na końcu poprzedniego (przed znacznikiem pustej linijki).
+// Dawniej placeCaret(prev, długość tekstu prev): długość liczona jak zapis (łamanie wiersza = 1
+// znak), a placeCaret liczy tylko węzły tekstu — po „pustym” akapicie z samym Shift+Enter kursor
+// stawał ZA pierwszą literą, a następny Backspace ją kasował („Wstęp” → „stęp”, 2026-10-09).
+function placeCaretAtJoin(prev, join) {
+  focusDocParagraph(prev);
+  const range = document.createRange();
+  let tn = null;
+  if (join?.isConnected && prev.contains(join)) {
+    // pierwszy tekst doklejonego akapitu; przed nim nic, co zajmuje miejsce (np. <br> z pliku)
+    const walker = document.createTreeWalker(join, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+    for (let n = join; n; n = walker.nextNode()) {
+      if (n.nodeType === 3) { tn = n; break; }
+      if (n.matches("br, img, svg, canvas, [contenteditable=false]")) break;
+    }
+    if (tn) range.setStart(tn, 0);
+    else range.setStartBefore(join);
+  } else {
+    const ph = [...prev.querySelectorAll("br[data-dwb-ph]")].pop();
+    if (ph) range.setStartBefore(ph);
+    else { range.selectNodeContents(prev); range.collapse(false); }
+  }
+  range.collapse(true);
+  const sel = window.getSelection();
+  sel?.removeAllRanges();
+  sel?.addRange(range);
+}
+
+// Położenie kursora liczone jak zapis: tekst + łamania wiersza <br> z pliku (po 1 znaku).
+// getCaretOffset (Range.toString) <br> nie widzi — Backspace tuż za łamaniem wiersza brał się za
+// „początek akapitu” i sklejał z poprzednim, zamiast skasować łamanie (Word kasuje łamanie).
+function getCaretModelOffset(p) {
+  const sel = window.getSelection();
+  const offset = getCaretOffset(p);
+  if (!sel?.rangeCount || !p.contains(sel.getRangeAt(0).startContainer)) return offset;
+  const pre = document.createRange();
+  pre.selectNodeContents(p);
+  pre.setEnd(sel.getRangeAt(0).startContainer, sel.getRangeAt(0).startOffset);
+  return offset + pre.cloneContents().querySelectorAll("br:not([data-dwb-ph])").length;
 }
 
 function placeCaret(el, offset) {
@@ -1176,7 +1223,7 @@ async function handleInlineBackspace(p, paraIndex, e) {
   // Dawniej liczył się tylko początek zaznaczenia: „kursor na początku” → sklejenie z poprzednim
   // akapitem, a zaznaczony tekst zostawał (zgłoszenie 2026-10-04; zaznaczanie od końca działało).
   if (sel?.rangeCount && !sel.isCollapsed && !e.fromDelete) return;
-  if (getCaretOffset(p) !== 0) return;
+  if (getCaretModelOffset(p) !== 0) return;
   // Backspace na początku punktu listy najpierw zdejmuje numerację (jak w Wordzie); kolejny skleja
   if (isListParagraph(p) && sel?.isCollapsed && !e.fromDelete && typeof composeUi !== "undefined") {
     e.preventDefault();
@@ -1210,9 +1257,9 @@ async function handleInlineBackspace(p, paraIndex, e) {
     toast(t("mergeAcross"), "info");
     return;
   }
-  const joinAt = previewRunsToPlainText(extractRunsFromPreviewParagraph(prev)).length;
+  const join = p.firstChild;
   mergeParagraphDom(prev, p);
-  placeCaret(prev, joinAt);
+  placeCaretAtJoin(prev, join);
   const mergedRuns = extractRunsFromPreviewParagraph(prev);
   pristineParas.delete(prev);
   mirrorBaseline(paraIndex - 1, 2, mergedRuns);

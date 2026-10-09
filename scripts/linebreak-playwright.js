@@ -89,6 +89,34 @@ async function run() {
   const q2 = (x2.match(/<w:p>(?:(?!<w:p>).)*Znacznik(?:(?!<\/w:p>).)*<\/w:p>/) || [""])[0].replace(/<w:rPr>.*?<\/w:rPr>/g, "");
   check("po ponownym otwarciu i pisaniu: zakładka dalej tuż za łamaniem", /<w:br\/><\/w:r><w:bookmarkStart [^>]*w:name="Znacznik"\/><w:bookmarkEnd [^>]*\/><w:r><w:t[^>]*>rowadzenie!<\/w:t>/.test(q2), q2);
 
+  // ── 3) Backspace przed nagłówkiem, nad nim „pusty” akapit z samym łamaniem wiersza ──
+  // Zgłoszenie 2026-10-09 (wykład, nagranie): kolejne Backspace przed „Wstęp (ok. 1 minuty):”
+  // kasowały „W” — po sklejeniu z akapitem „⏎” kursor stawał ZA pierwszą literą (długość
+  // liczona z łamaniem, kursor stawiany po samym tekście); sklejony akapit miał też o linijkę za dużo
+  // (znacznik pustej linijki z końca akapitu został w środku). Word: sklej → skasuj łamanie → sklej.
+  const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+  const zip = new JSZip();
+  zip.file("[Content_Types].xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+  zip.file("_rels/.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+  zip.file("word/document.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${W}><w:body><w:p><w:r><w:t>Tekst przed.</w:t></w:r></w:p><w:p><w:r><w:br/></w:r></w:p><w:p/><w:p><w:r><w:rPr><w:b/></w:rPr><w:t>Wstęp (ok. 1 minuty):</w:t></w:r></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1418" w:right="1418" w:bottom="1418" w:left="1418" w:header="709" w:footer="709" w:gutter="0"/></w:sectPr></w:body></w:document>`);
+  await page.locator("#fileInput").setInputFiles({ name: "bs.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer: await zip.generateAsync({ type: "nodebuffer" }) });
+  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && /Wstęp/.test(document.querySelector(".docx-preview-host")?.textContent || ""), null, { timeout: 30000 });
+  await page.evaluate(() => { if (readOnlyMode) appFrame.setReadOnly(false); });
+  await idle(page);
+  await page.evaluate(() => { const p = [...document.querySelectorAll(".docx-preview-host p")].find((q) => q.textContent.startsWith("Wstęp")); placeCaret(p, 0); });
+  const head = () => page.evaluate(() => {
+    const p = [...document.querySelectorAll(".docx-preview-host p")].find((q) => /tęp \(ok/.test(q.textContent));
+    const line = parseFloat(getComputedStyle(p).lineHeight) || 19;
+    return { text: p.textContent, ph: p.querySelectorAll("br[data-dwb-ph]").length, lines: Math.round(p.getBoundingClientRect().height / line), n: collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).length };
+  });
+  const steps = [];
+  for (let k = 0; k < 3; k++) { await page.keyboard.press("Backspace"); await idle(page); steps.push(await head()); }
+  check("Backspace przed nagłówkiem: „W” zostaje po każdym naciśnięciu", steps.every((s) => s.text.startsWith("Wstęp")), JSON.stringify(steps));
+  check("…sklejony z akapitem „⏎” = 2 linijki, bez znacznika pustej linijki w środku", steps[1].ph === 0 && steps[1].lines === 2, JSON.stringify(steps[1]));
+  check("…kolejny Backspace kasuje łamanie wiersza, akapity się nie sklejają", steps[2].n === steps[1].n && steps[2].lines === 1, JSON.stringify(steps));
+  const x3 = (await xmlOf(await savedB64(page))).replace(/<w:rPr>.*?<\/w:rPr>/g, "");
+  check("…w pliku: „Tekst przed.” i osobny „Wstęp…” bez łamania", /<w:t>Tekst przed\.<\/w:t><\/w:r><\/w:p><w:p>(?:(?!<\/w:p>).)*<w:t>Wstęp \(ok\. 1 minuty\):<\/w:t>/.test(x3) && !/<w:br\/>/.test(x3), x3.slice(x3.indexOf("<w:body>"), x3.indexOf("<w:sectPr")));
+
   check("brak błędów strony", errors.length === 0, errors.join(" | "));
   await browser.close();
 }
