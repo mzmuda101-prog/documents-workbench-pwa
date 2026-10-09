@@ -9,6 +9,7 @@ const LAZY_FEATURE_SCRIPTS = {
   stats: ["app/stats-panel.js"],
   review: ["app/review-panel.js"],
   forms: ["app/forms-panel.js"],
+  compare: ["app/compare-panel.js"],
 };
 
 const PANEL_LAZY_FEATURE = {
@@ -21,6 +22,7 @@ const PANEL_LAZY_FEATURE = {
   "panel-stats": "stats",
   "panel-review": "review",
   "panel-forms": "forms",
+  "panel-compare": "compare",
 };
 
 const lazyFeatureLoaded = new Set();

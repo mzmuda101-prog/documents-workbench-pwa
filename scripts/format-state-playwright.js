@@ -120,6 +120,27 @@ async function run() {
   runs = await savedRuns(page, "podkreślony");
   check("podkreślenie wyłączone w trakcie pisania: „koniec” bez podkreślenia", JSON.stringify(runs) === JSON.stringify([["Tekst ", false, false], ["podkreślony", false, true], ["koniec", false, false]]), JSON.stringify(runs));
 
+  // ── 3a. przekreślenie: przycisk z paska używa modelu runów, nie tylko CSS podglądu ───────
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Korekta: ");
+  await page.click("#fmtStrike");
+  await page.keyboard.type("skreślone");
+  const strikeOn = await page.evaluate(() => document.getElementById("fmtStrike").getAttribute("aria-pressed") === "true");
+  await page.click("#fmtStrike");
+  await page.keyboard.type(" zostaje");
+  await page.waitForTimeout(300);
+  const strikeRuns = await page.evaluate(async () => {
+    const z = await JSZip.loadAsync(await buildDocumentForSave());
+    const xml = await z.file("word/document.xml").async("string");
+    const p = (xml.match(/<w:p[ >](?:(?!<\/w:p>).)*skreślone(?:(?!<\/w:p>).)*<\/w:p>/s) || [""])[0];
+    return [...p.matchAll(/<w:r>(.*?)<\/w:r>/gs)].map((m) => [(m[1].match(/<w:t[^>]*>([^<]*)/) || [])[1], /<w:strike(?:\s|\/)/.test(m[1]) && !/w:val="0"/.test(m[1])]);
+  });
+  check("przekreślenie z paska: przycisk świeci, a .docx ma w:strike tylko na zaznaczonym fragmencie", strikeOn && JSON.stringify(strikeRuns) === JSON.stringify([["Korekta: ", false], ["skreślone", true], [" zostaje", false]]), JSON.stringify({ strikeOn, strikeRuns }));
+
+  // ¶ jest wyłącznie widokiem: nie zapisuje danych, a po przeładowaniu nadal odpowiada przyciskowi.
+  await page.click("#formatMarksBtn");
+  check("¶ na pasku włącza znaki niedrukowalne bez dodania operacji do kolejki pliku", await page.evaluate(() => document.getElementById("formatMarksBtn").getAttribute("aria-pressed") === "true" && docCanvasEl.classList.contains("show-formatting-marks") && pendingDocEdits.length === 0));
+
   // ── 3b. kursywa: Ctrl/⌘+I za pochylonym słowem; w Cytacie (pochylony ze stylu) → w:i w:val="0" ──
   await page.evaluate(() => { const ps = document.querySelectorAll(".docx-preview-host p.docx-editable-p"); const p = ps[ps.length - 1]; placeCaret(p, p.textContent.length); });
   await page.keyboard.press("Enter");

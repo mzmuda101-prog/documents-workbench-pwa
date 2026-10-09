@@ -1398,7 +1398,7 @@ function execInlineFormat(command) {
     syncFormatIndicators();
     return;
   }
-  document.execCommand(command, false, null);
+  document.execCommand(command === "strike" ? "strikeThrough" : command, false, null);
   onInlineParagraphInput();
   syncFormatIndicators();
 }
@@ -1406,31 +1406,31 @@ function execInlineFormat(command) {
 // Pogrubienie/kursywa/podkreślenie tak, jak WIDAĆ (styl obliczony — też ze stylu akapitu, np.
 // nagłówek): przy kursorze — znak, którego format dostanie pisanie, + format dalszego pisania;
 // przy zaznaczeniu — włączone, gdy obejmuje CAŁY zaznaczony tekst (jak przyciski w Wordzie).
-function underlinedEl(el) {
+function decoratedEl(el, kind) {
   for (let a = el; a && !a.classList?.contains("docx-editable-p"); a = a.parentElement) {
-    if (/underline/.test(getComputedStyle(a).textDecorationLine || "")) return true;
+    if (new RegExp(kind).test(getComputedStyle(a).textDecorationLine || "")) return true;
     if (a.localName === "p") break;
   }
   return false;
 }
 function flagsOfEl(el) {
-  if (!el) return { bold: false, italic: false, underline: false };
+  if (!el) return { bold: false, italic: false, underline: false, strike: false };
   const cs = getComputedStyle(el);
   const w = cs.fontWeight === "bold" ? 700 : parseInt(cs.fontWeight, 10) || 400;
-  return { bold: w >= 600, italic: /italic|oblique/.test(cs.fontStyle), underline: underlinedEl(el) };
+  return { bold: w >= 600, italic: /italic|oblique/.test(cs.fontStyle), underline: decoratedEl(el, "underline"), strike: decoratedEl(el, "line-through") };
 }
 function formatFlagsAt(range) {
-  if (!range) return { bold: false, italic: false, underline: false };
+  if (!range) return { bold: false, italic: false, underline: false, strike: false };
   const elOf = (n) => (n?.nodeType === 1 ? n : n?.parentElement);
   if (range.collapsed) {
     const p = elOf(range.startContainer)?.closest(".docx-editable-p");
     const src = p ? caretStyleSourceNode(p, range.startContainer, range.startOffset) : range.startContainer;
     const f = flagsOfEl(elOf(src));
     const pending = currentTypingStyle();
-    ["bold", "italic", "underline"].forEach((k) => { if (pending && pending[k] != null) f[k] = !!pending[k]; });
+    ["bold", "italic", "underline", "strike"].forEach((k) => { if (pending && pending[k] != null) f[k] = !!pending[k]; });
     return f;
   }
-  const out = { bold: true, italic: true, underline: true };
+  const out = { bold: true, italic: true, underline: true, strike: true };
   let any = false;
   const root = range.commonAncestorContainer.nodeType === 1 ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
@@ -1440,20 +1440,20 @@ function formatFlagsAt(range) {
     if (n === range.startContainer && range.startOffset >= n.length) continue;
     any = true;
     const f = flagsOfEl(n.parentElement);
-    ["bold", "italic", "underline"].forEach((k) => { if (!f[k]) out[k] = false; });
+    ["bold", "italic", "underline", "strike"].forEach((k) => { if (!f[k]) out[k] = false; });
   }
-  return any ? out : { bold: false, italic: false, underline: false };
+  return any ? out : { bold: false, italic: false, underline: false, strike: false };
 }
 
 // Przyciski B / I / U „wciśnięte”, gdy format jest włączony (kursor, zaznaczenie, Ctrl/⌘+B).
 // W karcie komentarza — stan edytora komentarza (execCommand).
 function syncBiuButtons() {
-  const ids = { bold: "fmtBold", italic: "fmtItalic", underline: "fmtUnderline" };
+  const ids = { bold: "fmtBold", italic: "fmtItalic", underline: "fmtUnderline", strike: "fmtStrike" };
   const ed = document.activeElement?.closest?.(".cf-rich");
   let flags = null;
   if (ed) {
     flags = {};
-    Object.keys(ids).forEach((k) => { try { flags[k] = document.queryCommandState(k); } catch (_) { flags[k] = false; } });
+    Object.keys(ids).forEach((k) => { try { flags[k] = document.queryCommandState(k === "strike" ? "strikeThrough" : k); } catch (_) { flags[k] = false; } });
   } else if (originalFileBytes && !readOnlyMode) flags = formatFlagsAt(docSelectionRange());
   Object.entries(ids).forEach(([k, id]) => {
     const b = document.getElementById(id);
@@ -1748,6 +1748,7 @@ function wireFormatToolbar() {
     ["fmtBold", "bold"],
     ["fmtItalic", "italic"],
     ["fmtUnderline", "underline"],
+    ["fmtStrike", "strike"],
   ].forEach(([id, cmd]) => {
     const btn = document.getElementById(id);
     // jak w Wordzie: przycisk formatu nie zabiera fokusu (zaznaczenie w tekście zostaje,

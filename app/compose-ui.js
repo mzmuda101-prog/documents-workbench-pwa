@@ -2271,7 +2271,7 @@ const composeUi = (() => {
   }
 
   const RICH_KEYS = { KeyB: "bold", KeyI: "italic", KeyU: "underline" };
-  const RICH_BTNS = { fmtBold: "bold", fmtItalic: "italic", fmtUnderline: "underline" };
+  const RICH_BTNS = { fmtBold: "bold", fmtItalic: "italic", fmtUnderline: "underline", fmtStrike: "strikeThrough" };
   function runRich(cmd) {
     try { document.execCommand("styleWithCSS", false, false); } catch (_) { /* Safari bez tej opcji */ }
     document.execCommand(cmd, false, null);
@@ -2283,7 +2283,7 @@ const composeUi = (() => {
   };
   // capture na dokumencie — przed obsługą przycisków w docx-inline-edit.js (format dokumentu)
   document.addEventListener("click", (e) => {
-    const b = e.target.closest?.("#fmtBold, #fmtItalic, #fmtUnderline");
+    const b = e.target.closest?.("#fmtBold, #fmtItalic, #fmtUnderline, #fmtStrike");
     if (!b || !activeCommentEditor()) return;
     e.preventDefault();
     e.stopImmediatePropagation();
@@ -2991,7 +2991,7 @@ const composeUi = (() => {
   // klik obok / przewinięcie / zmiana rozmiaru — okienko znika
   document.addEventListener("pointerdown", (e) => {
     if (!pop || pop.el.contains(e.target) || pop.anchor.contains(e.target)) return;
-    if (e.target.closest?.("#fmtBold, #fmtItalic, #fmtUnderline") && activeCommentEditor()) return; // B / I / U dla komentarza
+    if (e.target.closest?.("#fmtBold, #fmtItalic, #fmtUnderline, #fmtStrike") && activeCommentEditor()) return; // format tekstu komentarza
     closePop();
   }, true);
   document.addEventListener("keydown", (e) => {

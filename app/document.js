@@ -214,6 +214,7 @@ async function renderCurrentDocument() {
     if (typeof semanticDocumentRendered === "function") semanticDocumentRendered();
     if (searchQueryEl?.value.trim()) runDocumentSearch();
     setupInlineEditingAfterRender();
+    if (typeof restoreFormatMarks === "function") restoreFormatMarks();
     if (typeof syncMobileDocZoomAfterRender === "function") syncMobileDocZoomAfterRender();
   } finally {
     clearTimeout(overlayTimer);
