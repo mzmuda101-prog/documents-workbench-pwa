@@ -95,7 +95,7 @@ const dwbPageBreaks = (() => {
     range.selectNodeContents(el);
     const rects = [...range.getClientRects()];
     el.querySelectorAll(ATOMS).forEach((a) => {
-      if (a.closest(".dwb-page-gap, .dwb-page-gap-spacer")) return;
+      if (a.closest(".dwb-page-gap, .dwb-page-gap-spacer, .dwb-anchor-abs, .dwb-anchor-wrap")) return; // obraz postawiony na kartce nie jest linijką akapitu
       const r = a.getBoundingClientRect();
       if (r.height > 0 && r.width > 0) rects.push(r);
     });
@@ -142,6 +142,18 @@ const dwbPageBreaks = (() => {
     const add = (el, lines, row = false) => {
       const next = !row && hasClass(el, keep.next);
       const together = !row && hasClass(el, keep.lines);
+      // Dół linijki do sprawdzania, czy mieści się na stronie — jak w Wordzie (porównanie z
+      // PDF-ami): środek liter + POŁOWA wysokości pojedynczej interlinii kroju (rozmiar ×
+      // współczynnik Worda); dodatkowy odstęp interlinii wielokrotnej może wystawać w dolny
+      // margines. „Podsumowanie…” (pojedyncza): nagłówek, którego litery kończą się 0,2 px nad
+      // marginesem, w Wordzie przechodzi na następną stronę; „umowa najmu” (1,17): ostatnia linijka
+      // akapitu z pełną interlinią 2,8 px za marginesem zostaje. Góra bez zmian (góra liter) — od
+      // niej liczą się odstępy stron w Edycji (fitSplit mierzy litery; inna góra = odstęp „pływał”).
+      if (!row && lines.length) {
+        const cs = getComputedStyle(el);
+        const single = (parseFloat(cs.fontSize) || 0) * wordLineFactor(cs.fontFamily) * scale;
+        if (single > 0) lines = lines.map(([t, b]) => [t, Math.max(b, (t + b) / 2 + single / 2)]);
+      }
       lines.forEach(([top, bottom], i) => out.push({ top: (top - secTop) / scale, bottom: (bottom - secTop) / scale,
         el, i, n: lines.length, row, next, together }));
     };
@@ -252,7 +264,7 @@ const dwbPageBreaks = (() => {
     }
     const bodyH = pageH - padT - bottomZone;
     const contentTop = (article.getBoundingClientRect().top - secRect.top) / scale;
-    const out = { sec, pageW, pageH, padT, padB, padL, padR, bodyH, contentTop, cuts: [], end: contentTop };
+    const out = { sec, pageW, pageH, padT, padB, padL, padR, bodyH, bottomZone, contentTop, cuts: [], end: contentTop };
     if (!(bodyH > 40)) return out;
     const u = articles.flatMap((a) => lineUnits(a, secRect.top, scale));
     // Położenia BEZ obecnych odstępów między stronami (każdy przesuwa dalszą treść o data-shift) —
@@ -260,12 +272,50 @@ const dwbPageBreaks = (() => {
     // przewijanie: skok do sekcji, „Wróć”, zoom, zmiana widoku).
     const gaps = [...sec.querySelectorAll(":scope > article > .dwb-page-gap")].map((g) => ({ top: (g.getBoundingClientRect().top - secRect.top) / scale, shift: parseFloat(g.dataset.shift) || 0 }));
     if (gaps.length) u.forEach((x) => { let d = 0; for (const g of gaps) if (g.top <= x.top) d += g.shift; x.top -= d; x.bottom -= d; });
-    if (includeNotes) sec.querySelectorAll(":scope > ol").forEach((ol) => u.push(...lineUnits(ol, secRect.top, scale)));
+    // Przypisy DOLNE na dole strony z odnośnikiem (jak w Wordzie; podgląd wydruku: includeNotes).
+    // Każda linijka zna przypisy, do których ma odnośnik; mieści się na stronie tylko razem z nimi
+    // (i kreską nad przypisami przy pierwszym na stronie) — inaczej idzie na następną stronę.
+    // Wynik: out.pageNotes[i] = przypisy strony i. Przypisy końcowe — dalej na końcu sekcji.
+    let footOl = null, noteH = null, sepH = 0;
+    if (includeNotes) {
+      footOl = sec.querySelector(":scope > ol.dwb-notes-footnote");
+      if (footOl?.children.length) {
+        noteH = new Map();
+        for (const li of footOl.children) {
+          const lcs = getComputedStyle(li);
+          noteH.set(li.dataset.dwbNote, li.getBoundingClientRect().height / scale + (parseFloat(lcs.marginTop) || 0) + (parseFloat(lcs.marginBottom) || 0));
+        }
+        const ocs = getComputedStyle(footOl);
+        sepH = (parseFloat(ocs.marginTop) || 0) + (parseFloat(ocs.paddingTop) || 0);
+        const refs = [...sec.querySelectorAll(":scope > article sup[data-dwb-note^='footnote:']")].map((el) => {
+          const r = el.getBoundingClientRect();
+          return { id: el.dataset.dwbNote, el, y: ((r.top + r.bottom) / 2 - secRect.top) / scale };
+        }).filter((r) => noteH.has(r.id));
+        const used = new Set();
+        u.forEach((x) => {
+          x.notes = refs.filter((r) => !used.has(r) && x.el.contains(r.el) && (x.row || (r.y >= x.top - 1 && r.y <= x.bottom + 1))).map((r) => { used.add(r); return r.id; });
+        });
+      }
+      sec.querySelectorAll(":scope > ol").forEach((ol) => { if (ol !== footOl || !noteH) u.push(...lineUnits(ol, secRect.top, scale)); });
+    }
     u.sort((a, b) => a.top - b.top);
+    let pageNotes = new Set(), pageNoteH = 0;
+    const noteExtra = (x) => {
+      if (!noteH || !x.notes?.length) return 0;
+      let h = 0;
+      for (const id of x.notes) if (!pageNotes.has(id)) h += noteH.get(id);
+      return h ? h + (pageNotes.size ? 0 : sepH) : 0;
+    };
+    const notesOf = (a, b) => { const ids = []; for (let i = a; i < b; i++) for (const id of u[i].notes || []) if (!ids.includes(id)) ids.push(id); return ids; };
+    if (noteH) out.pageNotes = [];
     let limit = pageH - bottomZone; // dół treści pierwszej strony
     let first = 0; // indeks pierwszej linijki bieżącej strony
     for (let k = 0; k < u.length; k++) {
-      if (u[k].bottom <= limit + 1) continue;
+      const extra = noteExtra(u[k]);
+      if (u[k].bottom <= limit - pageNoteH - extra + 0.5) {
+        if (extra || u[k].notes?.length) { for (const id of u[k].notes) pageNotes.add(id); pageNoteH += extra; }
+        continue;
+      }
       if (k > first) {
         let b = pageStartIndex(u, k, first);
         let block = null;
@@ -294,18 +344,24 @@ const dwbPageBreaks = (() => {
         // (łatka 14): Word rysuje je u góry strony — miejsce na nie odejmujemy od strony
         const header = u[b].row && u[b - 1]?.row ? repeatedHeader(u[b].el, u[b - 1].el, secRect.top, scale) : null;
         out.cuts.push({ y, top: u[b].top, h: u[b].bottom - u[b].top, block, line, el: u[b].el, header });
+        if (noteH) { out.pageNotes.push(notesOf(first, b)); pageNotes = new Set(); pageNoteH = 0; }
         first = b;
         limit = u[b].top + bodyH - (header?.h || 0);
         k = b - 1; // od nowej strony sprawdzamy jeszcze raz
       } else {
         // jedna rzecz wyższa niż strona (duży obraz, wysoki wiersz) — granica w środku niej
+        let firstCut = true;
         while (u[k].bottom > limit + 1) {
           out.cuts.push({ y: limit, top: limit });
+          if (noteH) out.pageNotes.push(firstCut ? notesOf(first, k + 1) : []);
+          firstCut = false;
           limit += bodyH;
         }
+        if (noteH) { pageNotes = new Set(); pageNoteH = 0; }
         first = k + 1;
       }
     }
+    if (noteH) out.pageNotes.push(notesOf(first, u.length));
     out.end = u.length ? Math.max(...u.map((x) => x.bottom)) : contentTop;
     return out;
   }

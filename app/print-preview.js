@@ -70,13 +70,15 @@ const dwbPrint = (() => {
       // wszystkie <article> kartki (sekcje ciągłe, np. fragment w 2 kolumnach) — bloki i tak stoją
       // bezwzględnie w zmierzonym miejscu, więc kolumny zostają, gdzie były
       sec.querySelectorAll(":scope > article").forEach((article) => [...article.children].forEach((el) => blocks.push({ el, holder: "article", box: rel(el, base) })));
-      sec.querySelectorAll(":scope > ol").forEach((ol, oi) => [...ol.children].forEach((el) => blocks.push({ el, holder: oi, box: rel(el, base) })));
+      // przypisy dolne na dole swoich stron (page-breaks.js: S.pageNotes) — nie płyną z treścią
+      const footOl = S.pageNotes ? sec.querySelector(":scope > ol.dwb-notes-footnote") : null;
+      sec.querySelectorAll(":scope > ol").forEach((ol, oi) => { if (ol !== footOl) [...ol.children].forEach((el) => blocks.push({ el, holder: oi, box: rel(el, base) })); });
       const cs = getComputedStyle(sec);
       const starts = [S.contentTop, ...S.cuts.map((c) => c.top)];
       // powtarzane wiersze nagłówka tabeli (page-breaks.js: cut.header) — miejsce tabeli zmierzone teraz
       const heads = [null, ...S.cuts.map((c) => c.header && { ...c.header, box: rel(c.header.table, base) })];
       plan.push({
-        S, sec, secH, blocks, heads,
+        S, sec, secH, blocks, heads, footOl,
         header: header && { el: header, box: rel(header, base) },
         footer: footer && { el: footer, box: rel(footer, base), fromBottom: secH - rel(footer, base).top },
         ols: [...sec.querySelectorAll(":scope > ol")],
@@ -145,6 +147,27 @@ const dwbPrint = (() => {
           sheet.appendChild(t);
         }
         sheet.appendChild(clip);
+        const notes = P.footOl && S.pageNotes?.[j];
+        if (notes?.length) {
+          // przypisy tej strony przy dolnym marginesie (nad stopką, jak w Wordzie); numer z oryginału
+          const ol = P.footOl.cloneNode(false);
+          ol.classList.add("pp-page-notes");
+          const all = [...P.footOl.children];
+          notes.forEach((id) => {
+            const li = all.find((x) => x.dataset.dwbNote === id);
+            if (!li) return;
+            const c = li.cloneNode(true);
+            if (li.classList.contains("dwb-note-native")) c.value = all.indexOf(li) + 1;
+            ol.appendChild(c);
+          });
+          ol.style.position = "absolute";
+          ol.style.left = `${P.pad.l}px`;
+          ol.style.right = `${P.pad.r}px`;
+          ol.style.top = "auto";
+          ol.style.bottom = `${S.bottomZone ?? S.padB}px`;
+          ol.style.margin = "0";
+          sheet.appendChild(ol);
+        }
         if (P.header) {
           const h = P.header.el.cloneNode(true);
           h.classList.add("pp-hf");
@@ -331,9 +354,30 @@ const dwbPrint = (() => {
       await frame();
       const host = src.querySelector(".docx-preview-host");
       if (!host) throw new Error("render");
+      // Przypisy dolne stoją na dole swoich stron (page-breaks.js: pageNotes) — ich lista na końcu
+      // sekcji nie może spychać przypisów końcowych pod sobą (Word: końcowe zaraz za treścią).
+      // Wyjęta z przepływu, z tą samą szerokością (wysokości przypisów dalej mierzalne).
+      host.querySelectorAll("section.docx > ol.dwb-notes-footnote").forEach((ol) => {
+        ol.style.width = `${ol.offsetWidth}px`;
+        ol.style.position = "absolute";
+      });
+      // kartka docx-preview to kolumna flex z „margin-bottom: auto” na treści — przypisy końcowe
+      // lądowały przy dole kartki; Word stawia je zaraz za tekstem (stopka zostaje na dole)
+      host.querySelectorAll("section.docx > ol.dwb-notes-endnote").forEach((ol) => {
+        const arts = ol.parentElement.querySelectorAll(":scope > article");
+        if (arts.length) arts[arts.length - 1].style.marginBottom = "0";
+        ol.style.marginBottom = "auto";
+      });
       const sections = await dwbPageBreaks.paginate(host, { includeNotes: true });
       const result = buildSheets(host, sections);
+      // Przeniesienie <style> buduje arkusz od nowa z TEKSTU — zmiany w CSSOM (zamienniki krojów z
+      // rodzajem, krój pustych akapitów, kolejność stylów tabeli: docx-render-fixes.js) przepadały i
+      // wydruk różnił się od podglądu („Zapotrzebowanie”: tabela w Calibri zamiast Arial).
+      // Najpierw zapisujemy bieżące reguły z powrotem do tekstu.
       const styles = [...host.querySelectorAll(":scope > style")];
+      styles.forEach((st) => {
+        try { const rules = st.sheet?.cssRules; if (rules) st.textContent = [...rules].map((r) => r.cssText).join("\n"); } catch (_) { /* arkusz niedostępny — zostaje tekst */ }
+      });
       showOverlay(styles, result);
     } catch (err) {
       log(`Podgląd wydruku: ${err.message || err}`, "error");

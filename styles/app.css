@@ -695,6 +695,8 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
 /* Lista z wcięciem wiszącym (docx-render-fixes.js): tekst na lewym wcięciu, numer w wysunięciu */
 .docx-preview-host p.dwb-list-hang { text-indent: 0 !important; position: relative; }
 .docx-preview-host p.dwb-list-hang::before { position: absolute; left: calc(-1 * var(--dwb-hang, 18pt)); white-space: pre; }
+/* punktor wyższy niż tekst: akapit ma dopełnienie (addMarkerLineSpace) — punktor zostaje na linii bazowej */
+.docx-preview-host p.dwb-list-hang[style*="--dwb-mk-top"]::before { margin-top: var(--dwb-mk-top); }
 
 .doc-canvas.read-only .docx-preview-host { cursor: default; }
 .doc-canvas.edit-mode .docx-preview-host { cursor: default; }
@@ -1878,16 +1880,27 @@ sup[data-dwb-note]::after { content: ""; position: absolute; inset: -0.5em -0.45
 /* Word nie podciąga par liter (kerning) ani nie łączy „fi” w ligatury, jeśli plik tego nie każe —
    przeglądarka robi to domyślnie i tekst wychodził węższy: inaczej zawijały się wiersze. */
 section.docx { font-kerning: none; font-variant-ligatures: none; }
-/* Indeks górny/dolny jak w Wordzie (PDF z Worda: 12 pt → 7 pt, 9 pt → 5,5 pt; górny podniesiony
-   o ⅓ rozmiaru tekstu). Przeglądarka dawała 83 % i „super” rozpychało linijkę — akapit z samym
-   znacznikiem czasu był o ~3 px wyższy niż w Wordzie (dokumenty „Punkt…”: strona więcej).
-   line-height: 0 — znacznik nie podnosi linijki (Word liczy wysokość z tekstu i znaku akapitu). */
-section.docx sup, section.docx sub { font-size: 60%; line-height: 0; }
-section.docx sup { vertical-align: 0.555em; }
-section.docx sub { vertical-align: -0.2em; }
+/* Indeks górny/dolny jak w Wordzie — zmierzone na pliku testowym (2026-10-09, 13 rozmiarów):
+   rozmiar = 2/3 tekstu zaokrąglone W DÓŁ do pół punktu (10 → 6,5 pt, 11 → 7, 12 → 8, 20 → 13;
+   dokładnie liczy applyWordSuperscripts, tu 2/3 dla nowych w Edycji), górny podniesiony o ~0,35
+   rozmiaru tekstu (0,53 em indeksu), dolny obniżony o ~0,08 (0,12 em). Przeglądarka dawała 83 %
+   i „super” rozpychało linijkę; line-height: 0 — znacznik nie podnosi linijki. */
+section.docx sup, section.docx sub { font-size: 66.67%; line-height: 0; }
+section.docx sup { vertical-align: 0.53em; }
+section.docx sub { vertical-align: -0.12em; }
 /* Punktor/numer listy kolorem znaku końca akapitu (łatka 12 w vendor-libs), gdy poziom listy nie
    ma własnego koloru — najniższa ważność, żeby kolor z definicji listy wygrywał. */
 :where(section.docx p[style*="--dwb-mark-color"])::before { color: var(--dwb-mark-color); }
+/* Minimum wysokości akapitu = jedna jego linijka (1lh). docx-preview dawał każdemu akapitowi
+   min-height z rozmiaru stylu domyślnego (reguła „.docx p, … span” z cechami fragmentów) — podpis
+   8 pt pod linią nie mógł być niższy niż 12 pt („A-RAVI-PROJEKT”). Pusty akapit — także świeżo
+   po Enterze, zanim policzy go docx-render-fixes.js — ma od razu wysokość swojej linijki (WebKit nie
+   stawia kursora w akapicie zerowej wysokości). Własne min-height akapitu (inline) wygrywa. */
+section.docx p { min-height: 1lh; }
+/* Akapit z treścią ma krój swojego tekstu (matchStrutFont w docx-render-fixes.js); punktor bez
+   własnego kroju w definicji listy — dotychczasowy krój akapitu. */
+:where(section.docx p[style*="--dwb-p-font"])::before { font-family: var(--dwb-p-font); }
+:where(section.docx p[style*="--dwb-p-size"])::before { font-size: var(--dwb-p-size); }
 /* Kolumny/karty z PDF (tabela układu) w Widoku mobilnym: jedna pod drugą, nie ściśnięte obok */
 .doc-canvas.doc-reflow-mode .docx table.docx_dwblayout,
 .doc-canvas.doc-reflow-mode .docx table.docx_dwblayout > tbody,

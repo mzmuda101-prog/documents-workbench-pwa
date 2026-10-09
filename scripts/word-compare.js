@@ -50,11 +50,15 @@ const PAGE_W = 794;
 // PDF z Worda (AppleScript); pamięć po skrócie pliku
 function wordPdf(file) {
   const hash = crypto.createHash("sha1").update(fs.readFileSync(file)).digest("hex").slice(0, 12);
-  const base = `${path.basename(file, ".docx")}-${hash}`;
+  // skrót ścieżki: dwa różne pliki o tej samej nazwie (np. kopia w innym folderze) nie kasują
+  // sobie nawzajem PDF-ów z pamięci
+  const where = crypto.createHash("sha1").update(path.resolve(file)).digest("hex").slice(0, 6);
+  const stem = `${path.basename(file, ".docx")}-${where}`;
+  const base = `${stem}-${hash}`;
   const pdf = path.join(CACHE, `${base}.pdf`);
   if (fs.existsSync(pdf) && !process.env.FRESH) return pdf;
   // starsze PDF-y tego pliku (inna treść = inny skrót) — precz, żeby pamięć nie rosła
-  for (const f of fs.readdirSync(CACHE)) if (f !== path.basename(pdf) && f.startsWith(`${path.basename(file, ".docx")}-`) && /-[0-9a-f]{12}\.(pdf|docx)$/.test(f)) fs.rmSync(path.join(CACHE, f), { force: true });
+  for (const f of fs.readdirSync(CACHE)) if (f !== path.basename(pdf) && f.startsWith(`${stem}-`) && /-[0-9a-f]{12}\.(pdf|docx)$/.test(f)) fs.rmSync(path.join(CACHE, f), { force: true });
   // Word (piaskownica macOS) pyta o zgodę na KAŻDĄ nową ścieżkę i pamięta ją dla tej ścieżki —
   // dawniej kopia i PDF miały nazwę ze skrótem, więc pytał przy każdym pliku. Teraz zawsze te same
   // dwa pliki: wejście nadpisywane w miejscu (ten sam plik na dysku), wynik kopiowany do pamięci.
@@ -127,6 +131,7 @@ async function run() {
     const sheets = await page.$$(".pp-sheet");
     const ours = [];
     for (const s of sheets) ours.push(`data:image/png;base64,${(await s.screenshot({ animations: "disabled" })).toString("base64")}`);
+    if (process.env.DEBUG_SHEETS) console.log("   kartka 2:", JSON.stringify(await page.evaluate(() => { const p = [...document.querySelectorAll('.pp-sheet[data-page="2"] p')].find((x) => /Witanie/.test(x.textContent)); const b = getComputedStyle(p, "::before"); return { h: p.getBoundingClientRect().height, cls: p.className, st: p.getAttribute("style"), before: [b.content, b.fontFamily, b.fontSize, b.lineHeight, b.display, b.verticalAlign], spans: [...p.querySelectorAll("*")].map((x) => { const c = getComputedStyle(x); return [x.tagName, c.fontFamily, c.fontSize, c.lineHeight, c.verticalAlign, Math.round(x.getBoundingClientRect().height * 10) / 10]; }), body: document.body.className, root: document.documentElement.className }; })));
     await page.evaluate(() => dwbPrint.close());
     // strony Worda (pdf.js aplikacji) i porównanie — w przeglądarce, na kanwach
     const pdfB64 = fs.readFileSync(pdf).toString("base64");

@@ -60,7 +60,13 @@ function patchBundle() {
   //    app/docx-render-fixes.js (layoutTabStops) od razu po renderze.
   const reTab = /renderTab\((\w+)\)\{var (\w+)=this\.createElement\("span"\);if\(\2\.innerHTML="&emsp;",this\.options\.experimental\)\{\2\.className=this\.tabStopClass\(\);var (\w+)=([\w$]+)\(\1,([\w$]+)\.Paragraph\)\?\.tabs;/;
   if (!reTab.test(src)) throw new Error("łatka tabulatorów: wzorzec renderTab nie pasuje (nowa wersja docx-preview?)");
-  src = src.replace(reTab, (m, T, E, R, F, D) => `renderTab(${T}){var ${E}=this.createElement("span");${E}.className="docx-tab";try{var __dwbStops=${F}(${T},${D}.Paragraph)?.tabs;__dwbStops&&__dwbStops.length&&(${E}.dataset.stops=JSON.stringify(__dwbStops.map(s=>[parseFloat(s.position),s.leader||"none",s.style||"left"])));this.defaultTabSize&&(${E}.dataset.dt=parseFloat(this.defaultTabSize))}catch(__e){}if(${E}.innerHTML="&emsp;",this.options.experimental){${E}.className+=" "+this.tabStopClass();var ${R}=${F}(${T},${D}.Paragraph)?.tabs;`);
+  // (16, 2026-10-09) Pozycje = tabulatory STYLU akapitu (z dziedziczeniem po basedOn — docx-preview
+  // scala paragraphProps) połączone z tabulatorami akapitu; w:tab w:val="clear" w akapicie usuwa
+  // pozycję ze stylu (jak Word). Dawniej tylko akapitu: renderParagraph dopisywał tabulatory stylu
+  // PO narysowaniu treści, więc tabulator ich nie widział — „Nagłówek”/„Stopka” (środek 4536 tw,
+  // prawy 9072 tw), spisy, formularze dostawały domyślny krok 1,25 cm („A-RAVI-PROJEKT”: numer
+  // umowy przy lewym marginesie zamiast na środku).
+  src = src.replace(reTab, (m, T, E, R, F, D) => `renderTab(${T}){var ${E}=this.createElement("span");${E}.className="docx-tab";try{var __dwbP=${F}(${T},${D}.Paragraph),__dwbMap=new Map;for(let __s of (__dwbP&&this.findStyle(__dwbP.styleName)?.paragraphProps?.tabs)||[])__s.style!="clear"&&__dwbMap.set(Math.round(parseFloat(__s.position)*2),__s);for(let __s of __dwbP?.tabs||[]){let __k=Math.round(parseFloat(__s.position)*2);__s.style=="clear"?__dwbMap.delete(__k):__dwbMap.set(__k,__s)}var __dwbStops=[...__dwbMap.values()].sort((a,b)=>parseFloat(a.position)-parseFloat(b.position));__dwbStops&&__dwbStops.length&&(${E}.dataset.stops=JSON.stringify(__dwbStops.map(s=>[parseFloat(s.position),s.leader||"none",s.style||"left"])));this.defaultTabSize&&(${E}.dataset.dt=parseFloat(this.defaultTabSize))}catch(__e){}if(${E}.innerHTML="&emsp;",this.options.experimental){${E}.className+=" "+this.tabStopClass();var ${R}=${F}(${T},${D}.Paragraph)?.tabs;`);
   console.log("  ✅  łatka: tabulatory z pozycjami (dane dla layoutTabStops)");
 
   // 4) Odstępy między znakami w przebiegu (w:rPr/w:spacing — Word „Czcionka → Zaawansowane →
@@ -183,9 +189,16 @@ function patchBundle() {
   //     własnego koloru dalej „auto”, jak w Wordzie. Rozmiar (data-dwb-mark-size) = wysokość
   //     PUSTEGO akapitu w Wordzie (applyWordLineMetrics): „Punkt Marzeny…” — puste akapity stylu
   //     27 pt ze znakiem 15 pt, u nas o połowę wyższe.
+  // krój znaku akapitu (w:rFonts) — wspólny parser cech przebiegu znał tylko kolor i rozmiar;
+  // pusty akapit ze znakiem w Times New Roman ma w Wordzie linijkę Timesa (12,6 pt przy 11 pt),
+  // nie kroju domyślnego (13,4 pt) — „A-Informacja-Ravi”: 3 strony zamiast 2
+  const reRunProp = /(for\(let \w+ of \w+\.elements\(\w+\)\)(\w+)\(\w+,\w+,\w+\);return \w+\}function \2\((\w+),(\w+),(\w+)\)\{return!!(\w+)\(\3,\4,\5\)\})/;
+  const mRP = src.match(reRunProp);
+  if (!mRP) throw new Error("łatka znaku akapitu: wzorzec parseRunProperty nie pasuje (nowa wersja docx-preview?)");
+  src = src.replace(reRunProp, (m0, _a, F, S, T, E, B) => m0.replace(`{return!!${B}(${S},${T},${E})}`, `{return ${S}.localName=="rFonts"?(${T}.fontFamily=${E}.attr(${S},"ascii")||${E}.attr(${S},"hAnsi")||${T}.fontFamily,!0):!!${B}(${S},${T},${E})}`));
   const reMarkRender = /(renderParagraph\((\w+)\)\{var (\w+)=this\.renderContainer\(\2,"p"\);)/;
   if (!reMarkRender.test(src)) throw new Error("łatka znaku akapitu: wzorzec renderParagraph nie pasuje (nowa wersja docx-preview?)");
-  src = src.replace(reMarkRender, (_, head, T, E) => `${head}{let __rp=${T}.runProps;__rp?.color&&/^[0-9a-f]{6}$/i.test(__rp.color)&&${E}.style.setProperty("--dwb-mark-color","#"+__rp.color);__rp?.fontSize&&(${E}.dataset.dwbMarkSize=__rp.fontSize)}`);
+  src = src.replace(reMarkRender, (_, head, T, E) => `${head}{let __rp=${T}.runProps;__rp?.color&&/^[0-9a-f]{6}$/i.test(__rp.color)&&${E}.style.setProperty("--dwb-mark-color","#"+__rp.color);__rp?.fontSize&&(${E}.dataset.dwbMarkSize=__rp.fontSize);__rp?.fontFamily&&(${E}.dataset.dwbMarkFont=__rp.fontFamily)}`);
   console.log("  ✅  łatka: kolor znaku końca akapitu dla punktorów/numerów listy");
 
   // 13) „Nie dodawaj odstępu między akapitami tego samego stylu” (w:contextualSpacing) — jest w
@@ -214,6 +227,38 @@ function patchBundle() {
   if (!reRow.test(src)) throw new Error("łatka wiersza nagłówka: wzorzec renderTableRow nie pasuje");
   src = src.replace(reRow, (m0, T, E) => `${m0}${T}.isHeader&&(${E}.dataset.dwbHeader="1");`);
   console.log("  ✅  łatka: wiersz nagłówka tabeli (w:tblHeader) oznaczony do powtarzania");
+
+  // 15) Obraz zakotwiczony z oblewaniem (wrapSquare/Tight/Through) albo wrapNone względem
+  //     marginesu/akapitu, ustawiony PRZESUNIĘCIEM: docx-preview domyślnie miał align "left" także
+  //     bez <wp:align>, więc każdy taki obraz był float:left — logotypy stawały jeden za drugim od
+  //     lewej, w kolejności z pliku („A-RAVI-PROJEKT”: logo PL po prawej, NCN po lewej — odwrotnie
+  //     niż w Wordzie). Teraz float tylko przy prawdziwym wyrównaniu; dane kotwicy idą do
+  //     data-dwb-anchor, a miejsce liczy positionAnchoredDrawings (docx-render-fixes.js).
+  const mWrapper = src.match(/parseDrawingWrapper\((\w+)\)\{var (\w+)=\{type:\w+\.Drawing,children:\[\],cssStyle:\{\}\},(\w+)=\1\.localName=="anchor";let (\w+)=null,\w+=(\w+)\.boolAttr\(\1,"simplePos"\);var __dwbBehind=\5\.boolAttr\(\1,"behindDoc"\);let (\w+)=\{relative:"page",align:"left",offset:"0"\},(\w+)=\{relative:"page",align:"top",offset:"0"\};for\(var (\w+) of \5\.elements\(\1\)\)switch\(\8\.localName\)\{case"simplePos":[^]*?lengthAttr\(\8,"x",(\w+)\.Emu\)/);
+  if (!mWrapper) throw new Error("łatka kotwic: nagłówek parseDrawingWrapper nie pasuje (nowa wersja docx-preview?)");
+  const [, ND, EL, RA, OW, XMK, PXK, PYK, LV, LU] = mWrapper;
+  const reAnchorAlign = /(\w+)&&\((\w+)\.align=(\w+)\.textContent\),(\w+)&&\(\2\.offset=/;
+  if (!reAnchorAlign.test(src)) throw new Error("łatka kotwic: wzorzec positionH/align nie pasuje");
+  src = src.replace(reAnchorAlign, (_, KT, PT, KT2, YT) => `${KT}&&(${PT}.align=${KT2}.textContent,${PT}.__a=1),${YT}&&(${PT}.offset=`);
+  const reAnchorWrap = new RegExp(`case"wrapNone":${OW}="wrapNone";break;`);
+  if (!reAnchorWrap.test(src)) throw new Error("łatka kotwic: wzorzec wrapNone (switch) nie pasuje");
+  src = src.replace(reAnchorWrap, (m0) => `${m0}case"wrapSquare":case"wrapTight":case"wrapThrough":${OW}=${LV}.localName;break;`);
+  const reAnchorEnd = new RegExp(`:${RA}&&\\(${PXK}\\.align=="left"\\|\\|${PXK}\\.align=="right"\\)&&\\(${EL}\\.cssStyle\\.float=${PXK}\\.align\\),${EL}\\}parseGraphic`);
+  if (!reAnchorEnd.test(src)) throw new Error("łatka kotwic: wzorzec float na końcu parseDrawingWrapper nie pasuje");
+  src = src.replace(reAnchorEnd, () => `:${RA}&&${PXK}.__a&&(${PXK}.align=="left"||${PXK}.align=="right")&&(${EL}.cssStyle.float=${PXK}.align),${RA}&&(${EL}.cssStyle["$data-dwb-anchor"]=JSON.stringify({w:${OW}||"",hr:${PXK}.relative,ha:${PXK}.__a?${PXK}.align:null,ho:${PXK}.offset,vr:${PYK}.relative,va:${PYK}.__a?${PYK}.align:null,vo:${PYK}.offset,b:__dwbBehind?1:0,dl:${XMK}.lengthAttr(${ND},"distL",${LU}.Emu),dr:${XMK}.lengthAttr(${ND},"distR",${LU}.Emu)})),${EL}}parseGraphic`);
+  console.log("  ✅  łatka: obrazy zakotwiczone z oblewaniem — dane kotwicy, bez fałszywego float:left");
+
+  // 17) Dzielenie wyrazów. docx-preview miał w domyślnym CSS na sztywno „hyphens: auto” —
+  //     przeglądarka dzieliła wyrazy w KAŻDYM dokumencie, a Word tylko przy włączonym
+  //     „Automatyczne dzielenie wyrazów” (w:settings/w:autoHyphenation). Wyjustowane akapity
+  //     łamały się inaczej niż w Wordzie („A-RAVI-PROJEKT”: „techni-ques”, „hun-dred”).
+  //     Bez tej opcji: hyphens: manual (miękkie łączniki z pliku dalej działają, jak w Wordzie).
+  const reSetTab = /case"defaultTabStop":(\w+)\.defaultTabStop=(\w+)\.lengthAttr\((\w+),"val"\);break;/;
+  if (!reSetTab.test(src)) throw new Error("łatka dzielenia wyrazów: wzorzec parseSettings nie pasuje (nowa wersja docx-preview?)");
+  src = src.replace(reSetTab, (m0, E, X, R) => `${m0}case"autoHyphenation":${E}.autoHyphenation=${X}.boolAttr(${R},"val",!0);break;`);
+  if (!src.includes("color: black; hyphens: auto;")) throw new Error("łatka dzielenia wyrazów: brak „hyphens: auto” w stylu domyślnym");
+  src = src.replace("color: black; hyphens: auto;", 'color: black; hyphens: ${this.document?.settingsPart?.settings?.autoHyphenation?"auto":"manual"};');
+  console.log("  ✅  łatka: dzielenie wyrazów tylko przy w:autoHyphenation (jak Word)");
   fs.writeFileSync(OUT, src);
 }
 

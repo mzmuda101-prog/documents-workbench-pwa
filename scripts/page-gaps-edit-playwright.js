@@ -186,7 +186,8 @@ async function run() {
   for (let i = 0; i < 80 && !pushed; i++) {
     await page.keyboard.press("Enter");
     await sleep(30);
-    pushed = await page.evaluate(async () => { await dwbPageBreaks.compute(); const p = docCaretParagraph(document.activeElement); const prev = p?.previousElementSibling; return !!prev?.matches(".dwb-page-gap"); });
+    // Enter w edytorze kończy się asynchronicznie — najpierw koniec zmiany, potem granice stron
+    pushed = await page.evaluate(async () => { if (typeof waitInlineStructuralIdle === "function") await waitInlineStructuralIdle(); await dwbPageBreaks.compute(); const p = docCaretParagraph(document.activeElement); const prev = p?.previousElementSibling; return !!prev?.matches(".dwb-page-gap"); });
   }
   const nested = await page.evaluate(() => document.querySelectorAll(".docx-preview-host p p").length);
   check("Enter w pustym akapicie (po wyjściu z listy, puste z pliku): nowy akapit obok, nie w środku", pushed && nested === 0, JSON.stringify({ pushed, nested }));

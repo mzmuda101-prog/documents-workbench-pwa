@@ -287,6 +287,10 @@ function applyContextualSpacing(host) {
     while (prev?.matches(PAGE_LAYOUT_OWN)) prev = prev.previousElementSibling;
     let next = p.nextElementSibling;
     while (next?.matches(PAGE_LAYOUT_OWN)) next = next.nextElementSibling;
+    // sąsiadem akapitu przy tabeli jest akapit w tabeli (Word: nagłówek z „bez odstępu…” nad tabelą
+    // w tym samym stylu nie ma odstępu — „Zapotrzebowanie”: tabele o 8 pt niżej)
+    if (next?.tagName === "TABLE") next = next.querySelector("td p");
+    if (prev?.tagName === "TABLE") { const ps = prev.querySelectorAll("td p"); prev = ps[ps.length - 1] || null; }
     set(p, "marginTop", prev?.tagName === "P" && docxParagraphStyleKey(prev) === key, orig[0]);
     set(p, "marginBottom", next?.tagName === "P" && docxParagraphStyleKey(next) === key, orig[1]);
   });
@@ -297,7 +301,8 @@ function applyContextualSpacing(host) {
 // wysokości linijki po przerysowaniu podskakiwałby o kilka px. Wysokość = jego interlinia.
 function fixEmptyParagraphHeights(host) {
   host?.querySelectorAll("section.docx p").forEach((p) => {
-    if (p.style.minHeight || p.textContent.length || p.querySelector(EMPTY_P_CONTENT)) return;
+    // „0px” to wyzerowane minimum akapitu z treścią (applyWordLineMetrics) — klon po Enterze je dziedziczy
+    if ((p.style.minHeight && p.style.minHeight !== "0px") || p.textContent.length || p.querySelector(EMPTY_P_CONTENT)) return;
     const cs = getComputedStyle(p);
     const fs = parseFloat(cs.fontSize);
     const lh = p.style.lineHeight;
@@ -311,6 +316,8 @@ function fixEmptyParagraphHeights(host) {
 // Po zmianach akapitów w podglądzie (Edycja) — odstępy list i puste akapity jak po narysowaniu.
 function watchParagraphLayout(wrapper) {
   if (!wrapper || typeof MutationObserver !== "function") return;
+  // w następnej klatce, nie w trakcie operacji edycji (natychmiast psuło kotwiczenie widoku przy
+  // Enter/Backspace w pustym punkcie listy — test page-gaps-edit)
   let pending = false;
   const mo = new MutationObserver(() => {
     if (pending) return;
@@ -331,6 +338,20 @@ function watchParagraphLayout(wrapper) {
 // wcześniej; wiersz z treścią (bez minimum) też był o linię niższy. Grubość z DEKLARACJI
 // (styl komórki albo reguła tabeli): obliczona jest zaokrąglona do 1 px. Tabele bez linii — bez zmian.
 const PT_PX = 96 / 72;
+
+// Indeks górny/dolny: rozmiar jak w Wordzie = 2/3 tekstu zaokrąglone w dół do pół punktu
+// (pomiar w Wordzie, 13 rozmiarów — app.css). Odnośniki przypisów też (styl z vertAlign).
+function applyWordSuperscripts(host) {
+  if (!host) return 0;
+  let n = 0;
+  host.querySelectorAll("section.docx sup, section.docx sub").forEach((el) => {
+    const base = parseFloat(getComputedStyle(el.parentElement).fontSize) * 0.75; // pt
+    if (!base) return;
+    el.style.fontSize = `${Math.floor(base * 4 / 3) / 2}pt`;
+    n++;
+  });
+  return n;
+}
 function cssLengthPx(v) {
   const m = /^(-?[\d.]+)(pt|px)$/.exec(String(v || "").trim());
   return m ? parseFloat(m[1]) * (m[2] === "pt" ? PT_PX : 1) : null;
@@ -402,8 +423,231 @@ function applyMergedCellFirstLine(host) {
   return n;
 }
 
+// Obrazy zakotwiczone (łatka 15: data-dwb-anchor) — miejsce jak w Wordzie: poziomo względem
+// strony / marginesu / kolumny, pionowo względem strony / marginesu / akapitu, przesunięciem albo
+// wyrównaniem. Obraz zostaje w swoim akapicie (edycja i zapis go widzą) i stoi bezwzględnie
+// WZGLĘDEM AKAPITU (position: relative na <p> — ten sam punkt odniesienia w podglądzie i w podglądzie
+// wydruku, gdzie akapity są przenoszone na kartki). Oblewanie tekstem (wrapSquare/Tight/Through):
+// niewidoczne „rezerwacje” (span.dwb-anchor-wrap, float) na początku akapitu, ułożone od skrajnego
+// — kilka obrazów po jednej stronie też stoi na swoich miejscach; ujemny margin-top = obraz
+// wystający nad akapit zabiera miejsce tylko tam, gdzie zachodzi na tekst. Liczenie stron pomija
+// obraz (.dwb-anchor-abs) i rezerwacje. Strona akapitu w długiej sekcji: z jego położenia.
+function positionAnchoredDrawings(host) {
+  if (!host) return 0;
+  const byPara = new Map();
+  host.querySelectorAll("section.docx [data-dwb-anchor]").forEach((el) => {
+    let d;
+    try { d = JSON.parse(el.dataset.dwbAnchor); } catch (_) { return; }
+    const wrapText = /^wrap(Square|Tight|Through)$/.test(d.w);
+    if (!wrapText && !(d.w === "wrapNone" && !(d.hr === "page" && d.vr === "page"))) return; // reszta jak dotąd
+    if (el.closest("td, header, footer")) return; // w komórce / nagłówku: układ docx-preview
+    const p = el.closest("p");
+    if (!p || !el.closest("section.docx")) return;
+    if (!byPara.has(p)) byPara.set(p, []);
+    byPara.get(p).push({ el, d, wrapText });
+  });
+  let n = 0;
+  byPara.forEach((items, p) => {
+    const sec = p.closest("section.docx");
+    const scale = sec.getBoundingClientRect().height / sec.offsetHeight || 1;
+    const cs = getComputedStyle(sec);
+    const padL = parseFloat(cs.paddingLeft) || 0, padR = parseFloat(cs.paddingRight) || 0;
+    const padT = parseFloat(cs.paddingTop) || 0, padB = parseFloat(cs.paddingBottom) || 0;
+    const pageW = sec.offsetWidth;
+    const pageH = parseFloat(cs.minHeight) || pageW * Math.SQRT2;
+    const sr = sec.getBoundingClientRect();
+    const pr = p.getBoundingClientRect();
+    const pTop = (pr.top - sr.top) / scale, pLeft = (pr.left - sr.left) / scale;
+    const pW = pr.width / scale, pH = pr.height / scale;
+    const bodyH = Math.max(1, pageH - padT - padB);
+    const pageTop = Math.max(0, Math.floor((pTop - padT) / bodyH)) * pageH; // strona akapitu
+    const off = (v) => cssLengthPx(v) ?? 0;
+    const placed = items.map(({ el, d, wrapText }) => {
+      // wrapNone: docx-preview daje kotwicy 0×0 (obraz wystaje) — rozmiar z samego obrazu
+      const img = el.querySelector("img, svg");
+      const w = cssLengthPx(el.style.width) || cssLengthPx(img?.style.width) || (img ? img.getBoundingClientRect().width / scale : 0);
+      const h = cssLengthPx(el.style.height) || cssLengthPx(img?.style.height) || (img ? img.getBoundingClientRect().height / scale : 0);
+      const hF = d.hr === "page" ? [0, pageW] : d.hr === "leftMargin" ? [0, padL] : d.hr === "rightMargin" ? [pageW - padR, pageW] : [padL, pageW - padR];
+      let x = hF[0] + off(d.ho);
+      if (d.ha === "right" || d.ha === "outside") x = hF[1] - w;
+      else if (d.ha === "center") x = (hF[0] + hF[1] - w) / 2;
+      else if (d.ha === "left" || d.ha === "inside") x = hF[0];
+      const vF = d.vr === "page" ? [pageTop, pageTop + pageH]
+        : d.vr === "margin" ? [pageTop + padT, pageTop + pageH - padB]
+        : d.vr === "topMargin" ? [pageTop, pageTop + padT]
+        : d.vr === "bottomMargin" ? [pageTop + pageH - padB, pageTop + pageH]
+        : [pTop, pTop + pH]; // paragraph / line
+      let y = vF[0] + off(d.vo);
+      if (d.va === "bottom" || d.va === "outside") y = vF[1] - h;
+      else if (d.va === "center") y = (vF[0] + vF[1] - h) / 2;
+      else if (d.va === "top" || d.va === "inside") y = vF[0];
+      return { el, d, wrapText, x, y, w, h };
+    });
+    if (getComputedStyle(p).position === "static") p.style.position = "relative";
+    placed.forEach(({ el, d, wrapText, x, y, w, h }) => {
+      el.style.position = "absolute";
+      el.style.float = "none";
+      el.style.margin = "0";
+      el.style.left = `${Math.round((x - pLeft) * 100) / 100}px`;
+      el.style.top = `${Math.round((y - pTop) * 100) / 100}px`;
+      el.style.zIndex = d.b ? "-1" : "1";
+      el.classList.add("dwb-anchor-abs");
+      if (wrapText) { el.style.width = `${w}px`; el.style.height = `${h}px`; }
+      n++;
+    });
+    // rezerwacje miejsca dla oblewanych: prawa strona od prawej krawędzi, lewa od lewej
+    const wraps = placed.filter((x) => x.wrapText && x.y + x.h > pTop);
+    const side = (x) => x.x + x.w / 2 > pLeft + pW / 2;
+    const make = (o, right, gap) => {
+      const ph = document.createElement("span");
+      ph.className = "dwb-anchor-wrap";
+      ph.setAttribute("aria-hidden", "true");
+      ph.style.cssText = `float:${right ? "right" : "left"};display:block;width:${o.w}px;height:${o.h}px;margin-top:${Math.round((o.y - pTop) * 100) / 100}px;`
+        + (right ? `margin-right:${Math.max(0, gap)}px;margin-left:${cssLengthPx(o.d.dl) ?? 12}px;` : `margin-left:${Math.max(0, gap)}px;margin-right:${cssLengthPx(o.d.dr) ?? 12}px;`);
+      return ph;
+    };
+    const out = [];
+    let edge = pLeft + pW;
+    wraps.filter(side).sort((a, b) => (b.x + b.w) - (a.x + a.w)).forEach((o) => { out.push(make(o, true, edge - (o.x + o.w))); edge = o.x - (cssLengthPx(o.d.dl) ?? 12); });
+    edge = pLeft;
+    wraps.filter((o) => !side(o)).sort((a, b) => a.x - b.x).forEach((o) => { out.push(make(o, false, o.x - edge)); edge = o.x + o.w + (cssLengthPx(o.d.dr) ?? 12); });
+    if (out.length) p.prepend(...out);
+  });
+  return n;
+}
+
+// Akapit kończący się ręcznym końcem wiersza (w:br, Shift+Enter): w Wordzie znak akapitu stoi w
+// NASTĘPNEJ linijce, więc „tekst⏎(Shift+Enter)” to dwie linijki, a dwa same w:br — trzy. Przeglądarka
+// nie robi linijki za <br> na końcu bloku („Podsumowanie dla porządkowych”: akapit z dwoma
+// łamaniami pod tytułem o linijkę niższy niż w Wordzie, cała strona przesunięta). Dokładamy
+// <br data-dwb-ph> — ten sam znacznik „pusty wiersz tylko dla oka”, którego używa Edycja (zapis go
+// pomija, docx-run-styles.js).
+function addTrailingBreakLines(host) {
+  if (!host) return 0;
+  let n = 0;
+  host.querySelectorAll("section.docx p").forEach((p) => {
+    let last = p.lastChild;
+    while (last) {
+      if (last.nodeType === 3 && !last.data.length) { last = last.previousSibling; continue; }
+      if (last.nodeType === 1 && last.tagName !== "BR" && last.lastChild && !last.matches?.("[contenteditable=false], img, svg")) { last = last.lastChild; continue; }
+      break;
+    }
+    if (last?.nodeType !== 1 || last.tagName !== "BR" || last.dataset.dwbPh || last.closest(".dwb-page-break")) return;
+    const ph = document.createElement("br");
+    ph.dataset.dwbPh = "1";
+    last.after(ph);
+    n++;
+  });
+  return n;
+}
+
 // Coś, co daje akapitowi linijkę mimo braku tekstu (obraz, wyspa, przerwa wiersza, pole).
 const EMPTY_P_CONTENT = "img, svg, canvas, video, object, iframe, br, input, select, textarea, [contenteditable=false]";
+
+// Krój „szkieletu” linijki = krój tekstu. Przeglądarka buduje linijkę także z niewidocznego
+// szkieletu w kroju AKAPITU (styl domyślny, np. Calibri), gdy tekst jest w innym (Arial): różne
+// proporcje góra/dół podnosiły linijkę o ~1 px — i tylko wtedy, gdy krój akapitu był już wczytany
+// („CO-23”: raz 98 %, raz 58 % zgodności podglądu wydruku). Word liczy linijkę z samego tekstu.
+// Punktor/numer listy bez własnego kroju zostaje przy dotychczasowym (--dwb-p-font, app.css).
+// Fragment wzorcowy linijki: największy tekst, przy równym rozmiarze — najdłuższy; kroje symboli
+// (punktor „” w Symbol/Wingdings jako pierwszy fragment akapitu z PDF) tylko, gdy nie ma innych.
+const SYMBOL_FONT = /^["']?(symbol|wingdings( \d)?|webdings|zapf ?dingbats|marlett)["']?$/i;
+function dominantRun(p) {
+  let best = null, bestFs = 0, bestLen = 0, bestSym = true;
+  p.querySelectorAll("span").forEach((sp) => {
+    // tekst fragmentu: jego własne węzły tekstu i indeks górny/dolny w nim (podpis cały w <sup>)
+    const own = [...sp.childNodes].map((n) => (n.nodeType === 3 ? n.data : n.nodeType === 1 && /^(SUP|SUB)$/.test(n.tagName) ? n.textContent : "")).join("").trim();
+    if (!own || sp.closest("sup, sub")) return;
+    const cs = getComputedStyle(sp);
+    const fs = parseFloat(cs.fontSize);
+    const sym = SYMBOL_FONT.test(cs.fontFamily.split(",")[0].trim());
+    const better = (bestSym && !sym) || (sym === bestSym && (fs > bestFs + 0.01 || (Math.abs(fs - bestFs) <= 0.01 && own.length > bestLen)));
+    if (!best || better) { best = sp; bestFs = fs; bestLen = own.length; bestSym = sym; }
+  });
+  return best;
+}
+
+function matchStrutFont(p, runFamily) {
+  const own = getComputedStyle(p).fontFamily;
+  if (!runFamily || own === runFamily) return;
+  if (!p.style.getPropertyValue("--dwb-p-font")) p.style.setProperty("--dwb-p-font", own);
+  p.style.fontFamily = runFamily;
+}
+
+// Punktor/numer listy w Wordzie ma cechy ZNAKU AKAPITU (gdy definicja listy ich nie podaje), nie
+// tekstu: „WYKŁAD” — tekst 5 pt, znak akapitu (styl) 11 pt → punktor 11 pt i to on wyznacza
+// wysokość linijki. Akapit dostaje rozmiar tekstu (applyWordLineMetrics), więc punktor zachowuje
+// swój przez --dwb-p-size / --dwb-p-font (app.css, najniższa ważność — rozmiar z listy wygrywa).
+function keepMarkerFont(p) {
+  if (!/(^|\s)docx-num-/.test(p.className) || p.style.getPropertyValue("--dwb-p-size")) return;
+  p.style.setProperty("--dwb-p-size", p.dataset.dwbMarkSize || getComputedStyle(p).fontSize);
+  if (p.dataset.dwbMarkFont) p.style.setProperty("--dwb-p-font", withGenericFontFallback(`"${p.dataset.dwbMarkFont}"`) || `"${p.dataset.dwbMarkFont}"`);
+}
+
+// Kolejność stylów jak w Wordzie (OOXML): ustawienia domyślne → STYL TABELI → styl akapitu → styl
+// znakowy → wprost. docx-preview pisze styl tabeli jako „table.docx_X span” — ważniejszy w CSS niż
+// styl akapitu Normalny („.docx :where(p) span”, łatka 10), więc w tabeli wygrywał krój tabeli
+// („Zapotrzebowanie”: Table Grid = Calibri, Normalny = Arial — Word pokazuje Arial, my Calibri).
+// Reguły tekstu stylów tabel i ustawień domyślnych dostają najniższą ważność (:where) — kolejność
+// w arkuszu (domyślne → style) zostaje, więc styl tabeli dalej wygrywa z domyślnymi.
+// Wołać PO applyRunDefaultsToParagraphs (szuka „.docx span”).
+function lowerTableStylePrecedence(host) {
+  if (!host) return 0;
+  let n = 0;
+  host.querySelectorAll("style").forEach((el) => {
+    let rules;
+    try { rules = el.sheet?.cssRules; } catch (_) { rules = null; }
+    for (const rule of rules || []) {
+      if (rule.type !== 1 || !rule.selectorText) continue;
+      const parts = rule.selectorText.split(",").map((x) => x.trim());
+      let changed = false;
+      const out = parts.map((sel) => {
+        let m = /^(\.[\w-]+) span$/.exec(sel); // ustawienia domyślne: „.docx span”
+        if (m) { changed = true; return `:where(${m[1]}) span`; }
+        m = /^(table\.[\w-]+(?:[ >][^,]*)?) span$/.exec(sel); // styl tabeli (też warunkowy: pierwszy wiersz…)
+        if (m && !/:where\(/.test(m[1])) { changed = true; return `:where(${m[1]}) span`; }
+        return sel;
+      });
+      if (changed) { try { rule.selectorText = out.join(", "); n++; } catch (_) { /* nieobsługiwany selektor */ } }
+    }
+  });
+  return n;
+}
+
+// Punktor większy niż tekst (11 pt przy tekście 5 pt) w Wordzie podnosi pierwszą linijkę akapitu
+// do swojej wysokości. U nas punktor stoi poza tekstem (absolute, .dwb-list-hang) — dokładamy
+// różnicę jako dopełnienie (≈ 80 % nad tekstem, 20 % pod, jak wysokość nad/pod linią bazową),
+// a punktor podnosimy o górne dopełnienie (--dwb-mk-top), żeby trzymał linię bazową tekstu.
+// Interlinia „dokładnie” — bez zmian (Word też trzyma stałą wysokość).
+let markerCanvas = null;
+function markerGlyphHeight(b, mfs) {
+  try {
+    markerCanvas = markerCanvas || document.createElement("canvas").getContext("2d");
+    markerCanvas.font = `${b.fontStyle} ${b.fontWeight} ${mfs}px ${b.fontFamily}`;
+    const m = markerCanvas.measureText("•");
+    const h = (m.fontBoundingBoxAscent || 0) + (m.fontBoundingBoxDescent || 0);
+    if (h > 0) return h;
+  } catch (_) { /* brak canvas — współczynnik kroju */ }
+  return mfs * wordLineFactor(b.fontFamily);
+}
+
+function addMarkerLineSpace(p) {
+  if (!p.style.getPropertyValue("--dwb-p-size") || p.classList.contains("dwb-exact")) return;
+  const b = getComputedStyle(p, "::before");
+  if (!b.content || b.content === "none") return;
+  const cs = getComputedStyle(p);
+  const mfs = parseFloat(b.fontSize), pfs = parseFloat(cs.fontSize), plh = parseFloat(cs.lineHeight);
+  if (!(mfs > pfs * 1.05) || !plh || !pfs) return;
+  // wysokość punktora = zasięg liter JEGO kroju nad i pod linią bazową (bez odstępu kroju i bez
+  // mnożnika interlinii) − linijka tekstu („WYKŁAD”: punktor Arial 11 pt przy tekście 5 pt i
+  // interlinii 1,08 → Word 12,1 pt na punkt; Arial: 0,905 + 0,212 = 1,117 × 11 = 12,3)
+  const extra = markerGlyphHeight(b, mfs) - plh;
+  if (extra < 0.5) return;
+  const top = Math.round(extra * 0.8 * 100) / 100;
+  p.style.paddingTop = `${top}px`;
+  p.style.paddingBottom = `${Math.round(extra * 0.2 * 100) / 100}px`;
+  p.style.setProperty("--dwb-mk-top", `${-top}px`);
+}
 
 function wordLineFactor(fontFamily) {
   const first = String(fontFamily || "").split(",")[0].trim().replace(/^["']|["']$/g, "").toLowerCase();
@@ -424,6 +668,7 @@ function applyWordLineMetrics(host) {
     const empty = !p.textContent.length && !p.querySelector(EMPTY_P_CONTENT);
     const emptyRun = empty ? p.querySelector("span[style*='font-size']") : null;
     if (empty && !emptyRun && p.dataset.dwbMarkSize) p.style.fontSize = p.dataset.dwbMarkSize;
+    if (empty && !emptyRun && p.dataset.dwbMarkFont) p.style.fontFamily = withGenericFontFallback(`"${p.dataset.dwbMarkFont}"`) || `"${p.dataset.dwbMarkFont}"`;
     const key = `${p.className}|${p.style.lineHeight}`;
     let m = multiplierCache.get(key);
     if (m === undefined) {
@@ -436,11 +681,35 @@ function applyWordLineMetrics(host) {
       m = Number.isFinite(a) && Number.isFinite(b) && Math.abs(b - 2 * a) < 1 ? a / 100 : null;
       multiplierCache.set(key, m);
     }
-    if (!m && empty && getComputedStyle(p).lineHeight === "normal") {
-      // bez interlinii w pliku = pojedyncza (Word): pusty akapit ma linijkę rozmiar × współczynnik kroju
-      const cs = getComputedStyle(emptyRun || p);
-      const fs = parseFloat(cs.fontSize);
-      if (fs) p.style.minHeight = `${Math.round(fs * wordLineFactor(cs.fontFamily) * 100) / 100}px`;
+    if (!m && getComputedStyle(p).lineHeight === "normal") {
+      // Bez interlinii w pliku (brak w:spacing w akapicie, stylu i docDefaults) = pojedyncza, jak w
+      // Wordzie: rozmiar × współczynnik kroju. Przeglądarka brała „normal” z metryk swojego kroju
+      // i z rozmiaru AKAPITU (stylu), nie tekstu — podpis 8 pt pod linią miał linijkę 12 pt, a
+      // zwykły wiersz Times 13,5 pt zamiast 13,8 („A-RAVI-PROJEKT”: 15 pt dryfu na stronie).
+      if (empty) {
+        const cs = getComputedStyle(emptyRun || p);
+        const fs = parseFloat(cs.fontSize);
+        if (fs) p.style.minHeight = `${Math.round(fs * wordLineFactor(cs.fontFamily) * 100) / 100}px`;
+        return;
+      }
+      // rozmiar linijki = największy tekst w akapicie (Word liczy linijkę z fragmentów)
+      const big = dominantRun(p);
+      const bigFs = big ? parseFloat(getComputedStyle(big).fontSize) : 0;
+      if (big) keepMarkerFont(p);
+      if (!big) {
+        // bez tekstu, same łamania wiersza: linijki w kroju i rozmiarze znaku akapitu (Word)
+        if (!p.querySelector("br")) return;
+        if (p.dataset.dwbMarkSize) p.style.fontSize = p.dataset.dwbMarkSize;
+        if (p.dataset.dwbMarkFont) p.style.fontFamily = withGenericFontFallback(`"${p.dataset.dwbMarkFont}"`) || `"${p.dataset.dwbMarkFont}"`;
+        p.style.lineHeight = String(wordLineFactor(getComputedStyle(p).fontFamily));
+        fixed++;
+        return;
+      }
+      p.style.fontSize = `${bigFs}px`;
+      p.style.lineHeight = String(wordLineFactor(getComputedStyle(big).fontFamily));
+      matchStrutFont(p, getComputedStyle(big).fontFamily);
+      addMarkerLineSpace(p);
+      fixed++;
       return;
     }
     if (!m) {
@@ -465,13 +734,15 @@ function applyWordLineMetrics(host) {
       }
       return;
     }
-    const run = empty ? emptyRun || p : [...p.querySelectorAll("span")].find((s) => s.textContent.trim()) || p.querySelector("span") || p;
+    const run = empty ? emptyRun || p : dominantRun(p) || p.querySelector("span") || p;
     const cs = getComputedStyle(run);
     const fs = parseFloat(cs.fontSize);
     if (!fs) return;
     const ratio = Math.round(m * wordLineFactor(cs.fontFamily) * 1000) / 1000;
+    if (!empty) keepMarkerFont(p);
     p.style.fontSize = `${fs}px`;
     p.style.lineHeight = String(ratio);
+    if (!empty) { matchStrutFont(p, cs.fontFamily); addMarkerLineSpace(p); }
     if (empty) p.style.minHeight = `${Math.round(fs * ratio * 100) / 100}px`;
     fixed++;
   });

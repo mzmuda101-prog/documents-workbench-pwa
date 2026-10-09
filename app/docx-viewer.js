@@ -31,16 +31,28 @@ async function loadFallbackDocFont(wrapper) {
 async function waitDocFontsSettled(el, timeout = 4000) {
   if (!document.fonts || !el) return;
   void el.offsetHeight;
-  await new Promise((r) => requestAnimationFrame(() => r()));
-  const deadline = performance.now() + timeout;
-  for (let round = 0; round < 3; round++) {
-    const pending = [...document.fonts].filter((f) => f.status === "loading").map((f) => f.loaded.catch(() => null));
-    if (!pending.length) break;
-    await Promise.race([Promise.all(pending), new Promise((r) => setTimeout(r, Math.max(0, deadline - performance.now())))]);
-    if (performance.now() >= deadline) break;
-    void el.offsetHeight; // po dojściu kroju układ się zmienia — mogą ruszyć kolejne odmiany
+  // Każdą odmianę kroju użytą w dokumencie (rodzina × grubość × pochylenie, z próbką tekstu)
+  // zamawiamy wprost — samo czekanie na „loading” nie wystarczało: Chrome czasem zaczynał pobierać
+  // dopiero w następnej klatce, a pomiar szedł na kroju zastępczym (linijki o 1 px wyższe —
+  // „CO-23”: 1 na 3 podglądy wydruku z inną zgodnością).
+  const want = new Map();
+  for (const sp of el.querySelectorAll("section.docx span, section.docx p")) {
+    if (want.size > 60) break;
+    const t = sp.firstChild?.nodeType === 3 ? sp.firstChild.data.trim() : "";
+    if (!t) continue;
+    const cs = getComputedStyle(sp);
+    const fam = cs.fontFamily.split(",")[0].trim();
+    const key = `${cs.fontStyle} ${cs.fontWeight} 16px ${fam}`;
+    if (!want.has(key)) want.set(key, t.slice(0, 40));
   }
+  const loads = [...want].map(([font, text]) => document.fonts.load(font, text).catch(() => null));
+  const deadline = new Promise((r) => setTimeout(r, timeout));
+  await Promise.race([Promise.all(loads), deadline]);
+  await new Promise((r) => requestAnimationFrame(() => r()));
+  const pending = [...document.fonts].filter((f) => f.status === "loading").map((f) => f.loaded.catch(() => null));
+  if (pending.length) await Promise.race([Promise.all(pending), new Promise((r) => setTimeout(r, 1500))]);
   await document.fonts.ready;
+  void el.offsetHeight;
 }
 
 // opts.pages: zawsze układ stron (podgląd wydruku rysuje osobny render także w Widoku mobilnym)
@@ -67,7 +79,10 @@ async function renderDocxPreview(bytes, container, opts = {}) {
   });
   addGenericFontFallbacks(wrapper); // brak kroju na urządzeniu → systemowy bezszeryfowy/szeryfowy z prawdziwym pogrubieniem
   applyRunDefaultsToParagraphs(wrapper); // pusty / nowy akapit: krój i rozmiar dokumentu, nie aplikacji
+  lowerTableStylePrecedence(wrapper); // styl akapitu wygrywa ze stylem tabeli (kolejność Worda)
   applyContextualSpacing(wrapper); // listy bez odstępów między punktami (styl „Akapit z listą”)
+  applyWordSuperscripts(wrapper); // indeksy: 2/3 rozmiaru w dół do pół punktu (Word)
+  addTrailingBreakLines(wrapper); // Shift+Enter na końcu akapitu = jeszcze jedna linijka (Word)
   await loadFallbackDocFont(wrapper); // plik bez kroju: zamiennik wczytany przed pomiarami
   fixDocxBulletRendering(wrapper);
   fixPageAnchoredDrawings(wrapper);
@@ -75,6 +90,7 @@ async function renderDocxPreview(bytes, container, opts = {}) {
   if (!mobileReflow) {
     applyMergedCellFirstLine(wrapper); // scalenie w pionie: 1. wiersz ≥ pierwsza linijka (Word)
     addTableBorderHeights(wrapper); // linie tabeli ponad wysokość wiersza (Word)
+    positionAnchoredDrawings(wrapper); // logotypy / zdjęcia z oblewaniem — miejsce jak w Wordzie (po układzie akapitów)
   }
   if (!mobileReflow) {
     layoutTabStops(wrapper); // tabulatory na pozycjach z akapitu (spis treści, formularze)

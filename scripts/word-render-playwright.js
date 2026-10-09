@@ -134,7 +134,8 @@ async function run() {
   check("kolor znaku akapitu w zmiennej dla punktora (#FF0000)", /^#ff0000$/i.test(l3.mark) && !l1.mark, JSON.stringify(info.list.map((x) => x.mark)));
   // Times New Roman: wysokość linijki 1,149 × rozmiar (WORD_LINE_FACTORS); znak akapitu 20 pt
   check("pusty akapit = linijka ze znaku akapitu (20 pt × 1,149 ≈ 30,6 px)", info.empty && Math.abs(info.empty.h - 20 * 1.149 * 4 / 3) < 1, JSON.stringify(info.empty));
-  check("indeks górny: 60 % rozmiaru tekstu", info.sup.supFs && Math.abs(info.sup.supFs / info.sup.baseFs - 0.6) < 0.02, JSON.stringify(info.sup));
+  // Word: 2/3 rozmiaru zaokrąglone w dół do pół punktu (11 pt → 7 pt)
+  check("indeks górny: 2/3 rozmiaru w dół do pół punktu (11 pt → 7 pt)", info.sup.supFs && Math.abs(info.sup.supFs * 0.75 - Math.floor(info.sup.baseFs * 0.75 * 4 / 3) / 2) < 0.05, JSON.stringify(info.sup));
   check("indeks górny nie podnosi linijki (wysokość jak zwykłego akapitu)", Math.abs(info.sup.supH - info.sup.plainH) < 0.6, JSON.stringify(info.sup));
   check("sekcja ciągła na tej samej kartce: 3 kartki (sekcje 1+2 | sekcja 3 | po podziale), nie 4", info.sections === 3, JSON.stringify({ sections: info.sections, articles: info.articles }));
   check("pierwsza kartka: 2 bloki treści, drugi w 2 kolumnach", info.articles[0] === 2 && info.cols[1] === "2", JSON.stringify({ articles: info.articles, cols: info.cols }));
