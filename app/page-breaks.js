@@ -207,6 +207,21 @@ const dwbPageBreaks = (() => {
     return b;
   }
 
+  // Wiersze nagłówka do powtórzenia, gdy strona zaczyna się wierszem `tr` tej samej tabeli co
+  // `prevTr`: kolejne od początku tabeli z data-dwb-header (jak w Wordzie). { table, rows, top, h }
+  // w układzie kartki; null, gdy tabela ich nie ma albo `tr` sam jest nagłówkiem.
+  function repeatedHeader(tr, prevTr, secTop, scale) {
+    const table = tr.closest("table");
+    if (!table || prevTr.closest("table") !== table) return null;
+    const rows = [];
+    for (const r of table.rows) { if (r.dataset.dwbHeader !== "1") break; rows.push(r); }
+    if (!rows.length || rows.includes(tr)) return null;
+    const a = rows[0].getBoundingClientRect();
+    const z = rows[rows.length - 1].getBoundingClientRect();
+    const h = (z.bottom - a.top) / scale;
+    return h > 0 ? { table, rows, top: (a.top - secTop) / scale, h } : null;
+  }
+
   function paginateSection(sec, { includeNotes = false, blockBreaks = false } = {}) {
     // sekcje ciągłe (Word: nowa sekcja na tej samej stronie) = kolejne <article> tej samej kartki
     const articles = [...sec.querySelectorAll(":scope > article")];
@@ -224,7 +239,18 @@ const dwbPageBreaks = (() => {
     // (klasa dwb-gapped) — wtedy z zapamiętanej wartości
     if (!sec.classList.contains("dwb-gapped")) sec.dataset.dwbPageH = String(parseFloat(cs.minHeight) || pageW * Math.SQRT2); // bez rozmiaru strony: A4
     const pageH = parseFloat(sec.dataset.dwbPageH) || pageW * Math.SQRT2;
-    const bodyH = pageH - padT - padB;
+    // Stopka wyższa niż miejsce między jej odległością od krawędzi a dolnym marginesem wypycha
+    // treść w górę — jak w Wordzie (S-99: stopka „S-99-P 2/26” na odległości = marginesowi, w
+    // Wordzie wiersz mniej na stronie). docx-preview: margin-bottom stopki = odległość − margines.
+    const footer = sec.querySelector(":scope > footer");
+    let bottomZone = padB;
+    if (footer && footer.offsetHeight) {
+      const dist = padB + (parseFloat(getComputedStyle(footer).marginBottom) || 0);
+      let fh = 0;
+      for (const c of footer.children) fh += c.offsetHeight + (parseFloat(getComputedStyle(c).marginTop) || 0) + (parseFloat(getComputedStyle(c).marginBottom) || 0);
+      if (dist >= 0 && fh > 0) bottomZone = Math.max(padB, dist + fh);
+    }
+    const bodyH = pageH - padT - bottomZone;
     const contentTop = (article.getBoundingClientRect().top - secRect.top) / scale;
     const out = { sec, pageW, pageH, padT, padB, padL, padR, bodyH, contentTop, cuts: [], end: contentTop };
     if (!(bodyH > 40)) return out;
@@ -236,7 +262,7 @@ const dwbPageBreaks = (() => {
     if (gaps.length) u.forEach((x) => { let d = 0; for (const g of gaps) if (g.top <= x.top) d += g.shift; x.top -= d; x.bottom -= d; });
     if (includeNotes) sec.querySelectorAll(":scope > ol").forEach((ol) => u.push(...lineUnits(ol, secRect.top, scale)));
     u.sort((a, b) => a.top - b.top);
-    let limit = pageH - padB; // dół treści pierwszej strony
+    let limit = pageH - bottomZone; // dół treści pierwszej strony
     let first = 0; // indeks pierwszej linijki bieżącej strony
     for (let k = 0; k < u.length; k++) {
       if (u[k].bottom <= limit + 1) continue;
@@ -264,9 +290,12 @@ const dwbPageBreaks = (() => {
         }
         const prevBottom = u[b - 1]?.bottom;
         const y = prevBottom != null && prevBottom <= u[b].top ? (prevBottom + u[b].top) / 2 : u[b].top;
-        out.cuts.push({ y, top: u[b].top, h: u[b].bottom - u[b].top, block, line, el: u[b].el });
+        // tabela idzie dalej na nowej stronie, a ma wiersze „Powtórz jako wiersz nagłówka”
+        // (łatka 14): Word rysuje je u góry strony — miejsce na nie odejmujemy od strony
+        const header = u[b].row && u[b - 1]?.row ? repeatedHeader(u[b].el, u[b - 1].el, secRect.top, scale) : null;
+        out.cuts.push({ y, top: u[b].top, h: u[b].bottom - u[b].top, block, line, el: u[b].el, header });
         first = b;
-        limit = u[b].top + bodyH;
+        limit = u[b].top + bodyH - (header?.h || 0);
         k = b - 1; // od nowej strony sprawdzamy jeszcze raz
       } else {
         // jedna rzecz wyższa niż strona (duży obraz, wysoki wiersz) — granica w środku niej

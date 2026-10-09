@@ -23,6 +23,26 @@ async function loadFallbackDocFont(wrapper) {
   await Promise.race([Promise.all(faces), new Promise((r) => setTimeout(r, 1500))]);
 }
 
+// Czcionki z dokumentu (osadzone w pliku, zamienniki Office) przeglądarka zaczyna wczytywać
+// dopiero przy przeliczeniu stylów — document.fonts.ready wołane zaraz po rysowaniu kończyło się
+// od razu i pomiary (podgląd wydruku) szły na kroju zastępczym: ten sam plik raz 98 %, raz 58 %
+// zgodności z Wordem (word:compare, „CO-23”, 2026-10-09). Wymuszamy ułożenie i czekamy na to,
+// co się wczytuje (z limitem czasu — brak kroju nie może zatrzymać podglądu).
+async function waitDocFontsSettled(el, timeout = 4000) {
+  if (!document.fonts || !el) return;
+  void el.offsetHeight;
+  await new Promise((r) => requestAnimationFrame(() => r()));
+  const deadline = performance.now() + timeout;
+  for (let round = 0; round < 3; round++) {
+    const pending = [...document.fonts].filter((f) => f.status === "loading").map((f) => f.loaded.catch(() => null));
+    if (!pending.length) break;
+    await Promise.race([Promise.all(pending), new Promise((r) => setTimeout(r, Math.max(0, deadline - performance.now())))]);
+    if (performance.now() >= deadline) break;
+    void el.offsetHeight; // po dojściu kroju układ się zmienia — mogą ruszyć kolejne odmiany
+  }
+  await document.fonts.ready;
+}
+
 // opts.pages: zawsze układ stron (podgląd wydruku rysuje osobny render także w Widoku mobilnym)
 async function renderDocxPreview(bytes, container, opts = {}) {
   if (!container) return;
@@ -52,6 +72,10 @@ async function renderDocxPreview(bytes, container, opts = {}) {
   fixDocxBulletRendering(wrapper);
   fixPageAnchoredDrawings(wrapper);
   applyWordLineMetrics(wrapper); // odstępy między wierszami jak w Wordzie (też granice stron)
+  if (!mobileReflow) {
+    applyMergedCellFirstLine(wrapper); // scalenie w pionie: 1. wiersz ≥ pierwsza linijka (Word)
+    addTableBorderHeights(wrapper); // linie tabeli ponad wysokość wiersza (Word)
+  }
   if (!mobileReflow) {
     layoutTabStops(wrapper); // tabulatory na pozycjach z akapitu (spis treści, formularze)
     // Czcionki osadzone w pliku (np. z PDF) docx-preview wczytuje z opóźnieniem — po ich

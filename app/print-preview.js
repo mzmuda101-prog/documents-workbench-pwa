@@ -73,8 +73,10 @@ const dwbPrint = (() => {
       sec.querySelectorAll(":scope > ol").forEach((ol, oi) => [...ol.children].forEach((el) => blocks.push({ el, holder: oi, box: rel(el, base) })));
       const cs = getComputedStyle(sec);
       const starts = [S.contentTop, ...S.cuts.map((c) => c.top)];
+      // powtarzane wiersze nagłówka tabeli (page-breaks.js: cut.header) — miejsce tabeli zmierzone teraz
+      const heads = [null, ...S.cuts.map((c) => c.header && { ...c.header, box: rel(c.header.table, base) })];
       plan.push({
-        S, sec, secH, blocks,
+        S, sec, secH, blocks, heads,
         header: header && { el: header, box: rel(header, base) },
         footer: footer && { el: footer, box: rel(footer, base), fromBottom: secH - rel(footer, base).top },
         ols: [...sec.querySelectorAll(":scope > ol")],
@@ -103,10 +105,14 @@ const dwbPrint = (() => {
         sheet.style.width = `${S.pageW}px`;
         // okno strony: treść od ws do we (pierwsza linijka następnej strony), na miejscu treści kartki
         const top = S.contentTop;
+        const head = P.heads[j]; // strona zaczyna się w środku tabeli z nagłówkiem: najpierw jego kopia
+        const headH = head ? head.h : 0;
         const clip = document.createElement("div");
         clip.className = "pp-clip";
-        clip.style.top = `${top}px`;
-        clip.style.height = `${Math.max(0, (we === Infinity ? S.pageH - top : we - ws))}px`;
+        // z nagłówkiem okno strony zaczyna się pod nim (tabela to jeden blok — wiersze sprzed
+        // granicy prześwitywałyby spod kopii nagłówka)
+        clip.style.top = `${top + headH}px`;
+        clip.style.height = `${Math.max(0, (we === Infinity ? S.pageH - top - headH : we - ws))}px`;
         const shift = document.createElement("div");
         shift.className = "pp-shift";
         shift.style.top = `${-ws}px`;
@@ -125,6 +131,19 @@ const dwbPrint = (() => {
           if (b.box.left < zone || b.box.right > S.pageW - zone) near = true;
         });
         clip.appendChild(shift);
+        if (head) {
+          // kopia tabeli z samymi wierszami nagłówka (kolumny i style z oryginału)
+          const t = head.table.cloneNode(false);
+          t.removeAttribute("id");
+          t.classList.add("pp-dup", "pp-repeat-head");
+          placeAbs(t, { top, left: head.box.left, width: head.box.width });
+          const cols = head.table.querySelector(":scope > colgroup");
+          if (cols) t.appendChild(cols.cloneNode(true));
+          const body = document.createElement("tbody");
+          head.rows.forEach((r) => body.appendChild(r.cloneNode(true)));
+          t.appendChild(body);
+          sheet.appendChild(t);
+        }
         sheet.appendChild(clip);
         if (P.header) {
           const h = P.header.el.cloneNode(true);
@@ -307,7 +326,7 @@ const dwbPrint = (() => {
       const bytes = await buildDocumentForSave();
       document.body.appendChild(src);
       await renderDocxPreview(bytes, src, { pages: true });
-      if (document.fonts?.ready) await document.fonts.ready;
+      await waitDocFontsSettled(src); // pomiary dopiero na właściwych krojach
       await frame();
       await frame();
       const host = src.querySelector(".docx-preview-host");

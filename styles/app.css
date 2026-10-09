@@ -610,19 +610,27 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
   font: 600 11px/1.3 var(--font); color: #fff; background: color-mix(in srgb, var(--accent) 80%, #334);
 }
 /* Narożne prowadnice marginesów: od punktu marginesu do krawędzi kartki. Są nakładką,
-   nie wpływają na układ ani nie trafiają do wydruku/zapisu. */
+   nie wpływają na układ ani nie trafiają do wydruku/zapisu. Pozycje TYLKO słowami kluczowymi
+   z przesunięciem (left/right/top/bottom X): procent w background-position liczy się od
+   (kartka − obrazek) — „calc(100% - dół)” przy obrazku wysokości dołu stawiało pionową kreskę
+   lewego dolnego rogu o cały margines za wysoko (w tekście zamiast do krawędzi kartki).
+   Każda kreska leży na wewnętrznej krawędzi pola tekstu (1 px w środku). */
 .dwb-page-margin-guide {
   position: absolute; box-sizing: border-box; z-index: 1; pointer-events: none; user-select: none;
   --dwb-guide-stroke: color-mix(in srgb, #64748b 36%, transparent);
+  --dwb-guide-h: repeating-linear-gradient(to right, var(--dwb-guide-stroke) 0 2px, transparent 2px 5px);
+  --dwb-guide-v: repeating-linear-gradient(to bottom, var(--dwb-guide-stroke) 0 2px, transparent 2px 5px);
   background:
-    repeating-linear-gradient(to right, var(--dwb-guide-stroke) 0 2px, transparent 2px 5px) 0 var(--dwb-guide-top) / var(--dwb-guide-left) 1px no-repeat,
-    repeating-linear-gradient(to right, var(--dwb-guide-stroke) 0 2px, transparent 2px 5px) right 0 top var(--dwb-guide-top) / var(--dwb-guide-right) 1px no-repeat,
-    repeating-linear-gradient(to right, var(--dwb-guide-stroke) 0 2px, transparent 2px 5px) 0 calc(100% - var(--dwb-guide-bottom)) / var(--dwb-guide-left) 1px no-repeat,
-    repeating-linear-gradient(to right, var(--dwb-guide-stroke) 0 2px, transparent 2px 5px) right 0 bottom var(--dwb-guide-bottom) / var(--dwb-guide-right) 1px no-repeat,
-    repeating-linear-gradient(to bottom, var(--dwb-guide-stroke) 0 2px, transparent 2px 5px) var(--dwb-guide-left) 0 / 1px var(--dwb-guide-top) no-repeat,
-    repeating-linear-gradient(to bottom, var(--dwb-guide-stroke) 0 2px, transparent 2px 5px) right calc(var(--dwb-guide-right) - 1px) top 0 / 1px var(--dwb-guide-top) no-repeat,
-    repeating-linear-gradient(to bottom, var(--dwb-guide-stroke) 0 2px, transparent 2px 5px) var(--dwb-guide-left) calc(100% - var(--dwb-guide-bottom)) / 1px var(--dwb-guide-bottom) no-repeat,
-    repeating-linear-gradient(to bottom, var(--dwb-guide-stroke) 0 2px, transparent 2px 5px) right calc(var(--dwb-guide-right) - 1px) bottom 0 / 1px var(--dwb-guide-bottom) no-repeat;
+    /* poziome: od krawędzi kartki do pola tekstu, na linii górnego / dolnego marginesu */
+    var(--dwb-guide-h) left 0 top var(--dwb-guide-top) / var(--dwb-guide-left) 1px no-repeat,
+    var(--dwb-guide-h) right 0 top var(--dwb-guide-top) / var(--dwb-guide-right) 1px no-repeat,
+    var(--dwb-guide-h) left 0 bottom var(--dwb-guide-bottom) / var(--dwb-guide-left) 1px no-repeat,
+    var(--dwb-guide-h) right 0 bottom var(--dwb-guide-bottom) / var(--dwb-guide-right) 1px no-repeat,
+    /* pionowe: od górnej / dolnej krawędzi kartki do pola tekstu, na linii lewego / prawego marginesu */
+    var(--dwb-guide-v) left var(--dwb-guide-left) top 0 / 1px var(--dwb-guide-top) no-repeat,
+    var(--dwb-guide-v) right var(--dwb-guide-right) top 0 / 1px var(--dwb-guide-top) no-repeat,
+    var(--dwb-guide-v) left var(--dwb-guide-left) bottom 0 / 1px var(--dwb-guide-bottom) no-repeat,
+    var(--dwb-guide-v) right var(--dwb-guide-right) bottom 0 / 1px var(--dwb-guide-bottom) no-repeat;
 }
 .doc-reflow-mode .dwb-page-margin-guide { display: none; }
 @media print { .dwb-page-margin-guide { display: none !important; } }

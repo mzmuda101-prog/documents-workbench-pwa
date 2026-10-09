@@ -325,6 +325,83 @@ function watchParagraphLayout(wrapper) {
   mo.observe(wrapper, { childList: true, subtree: true });
 }
 
+// Linie poziome tabeli dokładane do wysokości wiersza — jak w Wordzie. W Wordzie wiersz
+// „co najmniej 17 pt” z linią 0,5 pt ma 17,5 pt (PDF z Worda, „S-99_P”: 23,3 px na wiersz),
+// a przeglądarka mieści linię w 17 pt (22,7 px) — przy 30 wierszach strona kończyła się 18 px
+// wcześniej; wiersz z treścią (bez minimum) też był o linię niższy. Grubość z DEKLARACJI
+// (styl komórki albo reguła tabeli): obliczona jest zaokrąglona do 1 px. Tabele bez linii — bez zmian.
+const PT_PX = 96 / 72;
+function cssLengthPx(v) {
+  const m = /^(-?[\d.]+)(pt|px)$/.exec(String(v || "").trim());
+  return m ? parseFloat(m[1]) * (m[2] === "pt" ? PT_PX : 1) : null;
+}
+function addTableBorderHeights(host) {
+  if (!host) return 0;
+  const rules = [];
+  host.querySelectorAll("style").forEach((el) => {
+    let list;
+    try { list = el.sheet?.cssRules; } catch (_) { list = null; }
+    for (const r of list || []) if (r.type === 1 && /\btd\b/.test(r.selectorText) && (r.style.borderTopWidth || r.style.borderBottomWidth)) rules.push(r);
+  });
+  // grubość linii z deklaracji: styl komórki, inaczej ostatnia pasująca reguła
+  const declared = (td, side) => {
+    const prop = side === "top" ? "borderTopWidth" : "borderBottomWidth";
+    const styleProp = side === "top" ? "borderTopStyle" : "borderBottomStyle";
+    const cs = getComputedStyle(td);
+    if (cs[styleProp] === "none" || cs[styleProp] === "hidden" || !parseFloat(cs[prop])) return 0;
+    let v = td.style[prop];
+    if (!v) for (let i = rules.length - 1; i >= 0; i--) if (rules[i].style[prop] && td.matches(rules[i].selectorText)) { v = rules[i].style[prop]; break; }
+    return cssLengthPx(v) ?? parseFloat(cs[prop]);
+  };
+  let n = 0;
+  host.querySelectorAll("section.docx table").forEach((table) => {
+    if (getComputedStyle(table).borderCollapse !== "collapse") return;
+    const rows = [...table.rows];
+    rows.forEach((tr, i) => {
+      const cells = [...tr.cells];
+      if (!cells.length) return;
+      let extra = Math.max(0, ...cells.map((td) => declared(td, "bottom")), ...(rows[i + 1] ? [...rows[i + 1].cells].map((td) => declared(td, "top")) : []));
+      if (i === 0) extra += Math.max(0, ...cells.map((td) => declared(td, "top")));
+      if (!(extra > 0.05)) return;
+      // treść: dopełnienie komórek po połowie u góry i u dołu; minimum wiersza: + linia
+      cells.forEach((td) => {
+        const cs = getComputedStyle(td);
+        td.style.paddingTop = `${(parseFloat(cs.paddingTop) || 0) + extra / 2}px`;
+        td.style.paddingBottom = `${(parseFloat(cs.paddingBottom) || 0) + extra / 2}px`;
+      });
+      const h = cssLengthPx(tr.style.height);
+      if (h) tr.style.height = `${Math.round((h + extra) * 100) / 100}px`;
+      n++;
+    });
+  });
+  return n;
+}
+
+// Komórka scalona w pionie (w:vMerge → rowspan): w Wordzie PIERWSZY wiersz scalenia ma co
+// najmniej wysokość pierwszej linijki jej tekstu (bez odstępu przed), dalsze wiersze swoje minima,
+// a całość rośnie, gdy treść jest wyższa. Przeglądarka rozkłada komórkę tylko na minima wierszy.
+// Zmierzone w Wordzie na plikach testowych (2026-10-09): linijka 9,4 pt, minima 3,5 + 9,95 pt →
+// Word 19,4 pt, przeglądarka 13,45 („ubezp” z konwersji PDF: tabele o 30 % za niskie, 4 strony
+// zamiast 7). Wysokość linijki = interlinia pierwszego akapitu komórki.
+function applyMergedCellFirstLine(host) {
+  if (!host) return 0;
+  let n = 0;
+  host.querySelectorAll("section.docx td[rowspan]").forEach((td) => {
+    if (td.rowSpan < 2) return;
+    const p = td.querySelector("p");
+    const tr = td.parentElement;
+    if (!p || !p.textContent.trim() || tr?.tagName !== "TR") return;
+    const cs = getComputedStyle(p);
+    const lh = parseFloat(cs.lineHeight);
+    if (!lh) return;
+    const tcs = getComputedStyle(td);
+    const need = lh + (parseFloat(tcs.paddingTop) || 0) + (parseFloat(tcs.paddingBottom) || 0);
+    const cur = cssLengthPx(tr.style.height) || 0;
+    if (need > cur + 0.1) { tr.style.height = `${Math.round(need * 100) / 100}px`; n++; }
+  });
+  return n;
+}
+
 // Coś, co daje akapitowi linijkę mimo braku tekstu (obraz, wyspa, przerwa wiersza, pole).
 const EMPTY_P_CONTENT = "img, svg, canvas, video, object, iframe, br, input, select, textarea, [contenteditable=false]";
 

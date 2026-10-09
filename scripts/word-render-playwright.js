@@ -13,6 +13,9 @@
 // (4) Pusty akapit = jedna linijka liczona od znaku końca akapitu (w:pPr/w:rPr/w:sz) — nie
 //     rozmiar czcionki stylu bez interlinii; kolor znaku akapitu dla punktora (--dwb-mark-color).
 // (5) Indeks górny: 60 % rozmiaru i nie podnosi linijki (akapit tej samej wysokości co zwykły).
+// (6) Tabele: linia pozioma doliczana do wysokości wiersza (17 pt + 0,5 pt), pierwszy wiersz
+//     scalenia w pionie ≥ pierwsza linijka (reguła zmierzona w Wordzie), wiersz nagłówka
+//     (w:tblHeader) powtarzany na następnej stronie podglądu wydruku.
 // ENGINE=webkit (Safari/iPad).
 
 const pw = require("playwright");
@@ -63,6 +66,24 @@ async function fixture() {
     `<w:p><w:r><w:br w:type="page"/></w:r><w:r>${t("Po podziale strony")}</w:r></w:p>`,
   ].join("");
   z.file("word/document.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${NS}><w:body>${body}${SECT()}</w:body></w:document>`);
+  return z.generateAsync({ type: "nodebuffer" });
+}
+
+// Drugi dokument: tabela z nagłówkiem na 2 strony (obramowana) i para wierszy scalonych w pionie.
+async function fixtureTables() {
+  const z = new JSZip();
+  z.file("[Content_Types].xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+  z.file("_rels/.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+  const cell = (txt, extra = "", pPr = "") => `<w:tc><w:tcPr><w:tcW w:w="4000" w:type="dxa"/>${extra}</w:tcPr><w:p>${pPr ? `<w:pPr>${pPr}</w:pPr>` : ""}${txt ? `<w:r>${t(txt)}</w:r>` : ""}</w:p></w:tc>`;
+  const b = '<w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="000000"/><w:left w:val="single" w:sz="4" w:space="0" w:color="000000"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="000000"/><w:right w:val="single" w:sz="4" w:space="0" w:color="000000"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="000000"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="000000"/></w:tblBorders>';
+  const mar = '<w:tblCellMar><w:top w:w="0" w:type="dxa"/><w:left w:w="40" w:type="dxa"/><w:bottom w:w="0" w:type="dxa"/><w:right w:w="40" w:type="dxa"/></w:tblCellMar>';
+  const rows = [`<w:tr><w:trPr><w:tblHeader/><w:trHeight w:val="400"/></w:trPr>${cell("Nagłówek tabeli")}</w:tr>`];
+  for (let i = 1; i <= 60; i++) rows.push(`<w:tr><w:trPr><w:trHeight w:val="340"/></w:trPr>${cell(`Wiersz ${i}`)}</w:tr>`);
+  const big = `<w:tbl><w:tblPr><w:tblW w:w="4000" w:type="dxa"/>${b}${mar}</w:tblPr><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid>${rows.join("")}</w:tbl>`;
+  // para scalona w pionie (bez linii): linijka dokładnie 9,4 pt, odstęp przed 3,5 pt; minima 3,5 + 9,95 pt
+  const pair = (i) => `<w:tr><w:trPr><w:trHeight w:val="70" w:hRule="atLeast"/></w:trPr>${cell(`Scalona ${i}`, '<w:vMerge w:val="restart"/>', '<w:spacing w:before="70" w:after="0" w:line="188" w:lineRule="exact"/><w:rPr><w:sz w:val="16"/></w:rPr>')}</w:tr><w:tr><w:trPr><w:trHeight w:val="199" w:hRule="atLeast"/></w:trPr>${cell("", "<w:vMerge/>", '<w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/>')}</w:tr>`;
+  const merged = `<w:tbl><w:tblPr><w:tblW w:w="4000" w:type="dxa"/>${mar}</w:tblPr><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid>${pair(1)}${pair(2)}</w:tbl>`;
+  z.file("word/document.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${NS}><w:body>${merged}${P("Między tabelami")}${big}${P("Koniec")}${SECT()}</w:body></w:document>`);
   return z.generateAsync({ type: "nodebuffer" });
 }
 
@@ -134,6 +155,38 @@ async function run() {
   });
   check("podgląd wydruku: 3 strony", pp.n === 3, JSON.stringify(pp.texts));
   check("podgląd wydruku: kolumna prawa obok lewej (ta sama wysokość, przesunięta w prawo)", pp.side > 150 && pp.rowDiff < 40, JSON.stringify(pp));
+
+  // ── tabele (drugi dokument) ──
+  await page.evaluate(() => { if (window.dwbPrint?.isOpen()) dwbPrint.close(); if (typeof setDirtyState === "function") setDirtyState(false); });
+  const file2 = path.join(os.tmpdir(), `dwb-word-render-t-${process.pid}.docx`);
+  fs.writeFileSync(file2, await fixtureTables());
+  await page.setInputFiles("#fileInput", file2);
+  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && [...document.querySelectorAll(".docx-preview-host td")].some((td) => td.textContent === "Wiersz 1"), null, { timeout: 20000 });
+  fs.rmSync(file2, { force: true });
+  await page.waitForTimeout(500);
+  const tb = await page.evaluate(() => {
+    const host = document.querySelector(".docx-preview-host");
+    const tr = (txt) => [...host.querySelectorAll("tr")].find((r) => r.textContent === txt);
+    const r1 = tr("Wiersz 1"), m1 = tr("Scalona 1"), m2 = tr("Scalona 2");
+    return { row: r1.getBoundingClientRect().height, pair: m2.getBoundingClientRect().top - m1.getBoundingClientRect().top, head: !!tr("Nagłówek tabeli")?.dataset.dwbHeader };
+  });
+  check("wiersz tabeli: 17 pt + linia 0,5 pt (jak Word, 23,33 px)", Math.abs(tb.row - 17.5 * 4 / 3) < 0.4, JSON.stringify(tb));
+  // WebKit wkłada całą treść komórki scalonej do PIERWSZEGO wiersza (17,2 px zamiast 12,5) — tak
+  // było też przed regułą; tam tylko pilnujemy, żeby nie było gorzej (30,45 px)
+  if (ENGINE === "webkit") check("scalenie w pionie (WebKit): nie wyżej niż przed regułą Worda", tb.pair < 31, JSON.stringify(tb));
+  else check("scalenie w pionie: para wierszy = linijka 9,4 pt + minimum 9,95 pt (Word 19,4 pt ≈ 25,8 px)", Math.abs(tb.pair - 19.35 * 4 / 3) < 0.8, JSON.stringify(tb));
+  check("wiersz nagłówka oznaczony (w:tblHeader bez wartości = tak)", tb.head, JSON.stringify(tb));
+  await page.evaluate(() => dwbPrint.open());
+  await page.waitForSelector('.pp-sheet[data-page="2"]', { timeout: 20000 });
+  await page.waitForTimeout(400);
+  const rep2 = await page.evaluate(() => {
+    const s = document.querySelector('.pp-sheet[data-page="2"]');
+    const h = s.querySelector(".pp-repeat-head");
+    const clip = s.querySelector(".pp-clip").getBoundingClientRect();
+    const rows = [...s.querySelectorAll(".pp-clip tr")].filter((r) => { const b = r.getBoundingClientRect(); return b.top >= clip.top - 1 && b.bottom <= clip.bottom + 1 && b.height; });
+    return { head: h?.textContent || "", headBottom: h ? Math.round(h.getBoundingClientRect().bottom) : null, firstTop: rows[0] ? Math.round(rows[0].getBoundingClientRect().top) : null, first: rows[0]?.textContent };
+  });
+  check("podgląd wydruku: nagłówek tabeli powtórzony na stronie 2, wiersze pod nim", rep2.head === "Nagłówek tabeli" && rep2.firstTop >= rep2.headBottom - 1 && /^Wiersz \d+$/.test(rep2.first || ""), JSON.stringify(rep2));
 
   await browser.close();
   const real = errors.filter((e) => !/ResizeObserver/.test(e));

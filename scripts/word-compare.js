@@ -98,7 +98,9 @@ async function run() {
     // każdy plik w osobnym, czystym kontekście: przy kartach dokumentów (open-docs) i szkicach
     // podgląd wydruku potrafił pokazać POPRZEDNI plik (np. „WYKŁAD” z treścią umowy najmu)
     await context?.close();
-    context = await browser.newContext({ serviceWorkers: "block", viewport: { width: 1300, height: 1000 } });
+    // okno wyższe niż kartka (A3 = 1587 px): zrzut kartki wyższej niż okno obcinał jej dół —
+    // treść i stopka z dołu strony wychodziły jako „tylko Word” (do 2026-10-09 w każdym pomiarze)
+    context = await browser.newContext({ serviceWorkers: "block", viewport: { width: 1300, height: 1700 } });
     await context.addInitScript(() => sessionStorage.setItem("introPlayed", "true"));
     const page = await context.newPage();
     page.on("dialog", (d) => d.accept().catch(() => {}));
@@ -120,7 +122,7 @@ async function run() {
     await page.waitForSelector(".pp-sheet", { timeout: 30000 });
     await page.evaluate(async () => { const st = dwbPrint._state(); if (st) { st.fit = false; st.zoom = 1; } document.querySelector(".pp-pages").style.setProperty("--pp-zoom", "1"); await document.fonts.ready; });
     // na zrzucie tylko kartka: pasek podglądu, komunikaty i podpowiedzi schowane
-    await page.addStyleTag({ content: "#loadingOverlay, .pp-bar, .pp-warn, #toastContainer, .toast-container, .cursor-hint, [class*='hint-bubble'] { visibility: hidden !important; } .pp-zone { display: none !important; }" });
+    await page.addStyleTag({ content: "#loadingOverlay, .pp-bar, .pp-warn, .pp-page-label, #toastContainer, .toast-container, .cursor-hint, [class*='hint-bubble'] { visibility: hidden !important; } .pp-zone { display: none !important; }" });
     await page.waitForTimeout(500);
     const sheets = await page.$$(".pp-sheet");
     const ours = [];

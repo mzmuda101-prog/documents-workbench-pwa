@@ -201,6 +201,19 @@ function patchBundle() {
   if (!reCtxRender.test(src)) throw new Error("łatka contextualSpacing: wzorzec renderParagraph nie pasuje");
   src = src.replace(reCtxRender, (head, _h, T, E, R) => `${head}(${T}.contextualSpacing??${R}?.paragraphProps?.contextualSpacing)&&(${E}.dataset.dwbCtx="1");`);
   console.log("  ✅  łatka: odstępy między akapitami tego samego stylu (contextualSpacing)");
+
+  // 14) „Powtórz jako wiersz nagłówka” (w:trPr/w:tblHeader). docx-preview czytał go z
+  //     boolAttr bez wartości domyślnej — goły <w:tblHeader/> (tak zapisuje Word) = false — i nie
+  //     używał. Wiersz dostaje data-dwb-header; page-breaks.js rezerwuje na kolejnych stronach
+  //     tabeli miejsce na nagłówek, print-preview.js rysuje jego kopię (Word: „S-99_P” — nagłówek
+  //     „Rok:” na każdej stronie; bez tego dalsze strony przesunięte o wiersz).
+  const reHdr = /case"tblHeader":(\w+)\.isHeader=(\w+)\.boolAttr\((\w+),"val"\);/;
+  if (!reHdr.test(src)) throw new Error("łatka wiersza nagłówka: wzorzec tblHeader nie pasuje (nowa wersja docx-preview?)");
+  src = src.replace(reHdr, (_, E, M, R) => `case"tblHeader":${E}.isHeader=${M}.boolAttr(${R},"val",!0);`);
+  const reRow = /renderTableRow\((\w+)\)\{let (\w+)=this\.createElement\("tr"\);/;
+  if (!reRow.test(src)) throw new Error("łatka wiersza nagłówka: wzorzec renderTableRow nie pasuje");
+  src = src.replace(reRow, (m0, T, E) => `${m0}${T}.isHeader&&(${E}.dataset.dwbHeader="1");`);
+  console.log("  ✅  łatka: wiersz nagłówka tabeli (w:tblHeader) oznaczony do powtarzania");
   fs.writeFileSync(OUT, src);
 }
 
