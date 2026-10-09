@@ -12,7 +12,7 @@
 //     odczytu, a zapis z podglądu pomija takie akapity — opakowanie nie trafia do pliku.
 
 const LINK_SAFE_RE = /^(https?:|mailto:|tel:)/i;
-const linkUi = { back: null, backTop: 0, backTimer: 0, backToken: 0 };
+const linkUi = { back: null, backTop: 0, backTimer: 0, backToken: 0, backArmed: false };
 // użytkownik sam przewija — dociągnięcie „Wróć” odpada
 ["wheel", "touchstart", "pointerdown"].forEach((type) => document.addEventListener(type, (e) => { if (docViewportEl?.contains(e.target)) linkUi.backToken++; }, { passive: true, capture: true }));
 
@@ -359,31 +359,56 @@ function showLinkPeek(a, touch = false) {
 }
 
 // ── skok + „Wróć” ────────────────────────────────────────────────────────────
+// Wejście i wyjście „Wróć” tylko przez opacity/transform (CSS .link-back, .is-leaving); przy
+// „Ogranicz ruch” — od razu.
 function hideLinkBack() {
   clearTimeout(linkUi.backTimer);
-  if (linkUi.back) linkUi.back.hidden = true;
+  const b = linkUi.back;
+  if (!b || b.hidden || b.classList.contains("is-leaving")) return;
+  linkUi.backArmed = false;
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) { b.hidden = true; return; }
+  b.classList.add("is-leaving");
+  const done = () => { if (b.classList.contains("is-leaving")) { b.classList.remove("is-leaving"); b.hidden = true; } };
+  b.addEventListener("animationend", done, { once: true });
+  setTimeout(done, 260); // zapas, gdyby animationend nie przyszło (karta w tle)
 }
 function showLinkBack(top) {
   if (!linkUi.back) {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "link-back";
+    b.hidden = true;
     b.addEventListener("click", () => linkGoBack());
     document.body.append(b);
     linkUi.back = b;
   }
+  const b = linkUi.back;
   linkUi.backTop = top;
-  linkUi.back.textContent = t("linkBack");
-  linkUi.back.hidden = false;
+  linkUi.backArmed = false; // samo-chowanie czeka, aż widok odjedzie od miejsca sprzed skoku
+  b.textContent = t("linkBack");
+  if (b.hidden || b.classList.contains("is-leaving")) {
+    b.classList.remove("is-leaving");
+    b.hidden = false;
+  }
   clearTimeout(linkUi.backTimer);
   linkUi.backTimer = setTimeout(hideLinkBack, 12000);
+}
+// Wróciłeś sam (przewijaniem) mniej więcej tam, skąd był skok — „Wróć” nie jest już potrzebne.
+// Najpierw widok musi od tego miejsca odjechać (płynny skok startuje właśnie stamtąd).
+function onDocScrollForLinkBack() {
+  const b = linkUi.back;
+  if (!b || b.hidden || b.classList.contains("is-leaving") || !docViewportEl) return;
+  const near = Math.max(80, docViewportEl.clientHeight * 0.3);
+  const dist = Math.abs(docViewportEl.scrollTop - linkUi.backTop);
+  if (dist > near) linkUi.backArmed = true;
+  else if (linkUi.backArmed) hideLinkBack();
 }
 // Płynny powrót przerywa każda natychmiastowa zmiana przewijania — np. przeliczenie granic stron
 // (page-breaks.js trzyma akapit u góry na miejscu, gdy doszły czcionki/odstępy stron): widok
 // zostawał przy celu skoku (test links, niestabilny w tłoku). Po animacji dociągamy bez animacji,
 // chyba że użytkownik sam zaczął przewijać.
 function linkGoBack() {
-  if (!linkUi.back || linkUi.back.hidden || !docViewportEl) return false;
+  if (!linkUi.back || linkUi.back.hidden || linkUi.back.classList.contains("is-leaving") || !docViewportEl) return false;
   const top = linkUi.backTop;
   docViewportEl.scrollTo({ top, behavior: "smooth" });
   hideLinkBack();
@@ -477,6 +502,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // przytrzymanie na linku: bez systemowego menu (Kopiuj / Otwórz link) zamiast podglądu
   docCanvasEl?.addEventListener("contextmenu", (e) => { if (linkPeek.touchShown || (e.pointerType === "touch" && imgLinkAt(e))) e.preventDefault(); });
   docViewportEl?.addEventListener("scroll", hideLinkPeek, { passive: true });
+  docViewportEl?.addEventListener("scroll", onDocScrollForLinkBack, { passive: true });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && linkPeek.el) hideLinkPeek();
     // Spacja przy okienku obrazu (jak „Szybki podgląd” na Macu) = powiększ; nie przy pisaniu

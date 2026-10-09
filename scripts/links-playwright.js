@@ -69,6 +69,22 @@ async function run() {
   const top1 = await page.evaluate(() => docViewportEl.scrollTop);
   check("Alt+← wraca do miejsca sprzed skoku i chowa „Wróć”", Math.abs(top1 - top0) < 30 && await page.evaluate(() => document.querySelector(".link-back").hidden), `${top0} → ${top1}`);
 
+  // ── „Wróć” znika samo, gdy przewiniesz z powrotem w okolice miejsca sprzed skoku ──
+  await page.evaluate(() => document.querySelector('.docx-preview-host a[href="#_Toc3"]').scrollIntoView({ block: "center" }));
+  await page.waitForTimeout(150);
+  const top2 = await page.evaluate(() => docViewportEl.scrollTop);
+  await clickLink(page, '.docx-preview-host a[href="#_Toc3"]');
+  const shown = await page.evaluate(() => !document.querySelector(".link-back").hidden);
+  await page.evaluate((t) => { docViewportEl.scrollTop = t + 30; }, top2); // ręcznie, „mniej więcej” tam
+  await page.waitForFunction(() => document.querySelector(".link-back").hidden, null, { timeout: 2000 }).catch(() => {});
+  check("ręczny powrót w okolice miejsca sprzed skoku chowa „Wróć”", shown && await page.evaluate(() => document.querySelector(".link-back").hidden));
+  // po samym skoku (bez powrotu) „Wróć” zostaje
+  await clickLink(page, '.docx-preview-host a[href="#_Toc3"]');
+  await page.waitForTimeout(300);
+  check("bez powrotu „Wróć” zostaje na ekranie", await page.evaluate(() => !document.querySelector(".link-back").hidden && !document.querySelector(".link-back").classList.contains("is-leaving")));
+  await page.click(".link-back");
+  await page.waitForTimeout(900);
+
   // ── odsyłacze-pola ─────────────────────────────────────────────────────────
   await clickLink(page, '.docx-preview-host a.doc-xref[href="#_Ref9"]');
   check("odsyłacz REF \\h: klik przewija do celu", await inView(page, "Zagrożenia bombowe"));
@@ -94,6 +110,22 @@ async function run() {
   await page.evaluate(() => docViewportEl.scrollTo({ top: 0 }));
   await clickLink(page, '.docx-preview-host a[href="#_Toc1"]');
   check("Edycja: klik w spis treści też skacze", await inView(page, "Bezpieczeństwo"));
+  // Ctrl/⌘+klik w link w edytowalnym akapicie = od razu otwarcie, bez karty linku pod kursorem
+  {
+    const MOD = process.platform === "darwin" ? "Meta" : "Control";
+    const sel = '.docx-preview-host .docx-editable-p a[href^="https://"]';
+    const n0 = await page.evaluate(() => window.__opened.length);
+    await page.evaluate((s) => document.querySelector(s).scrollIntoView({ block: "center" }), sel);
+    await page.waitForTimeout(150);
+    await page.click(sel, { modifiers: [MOD] });
+    await page.waitForTimeout(400);
+    const r = await page.evaluate((n0) => ({ opened: window.__opened.length - n0, card: !!document.querySelector(".link-card") }), n0);
+    check("Edycja: Ctrl/⌘+klik w link otwiera od razu, bez karty linku", r.opened === 1 && !r.card, JSON.stringify(r));
+    await page.click(sel);
+    await page.waitForTimeout(400);
+    const r2 = await page.evaluate((n0) => ({ opened: window.__opened.length - n0, card: !!document.querySelector(".link-card") }), n0);
+    check("Edycja: zwykły klik w ten link dalej pokazuje kartę (bez otwierania)", r2.opened === 1 && r2.card, JSON.stringify(r2));
+  }
 
   // ── akapit z wysuniętym pierwszym wierszem (zgłoszenie: „N|agłe zdarzenia”) ─
   const hang = await page.evaluate(async () => {

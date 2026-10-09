@@ -2671,6 +2671,7 @@ const composeUi = (() => {
     return "left";
   }
 
+  let linkCardMuted = null; // link po Ctrl/⌘+kliku — bez karty, aż kursor go opuści
   function syncState() {
     const p = activeParagraph();
     if (p) lastP = p;
@@ -2692,7 +2693,8 @@ const composeUi = (() => {
     if (tableBtn) tableBtn.hidden = !(target?.isConnected && target.closest("td, th") && !readOnlyMode);
     const sel = window.getSelection();
     const a = !readOnlyMode && !pop && sel?.isCollapsed ? linkAtCaret() : null;
-    if (a) showLinkCard(a); else hideLinkCard();
+    if (a !== linkCardMuted) linkCardMuted = null;
+    if (a && !linkCardMuted) showLinkCard(a); else hideLinkCard();
     const hit = !readOnlyMode && !pop && !cCardMuted ? commentAtCaret() : null;
     if (hit) showCommentCard(hit); else hideCommentCard();
   }
@@ -2774,6 +2776,17 @@ const composeUi = (() => {
     if (!img || readOnlyMode || !collectPreviewParagraphElements(host()).includes(img.closest("p"))) return;
     e.preventDefault();
     showImageCard(img);
+  });
+  // Ctrl/⌘+klik w link w Edycji = od razu przejście (doc-links.js). Kursor zostaje, gdzie był
+  // (jak w Wordzie) — inaczej stawał w linku i najpierw wyskakiwała karta linku.
+  docCanvasEl?.addEventListener("mousedown", (e) => {
+    if (readOnlyMode || e.button !== 0) return;
+    if (!(e.ctrlKey || e.metaKey)) { linkCardMuted = null; return; } // zwykły klik w link = karta jak dotąd
+    const a = e.target.closest?.(".docx-editable-p a[href]");
+    if (!a) return;
+    e.preventDefault();
+    linkCardMuted = a; // kursor stał już w tym linku — karta nie wraca, dopóki z niego nie wyjdzie
+    hideLinkCard();
   });
   // Podgląd obrazu na cały ekran: dwuklik w Edycji, zwykły klik / stuknięcie w Czytaniu
   // (obraz w linku dalej działa jak link).
