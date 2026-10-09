@@ -252,6 +252,18 @@ async function run() {
   await idle(page);
   f = await saved(page);
   check("sam wklejony adres = link z tym adresem jako tekstem", f.rels.includes('Target="https://www.wklejka.pl"') && (await paraText(page, 3)).endsWith("www.wklejka.pl"), await paraText(page, 3));
+  // wyłącznik w „Narzędziach edycji”: adres wkleja się jako zwykły tekst (zaznaczenie zastąpione)
+  await page.evaluate(() => { const box = document.getElementById("pasteAutoLink"); box.checked = false; box.dispatchEvent(new Event("change", { bubbles: true })); });
+  await select(page, 5, 0, 5);
+  await paste("https://example.com/bez-linku");
+  await idle(page);
+  f = await saved(page);
+  const plain = await page.evaluate(() => {
+    const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[5];
+    return { a: !!p.querySelector('a[data-dwb-link*="bez-linku"], a[href*="bez-linku"]'), text: p.textContent, stored: localStorage.getItem("dwb-paste-autolink-v1") };
+  });
+  check("opcja wyłączona: wklejony adres = zwykły tekst, bez linku", !f.rels.includes("bez-linku") && !plain.a && plain.text.startsWith("https://example.com/bez-linku") && plain.stored === "0", JSON.stringify(plain));
+  await page.evaluate(() => { const box = document.getElementById("pasteAutoLink"); box.checked = true; box.dispatchEvent(new Event("change", { bubbles: true })); });
 
   // ── czytanie: Początek dokumentu przewija na górę ──
   await page.evaluate(() => appFrame.setReadOnly(true));

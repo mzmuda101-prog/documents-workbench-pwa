@@ -165,6 +165,52 @@ async function run() {
   const body4 = x4.slice(x4.indexOf("<w:body>"), x4.indexOf("<w:sectPr"));
   check("…w pliku: „Tekst przed.Dalej” bez łamania, „Ala⏎Kot” jednym akapitem", /<w:p>(?:(?!<\/w:p>).)*Tekst przed\.(?:(?!<\/w:p>).)*Dalej(?:(?!<\/w:p>).)*<\/w:p>/.test(body4) && !/Tekst przed\.(?:(?!<\/w:p>).)*<w:br\/>/.test(body4) && /<w:t>Ala<\/w:t><\/w:r><w:r><w:br\/><\/w:r><w:r><w:t>Kot<\/w:t>/.test(body4) && /<w:t>OlaEwa<\/w:t>|<w:t>Ola<\/w:t><\/w:r><w:r><w:t>Ewa<\/w:t>/.test(body4) && (body4.match(/<w:p[ >]/g) || []).length === 4, body4);
 
+  // ── 5) Enter w „pustym” akapicie z samym łamaniem wiersza (i za łamaniem na końcu tekstu) ──
+  // Word: „⏎” to dwie linijki. Enter ZA łamaniem → „⏎” (2 linijki) + nowy pusty; Enter PRZED
+  // łamaniem → pusty (1 linijka) + „⏎” (2 linijki), kursor w nowym przed łamaniem; „Tekst⏎|” jak „⏎|”.
+  zip.file("word/document.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${W}><w:body><w:p><w:r><w:t>Przed</w:t></w:r></w:p><w:p><w:r><w:br/></w:r></w:p><w:p><w:r><w:t>Po</w:t></w:r></w:p><w:p><w:r><w:br/></w:r></w:p><w:p><w:r><w:t>Środek</w:t></w:r></w:p><w:p><w:r><w:t>Tekst</w:t></w:r><w:r><w:br/></w:r></w:p><w:p><w:r><w:t>Koniec</w:t></w:r></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1418" w:right="1418" w:bottom="1418" w:left="1418" w:header="709" w:footer="709" w:gutter="0"/></w:sectPr></w:body></w:document>`);
+  await page.locator("#fileInput").setInputFiles({ name: "enter.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer: await zip.generateAsync({ type: "nodebuffer" }) });
+  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && /Środek/.test(document.querySelector(".docx-preview-host")?.textContent || ""), null, { timeout: 30000 });
+  await page.evaluate(() => { if (readOnlyMode) appFrame.setReadOnly(false); });
+  await idle(page);
+  // akapity podglądu: tekst, łamania z pliku, linijki (z rzeczywistej wysokości)
+  const layout = () => page.evaluate(() => collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).map((p) => {
+    const r = document.createRange(); r.selectNodeContents(p);
+    const tops = new Set([...r.getClientRects()].filter((q) => q.height > 0).map((q) => Math.round(q.top)));
+    const line = parseFloat(getComputedStyle(p).lineHeight) || 19;
+    return `${p.textContent}${"⏎".repeat(p.querySelectorAll("br:not([data-dwb-ph])").length)}:${Math.max(1, Math.round(p.getBoundingClientRect().height / line))}`;
+  }));
+  // kursor w akapicie nr i: przed / za łamaniem wiersza z pliku
+  const caretAtBr = (i, after) => page.evaluate(([i, after]) => {
+    const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[i];
+    const br = p.querySelector("br:not([data-dwb-ph])");
+    const r = document.createRange(); if (after) r.setStartAfter(br); else r.setStartBefore(br); r.collapse(true);
+    docEditRoot().focus({ preventScroll: true }); getSelection().removeAllRanges(); getSelection().addRange(r);
+  }, [i, after]);
+  const l0 = await layout();
+  check("(kontrola) „⏎” z pliku = 2 linijki, „Tekst⏎” = 2 linijki", l0[1] === "⏎:2" && l0[5] === "Tekst⏎:2", JSON.stringify(l0));
+  // a) za łamaniem w „⏎” → Enter → pisz „X”
+  await caretAtBr(1, true);
+  await page.keyboard.press("Enter"); await idle(page);
+  await page.keyboard.type("X"); await idle(page);
+  const la = await layout();
+  check("Enter ZA łamaniem w „⏎”: „⏎” zostaje (2 linijki), „X” w nowym akapicie", la[1] === "⏎:2" && la[2] === "X:1" && la[3] === "Po:1" && la.length === l0.length + 1, JSON.stringify(la.slice(0, 5)));
+  // b) przed łamaniem w drugim „⏎” (teraz nr 4) → Enter → pisz „Y”
+  await caretAtBr(4, false);
+  await page.keyboard.press("Enter"); await idle(page);
+  await page.keyboard.type("Y"); await idle(page);
+  const lb = await layout();
+  check("Enter PRZED łamaniem w „⏎”: pusty (1 linijka) + „Y⏎” (2 linijki)", lb[4] === ":1" && lb[5] === "Y⏎:2" && lb[6] === "Środek:1" && lb.length === la.length + 1, JSON.stringify(lb.slice(3, 8)));
+  // c) za łamaniem na końcu „Tekst⏎” (teraz nr 7) → Enter → pisz „Z”
+  await caretAtBr(7, true);
+  await page.keyboard.press("Enter"); await idle(page);
+  await page.keyboard.type("Z"); await idle(page);
+  const lc = await layout();
+  check("Enter ZA łamaniem na końcu „Tekst⏎”: „Tekst⏎” (2 linijki) + „Z”", lc[7] === "Tekst⏎:2" && lc[8] === "Z:1" && lc[9] === "Koniec:1", JSON.stringify(lc.slice(6)));
+  const x5 = (await xmlOf(await savedB64(page))).replace(/<w:rPr>.*?<\/w:rPr>/g, "").replace(/<w:pPr>.*?<\/w:pPr>/g, "").replace(/ xml:space="preserve"/g, "");
+  const paras5 = (x5.slice(x5.indexOf("<w:body>"), x5.indexOf("<w:sectPr")).match(/<w:p\/>|<w:p>(?:(?!<\/w:p>).)*<\/w:p>/g) || []).map((q) => q.replace(/<w:br\/>/g, "⏎").replace(/<[^>]+>/g, ""));
+  check("…w pliku te same akapity co w podglądzie", JSON.stringify(paras5) === JSON.stringify(lc.map((s) => s.replace(/:\d+$/, ""))), JSON.stringify(paras5));
+
   check("brak błędów strony", errors.length === 0, errors.join(" | "));
   await browser.close();
 }

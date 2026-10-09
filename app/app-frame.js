@@ -256,6 +256,38 @@ const appFrame = (() => {
 
   // ── Czytanie / Edycja ──────────────────────────────────────────────────────
   const modeBtns = Array.from(document.querySelectorAll(".mode-switch .mode-btn"));
+  // Wskaźnik pod aktywnym przyciskiem przesuwa się jak w nowym Wordzie. Tylko transform
+  // (kompozytor): przełączenie trybu przelicza style całego dokumentu (~50 ms na długim pliku),
+  // a ruch wskaźnika ma zostać płynny mimo to. Różna szerokość „Czytanie”/„Edycja” = scaleX.
+  const modeSwitchEl = document.querySelector(".mode-switch");
+  const modePill = modeSwitchEl ? document.createElement("span") : null;
+  if (modePill) {
+    modePill.className = "mode-pill";
+    modePill.setAttribute("aria-hidden", "true");
+    modeSwitchEl.prepend(modePill);
+    modeSwitchEl.classList.add("has-pill");
+  }
+  let modePillAt = null; // { x, w } — ostatnie położenie (punkt startu animacji)
+  function placeModePill(animate) {
+    const btn = modeBtns.find((b) => b.classList.contains("is-active"));
+    if (!modePill || !btn || !btn.offsetWidth) return; // pasek ukryty (pusty start) — RO poprawi
+    const at = { x: btn.offsetLeft, w: btn.offsetWidth };
+    modePill.style.width = `${at.w}px`;
+    modePill.style.transform = `translateX(${at.x}px)`;
+    const from = modePillAt;
+    modePillAt = at;
+    if (!animate || !from || (from.x === at.x && from.w === at.w) || !modePill.animate) return;
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    modePill.getAnimations().forEach((a) => a.cancel());
+    modePill.animate([
+      { transform: `translateX(${from.x}px) scaleX(${from.w / at.w})` },
+      { transform: `translateX(${at.x}px)` },
+    ], { duration: 320, easing: "cubic-bezier(0.22, 1, 0.36, 1)" });
+  }
+  if (modePill && typeof ResizeObserver === "function") {
+    // pokazanie paska, zmiana języka (inna szerokość napisów), układ telefonu — bez animacji
+    new ResizeObserver(() => placeModePill(false)).observe(modeSwitchEl);
+  }
   function syncModeSwitch() {
     const ro = !!readModeEl?.checked;
     modeBtns.forEach((b) => {
@@ -263,6 +295,7 @@ const appFrame = (() => {
       b.classList.toggle("is-active", on);
       b.setAttribute("aria-pressed", String(on));
     });
+    placeModePill(true);
   }
   function setReadOnly(ro) {
     if (!readModeEl || readModeEl.checked === !!ro) { syncModeSwitch(); return; }
@@ -699,8 +732,23 @@ const appFrame = (() => {
   document.getElementById("emptyOpenBtn")?.addEventListener("click", () => openFilePicker());
   document.getElementById("emptySampleBtn")?.addEventListener("click", () => loadSampleDocument("przewodnik"));
 
+  // ── sekcje panelu: treść wsuwa się przy rozwinięciu (opacity + transform, bez animowania
+  // wysokości — to przeliczałoby układ panelu co klatkę) ───────────────────────
+  sidebarNode?.querySelectorAll("details.panel").forEach((d) => {
+    d.addEventListener("toggle", () => {
+      if (!d.open || !rootEl.classList.contains("frame-ready")) return; // start apki — bez ruchu
+      d.classList.remove("is-revealing");
+      void d.offsetWidth; // szybkie zamknij/otwórz — animacja od nowa
+      d.classList.add("is-revealing");
+    });
+    d.addEventListener("animationend", (e) => {
+      if (e.target.parentElement === d) d.classList.remove("is-revealing");
+    });
+  });
+
   function onLanguageChange() {
     sidebarNode?.querySelectorAll("details.panel").forEach((d) => { d._dwbFindText = null; });
+    placeModePill(false);
     syncFile();
     syncZoomNow();
     syncPanelCounts();

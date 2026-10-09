@@ -1092,6 +1092,9 @@ function splitParagraphDomAtCaret(p) {
   newP.removeAttribute("data-para-index");
   newP.appendChild(tail);
   p.parentNode.insertBefore(newP, p.nextSibling);
+  // podział tuż ZA łamaniem wiersza: znacznik pustej linijki odszedł z resztą akapitu — „⏎” na końcu
+  // starego musi dalej mieć swoją linijkę (Word: „Tekst⏎” = dwie linijki)
+  if (typeof addTrailingBreakLine === "function") addTrailingBreakLine(p);
   return newP;
 }
 

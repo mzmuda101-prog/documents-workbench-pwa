@@ -525,20 +525,27 @@ function positionAnchoredDrawings(host) {
 function addTrailingBreakLines(host) {
   if (!host) return 0;
   let n = 0;
-  host.querySelectorAll("section.docx p").forEach((p) => {
-    let last = p.lastChild;
-    while (last) {
-      if (last.nodeType === 3 && !last.data.length) { last = last.previousSibling; continue; }
-      if (last.nodeType === 1 && last.tagName !== "BR" && last.lastChild && !last.matches?.("[contenteditable=false], img, svg")) { last = last.lastChild; continue; }
-      break;
-    }
-    if (last?.nodeType !== 1 || last.tagName !== "BR" || last.dataset.dwbPh || last.closest(".dwb-page-break")) return;
-    const ph = document.createElement("br");
-    ph.dataset.dwbPh = "1";
-    last.after(ph);
-    n++;
-  });
+  host.querySelectorAll("section.docx p").forEach((p) => { if (addTrailingBreakLine(p)) n++; });
   return n;
+}
+
+// Jeden akapit (też po Enterze za łamaniem wiersza: znacznik przechodzi do nowego akapitu, a w starym
+// „⏎” zostawało jedną linijką zamiast dwóch — docx-inline-edit.js splitParagraphDomAtCaret).
+function addTrailingBreakLine(p) {
+  let last = p.lastChild;
+  while (last) {
+    if (last.nodeType === 3 && !last.data.length) { last = last.previousSibling; continue; }
+    if (last.nodeType === 1 && last.tagName !== "BR" && !last.matches?.("[contenteditable=false], img, svg")) {
+      if (last.lastChild) { last = last.lastChild; continue; }
+      if (last.previousSibling) { last = last.previousSibling; continue; } // pusty <span> po podziale akapitu
+    }
+    break;
+  }
+  if (last?.nodeType !== 1 || last.tagName !== "BR" || last.dataset.dwbPh || last.closest(".dwb-page-break")) return false;
+  const ph = document.createElement("br");
+  ph.dataset.dwbPh = "1";
+  last.after(ph);
+  return true;
 }
 
 // Coś, co daje akapitowi linijkę mimo braku tekstu (obraz, wyspa, przerwa wiersza, pole).

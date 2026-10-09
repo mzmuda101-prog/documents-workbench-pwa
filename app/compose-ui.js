@@ -2932,9 +2932,18 @@ const composeUi = (() => {
     sel.addRange(c);
     tn.parentElement?.closest(".docx-editable-p")?.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: e.data }));
   });
-  // wklejony adres → link (zaznaczony tekst → link z tym tekstem)
+  // wklejony adres → link (zaznaczony tekst → link z tym tekstem); wyłącznik w „Narzędziach edycji”
+  const PASTE_AUTOLINK_KEY = "dwb-paste-autolink-v1";
+  const pasteAutoLinkOn = () => { try { return localStorage.getItem(PASTE_AUTOLINK_KEY) !== "0"; } catch (_) { return true; } };
+  const pasteAutoLinkBox = document.getElementById("pasteAutoLink");
+  if (pasteAutoLinkBox) {
+    pasteAutoLinkBox.checked = pasteAutoLinkOn();
+    pasteAutoLinkBox.addEventListener("change", () => {
+      try { localStorage.setItem(PASTE_AUTOLINK_KEY, pasteAutoLinkBox.checked ? "1" : "0"); } catch (_) {}
+    });
+  }
   docCanvasEl?.addEventListener("paste", (e) => {
-    if (readOnlyMode || e.clipboardData?.files?.length) return;
+    if (readOnlyMode || e.clipboardData?.files?.length || !pasteAutoLinkOn()) return;
     const raw = (e.clipboardData?.getData("text/plain") || "").trim();
     if (!raw || /\s/.test(raw) || raw.length > 2000) return;
     const href = autoLinkHref(raw.replace(/^mailto:/i, "")) || (/^mailto:/i.test(raw) && EMAIL_RE.test(raw.slice(7)) ? raw : "");
