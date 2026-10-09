@@ -1223,7 +1223,9 @@ async function handleInlineBackspace(p, paraIndex, e) {
   // Dawniej liczył się tylko początek zaznaczenia: „kursor na początku” → sklejenie z poprzednim
   // akapitem, a zaznaczony tekst zostawał (zgłoszenie 2026-10-04; zaznaczanie od końca działało).
   if (sel?.rangeCount && !sel.isCollapsed && !e.fromDelete) return;
-  if (getCaretModelOffset(p) !== 0) return;
+  // Delete na końcu poprzedniego: zawsze sklejenie z całym tym akapitem — placeCaret(p, 0) stawia
+  // kursor w pierwszym węźle TEKSTU, czyli za ewentualnym łamaniem wiersza na początku akapitu
+  if (!e.fromDelete && getCaretModelOffset(p) !== 0) return;
   // Backspace na początku punktu listy najpierw zdejmuje numerację (jak w Wordzie); kolejny skleja
   if (isListParagraph(p) && sel?.isCollapsed && !e.fromDelete && typeof composeUi !== "undefined") {
     e.preventDefault();

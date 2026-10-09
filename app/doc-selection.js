@@ -50,7 +50,8 @@ const dwbSel = (() => {
     const r = document.createRange();
     try { r.setStart(node, offset); } catch (_) { return false; }
     r.setEnd(p, p.childNodes.length);
-    return !r.toString().replace(/﻿/g, "").length && !r.cloneContents().querySelector?.("[data-cm-kind='note'], .ff-field, br, .docx-tab");
+    // <br data-dwb-ph> = pusta linijka „dla oka” na końcu akapitu, nie znak — za nią już koniec
+    return !r.toString().replace(/﻿/g, "").length && !r.cloneContents().querySelector?.("[data-cm-kind='note'], .ff-field, br:not([data-dwb-ph]), .docx-tab");
   }
 
   // Analiza zaznaczenia: akapity początku/końca (indeksy jak w pliku) i czy przekracza akapit.

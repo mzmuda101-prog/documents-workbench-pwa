@@ -36,6 +36,20 @@
     return (p.textContent || "").length;
   }
 
+  // Kursor na końcu akapitu liczonym jak zapis: za nim nie ma tekstu ani niczego, co w pliku jest
+  // znakiem (łamanie wiersza <br> z pliku, wyspa). Sam textContent <br> nie widzi — Delete przed
+  // łamaniem doklejał następny akapit ZA łamaniem, a kolejny Delete zjadał jego pierwszą literę
+  // (lustro Backspace przed „Wstęp”, 2026-10-09).
+  function atModelEnd(p) {
+    const sel = getSelection();
+    if (!sel?.rangeCount || !p.contains(sel.getRangeAt(0).endContainer)) return false;
+    const r = document.createRange();
+    r.selectNodeContents(p);
+    r.setStart(sel.getRangeAt(0).endContainer, sel.getRangeAt(0).endOffset);
+    const frag = r.cloneContents();
+    return !frag.textContent.replace(/\uFEFF/g, "") && !frag.querySelector("br:not([data-dwb-ph]), img, svg, canvas, [contenteditable=false]");
+  }
+
   function placeAt(p, offset) {
     const len = textLength(p);
     const o = Math.max(0, Math.min(len, offset));
@@ -134,7 +148,7 @@
     } else if (e.key === "ArrowLeft" && offset === 0) {
       const prev = neighbour(p, -1);
       if (prev) { e.preventDefault(); placeAt(prev, textLength(prev)); }
-    } else if (e.key === "Delete" && offset >= len) {
+    } else if (e.key === "Delete" && atModelEnd(p)) {
       // jak Backspace na początku następnego akapitu (ta sama ścieżka zapisu i cofania)
       const next = neighbour(p, 1);
       const all = collectPreviewParagraphElements(host());

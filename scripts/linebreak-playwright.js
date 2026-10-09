@@ -117,6 +117,54 @@ async function run() {
   const x3 = (await xmlOf(await savedB64(page))).replace(/<w:rPr>.*?<\/w:rPr>/g, "");
   check("…w pliku: „Tekst przed.” i osobny „Wstęp…” bez łamania", /<w:t>Tekst przed\.<\/w:t><\/w:r><\/w:p><w:p>(?:(?!<\/w:p>).)*<w:t>Wstęp \(ok\. 1 minuty\):<\/w:t>/.test(x3) && !/<w:br\/>/.test(x3), x3.slice(x3.indexOf("<w:body>"), x3.indexOf("<w:sectPr")));
 
+  // ── 4) Delete na końcu akapitu, pod nim akapit „⏎”, pusty i „Dalej” (lustro punktu 3) ──
+  // Word: Delete dokleja „⏎” (kursor zostaje przed łamaniem) → kasuje łamanie → dokleja pusty →
+  // dokleja „Dalej”. Koniec akapitu liczony po samym tekście nie widział <br> z pliku.
+  zip.file("word/document.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${W}><w:body><w:p><w:r><w:t>Tekst przed.</w:t></w:r></w:p><w:p><w:r><w:br/></w:r></w:p><w:p/><w:p><w:r><w:t>Dalej</w:t></w:r></w:p><w:p><w:r><w:t>Ala</w:t></w:r><w:r><w:br/></w:r></w:p><w:p><w:r><w:t>Kot</w:t></w:r></w:p><w:p><w:r><w:t>Ola</w:t></w:r></w:p><w:p><w:r><w:br/></w:r><w:r><w:t>Ewa</w:t></w:r></w:p><w:p><w:r><w:t>Ula</w:t></w:r><w:r><w:br/></w:r></w:p><w:p><w:r><w:t>Iza</w:t></w:r></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1418" w:right="1418" w:bottom="1418" w:left="1418" w:header="709" w:footer="709" w:gutter="0"/></w:sectPr></w:body></w:document>`);
+  await page.locator("#fileInput").setInputFiles({ name: "del.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer: await zip.generateAsync({ type: "nodebuffer" }) });
+  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && /Dalej/.test(document.querySelector(".docx-preview-host")?.textContent || ""), null, { timeout: 30000 });
+  await page.evaluate(() => { if (readOnlyMode) appFrame.setReadOnly(false); });
+  await idle(page);
+  const paraInfo = (start) => page.evaluate((start) => {
+    const all = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"));
+    const p = all.find((q) => q.textContent.startsWith(start));
+    const line = parseFloat(getComputedStyle(p).lineHeight) || 19;
+    return { text: p.textContent, br: p.querySelectorAll("br:not([data-dwb-ph])").length, ph: p.querySelectorAll("br[data-dwb-ph]").length, lines: Math.round(p.getBoundingClientRect().height / line), n: all.length };
+  }, start);
+  await page.evaluate(() => { const p = [...document.querySelectorAll(".docx-preview-host p")].find((q) => q.textContent === "Tekst przed."); placeCaret(p, p.textContent.length); });
+  const del = [];
+  for (let k = 0; k < 4; k++) { await page.keyboard.press("Delete"); await idle(page); del.push(await paraInfo("Tekst przed.")); }
+  const n0 = 10;
+  check("Delete na końcu: dokleja akapit „⏎” (2 linijki, kursor przed łamaniem)", del[0].n === n0 - 1 && del[0].br === 1 && del[0].lines === 2, JSON.stringify(del[0]));
+  check("…drugi Delete kasuje łamanie, akapitów tyle samo", del[1].n === del[0].n && del[1].br === 0 && del[1].lines === 1, JSON.stringify(del[1]));
+  check("…trzeci dokleja pusty, czwarty „Dalej”", del[2].n === del[1].n - 1 && del[3].n === del[2].n - 1 && del[3].text === "Tekst przed.Dalej", JSON.stringify(del.slice(2)));
+  // akapit kończący się łamaniem, kursor ZA łamaniem (nowa linijka) — Delete dokleja następny
+  await page.evaluate(() => { const p = [...document.querySelectorAll(".docx-preview-host p")].find((q) => q.textContent === "Ala"); const r = document.createRange(); const br = p.querySelector("br:not([data-dwb-ph])"); r.setStartAfter(br); r.collapse(true); docEditRoot().focus({ preventScroll: true }); getSelection().removeAllRanges(); getSelection().addRange(r); });
+  await page.keyboard.press("Delete");
+  await idle(page);
+  const ala = await paraInfo("Ala");
+  check("Delete za łamaniem na końcu akapitu: „Ala⏎Kot” w 2 linijkach", ala.text === "AlaKot" && ala.br === 1 && ala.ph === 0 && ala.lines === 2, JSON.stringify(ala));
+  // następny akapit zaczyna się łamaniem („⏎Ewa”): Delete dokleja go całego, potem kasuje łamanie
+  await page.evaluate(() => { const p = [...document.querySelectorAll(".docx-preview-host p")].find((q) => q.textContent === "Ola"); placeCaret(p, 3); });
+  const ola = [];
+  for (let k = 0; k < 2; k++) { await page.keyboard.press("Delete"); await idle(page); ola.push(await paraInfo("Ola")); }
+  check("Delete przed akapitem „⏎Ewa”: dokleja z łamaniem, potem kasuje łamanie", ola[0].text === "OlaEwa" && ola[0].br === 1 && ola[0].lines === 2 && ola[1].text === "OlaEwa" && ola[1].br === 0 && ola[1].lines === 1 && ola[1].n === ola[0].n, JSON.stringify(ola));
+  // klawiatura ekranowa (Android): Delete przychodzi jako beforeinput „deleteContentForward” bez
+  // keydown (doc-selection.js). Kursor za łamaniem na końcu „Ula⏎” — przed samą pustą linijką „dla
+  // oka”, to już koniec akapitu: dokleja „Iza” (dawniej znacznik liczył się jak treść — nic)
+  await page.evaluate(() => {
+    const p = [...document.querySelectorAll(".docx-preview-host p")].find((q) => q.textContent === "Ula");
+    const r = document.createRange(); r.setStartAfter(p.querySelector("br:not([data-dwb-ph])")); r.collapse(true);
+    docEditRoot().focus({ preventScroll: true }); getSelection().removeAllRanges(); getSelection().addRange(r);
+    document.activeElement.dispatchEvent(new InputEvent("beforeinput", { inputType: "deleteContentForward", bubbles: true, cancelable: true }));
+  });
+  await idle(page);
+  const ula = await paraInfo("Ula");
+  check("Delete z klawiatury ekranowej za łamaniem na końcu: „Ula⏎Iza”", ula.text === "UlaIza" && ula.br === 1 && ula.lines === 2, JSON.stringify(ula));
+  const x4 = (await xmlOf(await savedB64(page))).replace(/<w:rPr>.*?<\/w:rPr>/g, "");
+  const body4 = x4.slice(x4.indexOf("<w:body>"), x4.indexOf("<w:sectPr"));
+  check("…w pliku: „Tekst przed.Dalej” bez łamania, „Ala⏎Kot” jednym akapitem", /<w:p>(?:(?!<\/w:p>).)*Tekst przed\.(?:(?!<\/w:p>).)*Dalej(?:(?!<\/w:p>).)*<\/w:p>/.test(body4) && !/Tekst przed\.(?:(?!<\/w:p>).)*<w:br\/>/.test(body4) && /<w:t>Ala<\/w:t><\/w:r><w:r><w:br\/><\/w:r><w:r><w:t>Kot<\/w:t>/.test(body4) && /<w:t>OlaEwa<\/w:t>|<w:t>Ola<\/w:t><\/w:r><w:r><w:t>Ewa<\/w:t>/.test(body4) && (body4.match(/<w:p[ >]/g) || []).length === 4, body4);
+
   check("brak błędów strony", errors.length === 0, errors.join(" | "));
   await browser.close();
 }
