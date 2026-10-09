@@ -1261,6 +1261,21 @@ details.panel > summary .panel-title { flex: 1; }
   .doc-toolbar-row:first-child { flex: 1 1 360px; }
   .section-strip { flex: 1 1 100%; }
 }
+/* Te same miejsca w Czytaniu i w Edycji: gdy pasek jest dość szeroki, Czytanie/Edycja, ↶ ↷
+   i zoom stoją zawsze w pierwszym rzędzie obok szukania (szukajka nie musi mieć całej
+   szerokości), a pasek Edycji dostaje własny rząd pod spodem. Dawniej w Edycji cały drugi
+   rząd zjeżdżał niżej i przyciski zmieniały miejsce. Węższy pasek — jak było (tam drugi
+   rząd i tak zawsze stoi pod szukaniem, więc nic nie skacze). */
+.doc-panel { container: docpanel / inline-size; }
+@container docpanel (min-width: 860px) {
+  .doc-toolbar { flex-direction: row; flex-wrap: wrap; align-items: center; }
+  .doc-toolbar-row:first-child { flex: 1 1 240px; }
+  .doc-toolbar-row-2 { display: contents; }
+  .doc-toolbar-row-2 > .format-toolbar {
+    order: 1; flex: 1 1 100%; padding-left: 0; border-left: 0;
+  }
+  .section-strip { order: 2; flex: 1 1 100%; }
+}
 .doc-search {
   flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px;
   border: 1px solid var(--border); border-radius: 11px; background: var(--field); color: var(--muted);
