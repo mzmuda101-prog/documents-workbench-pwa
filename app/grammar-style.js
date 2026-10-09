@@ -2,6 +2,10 @@
 
 const NBSP = "\u00A0";
 
+function grammarLocale(opts = {}) {
+  return opts.lang === "en" ? "en-US" : "pl-PL";
+}
+
 // Skróty, po których kropka NIE kończy zdania („sp. z o.o.”, „np. w”, „art. 5 ust. 2 pkt. a”).
 // Dawniej reguła wielkiej litery robiła z „ACME sp. z o.o.” → „sp. Z o.o.”.
 const ABBREVIATIONS = new Set(`sp np m.in in ul al pl os tj tzn tzw itd itp jw ok godz min max zł gr r rr w ww wg tel
@@ -93,7 +97,7 @@ const GRAMMAR_RULES = [
   {
     id: "cap-after-period",
     langs: ["pl", "en"],
-    scan(text) {
+    scan(text, opts = {}) {
       const hits = [];
       const re = /(^|[.!?]\s+)([a-ząćęłńóśźż])/gu;
       let m;
@@ -106,18 +110,36 @@ const GRAMMAR_RULES = [
           start,
           end: start + 1,
           before: letter,
-          after: letter.toLocaleUpperCase(currentLang === "en" ? "en-US" : "pl-PL"),
+          after: letter.toLocaleUpperCase(grammarLocale(opts)),
         });
       }
       return hits;
     },
-    fixAll(text) {
-      const locale = currentLang === "en" ? "en-US" : "pl-PL";
+    fixAll(text, opts = {}) {
+      const locale = grammarLocale(opts);
       return text.replace(/(^|[.!?]\s+)([a-ząćęłńóśźż])/gu, (full, prefix, letter, offset, src) => {
         const pos = offset + prefix.length;
         if (isCapAfterPeriodException(src, offset, pos)) return full;
         return prefix + letter.toLocaleUpperCase(locale);
       });
+    },
+  },
+  {
+    // Tylko wyrazy stojące bezpośrednio obok siebie. Nie zgadujemy semantyki
+    // ani nie dotykamy fraz rozdzielonych interpunkcją.
+    id: "repeated-word",
+    langs: ["pl", "en"],
+    scan(text) {
+      const hits = [];
+      const re = /(?<![\p{L}\p{N}_])([\p{L}]+(?:['’\-][\p{L}]+)*)[ \t]+\1(?![\p{L}\p{N}_])/giu;
+      let m;
+      while ((m = re.exec(text)) !== null) {
+        hits.push({ start: m.index, end: m.index + m[0].length, before: m[0], after: m[1] });
+      }
+      return hits;
+    },
+    fixAll(text) {
+      return text.replace(/(?<![\p{L}\p{N}_])([\p{L}]+(?:['’\-][\p{L}]+)*)[ \t]+\1(?![\p{L}\p{N}_])/giu, "$1");
     },
   },
   {

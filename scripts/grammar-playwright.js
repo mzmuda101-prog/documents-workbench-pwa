@@ -79,6 +79,7 @@ async function run() {
       ["Koniec zdania. nowe zdanie", "Koniec zdania. Nowe zdanie"],
       ["J. kowalski podpisał", "J. kowalski podpisał"],
       ["a) pierwszy punkt listy", "a) pierwszy punkt listy"],
+      ["To że że zostało wpisane, jest błędem.", "To że zostało wpisane, jest błędem."],
       ['Powiedział "tak" i "nie".', "Powiedział „tak” i „nie”."],
       ["Kupiłem jabłka i.", "Kupiłem jabłka i."], // dawna „sierota i” przestawiała słowa
     ];
@@ -88,6 +89,9 @@ async function run() {
     }
     const nb = fix("Cała sprawa w domu i u nas", { nbspPl: true });
     if (nb !== "Cała sprawa w\u00A0domu i\u00A0u\u00A0nas") return { ok: false, step: "nbsp", msg: JSON.stringify(nb) };
+    const enRules = getEnabledGrammarRules({ lang: "en" });
+    const repeatedEn = fixParagraphWithRules("The the draft is ready.", enRules, { lang: "en" });
+    if (repeatedEn !== "The draft is ready.") return { ok: false, step: "repeated-en", msg: repeatedEn };
     const orphanLeft = 0;
 
     return {

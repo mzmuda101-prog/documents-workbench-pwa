@@ -635,6 +635,9 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
     var(--dwb-guide-v) right var(--dwb-guide-right) bottom 0 / 1px var(--dwb-guide-bottom) no-repeat;
 }
 .doc-reflow-mode .dwb-page-margin-guide { display: none; }
+/* Na telefonie prowadnice są zbyt blisko treści i nie da się ich użyć do
+   precyzyjnej regulacji marginesów. Zostawiamy czysty widok dokumentu. */
+html.is-mobile .dwb-page-margin-guide { display: none; }
 @media print { .dwb-page-margin-guide { display: none !important; } }
 .doc-reflow-mode .dwb-page-break { display: none; }
 @media print { .dwb-page-break { display: none !important; } }
