@@ -180,14 +180,13 @@ async function run() {
   // koniec dokumentu (jak w zgłoszeniu): puste akapity aż do nowej strony, długi wpisany akapit,
   // Backspace na jego początku — wjeżdża na koniec poprzedniej strony
   const endText = await page.evaluate(() => { const ps = [...document.querySelectorAll(".docx-preview-host section.docx > article > p")]; const p = ps[ps.length - 1]; p.scrollIntoView({ block: "center" }); docEditRoot().focus({ preventScroll: true }); const r = document.createRange(); r.selectNodeContents(p); r.collapse(false); getSelection().removeAllRanges(); getSelection().addRange(r); return p.textContent; });
+  // Enter aż akapit z kursorem zacznie nową stronę — po KAŻDYM naciśnięciu granice liczone od razu
+  // (dawniej sprawdzane co 5. naciśnięcie: trafienie zależało od wysokości pustych akapitów)
   let pushed = false;
   for (let i = 0; i < 80 && !pushed; i++) {
     await page.keyboard.press("Enter");
-    await sleep(40);
-    if (i % 5 === 4) {
-      await idle();
-      pushed = await page.evaluate(() => { const p = docCaretParagraph(document.activeElement); const prev = p?.previousElementSibling; return !!prev?.matches(".dwb-page-gap"); });
-    }
+    await sleep(30);
+    pushed = await page.evaluate(async () => { await dwbPageBreaks.compute(); const p = docCaretParagraph(document.activeElement); const prev = p?.previousElementSibling; return !!prev?.matches(".dwb-page-gap"); });
   }
   const nested = await page.evaluate(() => document.querySelectorAll(".docx-preview-host p p").length);
   check("Enter w pustym akapicie (po wyjściu z listy, puste z pliku): nowy akapit obok, nie w środku", pushed && nested === 0, JSON.stringify({ pushed, nested }));

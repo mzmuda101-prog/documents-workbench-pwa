@@ -12,7 +12,9 @@
 //     odczytu, a zapis z podglądu pomija takie akapity — opakowanie nie trafia do pliku.
 
 const LINK_SAFE_RE = /^(https?:|mailto:|tel:)/i;
-const linkUi = { back: null, backTop: 0, backTimer: 0 };
+const linkUi = { back: null, backTop: 0, backTimer: 0, backToken: 0 };
+// użytkownik sam przewija — dociągnięcie „Wróć” odpada
+["wheel", "touchstart", "pointerdown"].forEach((type) => document.addEventListener(type, (e) => { if (docViewportEl?.contains(e.target)) linkUi.backToken++; }, { passive: true, capture: true }));
 
 // ── odsyłacze-pola z XML ─────────────────────────────────────────────────────
 function linkFieldTarget(instr) {
@@ -376,10 +378,22 @@ function showLinkBack(top) {
   clearTimeout(linkUi.backTimer);
   linkUi.backTimer = setTimeout(hideLinkBack, 12000);
 }
+// Płynny powrót przerywa każda natychmiastowa zmiana przewijania — np. przeliczenie granic stron
+// (page-breaks.js trzyma akapit u góry na miejscu, gdy doszły czcionki/odstępy stron): widok
+// zostawał przy celu skoku (test links, niestabilny w tłoku). Po animacji dociągamy bez animacji,
+// chyba że użytkownik sam zaczął przewijać.
 function linkGoBack() {
-  if (!linkUi.back || linkUi.back.hidden) return false;
-  docViewportEl?.scrollTo({ top: linkUi.backTop, behavior: "smooth" });
+  if (!linkUi.back || linkUi.back.hidden || !docViewportEl) return false;
+  const top = linkUi.backTop;
+  docViewportEl.scrollTo({ top, behavior: "smooth" });
   hideLinkBack();
+  const token = ++linkUi.backToken;
+  const settle = () => {
+    if (token !== linkUi.backToken || Math.abs(docViewportEl.scrollTop - top) <= 24) return;
+    docViewportEl.scrollTo({ top, behavior: "auto" });
+  };
+  setTimeout(settle, 700);
+  setTimeout(settle, 1500);
   return true;
 }
 

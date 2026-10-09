@@ -269,11 +269,18 @@ const composeUi = (() => {
       // Tekst za kursorem idzie na nową stronę: formatowanie obu części z podglądu.
       // Podział w DOM tylko na chwilę (odczyt fragmentów) — zaraz scalony z powrotem,
       // bo applyDocumentEdit najpierw zapisuje do pliku akapity z podglądu w ich kolejności.
+      // Zaznaczony tekst (Ctrl+Enter zastępuje zaznaczenie, jak w Wordzie) podział kasuje z DOM —
+      // wraca do podglądu, a znika dopiero w op „split” (beforeRuns/afterRuns są już bez niego).
+      // Inaczej migawka cofania (robiona w applyDocumentEdit, czyli PO tym kasowaniu) nie miała
+      // tego tekstu i „Cofnij” go nie przywracało (chaos, ziarno 102).
+      const sel = window.getSelection();
+      const keep = sel?.rangeCount && !sel.getRangeAt(0).collapsed ? [...p.childNodes].map((n) => n.cloneNode(true)) : null;
       const tail = splitParagraphDomAtCaret(p);
       if (!tail) return;
       const beforeRuns = extractRunsFromPreviewParagraph(p);
       const afterRuns = extractRunsFromPreviewParagraph(tail);
       mergeParagraphDom(p, tail);
+      if (keep) p.replaceChildren(...keep);
       await runFileEdit({ op: "pageBreak", index, mode: "split", beforeRuns, afterRuns }, { paraIndex: index + 1, offset: 0 });
     }
   }

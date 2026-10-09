@@ -55,57 +55,72 @@ function wordPdf(file) {
   if (fs.existsSync(pdf) && !process.env.FRESH) return pdf;
   // starsze PDF-y tego pliku (inna treść = inny skrót) — precz, żeby pamięć nie rosła
   for (const f of fs.readdirSync(CACHE)) if (f !== path.basename(pdf) && f.startsWith(`${path.basename(file, ".docx")}-`) && /-[0-9a-f]{12}\.(pdf|docx)$/.test(f)) fs.rmSync(path.join(CACHE, f), { force: true });
-  const docx = path.join(CACHE, `${base}.docx`); // kopia w output/ — Word ma tu dostęp
-  fs.copyFileSync(file, docx);
+  // Word (piaskownica macOS) pyta o zgodę na KAŻDĄ nową ścieżkę i pamięta ją dla tej ścieżki —
+  // dawniej kopia i PDF miały nazwę ze skrótem, więc pytał przy każdym pliku. Teraz zawsze te same
+  // dwa pliki: wejście nadpisywane w miejscu (ten sam plik na dysku), wynik kopiowany do pamięci.
+  const docx = path.join(CACHE, "_word-in.docx");
+  const out = path.join(CACHE, "_word-out.pdf");
+  fs.writeFileSync(docx, fs.readFileSync(file));
+  if (fs.existsSync(out)) fs.truncateSync(out, 0);
   const esc = (s) => s.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
   try {
     execFileSync("osascript", ["-e", `
       tell application "Microsoft Word"
         open file name "${esc(docx)}"
         tell active document
-          save as file name "${esc(pdf)}" file format format PDF
+          save as file name "${esc(out)}" file format format PDF
         end tell
         try
           close active document saving no
         end try
       end tell`], { timeout: 180000, stdio: ["ignore", "pipe", "pipe"] });
   } catch (e) {
-    if (!fs.existsSync(pdf)) {
+    if (!(fs.existsSync(out) && fs.statSync(out).size)) {
       // Word potrafi zawisnąć na pytaniu (naprawa pliku, zgoda na dostęp) — zamykamy wszystko,
       // żeby następne pliki nie padały kolejno (dawniej 7 porażek po jednej)
       try { execFileSync("osascript", ["-e", 'tell application "Microsoft Word" to close every document saving no'], { timeout: 30000, stdio: "ignore" }); } catch (_) { /* Word nie odpowiada */ }
-      fs.rmSync(docx, { force: true });
       throw new Error(String(e.stderr || e.message).trim().split("\n").pop());
     }
   }
-  fs.rmSync(docx, { force: true });
-  if (!fs.existsSync(pdf)) throw new Error("Word nie zapisał PDF-a");
+  if (!(fs.existsSync(out) && fs.statSync(out).size)) throw new Error("Word nie zapisał PDF-a");
+  fs.copyFileSync(out, pdf);
   return pdf;
 }
 
 async function run() {
   const browser = await pw.chromium.launch({ headless: true });
-  const context = await browser.newContext({ serviceWorkers: "block", viewport: { width: 1300, height: 1000 } });
-  await context.addInitScript(() => sessionStorage.setItem("introPlayed", "true"));
-  const page = await context.newPage();
-  page.on("dialog", (d) => d.accept().catch(() => {}));
-  await page.goto(APP_URL, { waitUntil: "load" });
-  await page.evaluate(() => document.getElementById("heroSplash")?.remove());
   const report = [];
+  let context = null;
   for (const file of files) {
     const name = path.basename(file, ".docx");
     let pdf;
     try { pdf = wordPdf(file); } catch (e) { report.push({ name, error: `Word: ${String(e.message).split("\n")[0]}` }); console.log(`❌ ${name}: Word — ${e.message}`); continue; }
-    await page.evaluate(() => { if (typeof setDirtyState === "function") setDirtyState(false); if (window.dwbPrint?.isOpen()) dwbPrint.close(); });
+    // każdy plik w osobnym, czystym kontekście: przy kartach dokumentów (open-docs) i szkicach
+    // podgląd wydruku potrafił pokazać POPRZEDNI plik (np. „WYKŁAD” z treścią umowy najmu)
+    await context?.close();
+    context = await browser.newContext({ serviceWorkers: "block", viewport: { width: 1300, height: 1000 } });
+    await context.addInitScript(() => sessionStorage.setItem("introPlayed", "true"));
+    const page = await context.newPage();
+    page.on("dialog", (d) => d.accept().catch(() => {}));
+    await page.goto(APP_URL, { waitUntil: "load" });
+    await page.evaluate(() => document.getElementById("heroSplash")?.remove());
     await page.setInputFiles("#fileInput", file);
     await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && document.querySelector(".docx-preview-host p"), null, { timeout: 60000 });
-    await page.waitForTimeout(800);
+    // po otwarciu potrafi przyjść drugie (ciche) przerysowanie — jego nakładka „Renderowanie…”
+    // trafiała na zrzut kartki (fałszywe „przesunięcie wierszy” o setki px); czekamy na ciszę
+    await page.waitForFunction(() => {
+      const busy = !document.getElementById("loadingOverlay")?.classList.contains("hidden");
+      const now = performance.now();
+      if (busy || !window.__wcQuietSince) window.__wcQuietSince = busy ? 0 : now;
+      return !busy && now - window.__wcQuietSince > 1200;
+    }, null, { timeout: 60000, polling: 100 });
+    await page.evaluate(() => { window.__wcQuietSince = 0; });
     // nasze kartki: Podgląd wydruku w 100 %
     await page.evaluate(() => dwbPrint.open());
     await page.waitForSelector(".pp-sheet", { timeout: 30000 });
     await page.evaluate(async () => { const st = dwbPrint._state(); if (st) { st.fit = false; st.zoom = 1; } document.querySelector(".pp-pages").style.setProperty("--pp-zoom", "1"); await document.fonts.ready; });
     // na zrzucie tylko kartka: pasek podglądu, komunikaty i podpowiedzi schowane
-    await page.addStyleTag({ content: ".pp-bar, .pp-warn, #toastContainer, .toast-container, .cursor-hint, [class*='hint-bubble'] { visibility: hidden !important; } .pp-zone { display: none !important; }" });
+    await page.addStyleTag({ content: "#loadingOverlay, .pp-bar, .pp-warn, #toastContainer, .toast-container, .cursor-hint, [class*='hint-bubble'] { visibility: hidden !important; } .pp-zone { display: none !important; }" });
     await page.waitForTimeout(500);
     const sheets = await page.$$(".pp-sheet");
     const ours = [];
@@ -215,6 +230,9 @@ ${report.map((r) => r.error ? `<tr><td>${esc(r.name)}</td><td class="bad" colspa
 ${report.filter((r) => !r.error).map((r) => `<h2 id="${esc(r.name)}">${esc(r.name)}</h2><div class="pages">${r.pages.map((p) => p.overlay ? `<figure><a href="${esc(p.overlay)}"><img src="${esc(p.overlay)}" alt=""></a><figcaption>str. ${p.page}: ${p.match} % · wiersze ${p.rowsWord}/${p.rowsOurs} · przes. ${p.rowShift} px</figcaption></figure>` : `<figure><figcaption class="bad">str. ${p.page}: ${esc(p.missing)}</figcaption></figure>`).join("")}</div>`).join("")}
 </html>`;
   fs.writeFileSync(path.join(OUT, "raport.html"), html);
+  // liczby bez obrazów — do porównań przed/po zmianie (SUMMARY=ścieżka, domyślnie summary.json)
+  const summary = report.map((r) => ({ name: r.name, error: r.error, wordPages: r.wordPages, ourPages: r.ourPages, pages: (r.pages || []).map((p) => ({ match: p.match ?? null, rowShift: p.rowShift ?? null, missing: p.missing })) }));
+  fs.writeFileSync(process.env.SUMMARY || path.join(OUT, "summary.json"), JSON.stringify(summary, null, 1));
   console.log(`\nRaport: ${path.relative(ROOT, path.join(OUT, "raport.html"))}`);
   // inna liczba stron (albo Word nie zrobił PDF-a) = kod błędu — do skryptów i porównań w czasie
   const bad = report.filter((r) => r.error || r.wordPages !== r.ourPages).length;

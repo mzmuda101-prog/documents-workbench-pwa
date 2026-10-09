@@ -257,6 +257,77 @@ function applyRunDefaultsToParagraphs(host) {
   return n;
 }
 
+// „Nie dodawaj odstępu między akapitami tego samego stylu” (w:contextualSpacing; łatka 13 w
+// vendor-libs daje takiemu akapitowi data-dwb-ctx). Jak w Wordzie: akapit z tą cechą traci własny
+// odstęp przed, gdy poprzedni akapit ma ten sam styl, i odstęp po, gdy następny ma ten sam styl.
+// Styl = klasa docx_<id> (akapit bez stylu: brak klasy = styl domyślny). Sąsiad tylko w tym samym
+// pojemniku (komórka tabeli, strona) — jak w Wordzie.
+const PAGE_LAYOUT_OWN = ".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-break, .dwb-page-gap-band, .dwb-page-margin-guide";
+function docxParagraphStyleKey(el) {
+  return [...el.classList].find((c) => c.startsWith("docx_")) || "";
+}
+
+function applyContextualSpacing(host) {
+  if (!host) return 0;
+  let n = 0;
+  const set = (p, prop, zero, orig) => {
+    const want = zero ? "0px" : orig;
+    if (p.style[prop] !== want) { p.style[prop] = want; n++; }
+  };
+  host.querySelectorAll("section.docx p[data-dwb-ctx]").forEach((p) => {
+    // własne marginesy akapitu z pliku (docx-preview: w:spacing wprost) — do przywrócenia, gdy
+    // sąsiad przestanie mieć ten sam styl (Enter, koniec listy, sklejenie akapitów w Edycji)
+    if (p.dataset.dwbCtxOrig == null) p.dataset.dwbCtxOrig = JSON.stringify([p.style.marginTop, p.style.marginBottom]);
+    let orig = ["", ""];
+    try { orig = JSON.parse(p.dataset.dwbCtxOrig); } catch (_) { /* uszkodzony atrybut — bez własnych marginesów */ }
+    const key = docxParagraphStyleKey(p);
+    // odstępy między stronami w Edycji (page-breaks.js) to nie sąsiedzi — granica strony w środku
+    // listy nie może przywracać odstępów (przesunięcie układu → kolejne przeliczenie stron)
+    let prev = p.previousElementSibling;
+    while (prev?.matches(PAGE_LAYOUT_OWN)) prev = prev.previousElementSibling;
+    let next = p.nextElementSibling;
+    while (next?.matches(PAGE_LAYOUT_OWN)) next = next.nextElementSibling;
+    set(p, "marginTop", prev?.tagName === "P" && docxParagraphStyleKey(prev) === key, orig[0]);
+    set(p, "marginBottom", next?.tagName === "P" && docxParagraphStyleKey(next) === key, orig[1]);
+  });
+  return n;
+}
+
+// Pusty akapit dodany w Edycji (Enter, wklejka) nie przeszedł przez applyWordLineMetrics — bez
+// wysokości linijki po przerysowaniu podskakiwałby o kilka px. Wysokość = jego interlinia.
+function fixEmptyParagraphHeights(host) {
+  host?.querySelectorAll("section.docx p").forEach((p) => {
+    if (p.style.minHeight || p.textContent.length || p.querySelector(EMPTY_P_CONTENT)) return;
+    const cs = getComputedStyle(p);
+    const fs = parseFloat(cs.fontSize);
+    const lh = p.style.lineHeight;
+    if (!fs) return;
+    if (/^[\d.]+$/.test(lh)) p.style.minHeight = `${Math.round(fs * parseFloat(lh) * 100) / 100}px`;
+    else if (/(pt|px)$/.test(lh)) p.style.minHeight = lh;
+    else p.style.minHeight = `${Math.round(fs * wordLineFactor(cs.fontFamily) * 100) / 100}px`;
+  });
+}
+
+// Po zmianach akapitów w podglądzie (Edycja) — odstępy list i puste akapity jak po narysowaniu.
+function watchParagraphLayout(wrapper) {
+  if (!wrapper || typeof MutationObserver !== "function") return;
+  let pending = false;
+  const mo = new MutationObserver(() => {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(() => {
+      pending = false;
+      if (!wrapper.isConnected) { mo.disconnect(); return; }
+      applyContextualSpacing(wrapper);
+      fixEmptyParagraphHeights(wrapper);
+    });
+  });
+  mo.observe(wrapper, { childList: true, subtree: true });
+}
+
+// Coś, co daje akapitowi linijkę mimo braku tekstu (obraz, wyspa, przerwa wiersza, pole).
+const EMPTY_P_CONTENT = "img, svg, canvas, video, object, iframe, br, input, select, textarea, [contenteditable=false]";
+
 function wordLineFactor(fontFamily) {
   const first = String(fontFamily || "").split(",")[0].trim().replace(/^["']|["']$/g, "").toLowerCase();
   return WORD_LINE_FACTORS[first] || 1.17;
@@ -268,6 +339,14 @@ function applyWordLineMetrics(host) {
   const multiplierCache = new Map(); // klasa + inline line-height → mnożnik albo null (dokładny)
   let fixed = 0;
   root.querySelectorAll("section.docx p").forEach((p) => {
+    // Pusty akapit (bez tekstu i obiektów) nie ma w przeglądarce żadnej linijki — jego wysokość
+    // brała się z min-height = sam rozmiar czcionki stylu. W Wordzie to jedna linijka: rozmiar ×
+    // interlinia × współczynnik kroju, gdzie rozmiar = fragmentu, jeśli akapit jakiś ma (np. z
+    // kształtem, którego podgląd nie rysuje — linie do wypełnienia w „umowie najmu”), a bez
+    // fragmentów = ZNAKU KOŃCA akapitu (w:pPr/w:rPr/w:sz, łatka 12).
+    const empty = !p.textContent.length && !p.querySelector(EMPTY_P_CONTENT);
+    const emptyRun = empty ? p.querySelector("span[style*='font-size']") : null;
+    if (empty && !emptyRun && p.dataset.dwbMarkSize) p.style.fontSize = p.dataset.dwbMarkSize;
     const key = `${p.className}|${p.style.lineHeight}`;
     let m = multiplierCache.get(key);
     if (m === undefined) {
@@ -280,6 +359,13 @@ function applyWordLineMetrics(host) {
       m = Number.isFinite(a) && Number.isFinite(b) && Math.abs(b - 2 * a) < 1 ? a / 100 : null;
       multiplierCache.set(key, m);
     }
+    if (!m && empty && getComputedStyle(p).lineHeight === "normal") {
+      // bez interlinii w pliku = pojedyncza (Word): pusty akapit ma linijkę rozmiar × współczynnik kroju
+      const cs = getComputedStyle(emptyRun || p);
+      const fs = parseFloat(cs.fontSize);
+      if (fs) p.style.minHeight = `${Math.round(fs * wordLineFactor(cs.fontFamily) * 100) / 100}px`;
+      return;
+    }
     if (!m) {
       // Interlinia „dokładnie” (wartość w pt): wysokość linijki w przeglądarce bierze się też
       // z czcionki SAMEGO akapitu (domyślnej z dokumentu), nie tylko tekstu. Gdy tekst jest
@@ -290,7 +376,7 @@ function applyWordLineMetrics(host) {
         // docx-preview daje akapitowi min-height z domyślnej czcionki dokumentu — mały tekst
         // (podpis 6 pt przy domyślnych 10 pt) zajmował więcej miejsca niż w Wordzie. Wysokość
         // = podana wysokość linijki (pusty akapit-odstęp też ją ma — bez min-height miałby 0).
-        if (p.style.minHeight) p.style.minHeight = p.style.lineHeight;
+        if (p.style.minHeight || empty) p.style.minHeight = p.style.lineHeight;
         const run = [...p.querySelectorAll("span")].find((sp) => sp.textContent.trim());
         if (run) {
           const fs = parseFloat(getComputedStyle(run).fontSize);
@@ -302,12 +388,14 @@ function applyWordLineMetrics(host) {
       }
       return;
     }
-    const run = [...p.querySelectorAll("span")].find((s) => s.textContent.trim()) || p.querySelector("span") || p;
+    const run = empty ? emptyRun || p : [...p.querySelectorAll("span")].find((s) => s.textContent.trim()) || p.querySelector("span") || p;
     const cs = getComputedStyle(run);
     const fs = parseFloat(cs.fontSize);
     if (!fs) return;
+    const ratio = Math.round(m * wordLineFactor(cs.fontFamily) * 1000) / 1000;
     p.style.fontSize = `${fs}px`;
-    p.style.lineHeight = String(Math.round(m * wordLineFactor(cs.fontFamily) * 1000) / 1000);
+    p.style.lineHeight = String(ratio);
+    if (empty) p.style.minHeight = `${Math.round(fs * ratio * 100) / 100}px`;
     fixed++;
   });
   return fixed;

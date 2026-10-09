@@ -1,0 +1,36 @@
+{
+ "note": "2026-10-09 (ziarno 102): zaznaczenie w akapicie → Ctrl+Enter. Podział kasował zaznaczony tekst z podglądu PRZED migawką cofania — „Cofnij wszystko” nie przywracało tekstu (a buildPatchedDocx gubił nową linię za <?xml…?>).",
+ "doc": "blank",
+ "steps": [
+  "zaznacza myszą od akapitu 4:12 do 4:16",
+  "Ctrl/⌘+Enter (podział strony)"
+ ],
+ "actions": [
+  {
+   "name": "drag",
+   "r": [
+    0.546351,
+    0.515168,
+    0.427093,
+    0.155986,
+    0.652021,
+    0.509747,
+    0.313387,
+    0.090193
+   ]
+  },
+  {
+   "name": "pageBreak",
+   "r": [
+    0.501359,
+    0.338132,
+    0.985349,
+    0.7685,
+    0.179291,
+    0.341876,
+    0.911104,
+    0.918098
+   ]
+  }
+ ]
+}

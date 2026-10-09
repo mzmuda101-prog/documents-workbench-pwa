@@ -759,6 +759,25 @@ function commentRefIds(xml) {
   return new Set([...String(xml).matchAll(/<w:commentReference\b[^>]*\bw:id="(-?\d+)"/g)].map((m) => m[1]));
 }
 
+// Prolog części XML (deklaracja <?xml…?>, komentarze, odstępy przed elementem głównym) taki jak
+// w pliku wejściowym. XMLSerializer wypisuje deklarację bez nowej linii za nią, więc każda zmiana
+// przez DOM „zjadała” ten znak końca linii — a cofnięcie do stanu z niezapisanymi akapitami
+// (undo.js → buildPatchedDocx na bajtach z początku) dawało plik różny o ten jeden bajt.
+// Prolog różny tylko odstępami (albo zgubiony) = bierzemy oryginalny; inny (np. nowa deklaracja) — zostaje.
+function xmlPrologEnd(xml) {
+  const m = /<(?![?!])/.exec(xml);
+  return m ? m.index : 0;
+}
+function keepXmlProlog(originalXml, xml) {
+  const a = xmlPrologEnd(originalXml);
+  const b = xmlPrologEnd(xml);
+  const pa = originalXml.slice(0, a);
+  const pb = xml.slice(0, b);
+  if (pa === pb || !pa) return xml;
+  const squash = (s) => s.replace(/\s+/g, "");
+  return !pb || squash(pa) === squash(pb) ? pa + xml.slice(b) : xml;
+}
+
 // Naprawa nazw krojów zepsutych przez starsze wersje (do 2026-10-05): podgląd ma
 // „"DM Sans", sans-serif”, odczyt obcinał tylko początkowy cudzysłów i do pliku szło
 // w:ascii="DM Sans&quot;" — Word nie znajdował takiego kroju. Przy każdym zapisie: bez cudzysłowów.
@@ -815,6 +834,7 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
   const docFile = zip.file("word/document.xml");
   if (!docFile) throw new Error("word/document.xml missing");
   let xml = await docFile.async("string");
+  const xmlIn = xml;
   const commentRefsBefore = commentRefIds(xml);
   let total = 0;
   let coreXml = null;
@@ -925,7 +945,7 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
     const lost = [...commentRefsBefore].filter((id) => !after.has(id));
     if (lost.length) xml = (await applyRevisionsInZip(zip, xml, { op: "revisions", action: "removeComments", ids: lost })).xml;
   }
-  xml = repairFontNames(xml);
+  xml = keepXmlProlog(xmlIn, repairFontNames(xml));
   zip.file("word/document.xml", xml);
   if (coreXml !== null) zip.file("docProps/core.xml", coreXml);
   for (const f of Object.keys(zip.files)) {

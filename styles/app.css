@@ -1859,6 +1859,10 @@ section.docx > ol.dwb-notes > li.dwb-note-native { list-style: decimal outside; 
 section.docx > ol.dwb-notes > li > p { margin-top: 0; }
 sup[data-dwb-note], sup.note-mark { line-height: 0; cursor: pointer; border-radius: 3px; }
 sup[data-dwb-note]:hover, sup.note-mark:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+/* Odnośnik ma rozmiar indeksu jak w Wordzie (60 %) — „i” to ~2 px; niewidoczne pole wokół niego
+   łapie klik/dotknięcie (bez zmiany układu: pseudo-element w pozycji bezwzględnej). */
+sup[data-dwb-note] { position: relative; }
+sup[data-dwb-note]::after { content: ""; position: absolute; inset: -0.5em -0.45em; }
 .note-flash { animation: note-flash 1.6s ease-out; }
 @keyframes note-flash { 0%, 35% { background: color-mix(in srgb, var(--accent) 22%, transparent); } 100% { background: transparent; } }
 .cursor-hint.note-hint .cursor-hint-scaler { max-width: min(380px, calc(100vw - 32px)); font-weight: 400; font-size: 12.5px; line-height: 1.45; text-align: left; justify-content: flex-start; }
@@ -1866,6 +1870,16 @@ sup[data-dwb-note]:hover, sup.note-mark:hover { background: color-mix(in srgb, v
 /* Word nie podciąga par liter (kerning) ani nie łączy „fi” w ligatury, jeśli plik tego nie każe —
    przeglądarka robi to domyślnie i tekst wychodził węższy: inaczej zawijały się wiersze. */
 section.docx { font-kerning: none; font-variant-ligatures: none; }
+/* Indeks górny/dolny jak w Wordzie (PDF z Worda: 12 pt → 7 pt, 9 pt → 5,5 pt; górny podniesiony
+   o ⅓ rozmiaru tekstu). Przeglądarka dawała 83 % i „super” rozpychało linijkę — akapit z samym
+   znacznikiem czasu był o ~3 px wyższy niż w Wordzie (dokumenty „Punkt…”: strona więcej).
+   line-height: 0 — znacznik nie podnosi linijki (Word liczy wysokość z tekstu i znaku akapitu). */
+section.docx sup, section.docx sub { font-size: 60%; line-height: 0; }
+section.docx sup { vertical-align: 0.555em; }
+section.docx sub { vertical-align: -0.2em; }
+/* Punktor/numer listy kolorem znaku końca akapitu (łatka 12 w vendor-libs), gdy poziom listy nie
+   ma własnego koloru — najniższa ważność, żeby kolor z definicji listy wygrywał. */
+:where(section.docx p[style*="--dwb-mark-color"])::before { color: var(--dwb-mark-color); }
 /* Kolumny/karty z PDF (tabela układu) w Widoku mobilnym: jedna pod drugą, nie ściśnięte obok */
 .doc-canvas.doc-reflow-mode .docx table.docx_dwblayout,
 .doc-canvas.doc-reflow-mode .docx table.docx_dwblayout > tbody,
@@ -1888,7 +1902,11 @@ section.docx { font-kerning: none; font-variant-ligatures: none; }
    fragment w innej czcionce (punktor z Symbol, inny rozmiar) rozpychał linijkę o 1–3 pt —
    fragmenty nie wnoszą wysokości, linijkę wyznacza sam akapit (docx-render-fixes.js). */
 p.dwb-exact span { line-height: 0; }
-p.dwb-exact .docx-tab-laid { line-height: normal; height: 0.9em; vertical-align: -0.2em; }
+/* Rozłożony tabulator (inline-block z overflow: hidden) ma linię bazową na DOLNEJ krawędzi —
+   z wysokością linijki tekstu podnosił każdą linijkę z tabulatorem o ~5 px (spis treści w „Opisie
+   pras”: 25 px zamiast 20 px na pozycję, strona więcej). Niskie pudełko od −0,2 em do 0,7 em
+   mieści się w linijce przy każdej interlinii; kropki wypełnienia dalej na linii bazowej. */
+section.docx .docx-tab-laid { line-height: normal; height: 0.9em; vertical-align: -0.2em; }
 /* Tabulator to zagnieżdżony <span>, a docx-preview ma regułę „.docx span” z domyślną czcionką
    dokumentu (np. 10 pt) — wygrywała z dziedziczeniem po tekście: przy podpisie 6 pt tabulator
    miał 10 pt (i min-height 10 pt) i podnosił linijkę o 3 pt (dolny rząd kart z PDF zjeżdżał). */
@@ -2020,10 +2038,10 @@ p.dwb-exact img { vertical-align: baseline; }
 @font-face { font-family: "Carlito"; font-style: normal; font-weight: 700; font-display: swap; src: local("Carlito Bold"), local("Carlito-Bold"), url("../assets/fonts/doc/carlito-b-core-1.woff2") format("woff2"); unicode-range: U+0000-017F,U+0218-021B,U+02C6-02C7,U+02D8-02DD,U+2000-206F,U+20AC,U+2116,U+2122,U+2190-2193,U+2212,U+2215,U+221E,U+2248,U+2260,U+2264-2265,U+25A0-25A1,U+25AA-25AB,U+25CB,U+25CF,U+2713,U+FB01-FB02,U+FEFF,U+FFFD; }
 @font-face { font-family: "Carlito"; font-style: italic; font-weight: 400; font-display: swap; src: local("Carlito Italic"), local("Carlito-Italic"), url("../assets/fonts/doc/carlito-i-core-1.woff2") format("woff2"); unicode-range: U+0000-017F,U+0218-021B,U+02C6-02C7,U+02D8-02DD,U+2000-206F,U+20AC,U+2116,U+2122,U+2190-2193,U+2212,U+2215,U+221E,U+2248,U+2260,U+2264-2265,U+25A0-25A1,U+25AA-25AB,U+25CB,U+25CF,U+2713,U+FB01-FB02,U+FEFF,U+FFFD; }
 @font-face { font-family: "Carlito"; font-style: italic; font-weight: 700; font-display: swap; src: local("Carlito Bold Italic"), local("Carlito-BoldItalic"), url("../assets/fonts/doc/carlito-bi-core-1.woff2") format("woff2"); unicode-range: U+0000-017F,U+0218-021B,U+02C6-02C7,U+02D8-02DD,U+2000-206F,U+20AC,U+2116,U+2122,U+2190-2193,U+2212,U+2215,U+221E,U+2248,U+2260,U+2264-2265,U+25A0-25A1,U+25AA-25AB,U+25CB,U+25CF,U+2713,U+FB01-FB02,U+FEFF,U+FFFD; }
-@font-face { font-family: "Caladea"; font-style: normal; font-weight: 400; font-display: swap; src: local("Caladea"), local("Caladea Regular"), local("Caladea-Regular"), url("../assets/fonts/doc/caladea-r-core-1.woff2") format("woff2"); unicode-range: U+0000-017F,U+0218-021B,U+02C6-02C7,U+02D8-02DD,U+2000-206F,U+20AC,U+2116,U+2122,U+2190-2193,U+2212,U+2215,U+221E,U+2248,U+2260,U+2264-2265,U+25A0-25A1,U+25AA-25AB,U+25CB,U+25CF,U+2713,U+FB01-FB02,U+FEFF,U+FFFD; }
-@font-face { font-family: "Caladea"; font-style: normal; font-weight: 700; font-display: swap; src: local("Caladea Bold"), local("Caladea-Bold"), url("../assets/fonts/doc/caladea-b-core-1.woff2") format("woff2"); unicode-range: U+0000-017F,U+0218-021B,U+02C6-02C7,U+02D8-02DD,U+2000-206F,U+20AC,U+2116,U+2122,U+2190-2193,U+2212,U+2215,U+221E,U+2248,U+2260,U+2264-2265,U+25A0-25A1,U+25AA-25AB,U+25CB,U+25CF,U+2713,U+FB01-FB02,U+FEFF,U+FFFD; }
-@font-face { font-family: "Caladea"; font-style: italic; font-weight: 400; font-display: swap; src: local("Caladea Italic"), local("Caladea-Italic"), url("../assets/fonts/doc/caladea-i-core-1.woff2") format("woff2"); unicode-range: U+0000-017F,U+0218-021B,U+02C6-02C7,U+02D8-02DD,U+2000-206F,U+20AC,U+2116,U+2122,U+2190-2193,U+2212,U+2215,U+221E,U+2248,U+2260,U+2264-2265,U+25A0-25A1,U+25AA-25AB,U+25CB,U+25CF,U+2713,U+FB01-FB02,U+FEFF,U+FFFD; }
-@font-face { font-family: "Caladea"; font-style: italic; font-weight: 700; font-display: swap; src: local("Caladea Bold Italic"), local("Caladea-BoldItalic"), url("../assets/fonts/doc/caladea-bi-core-1.woff2") format("woff2"); unicode-range: U+0000-017F,U+0218-021B,U+02C6-02C7,U+02D8-02DD,U+2000-206F,U+20AC,U+2116,U+2122,U+2190-2193,U+2212,U+2215,U+221E,U+2248,U+2260,U+2264-2265,U+25A0-25A1,U+25AA-25AB,U+25CB,U+25CF,U+2713,U+FB01-FB02,U+FEFF,U+FFFD; }
+@font-face { font-family: "Caladea"; font-style: normal; font-weight: 400; font-display: swap; src: local("Cambria"), url("../assets/fonts/doc/caladea-r-core-1.woff2") format("woff2"); unicode-range: U+0000-017F,U+0218-021B,U+02C6-02C7,U+02D8-02DD,U+2000-206F,U+20AC,U+2116,U+2122,U+2190-2193,U+2212,U+2215,U+221E,U+2248,U+2260,U+2264-2265,U+25A0-25A1,U+25AA-25AB,U+25CB,U+25CF,U+2713,U+FB01-FB02,U+FEFF,U+FFFD; }
+@font-face { font-family: "Caladea"; font-style: normal; font-weight: 700; font-display: swap; src: local("Cambria Bold"), local("Cambria-Bold"), url("../assets/fonts/doc/caladea-b-core-1.woff2") format("woff2"); unicode-range: U+0000-017F,U+0218-021B,U+02C6-02C7,U+02D8-02DD,U+2000-206F,U+20AC,U+2116,U+2122,U+2190-2193,U+2212,U+2215,U+221E,U+2248,U+2260,U+2264-2265,U+25A0-25A1,U+25AA-25AB,U+25CB,U+25CF,U+2713,U+FB01-FB02,U+FEFF,U+FFFD; }
+@font-face { font-family: "Caladea"; font-style: italic; font-weight: 400; font-display: swap; src: local("Cambria Italic"), local("Cambria-Italic"), url("../assets/fonts/doc/caladea-i-core-1.woff2") format("woff2"); unicode-range: U+0000-017F,U+0218-021B,U+02C6-02C7,U+02D8-02DD,U+2000-206F,U+20AC,U+2116,U+2122,U+2190-2193,U+2212,U+2215,U+221E,U+2248,U+2260,U+2264-2265,U+25A0-25A1,U+25AA-25AB,U+25CB,U+25CF,U+2713,U+FB01-FB02,U+FEFF,U+FFFD; }
+@font-face { font-family: "Caladea"; font-style: italic; font-weight: 700; font-display: swap; src: local("Cambria Bold Italic"), local("Cambria-BoldItalic"), url("../assets/fonts/doc/caladea-bi-core-1.woff2") format("woff2"); unicode-range: U+0000-017F,U+0218-021B,U+02C6-02C7,U+02D8-02DD,U+2000-206F,U+20AC,U+2116,U+2122,U+2190-2193,U+2212,U+2215,U+221E,U+2248,U+2260,U+2264-2265,U+25A0-25A1,U+25AA-25AB,U+25CB,U+25CF,U+2713,U+FB01-FB02,U+FEFF,U+FFFD; }
 @font-face { font-family: "Helvetica"; font-style: normal; font-weight: 400; font-display: swap; src: local("Helvetica"), local("Arial"), local("ArialMT"), url("../assets/fonts/doc/arimo-r-core-1.woff2") format("woff2"); unicode-range: U+0000-017F,U+0218-021B,U+02C6-02C7,U+02D8-02DD,U+2000-206F,U+20AC,U+2116,U+2122,U+2190-2193,U+2212,U+2215,U+221E,U+2248,U+2260,U+2264-2265,U+25A0-25A1,U+25AA-25AB,U+25CB,U+25CF,U+2713,U+FB01-FB02,U+FEFF,U+FFFD; }
 @font-face { font-family: "Helvetica"; font-style: normal; font-weight: 700; font-display: swap; src: local("Helvetica Bold"), local("Helvetica-Bold"), local("Arial Bold"), local("Arial-BoldMT"), url("../assets/fonts/doc/arimo-b-core-1.woff2") format("woff2"); unicode-range: U+0000-017F,U+0218-021B,U+02C6-02C7,U+02D8-02DD,U+2000-206F,U+20AC,U+2116,U+2122,U+2190-2193,U+2212,U+2215,U+221E,U+2248,U+2260,U+2264-2265,U+25A0-25A1,U+25AA-25AB,U+25CB,U+25CF,U+2713,U+FB01-FB02,U+FEFF,U+FFFD; }
 @font-face { font-family: "Helvetica"; font-style: italic; font-weight: 400; font-display: swap; src: local("Helvetica Oblique"), local("Helvetica-Oblique"), local("Arial Italic"), local("Arial-ItalicMT"), url("../assets/fonts/doc/arimo-i-core-1.woff2") format("woff2"); unicode-range: U+0000-017F,U+0218-021B,U+02C6-02C7,U+02D8-02DD,U+2000-206F,U+20AC,U+2116,U+2122,U+2190-2193,U+2212,U+2215,U+221E,U+2248,U+2260,U+2264-2265,U+25A0-25A1,U+25AA-25AB,U+25CB,U+25CF,U+2713,U+FB01-FB02,U+FEFF,U+FFFD; }

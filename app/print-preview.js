@@ -67,8 +67,9 @@ const dwbPrint = (() => {
       const header = sec.querySelector(":scope > header");
       const footer = sec.querySelector(":scope > footer");
       const blocks = [];
-      const article = sec.querySelector(":scope > article");
-      [...(article?.children || [])].forEach((el) => blocks.push({ el, holder: "article", box: rel(el, base) }));
+      // wszystkie <article> kartki (sekcje ciągłe, np. fragment w 2 kolumnach) — bloki i tak stoją
+      // bezwzględnie w zmierzonym miejscu, więc kolumny zostają, gdzie były
+      sec.querySelectorAll(":scope > article").forEach((article) => [...article.children].forEach((el) => blocks.push({ el, holder: "article", box: rel(el, base) })));
       sec.querySelectorAll(":scope > ol").forEach((ol, oi) => [...ol.children].forEach((el) => blocks.push({ el, holder: oi, box: rel(el, base) })));
       const cs = getComputedStyle(sec);
       const starts = [S.contentTop, ...S.cuts.map((c) => c.top)];

@@ -143,6 +143,13 @@
       return;
     }
     if (e.key === "F6") { e.preventDefault(); cycleRegion(e.shiftKey ? -1 : 1); return; }
+    // Backspace poza polem tekstowym: WebKit (Playwright, starsze Safari z włączoną opcją) cofa
+    // wtedy historię — strona wychodzi na poprzedni adres i otwarty dokument znika bez pytania
+    // (beforeunload z dialogiem da się przeklikać). W apce taki Backspace nic nie robi.
+    if (e.key === "Backspace" && !e.altKey && !mod) {
+      const t = e.target?.nodeType === 1 ? e.target : a;
+      if (!t?.isContentEditable && !inFormField(t)) { e.preventDefault(); return; }
+    }
     if (!originalFileBytes) return;
 
     if (mod && !e.altKey && e.code === "KeyF") {

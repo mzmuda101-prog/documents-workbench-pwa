@@ -117,12 +117,21 @@ const dwbPageBreaks = (() => {
   // Czy wiersze akapitu opłyną odstęp pływający przed nim: akapit i jego pojemniki aż do <article>
   // to zwykłe bloki (flex, grid, tabela, overflow ≠ visible to osobny kontekst — taki akapit
   // przeszedłby pod pas w całości, więc granica idzie przed nim jak dawniej).
-  function canSplit(el, article) {
-    for (let x = el; x && x !== article; x = x.parentElement) {
+  function canSplit(el) {
+    for (let x = el; x && x.tagName !== "ARTICLE"; x = x.parentElement) {
       const cs = getComputedStyle(x);
       if (!/^(block|list-item)$/.test(cs.display) || cs.overflow !== "visible" || cs.cssFloat !== "none" || /^(absolute|fixed)$/.test(cs.position)) return false;
     }
-    return true;
+    return !multiColumn(el.closest("article"));
+  }
+
+  // Sekcja w kilku kolumnach (sekcja ciągła z w:cols, np. „2 kolumny” w środku strony) — jeden
+  // <article> z column-count. Linijki obu kolumn leżą na tych samych wysokościach, więc liczymy
+  // ją jako jedną całość (jak wiersz tabeli): idzie na następną stronę w całości.
+  function multiColumn(article) {
+    if (!article) return false;
+    const n = parseInt(getComputedStyle(article).columnCount, 10);
+    return n > 1;
   }
 
   // Linijki treści kartki (y w układzie kartki, bez zoomu): akapity rozbite na wiersze tekstu,
@@ -136,6 +145,12 @@ const dwbPageBreaks = (() => {
       lines.forEach(([top, bottom], i) => out.push({ top: (top - secTop) / scale, bottom: (bottom - secTop) / scale,
         el, i, n: lines.length, row, next, together }));
     };
+    if (multiColumn(article)) {
+      const r = article.getBoundingClientRect();
+      if (r.height) add(article, [[r.top, r.bottom]], true);
+      out[out.length - 1] && (out[out.length - 1].multi = true);
+      return out;
+    }
     article.querySelectorAll("p, tr").forEach((el) => {
       if (el.tagName === "TR") {
         if (el.parentElement?.closest("tr")) return; // tabela w tabeli — liczy się zewnętrzny wiersz
@@ -184,14 +199,18 @@ const dwbPageBreaks = (() => {
   // end — dół ostatniej linijki. Wspólne dla znaczników w Edycji i podglądu wydruku
   // (print-preview.js — tam też z przypisami pod treścią: includeNotes).
   // Najwyższy element w <article> zawierający el (akapit albo cała tabela).
-  function topBlock(el, article) {
+  // (kartka może mieć kilka <article> — sekcje ciągłe na jednej stronie; liczy się ten, w którym jest el)
+  function topBlock(el) {
+    const article = el.closest("article");
     let b = el;
     while (b && b.parentElement !== article) b = b.parentElement;
     return b;
   }
 
   function paginateSection(sec, { includeNotes = false, blockBreaks = false } = {}) {
-    const article = sec.querySelector(":scope > article");
+    // sekcje ciągłe (Word: nowa sekcja na tej samej stronie) = kolejne <article> tej samej kartki
+    const articles = [...sec.querySelectorAll(":scope > article")];
+    const article = articles[0];
     if (!article || !sec.offsetHeight) return null;
     const secRect = sec.getBoundingClientRect();
     const scale = secRect.height / sec.offsetHeight || 1; // zoom Widoku desktopowego (transform)
@@ -209,11 +228,11 @@ const dwbPageBreaks = (() => {
     const contentTop = (article.getBoundingClientRect().top - secRect.top) / scale;
     const out = { sec, pageW, pageH, padT, padB, padL, padR, bodyH, contentTop, cuts: [], end: contentTop };
     if (!(bodyH > 40)) return out;
-    const u = lineUnits(article, secRect.top, scale);
+    const u = articles.flatMap((a) => lineUnits(a, secRect.top, scale));
     // Położenia BEZ obecnych odstępów między stronami (każdy przesuwa dalszą treść o data-shift) —
     // przeliczenie nie musi ich zdejmować (dawniej zdejmowanie i wstawianie co chwilę przestawiało
     // przewijanie: skok do sekcji, „Wróć”, zoom, zmiana widoku).
-    const gaps = [...article.querySelectorAll(":scope > .dwb-page-gap")].map((g) => ({ top: (g.getBoundingClientRect().top - secRect.top) / scale, shift: parseFloat(g.dataset.shift) || 0 }));
+    const gaps = [...sec.querySelectorAll(":scope > article > .dwb-page-gap")].map((g) => ({ top: (g.getBoundingClientRect().top - secRect.top) / scale, shift: parseFloat(g.dataset.shift) || 0 }));
     if (gaps.length) u.forEach((x) => { let d = 0; for (const g of gaps) if (g.top <= x.top) d += g.shift; x.top -= d; x.bottom -= d; });
     if (includeNotes) sec.querySelectorAll(":scope > ol").forEach((ol) => u.push(...lineUnits(ol, secRect.top, scale)));
     u.sort((a, b) => a.top - b.top);
@@ -226,14 +245,16 @@ const dwbPageBreaks = (() => {
         let block = null;
         let line = 0; // > 0: granica w środku akapitu, przed jego wierszem nr line
         if (blockBreaks) {
-          if (u[b].row) {
+          if (u[b].multi) {
+            block = null; // kolumny: granica strony jako kreska, bez odstępu w środku kolumn
+          } else if (u[b].row) {
             // tabela przechodzi w całości (gdy się mieści na stronie)
             const head = u.findIndex((x) => x.row && topBlock(x.el, article) === topBlock(u[b].el, article));
             if (head > first) b = head;
             if (u[b] === u.find((x) => x.row && topBlock(x.el, article) === topBlock(u[b].el, article))) block = topBlock(u[b].el, article);
           } else if (u[b].i === 0) {
             block = topBlock(u[b].el, article);
-          } else if (canSplit(u[b].el, article)) {
+          } else if (canSplit(u[b].el)) {
             block = topBlock(u[b].el, article); // akapit dzieli się jak w Wordzie
             line = u[b].i;
           } else {

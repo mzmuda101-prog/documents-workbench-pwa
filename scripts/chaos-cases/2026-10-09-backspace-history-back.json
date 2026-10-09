@@ -1,0 +1,36 @@
+{
+ "note": "2026-10-09 (ziarno 103, WebKit): pisanie i Backspace bez kursora w dokumencie. WebKit cofał wtedy historię — strona wychodziła na about:blank z otwartym dokumentem (test: Timeout w idle).",
+ "doc": "przewodnik",
+ "steps": [
+  "pisze „ĄĘÓŁŚŻŹĆŃ”",
+  "Backspace ×2"
+ ],
+ "actions": [
+  {
+   "name": "type",
+   "r": [
+    0.316413,
+    0.951591,
+    0.392065,
+    0.432025,
+    0.040766,
+    0.151999,
+    0.649792,
+    0.061666
+   ]
+  },
+  {
+   "name": "backspace",
+   "r": [
+    0.408235,
+    0.204192,
+    0.857755,
+    0.285838,
+    0.083009,
+    0.139345,
+    0.97886,
+    0.691805
+   ]
+  }
+ ]
+}

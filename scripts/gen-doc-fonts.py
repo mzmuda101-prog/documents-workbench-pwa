@@ -118,7 +118,10 @@ FAMILIES = [
     ("Georgia", "gelasio", ["Georgia"], True),
     # te same szerokości pod innymi nazwami (pliki z LibreOffice, Maca, PDF)
     ("Carlito", "carlito", ["Carlito"], False),
-    ("Caladea", "caladea", ["Caladea"], False),
+    # „Caladea” w pliku: Word pokazuje Cambrię (PDF z Worda, „Punkt Marzeny…” 2026-10-09: panose
+    # = Cambria, osadzona Cambria) — lokalna Caladea z Google Fonts jest o ~6% szersza i
+    # przestawiała wiersze; z urządzenia tylko Cambria, potem nasz plik (szerokości Cambrii)
+    ("Caladea", "caladea", ["Cambria"], False),
     ("Helvetica", "arimo", ["Helvetica", "Arial"], False),
     ("Liberation Sans", "arimo", ["Liberation Sans", "Arimo", "Arial"], False),
     ("Arimo", "arimo", ["Arimo"], False),

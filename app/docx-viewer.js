@@ -47,6 +47,7 @@ async function renderDocxPreview(bytes, container, opts = {}) {
   });
   addGenericFontFallbacks(wrapper); // brak kroju na urządzeniu → systemowy bezszeryfowy/szeryfowy z prawdziwym pogrubieniem
   applyRunDefaultsToParagraphs(wrapper); // pusty / nowy akapit: krój i rozmiar dokumentu, nie aplikacji
+  applyContextualSpacing(wrapper); // listy bez odstępów między punktami (styl „Akapit z listą”)
   await loadFallbackDocFont(wrapper); // plik bez kroju: zamiennik wczytany przed pomiarami
   fixDocxBulletRendering(wrapper);
   fixPageAnchoredDrawings(wrapper);
@@ -65,4 +66,5 @@ async function renderDocxPreview(bytes, container, opts = {}) {
     }
   }
   if (mobileReflow && typeof applyMobileReflowLayout === "function") applyMobileReflowLayout(wrapper);
+  watchParagraphLayout(wrapper); // Edycja: nowe/usunięte akapity → odstępy list i puste akapity od nowa
 }

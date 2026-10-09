@@ -146,6 +146,61 @@ function patchBundle() {
   if (!rePush.test(src)) throw new Error("łatka list: wzorzec counter-reset nie pasuje");
   src = src.replace(rePush, (_, O, KT, R, J) => `${O}.includes(${KT})||${O}.push(${KT}),${R}+=this.styleToString(\`\${${J}}:before\`,{content:this.levelTextToContent`);
   console.log("  ✅  łatka: listy dzielące definicję (każdy w:num ze stylami, lvlOverride, wspólny licznik)");
+
+  // 10) Domyślny styl akapitu („Normalny”) a tekst. docx-preview dokleja selektor domyślny
+  //     PRZED całą listą: „.docx p, p.docx_normalny span { krój… }” — część „span” dostaje tylko
+  //     druga połówka. Krój/rozmiar Normalnego trafiały więc na sam akapit, a tekst w nim brał
+  //     krój z docDefaults (reguła „.docx span”). Podanie z Normalnym „Liberation Serif 11 pt”
+  //     przy docDefaults Aptos/Calibri 12 pt: u nas bezszeryfowe 12 pt, 2 strony zamiast 1
+  //     (npm run word:compare, 2026-10-09). Teraz także „.docx :where(p) span” — specyficzność
+  //     jak „.docx span” (później = wygrywa z docDefaults), a style znakowe (span.docx_X, też
+  //     później) i style akapitów (p.docx_X span) dalej wygrywają z Normalnym, jak w Wordzie.
+  const reDef = /(\w+)\[(\w+)\.target\]==\2&&\((\w+)=`\.\$\{this\.className\} \$\{\2\.target\}, `\+\3\)/;
+  if (!reDef.test(src)) throw new Error("łatka stylu domyślnego: wzorzec renderStyles nie pasuje (nowa wersja docx-preview?)");
+  const mLoop = src.match(/for\(let (\w+) of (\w+)\)\{var (\w+)=`\$\{(\w+)\.target\?\?""\}\.\$\{\4\.cssName\}`;\4\.target!=\1\.target&&\(\3\+=` \$\{\1\.target\}`\),/);
+  if (!mLoop) throw new Error("łatka stylu domyślnego: brak pętli podstylów w renderStyles");
+  const KT = mLoop[1];
+  src = src.replace(reDef, (_, O, J, TT) => `${O}[${J}.target]==${J}&&(${TT}=\`.\${this.className} \${${J}.target}, \`+(${J}.target!=${KT}.target?\`.\${this.className} :where(\${${J}.target}) \${${KT}.target}, \`:"")+${TT})`);
+  console.log("  ✅  łatka: domyślny styl akapitu działa też na tekst (krój/rozmiar Normalnego)");
+
+  // 11) Sekcja „ciągła” (w:type continuous) — w Wordzie nowa sekcja zaczyna się NA TEJ SAMEJ
+  //     stronie (np. środek strony w 2 kolumnach, inna numeracja wierszy). docx-preview przy
+  //     ignoreLastRenderedPageBreak (domyślnie włączone) robił nową kartkę po KAŻDEJ sekcji:
+  //     „ANALIZA POTRZEB…” (5 sekcji ciągłych) miała 5 stron zamiast 2 (word:compare, 2026-10-09).
+  //     Teraz jak w Wordzie: nowa kartka przy jawnym podziale strony, przy sekcji innego typu niż
+  //     ciągła/następna kolumna (brak w:type = nextPage) albo przy zmianie rozmiaru/orientacji.
+  //     Typ czytamy z sekcji, która się ZACZYNA (w:type opisuje początek swojej sekcji).
+  const reGroup = /groupByPageBreaks\((\w+)\)\{let (\w+)=\[\],(\w+),(\w+)=\[\2\];for\(let (\w+) of \1\)\2\.push\(\5\),\(this\.options\.ignoreLastRenderedPageBreak\|\|\5\.pageBreak\|\|this\.isPageBreakSection\(\3,\5\.sectProps\)\)&&\4\.push\(\2=\[\]\),\3=\5\.sectProps;return \4\.filter\((\w+)=>\6\.length>0\)\}/;
+  if (!reGroup.test(src)) throw new Error("łatka sekcji ciągłych: wzorzec groupByPageBreaks nie pasuje (nowa wersja docx-preview?)");
+  src = src.replace(reGroup, (_, T, E, _R, O) => `groupByPageBreaks(${T}){let ${E}=[],${O}=[${E}];for(let __i=0;__i<${T}.length;__i++){let __k=${T}[__i],__n=${T}[__i+1];${E}.push(__k);if(!__n)break;let __a=__k.sectProps,__b=__n.sectProps;(__k.pageBreak||__a!==__b&&(!/^(continuous|nextColumn)$/.test(__b?.type||"")||this.isPageBreakSection(__a,__b)))&&${O}.push(${E}=[])}return ${O}.filter(__x=>__x.length>0)}`);
+  console.log("  ✅  łatka: sekcje ciągłe na tej samej stronie (nowa kartka tylko przy podziale / sekcji „następna strona”)");
+
+  // 12) Znak końca akapitu (w:pPr/w:rPr): kolor i rozmiar. Kolorem Word rysuje punktor/numer listy,
+  //     gdy poziom listy nie ma własnego koloru (czerwony akapit = czerwona kropka). docx-preview
+  //     czyta pPr/rPr (paragraph.runProps: color, fontSize), ale go nie używa — znaczniki zawsze
+  //     czarne („Punkt…”: szare akapity z czarnymi kwadracikami). Kolor trafia do zmiennej
+  //     --dwb-mark-color akapitu; app.css daje ją TYLKO znacznikowi (::before) — tekst bez
+  //     własnego koloru dalej „auto”, jak w Wordzie. Rozmiar (data-dwb-mark-size) = wysokość
+  //     PUSTEGO akapitu w Wordzie (applyWordLineMetrics): „Punkt Marzeny…” — puste akapity stylu
+  //     27 pt ze znakiem 15 pt, u nas o połowę wyższe.
+  const reMarkRender = /(renderParagraph\((\w+)\)\{var (\w+)=this\.renderContainer\(\2,"p"\);)/;
+  if (!reMarkRender.test(src)) throw new Error("łatka znaku akapitu: wzorzec renderParagraph nie pasuje (nowa wersja docx-preview?)");
+  src = src.replace(reMarkRender, (_, head, T, E) => `${head}{let __rp=${T}.runProps;__rp?.color&&/^[0-9a-f]{6}$/i.test(__rp.color)&&${E}.style.setProperty("--dwb-mark-color","#"+__rp.color);__rp?.fontSize&&(${E}.dataset.dwbMarkSize=__rp.fontSize)}`);
+  console.log("  ✅  łatka: kolor znaku końca akapitu dla punktorów/numerów listy");
+
+  // 13) „Nie dodawaj odstępu między akapitami tego samego stylu” (w:contextualSpacing) — jest w
+  //     stylu „Akapit z listą” prawie każdego pliku z Worda. docx-preview go nie czytał: każdy
+  //     punkt listy dostawał pełny odstęp po (8 pt) — listy 1,5–2× wyższe niż w Wordzie, strona
+  //     więcej („Punkt…”, word:compare 2026-10-09). Parser (wspólny dla stylów i akapitów; style
+  //     dziedziczą po basedOn) zapamiętuje cechę, akapit dostaje data-dwb-ctx, a odstępy zeruje
+  //     applyContextualSpacing (docx-render-fixes.js) — tylko między akapitami tego samego stylu.
+  const reCtxParse = /case"keepNext":(\w+)\.keepNext=(\w+)\.boolAttr\((\w+),"val",!0\);break;/;
+  if (!reCtxParse.test(src)) throw new Error("łatka contextualSpacing: wzorzec parseParagraphProperty nie pasuje (nowa wersja docx-preview?)");
+  src = src.replace(reCtxParse, (m0, T, E, S) => `${m0}case"contextualSpacing":${T}.contextualSpacing=${E}.boolAttr(${S},"val",!0);break;`);
+  const reCtxRender = /(renderParagraph\((\w+)\)\{var (\w+)=this\.renderContainer\(\2,"p"\);[^]*?let (\w+)=this\.findStyle\(\2\.styleName\);)/;
+  if (!reCtxRender.test(src)) throw new Error("łatka contextualSpacing: wzorzec renderParagraph nie pasuje");
+  src = src.replace(reCtxRender, (head, _h, T, E, R) => `${head}(${T}.contextualSpacing??${R}?.paragraphProps?.contextualSpacing)&&(${E}.dataset.dwbCtx="1");`);
+  console.log("  ✅  łatka: odstępy między akapitami tego samego stylu (contextualSpacing)");
   fs.writeFileSync(OUT, src);
 }
 
