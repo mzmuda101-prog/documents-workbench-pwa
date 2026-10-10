@@ -180,7 +180,10 @@ async function a11yFix(item) {
     if (typeof setSidebarOpen === "function") setSidebarOpen(true);
     const panel = document.getElementById("panel-metadata");
     if (panel) { panel.open = true; panel.scrollIntoView({ block: "start", behavior: "smooth" }); }
-    setTimeout(() => document.getElementById("metaTitle")?.focus(), 350);
+    // po doładowaniu sekcji (lazy) — inaczej w tłoku fokus trafiał przed jej gotowością
+    if (typeof ensureLazyFeature === "function") await ensureLazyFeature("metadata").catch(() => {});
+    await new Promise((r) => requestAnimationFrame(() => r()));
+    document.getElementById("metaTitle")?.focus({ preventScroll: true });
     return;
   }
   if (readOnlyMode && typeof appFrame !== "undefined") appFrame.setReadOnly(false);

@@ -118,7 +118,7 @@ async function run() {
   check("„Dodaj opis” → okienko, po zapisie obraz bez uwagi", !found.imageAlt, JSON.stringify(found));
   // tytuł — Metadane
   await page.evaluate(() => document.querySelector('[data-rule="docTitle"] [data-fix="title"]').click());
-  await page.waitForTimeout(600);
+  await page.waitForFunction(() => document.activeElement?.id === "metaTitle", null, { timeout: 5000 }).catch(() => {});
   check("„Uzupełnij” tytuł: otwiera Metadane z kursorem w polu Tytuł", await page.evaluate(() => document.getElementById("panel-metadata").open && document.activeElement?.id === "metaTitle"));
   await page.evaluate(async () => { await ensureLazyFeature("metadata"); });
   await page.fill("#metaTitle", "Dokument testowy");

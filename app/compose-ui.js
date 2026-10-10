@@ -1369,7 +1369,7 @@ const composeUi = (() => {
     popCap(el, t("tableShadeGroup"));
     let shadeScope = "cell";
     const sseg = document.createElement("div");
-    sseg.className = "seg compose-cellalign-scope";
+    sseg.className = "seg compose-shade-scope"; // osobna klasa — przełącznik zakresu wyrównania zostaje jedyny pod swoją
     sseg.setAttribute("role", "group");
     [["cell", "tableScopeCell"], ["row", "tableScopeRow"], ["col", "tableScopeCol"], ["table", "tableScopeTable"]].forEach(([v, key]) => {
       const b = document.createElement("button");

@@ -9,6 +9,7 @@ const compareStatusEl = document.getElementById("compareStatus");
 const compareSummaryEl = document.getElementById("compareSummary");
 const compareResultsEl = document.getElementById("compareResults");
 const compareNewerEl = document.getElementById("compareNewer");
+const compareRedlineBtn = document.getElementById("compareRedlineBtn");
 const COMPARE_RENDER_LIMIT = 220;
 let compareLast = null; // { current, reference, rows } — wyrównanie po stronie „otwarty = nowszy”
 function compareNewerSide() {
@@ -69,9 +70,10 @@ async function runDocumentComparison() {
   try {
     // Include local, unsaved edits without mutating app state or the original package.
     const source = pendingDocEdits.length ? (await buildPatchedDocx(originalFileBytes, pendingDocEdits)).bytes : originalFileBytes;
-    const [current, reference] = await Promise.all([dwbCompareParagraphs(source), dwbCompareParagraphs(await file.arrayBuffer())]);
+    const refBytes = new Uint8Array(await file.arrayBuffer());
+    const [current, reference] = await Promise.all([dwbCompareParagraphs(source), dwbCompareParagraphs(refBytes)]);
     const result = dwbCompareAlign(current, reference);
-    compareLast = { current, reference, result };
+    compareLast = { current, reference, result, source, refBytes, refName: file.name };
     renderCompareLast();
   } catch (err) {
     compareSetStatus(t("compareFailed"));
@@ -90,10 +92,35 @@ function renderCompareLast() {
     return { ...row, side, kind: side === newer ? "added" : "removed" };
   });
   renderComparison(current, reference, { ...result, rows });
+  if (compareRedlineBtn) compareRedlineBtn.hidden = !rows.some((r) => r.kind !== "same");
   compareSetStatus(t(result.approximate ? "compareDoneApprox" : "compareDone", { current: current.length, reference: reference.length }));
 }
 
+// Dokument z poprawkami (w:ins / w:del) — starsza → nowsza, w nowej karcie: przegląd w Recenzji
+// (Akceptuj/Odrzuć), zapis jak zwykłego pliku. Żaden z porównywanych plików się nie zmienia.
+async function createRedlineDocument() {
+  if (!compareLast?.source || !compareLast?.refBytes) return;
+  compareRedlineBtn.disabled = true;
+  compareSetStatus(t("compareRedlineWorking"));
+  try {
+    const newerIsCurrent = compareNewerSide() === "current";
+    const older = newerIsCurrent ? compareLast.refBytes : compareLast.source;
+    const newer = newerIsCurrent ? compareLast.source : compareLast.refBytes;
+    let author = "";
+    try { author = localStorage.getItem("dwb.authorName") || ""; } catch (_) {}
+    const { bytes, stats } = await dwbRedline(older, newer, { author: author || t("compareRedlineAuthor") });
+    const base = (newerIsCurrent ? currentFileName : compareLast.refName || "dokument").replace(/\.docx$/i, "");
+    const name = `${base} (${t("compareRedlineSuffix")}).docx`;
+    const ok = await openDocumentFiles([{ file: new File([bytes], name, { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }) }]);
+    compareSetStatus(ok ? t("compareRedlineDone", { n: stats.changed + stats.added + stats.removed }) : t("compareFailed"));
+  } catch (err) {
+    log(`Porównanie: ${err.message || err}`, "error");
+    compareSetStatus(t("compareFailed"));
+  } finally { compareRedlineBtn.disabled = false; }
+}
+
 compareRunBtn?.addEventListener("click", runDocumentComparison);
+compareRedlineBtn?.addEventListener("click", createRedlineDocument);
 compareNewerEl?.addEventListener("click", (e) => {
   const b = e.target.closest("button[data-newer]");
   if (!b || b.classList.contains("is-on")) return;

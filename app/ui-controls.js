@@ -182,7 +182,8 @@ async function saveDocument() {
   try {
     const bytes = await buildDocumentForSave();
     const writable = await handle.createWritable();
-    await writable.write(bytes);
+    // śledzenie zmian: na dysk plik z poprawkami, w aplikacji zostaje czysty stan (dalej śledzimy)
+    await writable.write(typeof dwbTrack !== "undefined" ? await dwbTrack.bytesForDisk(bytes) : bytes);
     await writable.close();
     pendingDocEdits = [];
     originalFileBytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
@@ -205,6 +206,7 @@ async function saveDocumentAs() {
     return;
   }
   const bytes = await buildDocumentForSave();
+  const disk = typeof dwbTrack !== "undefined" ? await dwbTrack.bytesForDisk(bytes) : bytes; // z poprawkami przy śledzeniu
   const base = (currentFileName || "document.docx").replace(/\.docx$/i, "");
   const suggested = `${base}_edited.docx`;
 
@@ -218,7 +220,7 @@ async function saveDocumentAs() {
         }],
       });
       const writable = await handle.createWritable();
-      await writable.write(bytes);
+      await writable.write(disk);
       await writable.close();
       fileHandle = handle;
       overwriteConfirmedFor = handle; // sam wybrał ten plik w oknie zapisu — kolejne „Zapisz” bez pytania
@@ -241,7 +243,7 @@ async function saveDocumentAs() {
   const nameRaw = window.prompt(t("saveAsPrompt"), suggested);
   if (!nameRaw) return;
   const name = nameRaw.toLowerCase().endsWith(".docx") ? nameRaw : `${nameRaw}.docx`;
-  await downloadBytes(bytes, name);
+  await downloadBytes(disk, name);
   originalFileBytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   currentFileName = name;
   pendingDocEdits = [];

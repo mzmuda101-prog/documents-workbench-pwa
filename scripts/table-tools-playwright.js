@@ -156,7 +156,7 @@ async function run() {
   await page.waitForSelector(".compose-pop-tabletools .table-shades .color-swatch");
   await page.evaluate(() => {
     const pop = document.querySelector(".compose-pop-tabletools");
-    const seg = [...pop.querySelectorAll(".compose-cellalign-scope")][0];
+    const seg = pop.querySelector(".compose-shade-scope");
     seg.querySelector('button[data-v="row"]').click();
     pop.querySelector(".table-shades .color-swatch").click();
   });

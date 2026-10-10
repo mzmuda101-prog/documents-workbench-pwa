@@ -109,6 +109,10 @@ async function ingestFile(file, options = {}) {
     setDirtyState(false);
 
     await renderCurrentDocument();
+    // śledzenie zmian: stan z karty (open-docs) albo z ustawień pliku (Word ze śledzeniem).
+    // Bez await: wczytanie nie może się wydłużać — kursor dla nowego dokumentu (createNew) jest
+    // ustawiany tuż po powrocie i zużywany przez przygotowanie akapitów do edycji.
+    if (typeof dwbTrack !== "undefined") dwbTrack.onDocumentLoaded(options.track || null).catch(() => {});
     setStatus(t("docLoaded"));
     if (!options.silent) toast(t("docLoaded"), "success");
     if (typeof loadMetadataFromDocument === "function") loadMetadataFromDocument().catch(() => {});
@@ -297,10 +301,25 @@ async function applyDocumentEdit(edit, xmlOpts = {}) {
   if (!originalFileBytes) return 0;
   await mergeInlineEditsIntoBytes();
   const normalized = edit.op ? edit : { ...edit, op: "replace" };
+  // poprawki z różnicy „przed” → teraz (track-changes.js) — cały plik naraz, nie operacja na XML
+  if (normalized.op === "redline") {
+    if (pendingDocEdits.length) {
+      originalFileBytes = (await buildPatchedDocx(originalFileBytes, pendingDocEdits)).bytes;
+      pendingDocEdits = [];
+    }
+    const { bytes, stats } = await dwbRedline(normalized.baseline, originalFileBytes, { author: normalized.author, trackOn: normalized.trackOn });
+    const n = stats.changed + stats.added + stats.removed;
+    originalFileBytes = bytes;
+    await reloadFromBytes(bytes);
+    if (n) setDirtyState(true);
+    return n;
+  }
   recordPendingEdit(normalized);
   const { bytes, changeCount } = await buildPatchedDocx(originalFileBytes, pendingDocEdits, xmlOpts);
   pendingDocEdits = [];
   originalFileBytes = bytes;
+  // Akceptuj/Odrzuć podczas śledzenia — to samo w pliku „przed” (bez nowych poprawek)
+  if (normalized.op === "revisions" && typeof dwbTrack !== "undefined") await dwbTrack.mirrorRevisions(normalized);
   await reloadFromBytes(bytes);
   if (changeCount > 0) setDirtyState(true);
   return changeCount;

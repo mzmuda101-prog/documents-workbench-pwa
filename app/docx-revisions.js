@@ -350,7 +350,17 @@ function applyRevisionsToDoc(doc, mode, ids) {
   });
   rowsToRemove.forEach((tr) => tr.parentNode?.removeChild(tr));
   // od końca, żeby łączenie kilku akapitów pod rząd szło jak w Wordzie
-  merges.reverse().forEach((p) => { if (p.parentNode) revMergeWithNext(p); });
+  // Ostatni akapit w miejscu (treść, komórka) nie ma z czym się złączyć: gdy po przyjęciu jest
+  // pusty i nie kończy sekcji — znika (inaczej zostawał pusty akapit po usuniętym, np. z
+  // porównania wersji). Jedyny akapit komórki / dokumentu zostaje (Word go wymaga).
+  merges.reverse().forEach((p) => {
+    if (!p.parentNode || revMergeWithNext(p)) return;
+    const pPr = revChildren(p).find((c) => c.localName === "pPr");
+    const empty = !revChildren(p).some((c) => c.localName !== "pPr");
+    const sect = pPr && revChildren(pPr).some((c) => c.localName === "sectPr");
+    const siblings = revChildren(p.parentNode).filter((c) => c.localName === "p");
+    if (empty && !sect && siblings.length > 1) p.parentNode.removeChild(p);
+  });
   return count;
 }
 

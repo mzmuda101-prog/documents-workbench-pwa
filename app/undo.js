@@ -55,6 +55,7 @@ const UNDO_OP_LABEL = {
   commentDone: "undoOpComment",
   commentEdit: "undoOpComment",
   headerFooter: "undoOpHeaderFooter",
+  redline: "undoOpTrack",
 };
 
 const dwbUndo = (() => {

@@ -1,4 +1,4 @@
-const CACHE_VERSION = "20261010-11";
+const CACHE_VERSION = "20261010-12";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
@@ -31,6 +31,8 @@ const SHELL_ASSETS = [
   `./app/language.js?v=${ASSET_V}`,
   `./app/docx-metadata.js?v=${ASSET_V}`,
   `./app/docx-compare.js?v=${ASSET_V}`,
+  `./app/docx-redline.js?v=${ASSET_V}`,
+  `./app/track-changes.js?v=${ASSET_V}`,
   `./app/docx-revisions.js?v=${ASSET_V}`,
   `./app/docx-forms.js?v=${ASSET_V}`,
   `./app/doc-links.js?v=${ASSET_V}`,

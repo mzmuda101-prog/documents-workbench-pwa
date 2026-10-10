@@ -536,6 +536,16 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
   min-width: 1.6em; text-align: right;
 }
 .fr-preview-snippet { line-height: 1.35; word-break: break-word; }
+/* Śledzenie zmian (track-changes.js): „Proste znaczniki” — czerwony pasek na marginesie przy
+   zmienionym akapicie (jak w Wordzie); przy akapicie z kursorem razem ze znacznikiem kursora */
+.dwb-track-bar { position: absolute; width: 2px; border-radius: 1px; background: #d13438; pointer-events: none; user-select: none; z-index: 1; }
+.doc-reflow-mode .dwb-track-bar { margin-left: 4px; }
+.status-track { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px; border: 0; border-radius: 999px; background: color-mix(in srgb, #d13438 13%, transparent); color: #b02a30; font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; }
+.status-track::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #d13438; }
+.status-track[hidden] { display: none; }
+[data-theme="dark"] .status-track { color: #f08a8a; }
+.track-toggle { font-weight: 700; }
+@media print { .dwb-track-bar { display: none !important; } }
 /* Ułatwienia dostępu (a11y-check.js): poziom uwagi jak w Wordzie */
 .a11y-results { display: flex; flex-direction: column; gap: 8px; }
 .a11y-level { margin-right: 6px; padding: 1px 6px; border-radius: 999px; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
@@ -706,8 +716,8 @@ html.is-mobile .dwb-page-margin-guide { display: none; }
 .doc-canvas:not(.doc-reflow-mode) section.docx[data-dwb-v-align="both"] > article:not([style*="column-count"]) { flex: 1 0 auto; display: flex; flex-direction: column; justify-content: space-between; }
 
 /* Menu tabeli: wyrównanie w komórce (siatka 3×3 jak w Wordzie) */
-.compose-cellalign-scope { margin: 2px 8px 6px; }
-.compose-cellalign-scope button { padding: 5px 6px; font-size: 12px; }
+.compose-cellalign-scope, .compose-shade-scope { margin: 2px 8px 6px; }
+.compose-cellalign-scope button, .compose-shade-scope button { padding: 5px 6px; font-size: 12px; }
 .compose-cellalign { display: grid; grid-template-columns: repeat(3, 36px); gap: 4px; padding: 0 8px 6px; }
 .compose-cellalign .compose-align { width: 36px; height: 32px; }
 .compose-item.is-current .compose-item-label { font-weight: 700; color: var(--accent); }

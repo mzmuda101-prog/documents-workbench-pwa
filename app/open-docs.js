@@ -79,6 +79,7 @@ const dwbOpenDocs = (() => {
     if (!d || !originalFileBytes) return;
     d.anchor = typeof captureDocScrollAnchor === "function" ? captureDocScrollAnchor() : null;
     d.bytes = await buildDocumentForSave();
+    d.track = typeof dwbTrack !== "undefined" ? dwbTrack.snapshot() : null; // śledzenie zmian tej karty
     d.name = currentFileName || d.name;
     d.handle = fileHandle || null;
     d.dirty = !!hasUnsavedChanges;
@@ -98,7 +99,7 @@ const dwbOpenDocs = (() => {
     try {
       let ok;
       if (d.bytes) {
-        ok = await window.ingestFile(new File([d.bytes], d.name, { type: OPEN_DOCS_MIME }), { silent: true, ...(d.handle ? { handle: d.handle } : {}) });
+        ok = await window.ingestFile(new File([d.bytes], d.name, { type: OPEN_DOCS_MIME }), { silent: true, track: d.track || null, ...(d.handle ? { handle: d.handle } : {}) });
         if (ok) {
           if (d.dirty) {
             if (typeof dwbDrafts !== "undefined") dwbDrafts.unpark(d.draft);
