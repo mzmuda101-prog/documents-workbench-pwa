@@ -2724,16 +2724,45 @@ const composeUi = (() => {
     return cls.map((c) => `span.${CSS.escape(c)}`).join(",");
   }
 
+  // Rodzaj cyfr i początek numeracji z pliku (w:pgNumType pierwszej sekcji) — podgląd i podgląd
+  // wydruku piszą numery tak jak Word (i, ii… / A, B…, od „Zacznij od”).
+  let pageNumbering = { numFmt: "decimal", start: null, bytes: null };
+  async function refreshPageNumbering() {
+    const bytes = originalFileBytes;
+    const doc = bytes ? await getDocumentXmlDom(bytes).catch(() => null) : null;
+    const sect = doc ? composeSectPrs(doc)[0] : null;
+    pageNumbering = { ...composePageNumbering(sect), bytes };
+  }
+  const toRoman = (n) => {
+    let out = "";
+    [[1000, "m"], [900, "cm"], [500, "d"], [400, "cd"], [100, "c"], [90, "xc"], [50, "l"], [40, "xl"], [10, "x"], [9, "ix"], [5, "v"], [4, "iv"], [1, "i"]].forEach(([v, r]) => { while (n >= v) { out += r; n -= v; } });
+    return out;
+  };
+  // Word: a … z, potem aa, bb … (ta sama litera powtórzona)
+  const toLetter = (n) => String.fromCharCode(97 + ((n - 1) % 26)).repeat(Math.floor((n - 1) / 26) + 1);
+  function pageNumberText(page) {
+    const n = page + (pageNumbering.start != null ? pageNumbering.start - 1 : 0);
+    if (n < 1 && pageNumbering.numFmt !== "decimal") return "";
+    switch (pageNumbering.numFmt) {
+      case "lowerRoman": return toRoman(n);
+      case "upperRoman": return toRoman(n).toUpperCase();
+      case "lowerLetter": return toLetter(n);
+      case "upperLetter": return toLetter(n).toUpperCase();
+      default: return String(n);
+    }
+  }
   function fixPreviewPageNumbers() {
     const sel = pageNumberSelector();
     if (!sel) return;
+    if (pageNumbering.bytes !== originalFileBytes) { refreshPageNumbering().then(fixPreviewPageNumbers); return; }
     const { list, total } = sectionPages();
+    // „z N” = liczba stron dokumentu (pole NUMPAGES nie zależy od „Zacznij od”)
     list.forEach(({ sec, first, last }) => {
       sec.querySelectorAll(":scope > header, :scope > footer").forEach((part) => {
         const page = part.localName === "header" ? first : last;
         part.querySelectorAll("p").forEach((p) => {
           const spans = Array.from(p.querySelectorAll(sel));
-          if (spans[0]) spans[0].textContent = String(page);
+          if (spans[0]) spans[0].textContent = pageNumberText(page);
           if (spans[1]) spans[1].textContent = String(total);
         });
       });
@@ -2764,6 +2793,10 @@ const composeUi = (() => {
         ${segAlign("f", st.footer.align)}
         <label class="compose-field"><span></span><select class="hf-n">${fmts.map(([v, k]) => `<option value="${v}">${t(k)}</option>`).join("")}</select></label>
         ${segAlign("n", st.footer.numAlign || "center")}
+        <div class="mf-grid hf-numopts">
+          <label class="compose-field"><span data-k="hfNumFmt"></span><select class="hf-numfmt"></select></label>
+          <label class="compose-field"><span data-k="hfStartAt"></span><input type="text" class="hf-start" inputmode="numeric" autocomplete="off" enterkeyhint="done"></label>
+        </div>
         <label class="compose-check"><input type="checkbox" class="hf-first"><span></span></label>
         <p class="compose-note hf-note"></p>
         <div class="compose-actions"><span class="compose-actions-gap"></span><button type="button" class="btn lf-cancel"></button><button type="button" class="btn primary lf-ok"></button></div>`;
@@ -2792,7 +2825,14 @@ const composeUi = (() => {
           g.querySelectorAll("button").forEach((x) => { x.classList.toggle("is-on", x === b); x.setAttribute("aria-pressed", String(x === b)); });
         });
       });
-      const syncNum = () => { el.querySelector('[data-seg="n"]').hidden = !nSel.value; };
+      el.querySelectorAll(".hf-numopts [data-k]").forEach((x) => { x.textContent = t(x.dataset.k); });
+      const numFmt = el.querySelector(".hf-numfmt");
+      [["decimal", "1, 2, 3"], ["lowerRoman", "i, ii, iii"], ["upperRoman", "I, II, III"], ["lowerLetter", "a, b, c"], ["upperLetter", "A, B, C"]].forEach(([v, label]) => numFmt.appendChild(new Option(label, v)));
+      numFmt.value = st.numFmt || "decimal";
+      const startIn = el.querySelector(".hf-start");
+      startIn.value = st.start != null ? String(st.start) : "";
+      startIn.placeholder = t("hfStartAuto");
+      const syncNum = () => { el.querySelector('[data-seg="n"]').hidden = !nSel.value; el.querySelector(".hf-numopts").hidden = !nSel.value; };
       nSel.addEventListener("change", syncNum);
       syncNum();
       el.querySelector(".lf-cancel").textContent = t("linkCancel");
@@ -2803,7 +2843,7 @@ const composeUi = (() => {
           op: "headerFooter", lang: currentLang, total: sectionPages().total,
           header: { text: hIn.value.trim(), align: segs.h },
           footer: { text: fIn.value.trim(), align: segs.f },
-          number: { fmt: nSel.value || null, align: segs.n },
+          number: { fmt: nSel.value || null, align: segs.n, numFmt: numFmt.value, start: /^\d+$/.test(startIn.value.trim()) ? parseInt(startIn.value.trim(), 10) : null },
           firstDifferent: first.checked,
         };
         closePop();
@@ -3273,5 +3313,5 @@ const composeUi = (() => {
     document.getElementById(id)?.addEventListener("click", openNewDialog);
   });
 
-  return { openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
+  return { openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
 })();

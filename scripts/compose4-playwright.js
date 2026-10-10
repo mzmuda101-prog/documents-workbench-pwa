@@ -176,6 +176,30 @@ async function run() {
   check("plik: odwołania nagłówka/stopki na początku sectPr, titlePg, 4 części (bez sierot)", /^<w:sectPr><w:headerReference w:type="default"/.test(sect) && /<w:titlePg\/>/.test(sect) && parts.length === 4, JSON.stringify({ sect: sect.slice(0, 160), parts }));
   const footer = await zip.file(parts.find((f) => f.includes("footer") && !/<w:p\/>/.test(""))).async("string");
   check("plik: numer strony to pola PAGE i NUMPAGES", /instrText[^>]*> PAGE </.test(footer + (await Promise.all(parts.map((f) => zip.file(f).async("string")))).join("")) && /NUMPAGES/.test((await Promise.all(parts.map((f) => zip.file(f).async("string")))).join("")), "");
+  // rodzaj cyfr i „Zacznij od” (w:pgNumType): I, II… od 3 — 2. strona = IV
+  await page.click("#insertMenuBtn");
+  await page.click(".compose-pop-insert .compose-item-label:text-is('Nagłówek, stopka, numer strony…')");
+  await page.waitForSelector(".compose-pop-hf .hf-numfmt");
+  check("okienko: „Cyfry” i „Zacznij od” przy numerze strony", await page.evaluate(() => !document.querySelector(".hf-numopts").hidden && document.querySelector(".hf-numfmt").value === "decimal" && document.querySelector(".hf-start").value === ""));
+  await page.selectOption(".hf-numfmt", "upperRoman");
+  await page.fill(".hf-start", "3");
+  await page.click(".compose-pop-hf .lf-ok");
+  await idle(page);
+  secs = await sections(page);
+  check("podgląd: numer rzymski od 3 (2. strona = IV), „z N” bez zmian", secs[1].f === "PoufneStrona IV z 2", JSON.stringify(secs));
+  zip = await savedZip(page);
+  const sect2 = ((await zip.file("word/document.xml").async("string")).match(/<w:sectPr>.*?<\/w:sectPr>/) || [""])[0];
+  check("plik: w:pgNumType fmt=upperRoman start=3 przed titlePg", /<w:pgNumType w:fmt="upperRoman" w:start="3"\/>.*<w:titlePg\/>/.test(sect2), sect2.slice(0, 400));
+  await page.click("#insertMenuBtn");
+  await page.click(".compose-pop-insert .compose-item-label:text-is('Nagłówek, stopka, numer strony…')");
+  await page.waitForSelector(".compose-pop-hf .hf-numfmt");
+  check("okienko pokazuje zapisane: I, II, III od 3", await page.evaluate(() => document.querySelector(".hf-numfmt").value === "upperRoman" && document.querySelector(".hf-start").value === "3"));
+  await page.selectOption(".hf-numfmt", "decimal");
+  await page.fill(".hf-start", "");
+  await page.click(".compose-pop-hf .lf-ok");
+  await idle(page);
+  zip = await savedZip(page);
+  check("powrót do 1, 2, 3 i kontynuacji: w:pgNumType znika", !/pgNumType/.test(await zip.file("word/document.xml").async("string")));
   // usunięcie: puste pola, bez numeru, bez pierwszej
   await page.click("#insertMenuBtn");
   await page.click(".compose-pop-insert .compose-item-label:text-is('Nagłówek, stopka, numer strony…')");

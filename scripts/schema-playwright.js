@@ -146,6 +146,7 @@ async function editAll(page) {
       });
     }],
     ["nagłówek i stopka z numerem", async () => { await edit({ op: "headerFooter", lang: "pl", total: 3, header: { text: "Nagłówek testu", align: "right" }, footer: { text: "Stopka", align: "left" }, number: { fmt: "n", align: "center" }, firstDifferent: false }); }],
+    ["numery stron: rzymskie od 3 + inna pierwsza", async () => { await edit({ op: "headerFooter", lang: "pl", total: 3, header: { text: "Nagłówek testu", align: "right" }, footer: { text: "", align: "left" }, number: { fmt: "pageOf", align: "right", numFmt: "lowerRoman", start: 3 }, firstDifferent: true }); }],
     ["marginesy + pozioma", async () => { await edit({ op: "pageSetup", index: 0, scope: "all", margins: { top: 1134, bottom: 1134, left: 1418, right: 1418 }, orient: "landscape" }); }],
     ["metadane", async () => { await edit({ op: "coreMetadata", fields: { title: "Tytuł & <test>", creator: "Test", subject: "schemat" } }); }],
   ];

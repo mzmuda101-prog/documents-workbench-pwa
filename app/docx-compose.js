@@ -2188,6 +2188,27 @@ async function applyCommentThreadInZip(zip, xml, edit) {
 const COMPOSE_REL_HEADER = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header";
 const COMPOSE_REL_FOOTER = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer";
 const COMPOSE_PN_FORMATS = ["n", "page", "pageOf", "dash"];
+// Rodzaj cyfr i początek numeracji (Word: Numer strony → Formatuj numery stron): w:pgNumType
+const COMPOSE_PN_NUMFMTS = ["decimal", "lowerRoman", "upperRoman", "lowerLetter", "upperLetter"];
+const COMPOSE_SECT_AFTER_PGNUM = ["cols", "formProt", "vAlign", "noEndnote", "titlePg", "textDirection", "bidi", "rtlGutter", "docGrid", "printerSettings", "sectPrChange"];
+function composePageNumbering(sect) {
+  const el = sect && composeDirectChild(sect, "pgNumType");
+  const fmt = composeWAttr(el, "fmt");
+  const start = composeWInt(el, "start");
+  return { numFmt: COMPOSE_PN_NUMFMTS.includes(fmt) ? fmt : "decimal", start: start != null && start >= 0 ? start : null };
+}
+function composeSetPageNumbering(sect, numFmt, start) {
+  let el = composeDirectChild(sect, "pgNumType");
+  if (!el) {
+    el = composeEl(sect.ownerDocument, "pgNumType");
+    const after = COMPOSE_SECT_AFTER_PGNUM.map((n) => composeDirectChild(sect, n)).find(Boolean);
+    sect.insertBefore(el, after || null);
+  }
+  const set = (k, v) => { if (v == null) { el.removeAttributeNS(W_NS, k); el.removeAttribute(`w:${k}`); } else el.setAttributeNS(W_NS, `w:${k}`, String(v)); };
+  set("fmt", numFmt && numFmt !== "decimal" ? numFmt : null);
+  set("start", start != null && start >= 0 ? start : null);
+  if (!el.attributes.length) sect.removeChild(el);
+}
 
 function composeSectPrs(doc) {
   return Array.from(doc.getElementsByTagNameNS(W_NS, "sectPr")).filter((s) => s.parentNode?.localName === "body" || s.parentNode?.localName === "pPr");
@@ -2223,7 +2244,7 @@ function composePageNumberXml(fmt, lang, styleId, total) {
 
 // Stan do okienka: { header: { text, align, complex }, footer: {…, number: fmt|null, numAlign}, firstDifferent, sections }
 async function readHeaderFooterState(bytes) {
-  const out = { header: { text: "", align: "left", complex: false }, footer: { text: "", align: "left", complex: false, number: null, numAlign: "center" }, firstDifferent: false, sections: 1 };
+  const out = { header: { text: "", align: "left", complex: false }, footer: { text: "", align: "left", complex: false, number: null, numAlign: "center" }, firstDifferent: false, sections: 1, numFmt: "decimal", start: null };
   if (!bytes || !window.JSZip) return out;
   const zip = await loadDocxZipCached(bytes);
   const doc = await getDocumentXmlDom(bytes);
@@ -2233,6 +2254,7 @@ async function readHeaderFooterState(bytes) {
   const body = composeDirectChild(doc.getElementsByTagNameNS(W_NS, "body")[0], "sectPr") || sects[sects.length - 1];
   if (!body) return out;
   out.firstDifferent = !!composeDirectChild(body, "titlePg");
+  Object.assign(out, composePageNumbering(sects[0] || body)); // numeracja zaczyna się w pierwszej sekcji
   const rels = (await composeReadRels(zip)).doc;
   const target = (rid) => Array.from(rels.documentElement.getElementsByTagName("Relationship")).find((r) => r.getAttribute("Id") === rid)?.getAttribute("Target");
   for (const kind of ["header", "footer"]) {
@@ -2319,6 +2341,10 @@ async function applyHeaderFooterInZip(zip, xml, edit) {
       rid = newPart(kind, inner);
     }
     sects.forEach((s) => setRef(s, kind, "default", rid));
+  }
+  // rodzaj cyfr na wszystkich sekcjach, początek — tylko w pierwszej (dalsze sekcje kontynuują)
+  if (edit.number?.fmt && (edit.number.numFmt || edit.number.start !== undefined)) {
+    sects.forEach((s, i) => composeSetPageNumbering(s, edit.number.numFmt || "decimal", i === 0 ? edit.number.start : composePageNumbering(s).start));
   }
   // inna pierwsza strona: titlePg + puste części „first”
   let emptyH = null; let emptyF = null;

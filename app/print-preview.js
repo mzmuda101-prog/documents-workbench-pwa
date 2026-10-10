@@ -42,7 +42,7 @@ const dwbPrint = (() => {
     if (!part || !sel) return;
     part.querySelectorAll("p").forEach((p) => {
       const spans = Array.from(p.querySelectorAll(sel));
-      if (spans[0]) spans[0].textContent = String(page);
+      if (spans[0]) spans[0].textContent = typeof composeUi !== "undefined" && composeUi.pageNumberText ? composeUi.pageNumberText(page) : String(page);
       if (spans[1]) spans[1].textContent = String(total);
     });
   }
