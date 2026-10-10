@@ -1277,23 +1277,52 @@ const composeUi = (() => {
     return true;
   }
 
-  async function tableAction(action) {
+  async function tableAction(action, extra = {}) {
     const p = caretParagraph();
     const cell = cellOf(p);
     if (!cell) { toast(t("tableNoCaret"), "info"); return; }
     const index = resolveParaIndex(p);
     const firstIdx = firstParaIndexIn(cell.table);
-    await applyDocumentEdit({ op: "table", index, action }).catch((err) => log(`Tabela: ${err.message || err}`, "error"));
+    const n = await applyDocumentEdit({ op: "table", index, action, ...extra }).catch((err) => { log(`Tabela: ${err.message || err}`, "error"); return 0; });
+    if (!n && ["merge", "split", "evenCols"].includes(action)) toast(t(action === "merge" ? "tableMergeNo" : action === "split" ? "tableSplitNo" : "tableEvenNo"), "info");
     await whenEditable();
     if (readOnlyMode) return;
     const { ti, r, c } = cell;
-    const target = { rowAbove: [r, c], rowBelow: [r + 1, c], colLeft: [r, c], colRight: [r, c + 1], delRow: [r, c], delCol: [r, c - 1] }[action];
+    const target = { rowAbove: [r, c], rowBelow: [r + 1, c], colLeft: [r, c], colRight: [r, c + 1], delRow: [r, c], delCol: [r, c - 1], merge: [Math.min(r, extra.toR ?? r), Math.min(c, extra.toC ?? c)], split: [r, c], headerRow: [r, c], shade: [r, c], borders: [r, c], evenCols: [r, c] }[action];
     if (target) focusCell(ti, target[0], Math.max(0, target[1]));
     else if (action === "delTable" && firstIdx >= 0) focusParagraphAtOffset(firstIdx, 0); // akapit, który był pod tabelą
   }
 
-  function buildTableMenu(el) {
+  // Zaznaczenie przez kilka komórek tej samej tabeli → { toIndex, toR, toC } drugiego rogu (scalanie)
+  function multiCellSelection(p) {
+    const sel = window.getSelection();
+    if (!sel?.rangeCount || sel.isCollapsed) return null;
+    const r = sel.getRangeAt(0);
+    const pOf = (n) => (n.nodeType === 1 ? n : n.parentElement)?.closest?.(".docx-editable-p");
+    const a = pOf(r.startContainer), b = pOf(r.endContainer);
+    const ca = cellOf(a), cb = cellOf(b);
+    if (!ca || !cb || ca.table !== cb.table || ca.td === cb.td) return null;
+    const other = a === p || ca.td === cellOf(p)?.td ? b : a;
+    const co = cellOf(other);
+    return { toIndex: resolveParaIndex(other), toR: co.r, toC: co.c };
+  }
+  // Wiersz z kursorem powtarzany jako nagłówek (w:tblHeader) — z pliku
+  async function rowIsHeader(p) {
+    const doc = await getDocumentXmlDom(originalFileBytes).catch(() => null);
+    const xp = doc && collectParagraphElements(doc.documentElement, "all")[resolveParaIndex(p)];
+    let tr = xp?.parentNode;
+    while (tr && tr.localName !== "tr") tr = tr.parentNode;
+    const trPr = tr && composeDirectChild(tr, "trPr");
+    const h = trPr && composeDirectChild(trPr, "tblHeader");
+    return !!h && !/^(0|false|off)$/.test(composeWAttr(h, "val") || "");
+  }
+
+  async function buildTableMenu(el) {
     el.classList.add("compose-pop-tabletools");
+    const caretP = typeof restoreDocCaret === "function" ? restoreDocCaret() : null;
+    const multi = caretP ? multiCellSelection(caretP) : null;
+    await mergeInlineEditsIntoBytes().catch(() => {});
+    const header = caretP ? await rowIsHeader(caretP) : false;
     popCap(el, t("tableInsertGroup"));
     const grid = document.createElement("div");
     grid.className = "compose-grid2";
@@ -1317,6 +1346,52 @@ const composeUi = (() => {
     [["tableDelRow", "delRow"], ["tableDelCol", "delCol"], ["tableDelTable", "delTable"]].forEach(([key, action]) => {
       popItem(el, { label: t(key), icon: ICON('<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>'), onPick: () => tableAction(action) });
     });
+    // ── scal / podziel (Word: Układ tabeli → Scalanie) ──
+    popCap(el, t("tableMergeGroup"));
+    if (multi) popItem(el, { label: t("tableMergeSel"), desc: t("tableMergeSelDesc"), icon: ICON('<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M8 12h8M10 10l-2 2 2 2M14 10l2 2-2 2"/>'), onPick: () => tableAction("merge", multi) }).dataset.tbl = "mergeSel";
+    popItem(el, { label: t("tableMergeRight"), icon: ICON('<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M12 5v4M12 15v4M9 12h6M13 10l2 2-2 2"/>'), onPick: () => tableAction("merge", { dir: "right" }) }).dataset.tbl = "mergeRight";
+    popItem(el, { label: t("tableMergeDown"), icon: ICON('<rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M5 12h4M15 12h4M12 9v6M10 13l2 2 2-2"/>'), onPick: () => tableAction("merge", { dir: "down" }) }).dataset.tbl = "mergeDown";
+    popItem(el, { label: t("tableSplit"), desc: t("tableSplitDesc"), icon: ICON('<rect x="3" y="5" width="18" height="14" rx="1.5"/><path d="M12 5v14" stroke-dasharray="2 2"/>'), onPick: () => tableAction("split") }).dataset.tbl = "split";
+    // ── wygląd (Word: Projekt tabeli) ──
+    popCap(el, t("tableLookGroup"));
+    const hb = popItem(el, { label: t("tableHeaderRow"), desc: t("tableHeaderRowDesc"), icon: ICON('<rect x="3" y="4" width="18" height="16" rx="1.5"/><rect x="3" y="4" width="18" height="5" rx="1" fill="currentColor" opacity=".35"/>'), onPick: () => tableAction("headerRow") });
+    hb.dataset.tbl = "headerRow";
+    hb.setAttribute("role", "menuitemcheckbox");
+    hb.setAttribute("aria-checked", String(header));
+    hb.classList.toggle("is-current", header);
+    [["all", "tableBordersAll", '<rect x="3" y="4" width="18" height="16"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="12" y1="4" x2="12" y2="20"/>'],
+      ["outside", "tableBordersOutside", '<rect x="3" y="4" width="18" height="16"/><line x1="3" y1="12" x2="21" y2="12" stroke-dasharray="1.5 2" opacity=".5"/><line x1="12" y1="4" x2="12" y2="20" stroke-dasharray="1.5 2" opacity=".5"/>'],
+      ["none", "tableBordersNone", '<rect x="3" y="4" width="18" height="16" stroke-dasharray="1.5 2" opacity=".5"/>']].forEach(([kind, key, svg]) => {
+      popItem(el, { label: t(key), icon: ICON(svg), onPick: () => tableAction("borders", { kind }) }).dataset.tbl = `borders-${kind}`;
+    });
+    popItem(el, { label: t("tableEvenCols"), icon: ICON('<rect x="3" y="4" width="18" height="16" rx="1.5"/><line x1="9" y1="4" x2="9" y2="20"/><line x1="15" y1="4" x2="15" y2="20"/>'), onPick: () => tableAction("evenCols") }).dataset.tbl = "evenCols";
+    // kolor (cieniowanie) komórki — zakres jak przy wyrównaniu
+    popCap(el, t("tableShadeGroup"));
+    let shadeScope = "cell";
+    const sseg = document.createElement("div");
+    sseg.className = "seg compose-cellalign-scope";
+    sseg.setAttribute("role", "group");
+    [["cell", "tableScopeCell"], ["row", "tableScopeRow"], ["col", "tableScopeCol"], ["table", "tableScopeTable"]].forEach(([v, key]) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.dataset.v = v;
+      b.textContent = t(key);
+      b.classList.toggle("is-on", v === shadeScope);
+      b.setAttribute("aria-pressed", String(v === shadeScope));
+      b.addEventListener("click", () => { shadeScope = v; sseg.querySelectorAll("button").forEach((x) => { x.classList.toggle("is-on", x === b); x.setAttribute("aria-pressed", String(x === b)); }); });
+      sseg.appendChild(b);
+    });
+    el.appendChild(sseg);
+    const shades = document.createElement("div");
+    shades.className = "color-grid table-shades";
+    const cols = THEME_BASE.map(themeColumn);
+    [1, 2].forEach((row) => cols.forEach((col) => {
+      const [hex, key, d] = col[row];
+      const name = d ? t(d.startsWith("+") ? "colLighter" : "colDarker", { name: t(key), pct: d.slice(1) }) : t(key);
+      shades.appendChild(swatch(hex, name, () => tableAction("shade", { fill: hex, scope: shadeScope })));
+    }));
+    shades.appendChild(swatch("FFFFFF", t("tableShadeNone"), () => tableAction("shade", { fill: null, scope: shadeScope }), "is-none"));
+    el.appendChild(shades);
     buildCellAlign(el);
     const hint = document.createElement("p");
     hint.className = "compose-note compose-note-pad";

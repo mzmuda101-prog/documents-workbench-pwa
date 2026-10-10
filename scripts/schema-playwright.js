@@ -117,6 +117,14 @@ async function editAll(page) {
     ["lista punktowana + poziom", async () => { const i = await target(); await caret(i, "mid"); await page.evaluate(() => composeUi.applyList("bullet")); await idle(page); await caret(i, "start"); await page.keyboard.press("Tab"); }],
     ["lista numerowana", async () => { const i = await target(); await caret(i, "mid"); await page.evaluate(() => composeUi.applyList("number")); }],
     ["tabela 2×3", async () => { const i = await target(); await caret(i, "end"); await page.evaluate(() => composeUi.insertTable(2, 3)); }],
+    ["tabela: scal, podziel, nagłówek, kolor, krawędzie", async () => {
+      const i = await page.evaluate(() => { const ps = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")); return ps.findIndex((p) => p.closest("td")); });
+      if (i < 0) return false;
+      for (const e of [{ action: "merge", dir: "right" }, { action: "split" }, { action: "merge", dir: "down" }, { action: "split" }, { action: "headerRow" }, { action: "shade", fill: "DEEAF6", scope: "row" }, { action: "borders", kind: "outside" }, { action: "evenCols" }]) {
+        const j = await page.evaluate(() => { const ps = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")); return ps.findIndex((p) => p.closest("td")); });
+        await edit({ op: "table", index: j, ...e });
+      }
+    }],
     ["komentarz", async () => { const i = await target(); const w = await word(i); if (!w) return false; const o = await offsets(i, w.text); await edit({ op: "commentAdd", index: i, start: o.start, end: o.end, rich: [[{ text: "Uwaga " }, { text: "testowa", b: true }]], author: "Test", initials: "T" }); }],
     ["przypis dolny", async () => { const i = await target(); await caret(i, "end"); await page.evaluate(() => composeUi.insertNote("footnote")); }],
     ["przypis końcowy", async () => { const i = await target(); await caret(i, "mid"); await page.evaluate(() => composeUi.insertNote("endnote")); }],

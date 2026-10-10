@@ -1692,6 +1692,209 @@ function composeSetCellWidth(tc, w) {
   if (tcW && tcW.getAttributeNS(W_NS, "type") !== "pct") { tcW.setAttributeNS(W_NS, "w:w", String(Math.round(w))); tcW.setAttributeNS(W_NS, "w:type", "dxa"); }
 }
 
+// ── scalanie, dzielenie, nagłówek, cieniowanie, krawędzie (Word: Układ tabeli / Projekt tabeli) ──
+const COMPOSE_TCPR_ORDER = ["cnfStyle", "tcW", "gridSpan", "hMerge", "vMerge", "tcBorders", "shd", "noWrap", "tcMar", "textDirection", "tcFitText", "vAlign", "hideMark", "headers", "cellIns", "cellDel", "cellMerge", "tcPrChange"];
+const COMPOSE_TRPR_AFTER_HEADER = ["tblCellSpacing", "jc", "hidden", "ins", "del", "trPrChange"];
+const COMPOSE_TBLPR_ORDER = ["tblStyle", "tblpPr", "tblOverlap", "bidiVisual", "tblStyleRowBandSize", "tblStyleColBandSize", "tblW", "jc", "tblCellSpacing", "tblInd", "tblBorders", "shd", "tblLayout", "tblCellMar", "tblLook", "tblCaption", "tblDescription", "tblPrChange"];
+function composeOrderedChild(parent, el, order) {
+  const rank = order.indexOf(el.localName);
+  const after = Array.from(parent.childNodes).find((n) => n.nodeType === 1 && order.indexOf(n.localName) > rank);
+  parent.insertBefore(el, after || null);
+}
+function composeTcPr(doc, tc) {
+  let tcPr = composeDirectChild(tc, "tcPr");
+  if (!tcPr) { tcPr = composeEl(doc, "tcPr"); tc.insertBefore(tcPr, tc.firstChild); }
+  return tcPr;
+}
+function composeSetTcPrChild(doc, tc, name, attrs) {
+  const tcPr = composeTcPr(doc, tc);
+  const old = composeDirectChild(tcPr, name);
+  if (old) tcPr.removeChild(old);
+  if (attrs) composeOrderedChild(tcPr, composeEl(doc, name, attrs), COMPOSE_TCPR_ORDER);
+}
+function composeSetSpan(doc, tc, span) {
+  composeSetTcPrChild(doc, tc, "gridSpan", span > 1 ? { val: span } : null);
+}
+// Treść komórki = akapity i tabele (bez tcPr). Pusta = sam akapit bez tekstu i obiektów.
+const composeCellBlocks = (tc) => Array.from(tc.childNodes).filter((n) => n.nodeType === 1 && n.namespaceURI === W_NS && n.localName !== "tcPr");
+function composeBlockEmpty(n) {
+  if (n.localName !== "p") return false;
+  const hasText = Array.from(n.getElementsByTagNameNS(W_NS, "t")).some((t) => t.textContent);
+  return !hasText && !["drawing", "pict", "object", "sdt", "fldSimple", "instrText", "footnoteReference", "endnoteReference", "commentReference", "sym", "tab"].some((tag) => n.getElementsByTagNameNS(W_NS, tag).length);
+}
+// Komórka po scaleniu „w głąb” (ciąg dalszy) — jeden pusty akapit z formatem pierwszego.
+function composeEmptyCellContent(doc, tc) {
+  const first = composeCellBlocks(tc).find((n) => n.localName === "p");
+  composeCellBlocks(tc).forEach((n) => tc.removeChild(n));
+  const np = composeEl(doc, "p");
+  const pPr = first && composeDirectChild(first, "pPr");
+  if (pPr) { const c = pPr.cloneNode(true); Array.from(c.childNodes).filter((n) => ["sectPr", "numPr"].includes(n.localName)).forEach((n) => c.removeChild(n)); np.appendChild(c); }
+  tc.appendChild(np);
+}
+const composeGridWidths = (tbl) => {
+  const g = composeDirectChild(tbl, "tblGrid");
+  return g ? Array.from(g.childNodes).filter((n) => n.localName === "gridCol").map((x) => parseInt(x.getAttributeNS(W_NS, "w"), 10) || 0) : [];
+};
+function composeFitCellWidths(tbl) {
+  const widths = composeGridWidths(tbl);
+  if (!widths.length) return;
+  composeRows(tbl).forEach((r) => composeCells(r).forEach((c) => {
+    const st = composeGridStart(c);
+    const w = widths.slice(st, st + composeSpan(c)).reduce((x, y) => x + y, 0);
+    if (w) composeSetCellWidth(c, w);
+  }));
+}
+// Prostokąt komórek domknięty na istniejące scalenia (jak zaznaczenie w Wordzie): każda komórka
+// zachodząca na prostokąt rozszerza go do swoich granic, scalenie pionowe — do swojego początku/końca.
+function composeMergeRect(rows, r0, r1, c0, c1) {
+  for (let changed = true, guard = 0; changed && guard < 50; guard++) {
+    changed = false;
+    for (let r = r0; r <= r1; r++) {
+      for (const c of composeCells(rows[r])) {
+        const st = composeGridStart(c), en = st + composeSpan(c) - 1;
+        if (en < c0 || st > c1) continue;
+        if (st < c0) { c0 = st; changed = true; }
+        if (en > c1) { c1 = en; changed = true; }
+        if (r === r0 && composeVMerge(c) === "continue" && r0 > 0) { r0--; changed = true; }
+      }
+    }
+    const below = rows[r1 + 1];
+    if (below && composeCells(below).some((c) => { const st = composeGridStart(c); return composeVMerge(c) === "continue" && st <= c1 && st + composeSpan(c) - 1 >= c0; })) { r1++; changed = true; }
+  }
+  return { r0, r1, c0, c1 };
+}
+function composeTableMerge(doc, tbl, rect) {
+  const rows = composeRows(tbl);
+  const { r0, r1, c0, c1 } = composeMergeRect(rows, rect.r0, rect.r1, rect.c0, rect.c1);
+  const rowsCells = [];
+  for (let r = r0; r <= r1; r++) {
+    const cells = composeCells(rows[r]).filter((c) => { const st = composeGridStart(c); return st + composeSpan(c) - 1 >= c0 && st <= c1; });
+    // wiersz bez komórki w którejś kolumnie (krótszy wiersz) — nie scalamy (jak Word: niedostępne)
+    const covered = cells.reduce((s, c) => s + composeSpan(c), 0);
+    if (!cells.length || covered !== c1 - c0 + 1) return false;
+    rowsCells.push(cells);
+  }
+  if (rowsCells.length === 1 && rowsCells[0].length === 1) return false; // jedna komórka — nic do scalania
+  const top = rowsCells[0][0];
+  // treść w kolejności czytania (wiersz po wierszu, od lewej) — puste akapity odpadają
+  const content = rowsCells.flat().flatMap((c) => composeCellBlocks(c)).filter((n) => !composeBlockEmpty(n));
+  const keepFirst = composeCellBlocks(top).find((n) => n.localName === "p");
+  const width = composeGridWidths(tbl).slice(c0, c1 + 1).reduce((x, y) => x + y, 0);
+  rowsCells.forEach((cells, i) => {
+    const first = cells[0];
+    cells.slice(1).forEach((c) => c.parentNode.removeChild(c));
+    composeSetSpan(doc, first, c1 - c0 + 1);
+    if (width) composeSetCellWidth(first, width);
+    if (i > 0) { composeEmptyCellContent(doc, first); composeSetVMerge(doc, first, "continue"); }
+  });
+  composeCellBlocks(top).forEach((n) => top.removeChild(n));
+  if (content.length) content.forEach((n) => top.appendChild(n));
+  else top.appendChild(keepFirst || composeEl(doc, "p"));
+  composeSetVMerge(doc, top, r1 > r0 ? "restart" : null);
+  return true;
+}
+// Podziel: komórka scalona → rozdziel scalenie (każda kolumna/wiersz znów osobno); zwykła
+// komórka → dwie kolumny (siatka dostaje kolumnę, sąsiednie wiersze — szerszą komórkę).
+function composeTableSplit(doc, tbl, tc) {
+  const rows = composeRows(tbl);
+  const r0 = rows.indexOf(tc.parentNode);
+  const c0 = composeGridStart(tc), span = composeSpan(tc);
+  const widths = composeGridWidths(tbl);
+  if (span > 1 || composeVMerge(tc) === "restart") {
+    let r1 = r0;
+    if (composeVMerge(tc) === "restart") while (rows[r1 + 1] && composeVMerge(composeCellAtCol(rows[r1 + 1], c0)) === "continue") r1++;
+    for (let r = r0; r <= r1; r++) {
+      const cell = composeCellAtCol(rows[r], c0);
+      if (!cell) continue;
+      composeSetVMerge(doc, cell, null);
+      if (span > 1) {
+        composeSetSpan(doc, cell, 1);
+        let after = cell;
+        for (let k = 1; k < span; k++) {
+          const nc = composeBlankCell(doc, cell);
+          composeSetSpan(doc, nc, 1);
+          after.parentNode.insertBefore(nc, after.nextSibling);
+          after = nc;
+        }
+      }
+    }
+    composeFitCellWidths(tbl);
+    return true;
+  }
+  const gridEl = composeDirectChild(tbl, "tblGrid");
+  if (!gridEl || !widths.length) return false;
+  const cols = Array.from(gridEl.childNodes).filter((n) => n.localName === "gridCol");
+  const w = widths[c0] || 0;
+  const w2 = Math.max(200, Math.floor(w / 2));
+  cols[c0].setAttributeNS(W_NS, "w:w", String(Math.max(200, w - w2)));
+  gridEl.insertBefore(composeEl(doc, "gridCol", { w: w2 }), cols[c0 + 1] || null);
+  rows.forEach((r) => {
+    if (r === tc.parentNode) {
+      const nc = composeBlankCell(doc, tc);
+      composeSetSpan(doc, nc, 1);
+      if (composeVMerge(tc)) composeSetVMerge(doc, nc, null);
+      r.insertBefore(nc, tc.nextSibling);
+      return;
+    }
+    const c = composeCellAtCol(r, c0);
+    if (c) composeSetSpan(doc, c, composeSpan(c) + 1); // komórka w tej kolumnie innych wierszy — szersza
+  });
+  composeFitCellWidths(tbl);
+  return true;
+}
+function composeTableHeaderRows(doc, tbl, tr) {
+  const rows = composeRows(tbl);
+  const at = rows.indexOf(tr);
+  const isHeader = (r) => { const trPr = composeDirectChild(r, "trPr"); const h = trPr && composeDirectChild(trPr, "tblHeader"); return !!h && !/^(0|false|off)$/.test(composeWAttr(h, "val") || ""); };
+  const on = !isHeader(tr);
+  rows.forEach((r, i) => {
+    const want = on ? i <= at : isHeader(r) && i < at; // włącz: wiersze od góry do tego; wyłącz: ten i niżej
+    let trPr = composeDirectChild(r, "trPr");
+    const old = trPr && composeDirectChild(trPr, "tblHeader");
+    if (old) trPr.removeChild(old);
+    if (want) {
+      if (!trPr) { trPr = composeEl(doc, "trPr"); const ex = composeDirectChild(r, "tblPrEx"); r.insertBefore(trPr, ex ? ex.nextSibling : r.firstChild); }
+      const h = composeEl(doc, "tblHeader");
+      const after = COMPOSE_TRPR_AFTER_HEADER.map((n) => composeDirectChild(trPr, n)).find(Boolean);
+      trPr.insertBefore(h, after || null);
+    } else if (trPr && !trPr.firstChild) r.removeChild(trPr);
+  });
+  return true;
+}
+function composeTableBorders(doc, tbl, kind) {
+  let tblPr = composeDirectChild(tbl, "tblPr");
+  if (!tblPr) { tblPr = composeEl(doc, "tblPr"); tbl.insertBefore(tblPr, tbl.firstChild); }
+  const old = composeDirectChild(tblPr, "tblBorders");
+  if (old) tblPr.removeChild(old);
+  const b = composeEl(doc, "tblBorders");
+  const line = { val: "single", sz: 4, space: 0, color: "auto" };
+  const none = { val: "none", sz: 0, space: 0, color: "auto" };
+  ["top", "left", "bottom", "right", "insideH", "insideV"].forEach((side) => {
+    const inside = side.startsWith("inside");
+    b.appendChild(composeEl(doc, side, kind === "none" || (kind === "outside" && inside) ? none : line));
+  });
+  composeOrderedChild(tblPr, b, COMPOSE_TBLPR_ORDER);
+  // krawędzie pojedynczych komórek przesłaniałyby wybór dla całej tabeli
+  composeRows(tbl).forEach((r) => composeCells(r).forEach((c) => { const tcPr = composeDirectChild(c, "tcPr"); const tb = tcPr && composeDirectChild(tcPr, "tcBorders"); if (tb) tcPr.removeChild(tb); }));
+  return true;
+}
+function composeTableEvenCols(tbl) {
+  const gridEl = composeDirectChild(tbl, "tblGrid");
+  const widths = composeGridWidths(tbl);
+  if (!gridEl || widths.length < 2) return false;
+  const each = Math.round(widths.reduce((x, y) => x + y, 0) / widths.length);
+  Array.from(gridEl.childNodes).filter((n) => n.localName === "gridCol").forEach((g) => g.setAttributeNS(W_NS, "w:w", String(each)));
+  composeFitCellWidths(tbl);
+  return true;
+}
+function composeScopeCells(rows, tr, tc, scope) {
+  const col = composeGridStart(tc);
+  return scope === "row" ? composeCells(tr)
+    : scope === "col" ? rows.map((r) => composeCellAtCol(r, col)).filter((c) => c && composeGridStart(c) <= col && col < composeGridStart(c) + composeSpan(c))
+    : scope === "table" ? rows.flatMap((r) => composeCells(r))
+    : [tc];
+}
+
 // op "table": { index, action } — rowAbove / rowBelow / colLeft / colRight / delRow / delCol / delTable
 function applyTableInXml(xml, edit) {
   const doc = composeParse(xml);
@@ -1793,7 +1996,7 @@ function applyTableInXml(xml, edit) {
       : edit.scope === "col" ? rows.map((r) => composeCellAtCol(r, col)).filter((c) => c && composeGridStart(c) <= col && col < composeGridStart(c) + composeSpan(c))
       : edit.scope === "table" ? rows.flatMap((r) => composeCells(r))
       : [tc];
-    const TCPR_ORDER = ["cnfStyle", "tcW", "gridSpan", "hMerge", "vMerge", "tcBorders", "shd", "noWrap", "tcMar", "textDirection", "tcFitText", "vAlign", "hideMark", "headers", "cellIns", "cellDel", "cellMerge", "tcPrChange"];
+    const TCPR_ORDER = COMPOSE_TCPR_ORDER;
     targets.forEach((cell) => {
       if (["top", "center", "bottom"].includes(edit.v)) {
         let tcPr = composeDirectChild(cell, "tcPr");
@@ -1812,6 +2015,37 @@ function applyTableInXml(xml, edit) {
         });
       }
     });
+  } else if (a === "merge") {
+    // toIndex — akapit w drugim rogu zaznaczenia; dir — „z prawą” / „z dolną” (dotyk)
+    let r0 = rows.indexOf(tr), r1 = r0, c0 = gridCol, c1 = gridCol + composeSpan(tc) - 1;
+    if (Number.isFinite(edit.toIndex)) {
+      const other = paragraphs[edit.toIndex] && composeCellOf(paragraphs[edit.toIndex]);
+      if (!other || other.tbl !== tbl) return { xml, count: 0 };
+      const or = rows.indexOf(other.tr);
+      r0 = Math.min(r0, or); r1 = Math.max(r1, or);
+      c0 = Math.min(c0, other.gridCol); c1 = Math.max(c1, other.gridCol + composeSpan(other.tc) - 1);
+    } else if (edit.dir === "right") {
+      const next = composeCells(tr)[composeCells(tr).indexOf(tc) + 1];
+      if (!next) return { xml, count: 0 };
+      c1 = composeGridStart(next) + composeSpan(next) - 1;
+    } else if (edit.dir === "down") {
+      while (rows[r1 + 1] && composeVMerge(composeCellAtCol(rows[r1 + 1], c0)) === "continue") r1++;
+      if (!rows[r1 + 1]) return { xml, count: 0 };
+      r1++;
+    }
+    if (!composeTableMerge(doc, tbl, { r0, r1, c0, c1 })) return { xml, count: 0 };
+  } else if (a === "split") {
+    if (!composeTableSplit(doc, tbl, tc)) return { xml, count: 0 };
+  } else if (a === "headerRow") {
+    composeTableHeaderRows(doc, tbl, tr);
+  } else if (a === "shade") {
+    const fill = /^[0-9A-F]{6}$/i.test(edit.fill || "") ? edit.fill.toUpperCase() : null;
+    composeScopeCells(rows, tr, tc, edit.scope).forEach((c) => composeSetTcPrChild(doc, c, "shd", fill ? { val: "clear", color: "auto", fill } : null));
+  } else if (a === "borders") {
+    if (!["all", "outside", "none"].includes(edit.kind)) return { xml, count: 0 };
+    composeTableBorders(doc, tbl, edit.kind);
+  } else if (a === "evenCols") {
+    if (!composeTableEvenCols(tbl)) return { xml, count: 0 };
   } else if (a === "delTable") {
     const parent = tbl.parentNode;
     // tabela w komórce — komórka musi kończyć się akapitem
