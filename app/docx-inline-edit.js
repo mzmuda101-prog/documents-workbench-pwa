@@ -1102,7 +1102,7 @@ function mergeParagraphDom(prev, curr) {
   // <br data-dwb-ph> = pusta linijka „tylko dla oka” za łamaniem wiersza NA KOŃCU akapitu. Za nią
   // dochodzi teraz treść — w środku akapitu rysowałaby drugą, nieistniejącą w pliku linijkę
   // (akapit „⏎” sklejony z „Wstęp” był o linijkę wyższy niż w Wordzie, zgłoszenie 2026-10-09).
-  const tail = curr.textContent.replace(/﻿/g, "") || curr.querySelector("img, svg, canvas, br:not([data-dwb-ph]), [contenteditable=false]");
+  const tail = curr.textContent.replace(/\uFEFF/g, "") || curr.querySelector("img, svg, canvas, br:not([data-dwb-ph]), [contenteditable=false]");
   if (tail) prev.querySelectorAll("br[data-dwb-ph]").forEach((ph) => ph.remove());
   while (curr.firstChild) prev.appendChild(curr.firstChild);
   curr.remove();
@@ -1462,6 +1462,37 @@ function syncBiuButtons() {
     b.classList.toggle("is-on", on);
     b.setAttribute("aria-pressed", on ? "true" : "false");
   });
+  // x² / x₂ — wciśnięty, gdy cały zaznaczony tekst (albo dalsze pisanie) ma ten indeks
+  const va = !ed && originalFileBytes && !readOnlyMode ? vertAlignAt(docSelectionRange()) : "baseline";
+  [["fmtSuper", "superscript"], ["fmtSub", "subscript"]].forEach(([id, kind]) => {
+    const b = document.getElementById(id);
+    if (!b) return;
+    b.classList.toggle("is-on", va === kind);
+    b.setAttribute("aria-pressed", va === kind ? "true" : "false");
+  });
+}
+
+function vertAlignAt(range) {
+  if (!range) return "baseline";
+  if (range.collapsed) {
+    const pending = currentTypingStyle()?.vertAlign;
+    if (pending) return pending;
+    const p = (range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement)?.closest?.(".docx-editable-p");
+    const src = p ? caretStyleSourceNode(p, range.startContainer, range.startOffset) : null;
+    return src?.nodeType === 3 ? vertAlignOfNode(src) : "baseline";
+  }
+  let kind = null;
+  const root = range.commonAncestorContainer.nodeType === 1 ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (!range.intersectsNode(n) || !/\S/.test(n.data) || !isDocTextNode(n)) continue;
+    if (n === range.endContainer && range.endOffset === 0) continue;
+    if (n === range.startContainer && range.startOffset >= n.length) continue;
+    const v = vertAlignOfNode(n);
+    if (kind && kind !== v) return "mixed";
+    kind = v;
+  }
+  return kind || "baseline";
 }
 
 // Format znakowy dla zaznaczenia (też przez kilka akapitów) albo — bez zaznaczenia — dla dalszego
@@ -1519,6 +1550,232 @@ function stepFontSize(dir, byPoint) {
   });
 }
 
+// ── indeks górny / dolny, wyczyść formatowanie, wielkość liter (Narzędzia główne w Wordzie) ──
+// Wszystko na kawałkach tekstu w zaznaczeniu (też przez kilka akapitów), bez przerysowania —
+// jak B / I / U. Format reszty fragmentu zostaje.
+
+// Kawałki tekstu w zakresie: węzły rozcięte na granicach, tylko edytowalny tekst dokumentu
+// (bez wysp, tabulatorów, znaków kursora).
+function selectedTextPieces(range) {
+  if (!range || range.collapsed) return [];
+  const root = range.commonAncestorContainer.nodeType === 1 ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
+  const found = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (!range.intersectsNode(n) || !n.length) continue;
+    const el = n.parentElement;
+    if (!el?.closest(".docx-editable-p") || el.closest('[contenteditable="false"], .docx-tab') || !isDocTextNode(n)) continue;
+    const from = n === range.startContainer ? range.startOffset : 0;
+    const to = n === range.endContainer ? range.endOffset : n.length;
+    if (to > from) found.push({ n, from, to });
+  }
+  return found.map(({ n, from, to }) => {
+    let node = n;
+    if (to < node.length) node.splitText(to);
+    if (from > 0) node = node.splitText(from);
+    return node;
+  }).filter((n) => /[^\uFEFF]/.test(n.data));
+}
+
+function selectPieces(pieces) {
+  if (!pieces.length) return;
+  const r = document.createRange();
+  r.setStart(pieces[0], 0);
+  const last = pieces[pieces.length - 1];
+  r.setEnd(last, last.length);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(r);
+}
+
+// Najwyższy element formatu nad tekstem w akapicie (link, wyspa i sam akapit — granica).
+function formatChainTop(node) {
+  let top = null;
+  for (let a = node.parentElement; a && !a.classList.contains("docx-editable-p") && a.localName !== "p"; a = a.parentElement) {
+    if (a.localName === "a" || a.getAttribute("contenteditable") === "false" || a.dataset.cm || a.dataset.ff) break;
+    top = a;
+  }
+  return top;
+}
+
+// Kawałek dostaje WŁASNĄ kopię łańcucha formatu: tekst przed nim i za nim w tym łańcuchu
+// przechodzi do klonów (ten sam format). Wtedy zmiana formatu łańcucha dotyczy tylko kawałka.
+function isolatePiece(node) {
+  const top = formatChainTop(node);
+  if (!top) return null;
+  const move = (range, where) => {
+    if (range.collapsed) return;
+    const frag = range.extractContents();
+    if (!frag.textContent.replace(/\uFEFF/g, "")) return;
+    const box = top.cloneNode(false);
+    box.removeAttribute("id");
+    box.appendChild(frag);
+    if (where === "before") top.before(box); else top.after(box);
+  };
+  const pre = document.createRange();
+  pre.setStart(top, 0);
+  pre.setEndBefore(node);
+  move(pre, "before");
+  const post = document.createRange();
+  post.setStartAfter(node);
+  post.setEnd(top, top.childNodes.length);
+  move(post, "after");
+  return top;
+}
+
+function vertAlignOfNode(n) {
+  for (let a = n.parentElement; a && !a.classList.contains("docx-editable-p"); a = a.parentElement) {
+    if (a.localName === "sup") return "superscript";
+    if (a.localName === "sub") return "subscript";
+    const va = a.style?.verticalAlign;
+    if (va === "super") return "superscript";
+    if (va === "sub") return "subscript";
+    if (va === "baseline") return "baseline";
+  }
+  return "baseline";
+}
+
+// x² / x₂ — drugi klik w ten sam zdejmuje (jak w Wordzie); górny ↔ dolny wzajemnie się wyłączają.
+function toggleVertAlign(kind) {
+  if (readOnlyMode) return false;
+  restoreDocCaret();
+  const range = docSelectionRange({ remembered: false });
+  if (!range) return false;
+  if (range.collapsed) {
+    const p = (range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement)?.closest?.(".docx-editable-p");
+    if (!p) return false;
+    const src = caretStyleSourceNode(p, range.startContainer, range.startOffset);
+    const pending = currentTypingStyle()?.vertAlign;
+    const cur = pending || (src?.nodeType === 3 ? vertAlignOfNode(src) : "baseline");
+    setTypingStyle({ vertAlign: cur === kind ? "baseline" : kind });
+    syncFormatIndicators();
+    return true;
+  }
+  const pieces = selectedTextPieces(range);
+  if (!pieces.length) return false;
+  const want = pieces.every((n) => vertAlignOfNode(n) === kind) ? "baseline" : kind;
+  pieces.forEach((n) => {
+    const top = isolatePiece(n);
+    // <sup>/<sub> z podglądu Worda → zwykły fragment (indeks niesie styl vertical-align)
+    for (let a = n.parentElement; a && top && a !== top.parentElement && !a.classList.contains("docx-editable-p"); a = a.parentElement) {
+      if (a.localName === "sup" || a.localName === "sub") {
+        const span = document.createElement("span");
+        while (a.firstChild) span.appendChild(a.firstChild);
+        a.replaceWith(span);
+        a = span;
+      }
+      a.style?.removeProperty("vertical-align");
+    }
+    let holder = n.parentElement;
+    if (holder.localName !== "span" || holder.childNodes.length !== 1 || holder.classList.contains("docx-editable-p")) {
+      holder = document.createElement("span");
+      n.before(holder);
+      holder.appendChild(n);
+    }
+    if (want !== "baseline") holder.style.verticalAlign = VERT_ALIGN_CSS[want];
+    else if (!holder.getAttribute("style")) holder.removeAttribute("style");
+  });
+  selectPieces(pieces);
+  onInlineParagraphInput();
+  syncFormatIndicators();
+  return true;
+}
+
+// „Wyczyść formatowanie” (gumka w Wordzie): tekst w zaznaczeniu traci format znaków (pogrubienie,
+// kolor, wyróżnienie, krój, rozmiar, indeks) — zostaje sam styl akapitu. Linki zostają linkami.
+// Bez zaznaczenia — cały akapit z kursorem. Akapity w całości objęte (albo z kursorem) wracają
+// do stylu „Normalny”, jak w Wordzie (nagłówek → zwykły tekst).
+function clearTextFormatting() {
+  if (readOnlyMode) return false;
+  const p0 = restoreDocCaret();
+  let range = docSelectionRange({ remembered: false });
+  if (!range) return false;
+  const host = docPreviewHost();
+  if (range.collapsed) {
+    const p = p0 || (range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement)?.closest?.(".docx-editable-p");
+    if (!p) return false;
+    range = document.createRange();
+    range.selectNodeContents(p);
+  }
+  const paras = collectPreviewParagraphElements(host).filter((p) => range.intersectsNode(p) && p.classList.contains("docx-editable-p"));
+  const whole = paras.filter((p) => {
+    const r = document.createRange();
+    r.selectNodeContents(p);
+    return range.compareBoundaryPoints(Range.START_TO_START, r) <= 0 && range.compareBoundaryPoints(Range.END_TO_END, r) >= 0;
+  });
+  const pieces = selectedTextPieces(range);
+  pieces.forEach((n) => {
+    const top = isolatePiece(n);
+    if (top) top.replaceWith(n);
+  });
+  clearTypingStyle();
+  selectPieces(pieces);
+  onInlineParagraphInput();
+  syncFormatIndicators();
+  const styled = whole.filter((p) => typeof composeStyleKeyOf === "function" && composeStyleKeyOf(p) !== "normal").map((p) => resolveParaIndex(p)).filter((i) => i >= 0);
+  if (styled.length && typeof applyDocumentEdit === "function") {
+    const caretP = docCaretParagraph(document.activeElement) || whole[0];
+    pendingInlineCursor = { paraIndex: resolveParaIndex(caretP), offset: getCaretOffset(caretP) };
+    applyDocumentEdit({ op: "paraFormat", indices: styled, style: "normal" });
+  }
+  return true;
+}
+
+// Zmiana wielkości liter zaznaczenia (Aa w Wordzie). Bez zaznaczenia — słowo przy kursorze.
+// Format zostaje (zmienia się tylko tekst w tych samych fragmentach).
+const CASE_MODES = ["sentence", "lower", "upper", "title", "toggle"];
+function caseTransform(mode, text, startsSentence) {
+  const loc = currentLang === "en" ? "en-US" : "pl-PL";
+  if (mode === "lower") return text.toLocaleLowerCase(loc);
+  if (mode === "upper") return text.toLocaleUpperCase(loc);
+  if (mode === "toggle") return [...text].map((c) => (c === c.toLocaleUpperCase(loc) ? c.toLocaleLowerCase(loc) : c.toLocaleUpperCase(loc))).join("");
+  if (mode === "title") return text.toLocaleLowerCase(loc).replace(/(^|[^\p{L}\p{N}'’])(\p{L})/gu, (m, pre, ch) => pre + ch.toLocaleUpperCase(loc));
+  // jak w zdaniu: wielka litera na początku zdania, reszta małymi
+  let atStart = startsSentence;
+  return [...text.toLocaleLowerCase(loc)].map((c) => {
+    if (/\p{L}/u.test(c)) { const out = atStart ? c.toLocaleUpperCase(loc) : c; atStart = false; return out; }
+    if (/[.!?]/.test(c)) atStart = true;
+    return c;
+  }).join("");
+}
+function changeTextCase(mode) {
+  if (readOnlyMode || !CASE_MODES.includes(mode)) return false;
+  restoreDocCaret();
+  let range = docSelectionRange({ remembered: false });
+  if (!range) return false;
+  if (range.collapsed) {
+    const n = range.startContainer;
+    const at = range.startOffset;
+    if (n.nodeType !== 3) return false;
+    const before = n.data.slice(0, at).match(/[\p{L}\p{N}'’-]*$/u)[0].length;
+    const after = n.data.slice(at).match(/^[\p{L}\p{N}'’-]*/u)[0].length;
+    if (!before && !after) return false;
+    range = document.createRange();
+    range.setStart(n, at - before);
+    range.setEnd(n, at + after);
+  }
+  const pieces = selectedTextPieces(range);
+  if (!pieces.length) return false;
+  // początek zdania: tekst akapitu przed pierwszym kawałkiem kończy się kropką albo jest pusty
+  const p = pieces[0].parentElement.closest(".docx-editable-p");
+  const pre = document.createRange();
+  pre.selectNodeContents(p);
+  pre.setEnd(pieces[0], 0);
+  const textBefore = pre.toString().replace(/\uFEFF/g, "").trimEnd();
+  let startsSentence = !textBefore || /[.!?]$/.test(textBefore);
+  let lastP = p;
+  pieces.forEach((n) => {
+    const np = n.parentElement.closest(".docx-editable-p");
+    if (np !== lastP) { startsSentence = true; lastP = np; } // nowy akapit = nowe zdanie
+    const next = caseTransform(mode, n.data, startsSentence);
+    if (mode === "sentence") startsSentence = /[.!?]\s*$/.test(n.data);
+    if (next !== n.data) n.data = next;
+  });
+  selectPieces(pieces);
+  onInlineParagraphInput();
+  return true;
+}
+
 function handleFormatShortcut(e) {
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
   // rozmiar czcionki jak w Wordzie (e.code — niezależnie od układu klawiatury)
@@ -1526,6 +1783,9 @@ function handleFormatShortcut(e) {
     const grow = e.shiftKey && e.code === "Period" ? [1, false] : e.shiftKey && e.code === "Comma" ? [-1, false]
       : !e.shiftKey && e.code === "BracketRight" ? [1, true] : !e.shiftKey && e.code === "BracketLeft" ? [-1, true] : null;
     if (grow) { e.preventDefault(); stepFontSize(...grow); return true; }
+    // indeks górny / dolny jak w Wordzie: Ctrl/⌘+Shift+= / Ctrl/⌘+= (e.code — klawisz „=”, też
+    // na polskim układzie); bez zaznaczenia przełącza format dalszego pisania
+    if (e.code === "Equal") { e.preventDefault(); toggleVertAlign(e.shiftKey ? "superscript" : "subscript"); return true; }
   }
   const cmd = { b: "bold", i: "italic", u: "underline" }[e.key.toLowerCase()];
   if (!cmd || !docCaretParagraph(e.target)) return false;
@@ -1755,6 +2015,11 @@ function wireFormatToolbar() {
     // na iPhonie klawiatura się nie chowa)
     btn?.addEventListener("mousedown", (e) => e.preventDefault());
     btn?.addEventListener("click", () => execInlineFormat(cmd));
+  });
+  [["fmtSuper", () => toggleVertAlign("superscript")], ["fmtSub", () => toggleVertAlign("subscript")], ["fmtClearBtn", () => clearTextFormatting()]].forEach(([id, fn]) => {
+    const b = document.getElementById(id);
+    b?.addEventListener("mousedown", (e) => e.preventDefault()); // zaznaczenie w tekście zostaje
+    b?.addEventListener("click", () => { if (!readOnlyMode) fn(); });
   });
   const askOther = (sel, key, apply) => {
     // „Inny…” — dowolna wartość jak w polu Worda (np. 10,5 pt albo krój spoza listy)

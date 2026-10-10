@@ -2753,6 +2753,15 @@ const composeUi = (() => {
   alignBtn?.addEventListener("mousedown", (e) => e.preventDefault());
   listBtn?.addEventListener("mousedown", (e) => e.preventDefault());
   listBtn?.addEventListener("click", () => openPop(listBtn, buildListMenu));
+  // Aa — zmiana wielkości liter (jak w Wordzie); pozycje pokazują efekt na sobie
+  const caseBtn = document.getElementById("fmtCaseBtn");
+  caseBtn?.addEventListener("mousedown", (e) => e.preventDefault());
+  caseBtn?.addEventListener("click", () => openPop(caseBtn, (el) => {
+    el.classList.add("compose-pop-case");
+    [["sentence", "caseSentence"], ["lower", "caseLower"], ["upper", "caseUpper"], ["title", "caseTitle"], ["toggle", "caseToggle"]].forEach(([mode, key]) => {
+      popItem(el, { label: t(key), onPick: () => { if (!changeTextCase(mode)) toast(t("caseNoText"), "info"); } });
+    });
+  }));
   alignBtn?.addEventListener("click", () => openPop(alignBtn, buildAlignMenu));
   styleSel?.addEventListener("change", () => applyStyle(styleSel.value));
   colorBtn?.addEventListener("mousedown", (e) => e.preventDefault());

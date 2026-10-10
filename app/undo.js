@@ -236,11 +236,12 @@ const dwbUndo = (() => {
   };
   // Formatowanie zaznaczenia: osobny krok. Bez zaznaczenia (format dla dalszego pisania) nic
   // się w dokumencie nie zmienia — kroku nie ma (dawniej pusty krok „Formatowanie”).
-  ["execInlineFormat", "applyFontSizePt", "applyFontFamily", "stepFontSize"].forEach((name) => {
+  ["execInlineFormat", "applyFontSizePt", "applyFontFamily", "stepFontSize", "toggleVertAlign", "clearTextFormatting", "changeTextCase"].forEach((name) => {
     const orig = window[name];
     if (typeof orig !== "function") return;
     window[name] = function formatUndoable(...args) {
-      const changes = name === "execInlineFormat" || typeof docSelectionIsRange !== "function" || docSelectionIsRange();
+      // wyczyść formatowanie i wielkość liter zmieniają tekst także bez zaznaczenia (akapit / słowo)
+      const changes = name === "execInlineFormat" || name === "clearTextFormatting" || name === "changeTextCase" || typeof docSelectionIsRange !== "function" || docSelectionIsRange();
       if (!readOnlyMode && changes) { endBurst(); push("undoOpFormat"); endBurst(); }
       return orig.apply(this, args);
     };

@@ -1692,6 +1692,15 @@ html.is-pinching .doc-viewport { overflow: hidden; }
 .compare-word { color: inherit; border-radius: 2px; padding: 0 1px; }
 .compare-word.compare-added { text-decoration: none; }
 .format-strike > span { text-decoration: line-through; font-size: 12px; letter-spacing: -1px; }
+.script-btn > span { font-size: 13px; font-weight: 600; letter-spacing: -.5px; }
+.script-btn sup, .script-btn sub { font-size: 9px; line-height: 0; }
+.case-btn > span { font-size: 13px; font-weight: 700; letter-spacing: -.3px; }
+.compose-pop-case { min-width: 190px; }
+.compose-pop-case .compose-item-icon { display: none; }
+/* Indeks górny / dolny (w:vertAlign): mniejsze litery jak w Wordzie — także fragment z własnym
+   rozmiarem (inline font-size), stąd !important; rozmiar w pliku zostaje (czyta go styl atrybutu) */
+.docx-preview-host span[style*="vertical-align: super"], .docx-preview-host span[style*="vertical-align:super"],
+.docx-preview-host span[style*="vertical-align: sub"], .docx-preview-host span[style*="vertical-align:sub"] { font-size: 66% !important; line-height: 0; }
 .marks-btn { font-family: Georgia, serif; font-size: 18px; font-weight: 700; }
 .marks-btn.is-on { color: var(--accent); background: var(--accent-light); border-color: var(--accent-border); }
 .doc-canvas.show-formatting-marks .docx-preview-host p::after { content: " ¶"; color: color-mix(in srgb, var(--accent) 58%, var(--muted)); font-family: var(--font-ui); font-size: .76em; font-weight: 600; text-decoration: none; white-space: pre; }

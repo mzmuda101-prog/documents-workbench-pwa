@@ -36,6 +36,12 @@ function cssFontSizeToPt(val) {
   return Number.isFinite(num) ? num : null;
 }
 
+// Indeks górny / dolny: w:vertAlign (superscript / subscript / baseline) ↔ CSS vertical-align.
+// docx-preview rysuje go jako <sup>/<sub> w fragmencie — czytamy oba zapisy.
+const VERT_ALIGN_BY_CSS = { super: "superscript", sub: "subscript", baseline: "baseline" };
+const VERT_ALIGN_CSS = { superscript: "super", subscript: "sub", baseline: "baseline" };
+const normVertAlign = (v) => (v === "superscript" || v === "subscript" ? v : "");
+
 function parseSpanStyle(cssText) {
   const style = {};
   if (!cssText) return style;
@@ -49,6 +55,8 @@ function parseSpanStyle(cssText) {
     if ((key === "text-decoration" || key === "text-decoration-line") && val.includes("underline")) style.underline = true;
     if ((key === "text-decoration" || key === "text-decoration-line") && val.includes("line-through")) style.strike = true;
     if (key === "color") style.color = val;
+    // indeks górny / dolny (w:vertAlign); „baseline” = jawnie wyłączony (pisanie za indeksem)
+    if (key === "vertical-align") { const va = VERT_ALIGN_BY_CSS[val.toLowerCase()]; if (va) style.vertAlign = va; }
     if (key === "background-color" || key === "background") { const h = normHighlight(val); if (h) style.highlight = h; }
     // pierwsza rodzina z listy, bez cudzysłowów z OBU stron: podgląd ma „"DM Sans", sans-serif” —
     // dawniej obcinany był tylko początkowy cudzysłów i do pliku szła nazwa kroju „DM Sans"”
@@ -76,6 +84,7 @@ function runStyleToCss(run) {
   }
   if (run.fontSize) parts.push(`font-size:${run.fontSize}`);
   if (run.highlight) parts.push(`background-color:${run.highlight}`);
+  if (VERT_ALIGN_CSS[run.vertAlign]) parts.push(`vertical-align:${VERT_ALIGN_CSS[run.vertAlign]}`);
   return parts.join(";");
 }
 
@@ -94,7 +103,8 @@ function runsStyleEqual(a, b) {
     && (a.fontFamily || "") === (b.fontFamily || "")
     && (a.fontSize || "") === (b.fontSize || "")
     && (a.link || "") === (b.link || "")
-    && normHighlight(a.highlight) === normHighlight(b.highlight);
+    && normHighlight(a.highlight) === normHighlight(b.highlight)
+    && normVertAlign(a.vertAlign) === normVertAlign(b.vertAlign);
 }
 
 function mergeAdjacentRuns(runs) {
@@ -164,6 +174,8 @@ function extractRunsFromPreviewParagraph(pEl) {
     if (tag === "i" || tag === "em") style.italic = true;
     if (tag === "u") style.underline = true;
     if (tag === "s" || tag === "strike") style.strike = true;
+    if (tag === "sup") style.vertAlign = "superscript";
+    if (tag === "sub") style.vertAlign = "subscript";
     // link (w:hyperlink): podgląd rysuje <a>. data-dwb-link = odwołanie z pliku („#zakładka”
     // albo „rel:rIdN”, nadane przy oznaczaniu akapitów), nowy link ma sam adres.
     if (tag === "a" && !node.classList.contains("doc-xref")) style.link = node.dataset.dwbLink || node.getAttribute("href") || "";
@@ -307,6 +319,8 @@ function xmlRunStyle(r) {
     const half = parseInt(getWVal(sz) || "0", 10);
     if (half) style.fontSize = `${half / 2}pt`;
   }
+  const va = kid("vertAlign");
+  if (va && normVertAlign(getWVal(va))) style.vertAlign = getWVal(va);
   return style;
 }
 
@@ -454,9 +468,15 @@ function createRunElement(doc, run) {
     }
     hasPr = true;
   }
+  if (VERT_ALIGN_CSS[run.vertAlign] && run.vertAlign !== "baseline") {
+    const va = doc.createElementNS(W_NS, "vertAlign");
+    setWVal(va, run.vertAlign);
+    rPr.appendChild(va);
+    hasPr = true;
+  }
   if (hasPr) {
     // kolejność dzieci w:rPr wg schematu Worda (dawniej u przed color, rFonts po color)
-    const order = ["rStyle", "rFonts", "b", "bCs", "i", "iCs", "strike", "color", "sz", "szCs", "highlight", "u", "shd"];
+    const order = ["rStyle", "rFonts", "b", "bCs", "i", "iCs", "strike", "color", "sz", "szCs", "highlight", "u", "shd", "vertAlign"];
     Array.from(rPr.childNodes).sort((x, y) => order.indexOf(x.localName) - order.indexOf(y.localName)).forEach((n) => rPr.appendChild(n));
     r.appendChild(rPr);
   }
@@ -518,7 +538,7 @@ function originalRunProps(pEl) {
   walk(pEl);
   return out;
 }
-const TOGGLE_TAGS = { bold: ["b", "bCs"], italic: ["i", "iCs"], strike: ["strike"], underline: ["u"], color: ["color"], highlight: ["highlight", "shd"] };
+const TOGGLE_TAGS = { bold: ["b", "bCs"], italic: ["i", "iCs"], strike: ["strike"], underline: ["u"], color: ["color"], highlight: ["highlight", "shd"], vertAlign: ["vertAlign"] };
 const RPR_ORDER = ["rStyle", "rFonts", "b", "bCs", "i", "iCs", "caps", "smallCaps", "strike", "dstrike", "outline", "shadow", "emboss", "imprint", "noProof", "snapToGrid", "vanish", "webHidden", "color", "spacing", "w", "kern", "position", "sz", "szCs", "highlight", "u", "effect", "bdr", "shd", "fitText", "vertAlign", "rtl", "cs", "em", "lang", "eastAsianLayout", "specVanish", "oMath"];
 function runFromOriginal(doc, run, originals) {
   if (run.link) return null; // link: styl Hiperłącze zakłada createRunElement
@@ -532,9 +552,9 @@ function runFromOriginal(doc, run, originals) {
     // podmień tylko cechy przełączane, resztę oryginału zostaw
     const freshPr = Array.from(fresh.childNodes).find((c) => c.localName === "rPr");
     for (const [k, tags] of Object.entries(TOGGLE_TAGS)) {
-      const want = k === "color" ? parseCssColorToWordHex(run.color) || null : k === "highlight" ? normHighlight(run.highlight) : run[k];
-      const had = k === "color" ? parseCssColorToWordHex(near.style.color) || null : k === "highlight" ? normHighlight(near.style.highlight) : near.style[k];
-      if ((k === "color" || k === "highlight") ? (want || "") === (had || "") : !!want === !!had) continue;
+      const want = k === "color" ? parseCssColorToWordHex(run.color) || null : k === "highlight" ? normHighlight(run.highlight) : k === "vertAlign" ? normVertAlign(run.vertAlign) : run[k];
+      const had = k === "color" ? parseCssColorToWordHex(near.style.color) || null : k === "highlight" ? normHighlight(near.style.highlight) : k === "vertAlign" ? normVertAlign(near.style.vertAlign) : near.style[k];
+      if ((k === "color" || k === "highlight" || k === "vertAlign") ? (want || "") === (had || "") : !!want === !!had) continue;
       Array.from(rPr.childNodes).filter((c) => tags.includes(c.localName)).forEach((c) => rPr.removeChild(c));
       if (freshPr) Array.from(freshPr.childNodes).filter((c) => tags.includes(c.localName)).forEach((c) => rPr.appendChild(c.cloneNode(true)));
     }
@@ -631,13 +651,13 @@ function applyRunsToPreviewParagraph(pEl, runs) {
 const docLinkHrefs = new Map();
 
 function runStyleHasProps(style) {
-  return !!(style?.bold || style?.italic || style?.underline || style?.strike || style?.color || style?.fontFamily || style?.fontSize || style?.highlight)
+  return !!(style?.bold || style?.italic || style?.underline || style?.strike || style?.color || style?.fontFamily || style?.fontSize || style?.highlight || normVertAlign(style?.vertAlign))
     || styleTurnsOff(style); // np. pogrubienie WYŁĄCZONE (Ctrl/⌘+B bez zaznaczenia) — też format do wstawienia
 }
 
 // Format „wyłączony” dla dalszego pisania (pogrubienie/kursywa/podkreślenie = false).
 function styleTurnsOff(style) {
-  return style?.bold === false || style?.italic === false || style?.underline === false || style?.strike === false;
+  return style?.bold === false || style?.italic === false || style?.underline === false || style?.strike === false || style?.vertAlign === "baseline";
 }
 
 // Wyjście z fragmentów tekstu (<span>, <b>…) w miejscu kursora aż do akapitu: fragmenty dzielone
@@ -648,7 +668,7 @@ function styleTurnsOff(style) {
 function breakOutOfRunsAtCaret(range, rootEl) {
   const marker = document.createTextNode("");
   range.insertNode(marker);
-  const SPLITTABLE = new Set(["span", "b", "strong", "i", "em", "u", "s", "strike"]);
+  const SPLITTABLE = new Set(["span", "b", "strong", "i", "em", "u", "s", "strike", "sup", "sub"]);
   for (let parent = marker.parentElement; parent && parent !== rootEl && SPLITTABLE.has(parent.localName) && parent.getAttribute("contenteditable") !== "false"; parent = marker.parentElement) {
     const tail = parent.cloneNode(false);
     while (marker.nextSibling) tail.appendChild(marker.nextSibling);
@@ -668,6 +688,8 @@ function accumulateElementStyle(el, style) {
   if (tag === "i" || tag === "em") style.italic = true;
   if (tag === "u") style.underline = true;
   if (tag === "s" || tag === "strike") style.strike = true;
+  if (tag === "sup") style.vertAlign = "superscript";
+  if (tag === "sub") style.vertAlign = "subscript";
 }
 
 // Formatowanie, które dostanie tekst wpisany w miejscu kursora: jak w Wordzie — znaku PRZED
@@ -760,6 +782,7 @@ function insertStyledTextAtCaret(text, style, rootEl, opts = {}) {
         probe.remove();
         const style2 = { ...style };
         for (const k of ["bold", "italic", "underline", "strike"]) if (style2[k] === false && !flags[k]) delete style2[k];
+        if (style2.vertAlign === "baseline") delete style2.vertAlign; // poza indeksem — zwykły tekst
         style = style2;
         css = runStyleToCss(style);
       }
@@ -878,6 +901,15 @@ function textFormatOfElement(el) {
   if (!el) return null;
   const cs = getComputedStyle(el);
   const family = String(cs.fontFamily || "").split(",")[0].trim().replace(/^["']|["']$/g, "");
+  // indeks górny / dolny rysujemy mniejszy, ale w pliku (i w Wordzie) rozmiar tekstu jest ten sam —
+  // pokazujemy rozmiar fragmentu (jego własny w:sz albo rozmiar wokół indeksu)
+  for (let a = el; a && a.localName !== "p"; a = a.parentElement) {
+    if (a.localName !== "sup" && a.localName !== "sub" && !/^(super|sub)$/.test(a.style?.verticalAlign || "")) continue;
+    const own = a.localName === "span" ? parseSpanStyle(a.getAttribute("style") || "").fontSize : null;
+    if (own) return { family, sizePt: parseFloat(own) };
+    const outer = parseFloat(getComputedStyle(a.parentElement).fontSize) || 0;
+    return { family, sizePt: Math.round(outer * 0.75 * 2) / 2 };
+  }
   const px = parseFloat(cs.fontSize) || 0;
   return { family, sizePt: Math.round(px * 0.75 * 2) / 2 };
 }
