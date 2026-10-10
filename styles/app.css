@@ -1874,6 +1874,13 @@ textarea.ff-pop-input { min-height: 4.5em; resize: vertical; }
 .tb-sep { width: 1px; height: 20px; margin: 0 3px; background: var(--border-subtle); }
 .insert-btn { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px 0 8px; color: var(--accent); }
 .insert-btn span { font-size: 12.5px; }
+/* „Gotowe” (touch.js) — tylko dotyk: bez klawiatury zewnętrznej nie ma Esc, którym wychodzi się z pisania */
+.done-edit-btn { display: none; }
+@media (pointer: coarse) {
+  .done-edit-btn { display: inline-flex; }
+  .done-edit-btn:not(:disabled) { background: var(--accent-light); border-color: var(--accent-border); }
+  .done-edit-btn:disabled { opacity: .38; cursor: default; color: var(--ink-2); }
+}
 .tb-select-style { max-width: 124px; }
 /* krój i rozmiar w miejscu kursora (pole puste = w zaznaczeniu kilka różnych) */
 .tb-select-font { width: 136px; max-width: 136px; text-overflow: ellipsis; }

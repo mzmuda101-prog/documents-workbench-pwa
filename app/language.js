@@ -389,6 +389,7 @@ const I18N = {
     helpKeysTitle: "Klawiatura",
     helpKeysText: "Ctrl/⌘+F — szukaj · Enter / Shift+Enter (albo F3) — następne / poprzednie · Ctrl/⌘+S — zapisz · Ctrl/⌘+Enter — podział strony · Ctrl/⌘+Alt+N — nowy dokument · Ctrl/⌘+Alt+E — Czytanie ⇄ Edycja · Ctrl/⌘+Alt+F — tryb skupienia · Ctrl/⌘+Alt+1 / 2 / 3 — panel / pasek / dokument (F6 — po kolei) · Esc — krok wstecz",
     // ── Cofnij / Ponów (undo.js) ──
+    doneEditing: "Gotowe",
     undoGroupAria: "Cofnij i ponów",
     helpUndoTitle: "Cofnij / Ponów",
     helpUndoText: "Ctrl/⌘+Z — cofnij · Ctrl/⌘+Shift+Z lub Ctrl+Y — ponów · przyciski ↶ ↷ na pasku. Cofa operacje z panelu, formatowanie i pisanie (ciągłe pisanie = jeden krok, przerwa lub kliknięcie zaczyna nowy).",
@@ -1328,6 +1329,7 @@ const I18N = {
     helpKeysTitle: "Keyboard",
     helpKeysText: "Ctrl/⌘+F — search · Enter / Shift+Enter (or F3) — next / previous · Ctrl/⌘+S — save · Ctrl/⌘+Enter — page break · Ctrl/⌘+Alt+N — new document · Ctrl/⌘+Alt+E — Reading ⇄ Editing · Ctrl/⌘+Alt+F — focus mode · Ctrl/⌘+Alt+1 / 2 / 3 — panel / toolbar / document (F6 — in turn) · Esc — step back",
     // ── Undo / Redo (undo.js) ──
+    doneEditing: "Done",
     undoGroupAria: "Undo and redo",
     helpUndoTitle: "Undo / Redo",
     helpUndoText: "Ctrl/⌘+Z — undo · Ctrl/⌘+Shift+Z or Ctrl+Y — redo · ↶ ↷ buttons in the toolbar. Undoes panel operations, formatting and typing (continuous typing = one step; a pause or a click starts a new one).",

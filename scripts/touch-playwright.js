@@ -105,6 +105,96 @@ async function run() {
   const afterEnter = await page.evaluate(() => ({ pos: document.getElementById("searchPos").textContent, focused: document.activeElement?.id }));
   check("Enter w szukaniu: wynik + klawiatura schowana (pole bez fokusu)", /1 \/ 21/.test(afterEnter.pos) && afterEnter.focused !== "searchQuery", JSON.stringify(afterEnter));
 
+  // Wyjście z pisania bez klawiatury zewnętrznej (Esc nie ma): „Gotowe” i stuknięcie w szare tło
+  await page.evaluate(() => appFrame.setReadOnly(false));
+  await page.waitForTimeout(300);
+  const editing = () => page.evaluate(() => {
+    const a = document.activeElement;
+    const sel = getSelection();
+    return {
+      focus: !!a?.closest?.(".docx-edit-root, .docx-editable-p"),
+      sel: !!sel.rangeCount && document.getElementById("docCanvas").contains(sel.anchorNode),
+      done: !document.getElementById("doneEditBtn").disabled,
+    };
+  });
+  const tapParagraph = async () => {
+    const r = await page.evaluate(() => {
+      const p = [...document.querySelectorAll(".docx-editable-p")].find((el) => el.textContent.trim().length > 20 && el.getBoundingClientRect().top > 200);
+      p.scrollIntoView({ block: "center" });
+      const b = p.getBoundingClientRect();
+      return { x: b.left + 30, y: b.top + 6 };
+    });
+    await page.touchscreen.tap(r.x, r.y);
+    await page.waitForTimeout(250);
+  };
+  const doneShown = await page.evaluate(() => getComputedStyle(document.getElementById("doneEditBtn")).display !== "none");
+  check("„Gotowe” widoczne na dotyku w Edycji", doneShown);
+  const idle = await editing();
+  check("„Gotowe” nieaktywne, gdy nic się nie pisze", !idle.done, JSON.stringify(idle));
+
+  await tapParagraph();
+  const typing = await editing();
+  check("stuknięcie w akapit = pisanie („Gotowe” aktywne)", typing.focus && typing.done, JSON.stringify(typing));
+  await page.tap("#doneEditBtn");
+  await page.waitForTimeout(200);
+  const afterDone = await editing();
+  check("„Gotowe” zdejmuje fokus i kursor z dokumentu", !afterDone.focus && !afterDone.sel && !afterDone.done, JSON.stringify(afterDone));
+
+  // szare tło: pas przerwy między stronami (widok stronami) albo pole pod ostatnią kartką
+  // (widok mobilny przepływa bez przerw)
+  const grey = async () => {
+    await page.evaluate(() => {
+      const band = [...document.querySelectorAll(".dwb-page-gap-band")].find((b) => b.getBoundingClientRect().height > 0);
+      if (band) band.scrollIntoView({ block: "center" });
+      else { const vp = document.getElementById("docViewport"); vp.scrollTop = vp.scrollHeight; }
+    });
+    await page.waitForTimeout(300); // przewinięcie i przeliczenie układu, zanim padną współrzędne
+    return page.evaluate(() => {
+      const vp = document.getElementById("docViewport");
+      const band = [...document.querySelectorAll(".dwb-page-gap-band")].find((b) => b.getBoundingClientRect().height > 0);
+      let x, y;
+      if (band) {
+        const r = band.getBoundingClientRect();
+        x = r.left + 12; y = r.top + r.height / 2;
+      } else {
+        const last = [...document.querySelectorAll(".docx-edit-root > section.docx")].pop().getBoundingClientRect();
+        x = last.left + last.width / 2; y = Math.min(last.bottom + 14, vp.getBoundingClientRect().bottom - 4);
+      }
+      const hit = document.elementFromPoint(x, y);
+      return { x, y, kind: band ? "pas przerwy" : "pod kartką", hit: hit ? `${hit.tagName}.${hit.className}` : null };
+    });
+  };
+  const exitByGrey = async (label) => {
+    await tapParagraph();
+    const before = await editing();
+    const g = await grey();
+    await page.touchscreen.tap(g.x, g.y);
+    await page.waitForTimeout(250);
+    const after = await editing();
+    check(`${label}: stuknięcie w szare tło (${g.kind}) wychodzi z pisania`, before.focus && !after.focus && !after.sel, JSON.stringify({ before, after, hit: g.hit }));
+  };
+  await exitByGrey("telefon");
+  // margines kartki to dalej kartka: stuknięcie stawia kursor, nie wychodzi
+  await tapParagraph();
+  const margin = await page.evaluate(() => {
+    const sec = document.querySelector(".docx-edit-root > section.docx");
+    const p = [...sec.querySelectorAll(".docx-editable-p")].find((el) => el.textContent.trim().length > 20 && el.getBoundingClientRect().top > 200);
+    const s = sec.getBoundingClientRect(), r = p.getBoundingClientRect();
+    return { x: s.left + Math.max(2, (r.left - s.left) / 2), y: r.top + 6 };
+  });
+  await page.touchscreen.tap(margin.x, margin.y);
+  await page.waitForTimeout(250);
+  const afterMargin = await editing();
+  check("stuknięcie w margines kartki nie wychodzi z pisania", afterMargin.focus, JSON.stringify(afterMargin));
+  // tablet w poziomie (jak iPad z ekranu): strony z pasami przerw między nimi
+  await page.setViewportSize({ width: 1180, height: 820 });
+  await page.evaluate(() => dwbView?.set?.(false));
+  await page.waitForTimeout(700);
+  await exitByGrey("tablet");
+  await page.evaluate(() => appFrame.setReadOnly(true));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(400);
+
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   check("nic nie wychodzi poza ekran w bok", !overflow);
 

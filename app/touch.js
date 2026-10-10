@@ -125,5 +125,51 @@
   document.addEventListener("focusin", () => setTimeout(syncKeyboard, 60));
   document.addEventListener("focusout", () => setTimeout(syncKeyboard, 120));
 
-  window.dwbTouch = { keepCaretVisible, restorePageScroll, syncKeyboard };
+  // ── 5) wyjście z pisania bez klawiatury zewnętrznej ─────────────────────────
+  // Akapit z kursorem jest podświetlony, dopóki dokument ma fokus. Cały dokument to jedno
+  // pole edycji (także szare tło między kartkami), więc stuknięcie obok tekstu tylko
+  // przestawiało kursor, a Esc na dotyku nie ma — z podświetlenia nie dało się wyjść
+  // (iPad po schowaniu klawiatury zostawia fokus). Dwie drogi, jak Esc: przycisk „Gotowe”
+  // na pasku Edycji i stuknięcie w szare tło poza kartkami.
+  const doneBtn = document.getElementById("doneEditBtn");
+  function typingInDoc() {
+    const a = document.activeElement;
+    return !readOnlyMode && !!a?.closest?.(".docx-edit-root, .docx-editable-p") && !!docCanvasEl?.contains(a);
+  }
+  function dismissEditing() {
+    const a = document.activeElement;
+    if (a?.closest?.(".docx-edit-root, .docx-editable-p") && docCanvasEl?.contains(a)) a.blur();
+    const sel = window.getSelection?.();
+    if (sel?.rangeCount && docCanvasEl?.contains(sel.anchorNode)) sel.removeAllRanges();
+    syncDoneBtn();
+  }
+  function syncDoneBtn() {
+    if (doneBtn) doneBtn.disabled = !typingInDoc();
+  }
+  // mousedown bez domyślnej akcji: przycisk nie zabiera fokusu (Android), dokument go oddaje w click
+  doneBtn?.addEventListener("mousedown", (e) => e.preventDefault());
+  doneBtn?.addEventListener("click", dismissEditing);
+  document.addEventListener("focusin", syncDoneBtn);
+  document.addEventListener("focusout", () => setTimeout(syncDoneBtn, 0));
+  docCanvasEl && new MutationObserver(syncDoneBtn).observe(docCanvasEl, { attributes: true, attributeFilter: ["class"] });
+
+  // Szare tło = obszar dokumentu poza kartkami: sam pojemnik (odstępy nad/pod/między sekcjami),
+  // pasy przerw między stronami i pole wokół. Przez mousedown, NIE pointerdown (w Safari/iOS
+  // preventDefault na pointerdown kasuje kliknięcie); bez domyślnej akcji tło nie stawia kursora.
+  function isBackdrop(t) {
+    if (!t || t.nodeType !== 1) return false;
+    if (t === docViewportEl || t === docCanvasEl) return true;
+    return t.matches(".docx-preview-host, .docx-edit-root") || !!t.closest(".dwb-page-gap-band");
+  }
+  const backdropTap = (e) => coarse.matches && !readOnlyMode && e.button === 0 && isBackdrop(e.target);
+  docViewportEl?.addEventListener("mousedown", (e) => {
+    if (!backdropTap(e)) return;
+    e.preventDefault();
+    dismissEditing();
+  });
+  // klik obok tekstu stawia kursor w najbliższym akapicie (doc-caret-nav.js) — dla myszy tak,
+  // ale na dotyku stuknięcie w szare tło ma wyjść z pisania, więc ten klik nie idzie dalej
+  docViewportEl?.addEventListener("click", (e) => { if (backdropTap(e)) e.stopPropagation(); }, true);
+
+  window.dwbTouch = { keepCaretVisible, restorePageScroll, syncKeyboard, dismissEditing };
 })();
