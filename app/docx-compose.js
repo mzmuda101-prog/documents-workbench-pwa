@@ -221,6 +221,124 @@ async function composeEnsureStyle(zip, key, cache) {
 }
 
 // ── op "paraFormat": styl i/lub wyrównanie akapitów ──────────────────────────
+// ── odstępy i wcięcia akapitu (Word: Akapit → Wcięcia i odstępy) ──────────────
+// Wartości jak w pliku: odstępy i wcięcia w twipach (1 pt = 20, 1 cm ≈ 567), interlinia
+// „auto” w 240-tych częściach wiersza (1,15 = 276), „atLeast”/„exact” — w twipach.
+// Efektywne wartości warstwami jak w Wordzie: ustawienia domyślne dokumentu → łańcuch stylów
+// (basedOn) → poziom listy (numbering.xml) → sam akapit. Każda warstwa nadpisuje to, co podaje.
+const COMPOSE_LAYOUT_ZERO = { before: 0, after: 0, line: 240, lineRule: "auto", left: 0, right: 0, firstLine: 0, hanging: 0 };
+function composeWAttr(el, name) {
+  if (!el) return null;
+  const v = el.getAttributeNS(W_NS, name) ?? el.getAttribute(`w:${name}`);
+  return v == null || v === "" ? null : v;
+}
+function composeWInt(el, name) {
+  const v = composeWAttr(el, name);
+  const n = v == null ? NaN : parseInt(v, 10);
+  return Number.isFinite(n) ? n : null;
+}
+function composeLayoutLayer(pPr, out) {
+  if (!pPr) return;
+  const sp = composeDirectChild(pPr, "spacing");
+  if (sp) {
+    ["before", "after"].forEach((k) => { const v = composeWInt(sp, k); if (v != null) out[k] = v; });
+    const line = composeWInt(sp, "line");
+    if (line != null) { out.line = line; out.lineRule = composeWAttr(sp, "lineRule") || "auto"; }
+  }
+  const ind = composeDirectChild(pPr, "ind");
+  if (ind) {
+    const left = composeWInt(ind, "left") ?? composeWInt(ind, "start");
+    const right = composeWInt(ind, "right") ?? composeWInt(ind, "end");
+    if (left != null) out.left = left;
+    if (right != null) out.right = right;
+    const hanging = composeWInt(ind, "hanging");
+    const first = composeWInt(ind, "firstLine");
+    if (hanging != null) { out.hanging = hanging; out.firstLine = 0; } // oba podane — wygrywa wysunięcie
+    else if (first != null) { out.firstLine = first; out.hanging = 0; }
+  }
+}
+function composeStyleById(stylesDoc, id) {
+  if (!stylesDoc || !id) return null;
+  return Array.from(stylesDoc.getElementsByTagNameNS(W_NS, "style")).find((st) => composeWAttr(st, "styleId") === id) || null;
+}
+function composeParaLayout(p, stylesDoc, numberingDoc) {
+  const out = { ...COMPOSE_LAYOUT_ZERO };
+  const def = stylesDoc?.getElementsByTagNameNS(W_NS, "pPrDefault")[0];
+  composeLayoutLayer(def && composeDirectChild(def, "pPr"), out);
+  const pPr = composeDirectChild(p, "pPr");
+  const pStyle = pPr && composeDirectChild(pPr, "pStyle");
+  let id = composeWAttr(pStyle, "val");
+  if (!id && stylesDoc) {
+    const d = Array.from(stylesDoc.getElementsByTagNameNS(W_NS, "style")).find((st) => composeWAttr(st, "type") === "paragraph" && /^(1|true|on)$/.test(composeWAttr(st, "default") || ""));
+    id = d ? composeWAttr(d, "styleId") : null;
+  }
+  const chain = [];
+  for (let i = 0, st = composeStyleById(stylesDoc, id); st && i < 12; i++, st = composeStyleById(stylesDoc, composeWAttr(composeDirectChild(st, "basedOn"), "val"))) chain.unshift(st);
+  let numPr = null;
+  chain.forEach((st) => {
+    const sp = composeDirectChild(st, "pPr");
+    composeLayoutLayer(sp, out);
+    if (sp && composeDirectChild(sp, "numPr")) numPr = composeDirectChild(sp, "numPr");
+  });
+  if (pPr && composeDirectChild(pPr, "numPr")) numPr = composeDirectChild(pPr, "numPr");
+  const numId = composeWAttr(numPr && composeDirectChild(numPr, "numId"), "val");
+  if (numberingDoc && numId && numId !== "0") {
+    const ilvl = composeWAttr(composeDirectChild(numPr, "ilvl"), "val") || "0";
+    const num = Array.from(numberingDoc.getElementsByTagNameNS(W_NS, "num")).find((n) => composeWAttr(n, "numId") === numId);
+    const absId = composeWAttr(num && composeDirectChild(num, "abstractNumId"), "val");
+    const abs = Array.from(numberingDoc.getElementsByTagNameNS(W_NS, "abstractNum")).find((a) => composeWAttr(a, "abstractNumId") === absId);
+    const lvl = abs && Array.from(abs.getElementsByTagNameNS(W_NS, "lvl")).find((l) => composeWAttr(l, "ilvl") === ilvl);
+    composeLayoutLayer(lvl && composeDirectChild(lvl, "pPr"), out);
+  }
+  composeLayoutLayer(pPr, out);
+  return out;
+}
+async function composeLayoutDocs(zip) {
+  const read = async (name) => { const f = zip.file(name); return f ? composeParse(await f.async("string")) : null; };
+  return { stylesDoc: await read("word/styles.xml"), numberingDoc: await read("word/numbering.xml") };
+}
+// Efektywne odstępy/wcięcia akapitów (indeksy jak w podglądzie) — do okienka „Odstępy i wcięcia”.
+async function composeParaLayoutsFromBytes(bytes, indices) {
+  const zip = await JSZip.loadAsync(bytes);
+  const doc = composeParse(await zip.file("word/document.xml").async("string"));
+  const { stylesDoc, numberingDoc } = await composeLayoutDocs(zip);
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  return indices.map((i) => (paragraphs[i] ? composeParaLayout(paragraphs[i], stylesDoc, numberingDoc) : null));
+}
+// Zapis: tylko podane cechy, reszta w:spacing / w:ind zostaje. Wcięcie pierwszego wiersza
+// i wysunięcie wykluczają się (jak w Wordzie). edit.indentDelta — Zwiększ/Zmniejsz wcięcie:
+// każdy akapit o krok od SWOJEGO wcięcia (efektywnego, z warstwami).
+function composeApplyLayout(p, pPr, edit, layout) {
+  const doc = p.ownerDocument;
+  if (edit.spacing) {
+    const sp = composeDirectChild(pPr, "spacing") || composeEl(doc, "spacing");
+    Object.entries(edit.spacing).forEach(([k, v]) => {
+      if (!["before", "after", "line", "lineRule"].includes(k)) return;
+      if (v == null) { sp.removeAttributeNS(W_NS, k); sp.removeAttribute(`w:${k}`); return; }
+      sp.setAttributeNS(W_NS, `w:${k}`, String(k === "lineRule" ? v : Math.max(0, Math.round(v))));
+      if (k === "before" || k === "after") { // „auto” odstęp HTML wygrywałby z wartością
+        sp.removeAttributeNS(W_NS, `${k}Autospacing`);
+        sp.removeAttribute(`w:${k}Autospacing`);
+      }
+    });
+    if (edit.spacing.line != null && edit.spacing.lineRule == null) sp.setAttributeNS(W_NS, "w:lineRule", "auto");
+    composeSetPPrChild(pPr, "spacing", sp.attributes.length ? sp : null);
+  }
+  const indEdit = { ...(edit.ind || {}) };
+  if (Number.isFinite(edit.indentDelta)) indEdit.left = Math.max(0, (layout?.left || 0) + edit.indentDelta);
+  if (Object.keys(indEdit).length) {
+    const ind = composeDirectChild(pPr, "ind") || composeEl(doc, "ind");
+    const drop = (k) => { ind.removeAttributeNS(W_NS, k); ind.removeAttribute(`w:${k}`); };
+    const set = (k, v) => ind.setAttributeNS(W_NS, `w:${k}`, String(Math.round(v)));
+    if (indEdit.left != null) { drop("start"); set("left", indEdit.left); }
+    if (indEdit.right != null) { drop("end"); set("right", Math.max(0, indEdit.right)); }
+    if (indEdit.hanging != null && indEdit.hanging > 0) { drop("firstLine"); set("hanging", indEdit.hanging); }
+    else if (indEdit.firstLine != null) { drop("hanging"); set("firstLine", Math.max(0, indEdit.firstLine)); }
+    else if (indEdit.hanging === 0) { drop("hanging"); set("firstLine", 0); }
+    composeSetPPrChild(pPr, "ind", ind);
+  }
+}
+
 async function applyParaFormatInZip(zip, xml, edit) {
   const doc = composeParse(xml);
   const paragraphs = collectParagraphElements(doc.documentElement, "all");
@@ -229,9 +347,12 @@ async function applyParaFormatInZip(zip, xml, edit) {
   const cache = new Map();
   let styleId;
   if (edit.style) styleId = await composeEnsureStyle(zip, edit.style, cache);
+  const layoutDocs = Number.isFinite(edit.indentDelta) ? await composeLayoutDocs(zip) : null;
   let count = 0;
   targets.forEach((p) => {
+    const layout = layoutDocs ? composeParaLayout(p, layoutDocs.stylesDoc, layoutDocs.numberingDoc) : null;
     const pPr = composeEnsurePPr(p);
+    if (edit.spacing || edit.ind || Number.isFinite(edit.indentDelta)) composeApplyLayout(p, pPr, edit, layout);
     if (edit.style) {
       composeSetPPrChild(pPr, "pStyle", styleId ? { val: styleId } : null);
       // Nagłówek z listy stylów jest poziomem konspektu ze stylu — bezpośredni w:outlineLvl

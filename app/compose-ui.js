@@ -1614,6 +1614,169 @@ const composeUi = (() => {
     el.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.closest("input")) { e.preventDefault(); submit(); } });
   }
 
+  // ── odstępy i wcięcia akapitu (Word: Interlinia i odstępy akapitu, Akapit → Wcięcia i odstępy) ──
+  // Szybkie pozycje działają od razu; „Odstępy i wcięcia…” — formularz z polami jak okno Akapit.
+  // Wartości w okienku to wartości EFEKTYWNE (styl, lista, akapit) — composeParaLayout.
+  const spacingBtn = document.getElementById("fmtSpacingBtn");
+  const LINE_PRESETS = [240, 276, 360, 480, 600, 720]; // 1,0 · 1,15 · 1,5 · 2,0 · 2,5 · 3,0
+  const INDENT_STEP_TW = 709; // 1,25 cm (domyślny tabulator Worda)
+  const numLocale = () => (currentLang === "en" ? "en-GB" : "pl-PL");
+  const fmtN = (v, d = 2) => (Math.round(v * 10 ** d) / 10 ** d).toLocaleString(numLocale(), { maximumFractionDigits: d });
+  const ptText = (tw) => fmtN(tw / 20, 1);
+  const lineText = (line) => (line / 240).toLocaleString(numLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+  const parseNum = (v) => { const n = parseFloat(String(v ?? "").trim().replace(/\s/g, "").replace(",", ".")); return Number.isFinite(n) ? n : NaN; };
+
+  async function layoutAtCaret() {
+    const p = caretParagraph();
+    if (!p) return null;
+    const indices = selectedParagraphIndices(p);
+    await mergeInlineEditsIntoBytes().catch(() => {});
+    const layouts = await composeParaLayoutsFromBytes(originalFileBytes, indices).catch(() => []);
+    return { p, indices, cur: layouts.find(Boolean) || { ...COMPOSE_LAYOUT_ZERO } };
+  }
+  function runLayout(ctx, patch) {
+    return runFileEdit({ op: "paraFormat", indices: ctx.indices, ...patch }, caretState(ctx.p));
+  }
+  function stepIndent(ctx, dir) {
+    // w liście „Zwiększ wcięcie” = poziom punktu głębiej (jak w Wordzie)
+    if (typeof isListParagraph === "function" && isListParagraph(ctx.p)) return changeListLevel(dir);
+    return runLayout(ctx, { indentDelta: dir * INDENT_STEP_TW });
+  }
+
+  async function buildSpacingMenu(el) {
+    el.classList.add("compose-pop-insert", "compose-pop-spacing");
+    const ctx = await layoutAtCaret();
+    if (!ctx) { closePop(); return; }
+    const { cur } = ctx;
+    const mark = (b, on) => { b.setAttribute("role", "menuitemradio"); b.setAttribute("aria-checked", String(on)); b.classList.toggle("is-current", on); };
+    const lineIcon = (gap) => ICON(`<line x1="5" y1="${12 - gap}" x2="19" y2="${12 - gap}"/><line x1="5" y1="${12 + gap}" x2="19" y2="${12 + gap}"/>`);
+    popCap(el, t("lineSpacing"));
+    LINE_PRESETS.forEach((line) => {
+      const b = popItem(el, { label: lineText(line), icon: lineIcon(Math.min(8, 2 + (line - 240) / 80)), onPick: () => runLayout(ctx, { spacing: { line, lineRule: "auto" } }) });
+      b.dataset.line = String(line);
+      mark(b, cur.lineRule === "auto" && Math.abs(cur.line - line) <= 3);
+    });
+    const before = cur.before > 0, after = cur.after > 0;
+    popItem(el, {
+      label: t(before ? "spaceBeforeRemove" : "spaceBeforeAdd"),
+      icon: ICON('<path d="M12 3v6M9 6l3-3 3 3"/><line x1="5" y1="13" x2="19" y2="13"/><line x1="5" y1="18" x2="19" y2="18"/>'),
+      onPick: () => runLayout(ctx, { spacing: { before: before ? 0 : 240 } }),
+    }).dataset.space = "before";
+    popItem(el, {
+      label: t(after ? "spaceAfterRemove" : "spaceAfterAdd"),
+      icon: ICON('<line x1="5" y1="6" x2="19" y2="6"/><line x1="5" y1="11" x2="19" y2="11"/><path d="M12 15v6M9 18l3 3 3-3"/>'),
+      onPick: () => runLayout(ctx, { spacing: { after: after ? 0 : 240 } }),
+    }).dataset.space = "after";
+    popCap(el, t("indentCap"));
+    popItem(el, {
+      label: t("indentMore"), desc: t("indentStepDesc"),
+      icon: ICON('<line x1="11" y1="6" x2="21" y2="6"/><line x1="11" y1="12" x2="21" y2="12"/><line x1="11" y1="18" x2="21" y2="18"/><path d="m3 9 3 3-3 3"/>'),
+      onPick: () => stepIndent(ctx, 1),
+    }).dataset.indent = "more";
+    popItem(el, {
+      label: t("indentLess"),
+      icon: ICON('<line x1="11" y1="6" x2="21" y2="6"/><line x1="11" y1="12" x2="21" y2="12"/><line x1="11" y1="18" x2="21" y2="18"/><path d="M7 9l-3 3 3 3"/>'),
+      onPick: () => stepIndent(ctx, -1),
+    }).dataset.indent = "less";
+    popItem(el, {
+      label: t("spacingMore"),
+      desc: t("spacingSummary", { b: ptText(cur.before), a: ptText(cur.after), i: cmText(cur.left) }),
+      icon: ICON('<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M10 12h6M8 16h8"/>'),
+      onPick: () => openPop(spacingBtn, (form) => buildLayoutForm(form, ctx)),
+    }).dataset.more = "1";
+  }
+
+  // Formularz jak okno Akapit w Wordzie: wcięcia (cm), specjalne (pierwszy wiersz / wysunięcie),
+  // odstępy (pt), interlinia (pojedyncza … dokładnie). Zastosuj = jeden krok Cofnij.
+  function buildLayoutForm(el, ctx) {
+    const { cur } = ctx;
+    el.classList.add("compose-pop-form", "compose-pop-layout");
+    el.innerHTML = `<div class="compose-cap"></div>
+      <div class="mf-grid">
+        <label class="compose-field"><span data-k="indLeft"></span><input type="text" class="lf-left" inputmode="decimal" autocomplete="off" enterkeyhint="done"></label>
+        <label class="compose-field"><span data-k="indRight"></span><input type="text" class="lf-right" inputmode="decimal" autocomplete="off" enterkeyhint="done"></label>
+        <label class="compose-field"><span data-k="indSpecial"></span><select class="lf-special"></select></label>
+        <label class="compose-field"><span data-k="indBy"></span><input type="text" class="lf-by" inputmode="decimal" autocomplete="off" enterkeyhint="done"></label>
+        <label class="compose-field"><span data-k="spBefore"></span><input type="text" class="lf-before" inputmode="decimal" autocomplete="off" enterkeyhint="done"></label>
+        <label class="compose-field"><span data-k="spAfter"></span><input type="text" class="lf-after" inputmode="decimal" autocomplete="off" enterkeyhint="done"></label>
+        <label class="compose-field"><span data-k="lineRuleLabel"></span><select class="lf-rule"></select></label>
+        <label class="compose-field"><span data-k="lineAt"></span><input type="text" class="lf-at" inputmode="decimal" autocomplete="off" enterkeyhint="done"></label>
+      </div>
+      <p class="compose-note lf-multi" hidden></p>
+      <p class="compose-note mf-warn is-error" hidden></p>
+      <div class="compose-actions"><span class="compose-actions-gap"></span><button type="button" class="btn lf-cancel"></button><button type="button" class="btn primary lf-ok"></button></div>`;
+    el.querySelector(".compose-cap").textContent = t("spacingLabel");
+    el.querySelectorAll("[data-k]").forEach((s) => { s.textContent = t(s.dataset.k); });
+    const $ = (c) => el.querySelector(c);
+    const special = $(".lf-special");
+    [["none", "indSpecialNone"], ["first", "indSpecialFirst"], ["hanging", "indSpecialHanging"]].forEach(([v, k]) => special.appendChild(new Option(t(k), v)));
+    const rule = $(".lf-rule");
+    [["240", "lineSingle"], ["276", null], ["360", "line15"], ["480", "lineDouble"], ["multiple", "lineMultiple"], ["atLeast", "lineAtLeast"], ["exact", "lineExact"]].forEach(([v, k]) => rule.appendChild(new Option(k ? t(k) : lineText(276), v)));
+    $(".lf-left").value = cmText(cur.left);
+    $(".lf-right").value = cmText(cur.right);
+    special.value = cur.hanging > 0 ? "hanging" : cur.firstLine > 0 ? "first" : "none";
+    $(".lf-by").value = cmText(cur.hanging > 0 ? cur.hanging : cur.firstLine);
+    $(".lf-before").value = ptText(cur.before);
+    $(".lf-after").value = ptText(cur.after);
+    if (cur.lineRule === "auto") {
+      const preset = ["240", "276", "360", "480"].find((v) => Math.abs(cur.line - Number(v)) <= 3);
+      rule.value = preset || "multiple";
+      $(".lf-at").value = lineText(cur.line);
+    } else {
+      rule.value = cur.lineRule === "exact" ? "exact" : "atLeast";
+      $(".lf-at").value = ptText(cur.line);
+    }
+    $(".lf-left").dataset.autofocus = "1";
+    const multi = $(".lf-multi");
+    multi.hidden = ctx.indices.length < 2;
+    multi.textContent = t("layoutMulti", { n: ctx.indices.length });
+    const syncFields = () => {
+      $(".lf-by").disabled = special.value === "none";
+      const preset = /^\d+$/.test(rule.value);
+      $(".lf-at").disabled = preset;
+      if (preset) $(".lf-at").value = lineText(Number(rule.value));
+    };
+    special.addEventListener("change", () => {
+      if (special.value !== "none" && !(parseNum($(".lf-by").value) > 0)) $(".lf-by").value = cmText(INDENT_STEP_TW);
+      syncFields();
+    });
+    rule.addEventListener("change", () => {
+      if (rule.value === "multiple") $(".lf-at").value = lineText(cur.lineRule === "auto" ? cur.line : 240);
+      else if (rule.value === "atLeast" || rule.value === "exact") $(".lf-at").value = ptText(cur.lineRule === "auto" ? 240 : cur.line);
+      syncFields();
+    });
+    syncFields();
+    const warn = $(".mf-warn");
+    const read = () => {
+      const cm = (c) => Math.round(parseNum($(c).value) * TW_PER_CM);
+      const pt = (c) => Math.round(parseNum($(c).value) * 20);
+      const left = cm(".lf-left"), right = cm(".lf-right"), by = special.value === "none" ? 0 : cm(".lf-by");
+      const before = pt(".lf-before"), after = pt(".lf-after");
+      let line, lineRule;
+      if (/^\d+$/.test(rule.value)) { line = Number(rule.value); lineRule = "auto"; }
+      else if (rule.value === "multiple") { line = Math.round(parseNum($(".lf-at").value) * 240); lineRule = "auto"; }
+      else { line = pt(".lf-at"); lineRule = rule.value; }
+      const nums = [left, right, by, before, after, line];
+      const ok = nums.every(Number.isFinite) && before >= 0 && after >= 0 && by >= 0 && line > 0 && Math.abs(left) <= 31680 && Math.abs(right) <= 31680;
+      return ok ? { spacing: { before, after, line, lineRule }, ind: special.value === "hanging" ? { left, right, hanging: by } : { left, right, firstLine: by, hanging: 0 } } : null;
+    };
+    const check = () => { const v = read(); warn.hidden = !!v; warn.textContent = v ? "" : t("layoutBad"); return v; };
+    el.addEventListener("input", check);
+    el.addEventListener("change", check);
+    $(".lf-cancel").textContent = t("linkCancel");
+    $(".lf-cancel").addEventListener("click", () => closePop());
+    const ok = $(".lf-ok");
+    ok.textContent = t("layoutApply");
+    const submit = () => {
+      const v = check();
+      if (!v) return;
+      closePop();
+      runLayout(ctx, v);
+    };
+    ok.addEventListener("click", submit);
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.closest("input")) { e.preventDefault(); submit(); } });
+  }
+
   // Tab / Shift+Tab w komórce = następna / poprzednia komórka; Tab w ostatniej = nowy wiersz (jak Word).
   function tableTab(p, back) {
     const cell = cellOf(p);
@@ -2763,6 +2926,8 @@ const composeUi = (() => {
     });
   }));
   alignBtn?.addEventListener("click", () => openPop(alignBtn, buildAlignMenu));
+  spacingBtn?.addEventListener("mousedown", (e) => e.preventDefault());
+  spacingBtn?.addEventListener("click", () => openPop(spacingBtn, buildSpacingMenu));
   styleSel?.addEventListener("change", () => applyStyle(styleSel.value));
   colorBtn?.addEventListener("mousedown", (e) => e.preventDefault());
   colorBtn?.addEventListener("click", () => openPop(colorBtn, buildColorMenu));

@@ -2685,7 +2685,10 @@ body:not(.has-document) #printPreviewMenuItem, body:not(.has-document) #pageSetu
 }
 
 /* Marginesy niestandardowe (compose-ui.js): cztery pola w dwóch kolumnach */
-.mf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+/* minmax(0, …): kolumna nie rozpycha się do naturalnej szerokości listy („Pojedyncza”) poza okienko */
+.mf-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 10px; }
+.mf-grid .compose-field > span { overflow-wrap: anywhere; }
+.compose-pop-layout { width: min(380px, calc(100vw - 16px)); }
 .compose-note.mf-warn { color: var(--warning); margin: 0; }
 .compose-note.mf-warn.is-error { color: var(--danger, #c0392b); }
 
