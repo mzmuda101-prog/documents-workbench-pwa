@@ -145,9 +145,14 @@ async function readComposeStyleClasses(bytes) {
     const zip = await loadDocxZipCached(bytes);
     const xml = await zip.file("word/styles.xml")?.async("string");
     if (!xml) return map;
-    const idx = composeStylesIndex(composeParse(xml));
+    // Jeden DOM wystarcza dla indeksu, stylu numeru strony i pozostałych stylów.
+    // Wcześniej te trzy odczyty parsowały ten sam styles.xml niezależnie przy każdym
+    // otwarciu dokumentu, co przy dużych plikach dawało zbędną pracę na głównym wątku.
+    const stylesDoc = composeParse(xml);
+    const styles = Array.from(stylesDoc.getElementsByTagNameNS(W_NS, "style"));
+    const idx = composeStylesIndex(stylesDoc);
     // styl znakowy numeru strony (pole PAGE w stopce) — podgląd podstawia w nim numer
-    const pn = Array.from(composeParse(xml).getElementsByTagNameNS(W_NS, "style")).find((st) => st.getAttributeNS(W_NS, "type") === "character"
+    const pn = styles.find((st) => st.getAttributeNS(W_NS, "type") === "character"
       && (composeDirectChild(st, "name")?.getAttributeNS(W_NS, "val") || "").trim().toLowerCase() === "page number");
     if (pn) map.set(docxStyleClassName(pn.getAttributeNS(W_NS, "styleId")), "pagenum");
     [...COMPOSE_STYLE_KEYS, ...COMPOSE_TOC_KEYS].forEach((key) => {
@@ -157,7 +162,7 @@ async function readComposeStyleClasses(bytes) {
     // Pozostałe style akapitu z pliku („Wskazówka”, „Tekst podstawowy”…) — lista stylów pokazuje
     // ich nazwę. Dawniej pokazywała „Normalny”, więc wybranie „Normalny” nic nie robiło i z akapitu
     // w takim stylu (np. ramka z tłem) nie było jak wyjść. Akapit listy ma swój przycisk — pomijamy.
-    Array.from(composeParse(xml).getElementsByTagNameNS(W_NS, "style")).forEach((st) => {
+    styles.forEach((st) => {
       const id = st.getAttributeNS(W_NS, "styleId");
       if (st.getAttributeNS(W_NS, "type") !== "paragraph" || !id) return;
       const cls = docxStyleClassName(id);

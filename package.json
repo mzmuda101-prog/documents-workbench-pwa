@@ -45,7 +45,6 @@
     "test:guide": "node scripts/guide-playwright.js",
     "test:caret": "node scripts/caret-nav-playwright.js && ENGINE=webkit node scripts/caret-nav-playwright.js",
     "test:review": "node scripts/review-playwright.js",
-    "test:compare": "node scripts/compare-playwright.js",
     "test:save": "node scripts/save-flow-playwright.js && ENGINE=webkit node scripts/save-flow-playwright.js",
     "test:launch": "node scripts/launch-files-playwright.js && ENGINE=webkit node scripts/launch-files-playwright.js",
     "test:links": "node scripts/links-playwright.js && ENGINE=webkit node scripts/links-playwright.js",
