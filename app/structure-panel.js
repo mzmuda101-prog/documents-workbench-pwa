@@ -174,7 +174,7 @@ function renderStructureStats(structure) {
   stats.forEach(([label, value]) => {
     const item = document.createElement("div");
     item.className = "structure-stat";
-    item.innerHTML = `<span class="structure-stat-label">${label}</span><strong>${value}</strong>`;
+    item.innerHTML = `<span class="structure-stat-label">${label}</span><strong>${fmtNum(value)}</strong>`;
     grid.appendChild(item);
   });
   structureSummaryEl.appendChild(grid);

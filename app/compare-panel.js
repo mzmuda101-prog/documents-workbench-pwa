@@ -1,12 +1,19 @@
 // Local, read-only counterpart of Word's Compare Documents.  The opened document is the
 // current side; a picked .docx is the reference side.  Nothing is uploaded or patched.
+// Which side is newer is the user's choice (#compareNewer, like Word's original → revised):
+// „Dodane” always means text of the newer version, „Usunięte” — of the older one.
 
 const compareFileEl = document.getElementById("compareFile");
 const compareRunBtn = document.getElementById("compareRunBtn");
 const compareStatusEl = document.getElementById("compareStatus");
 const compareSummaryEl = document.getElementById("compareSummary");
 const compareResultsEl = document.getElementById("compareResults");
+const compareNewerEl = document.getElementById("compareNewer");
 const COMPARE_RENDER_LIMIT = 220;
+let compareLast = null; // { current, reference, rows } — wyrównanie po stronie „otwarty = nowszy”
+function compareNewerSide() {
+  return compareNewerEl?.querySelector("button.is-on")?.dataset.newer === "reference" ? "reference" : "current";
+}
 
 function compareSetStatus(message) { if (compareStatusEl) compareStatusEl.textContent = message || ""; }
 function compareCell(label, value, tone) {
@@ -40,12 +47,14 @@ function renderComparison(current, reference, result) {
     compareResultsEl?.append(Object.assign(document.createElement("p"), { className: "hint", textContent: t("compareSame") }));
     return;
   }
+  // starsza → nowsza: przy „nowszy = drugi plik” zmiana idzie od otwartego do drugiego
+  const newerIsCurrent = compareNewerSide() === "current";
+  const textOf = (row, side) => (side === "current" ? current[row.left] : reference[row.right]);
   shown.slice(0, COMPARE_RENDER_LIMIT).forEach((row) => {
     const item = document.createElement("article"); item.className = `compare-item compare-item-${row.kind}`;
     item.append(Object.assign(document.createElement("span"), { className: "compare-kind", textContent: t(`compareKind${row.kind[0].toUpperCase()}${row.kind.slice(1)}`) }));
-    if (row.kind === "changed") item.append(compareChangedLine(reference[row.right], current[row.left]));
-    else if (row.kind === "added") item.append(compareTextLine(current[row.left], "added"));
-    else item.append(compareTextLine(reference[row.right], "removed"));
+    if (row.kind === "changed") item.append(newerIsCurrent ? compareChangedLine(reference[row.right], current[row.left]) : compareChangedLine(current[row.left], reference[row.right]));
+    else item.append(compareTextLine(textOf(row, row.side), row.kind));
     compareResultsEl?.append(item);
   });
   if (shown.length > COMPARE_RENDER_LIMIT) compareResultsEl?.append(Object.assign(document.createElement("p"), { className: "hint", textContent: t("compareTruncated", { shown: COMPARE_RENDER_LIMIT, total: shown.length }) }));
@@ -62,14 +71,32 @@ async function runDocumentComparison() {
     const source = pendingDocEdits.length ? (await buildPatchedDocx(originalFileBytes, pendingDocEdits)).bytes : originalFileBytes;
     const [current, reference] = await Promise.all([dwbCompareParagraphs(source), dwbCompareParagraphs(await file.arrayBuffer())]);
     const result = dwbCompareAlign(current, reference);
-    // Alignment names additions relative to its right side (the picked reference). The UI
-    // describes what changed in the open document, so flip one-sided rows here.
-    result.rows = result.rows.map((row) => row.kind === "added" ? { ...row, kind: "removed" } : row.kind === "removed" ? { ...row, kind: "added" } : row);
-    renderComparison(current, reference, result);
-    compareSetStatus(t(result.approximate ? "compareDoneApprox" : "compareDone", { current: current.length, reference: reference.length }));
+    compareLast = { current, reference, result };
+    renderCompareLast();
   } catch (err) {
     compareSetStatus(t("compareFailed"));
   } finally { compareRunBtn.disabled = false; }
 }
 
+// Alignment names additions relative to its right side (the picked reference): „added” = only in
+// the open document. Each one-sided row remembers its side; the kind follows the chosen direction.
+function renderCompareLast() {
+  if (!compareLast) return;
+  const { current, reference, result } = compareLast;
+  const newer = compareNewerSide();
+  const rows = result.rows.map((row) => {
+    if (row.kind !== "added" && row.kind !== "removed") return row;
+    const side = row.kind === "added" ? "reference" : "current";
+    return { ...row, side, kind: side === newer ? "added" : "removed" };
+  });
+  renderComparison(current, reference, { ...result, rows });
+  compareSetStatus(t(result.approximate ? "compareDoneApprox" : "compareDone", { current: current.length, reference: reference.length }));
+}
+
 compareRunBtn?.addEventListener("click", runDocumentComparison);
+compareNewerEl?.addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-newer]");
+  if (!b || b.classList.contains("is-on")) return;
+  compareNewerEl.querySelectorAll("button[data-newer]").forEach((x) => { const on = x === b; x.classList.toggle("is-on", on); x.setAttribute("aria-checked", String(on)); });
+  renderCompareLast();
+});

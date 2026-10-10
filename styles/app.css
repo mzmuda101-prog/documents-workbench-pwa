@@ -536,6 +536,12 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
   min-width: 1.6em; text-align: right;
 }
 .fr-preview-snippet { line-height: 1.35; word-break: break-word; }
+/* Korekta: zmiana jak w trybie poprawek — skreślone → wstawione, spacje widoczne */
+.fr-preview-snippet .gr-del { text-decoration: line-through; text-decoration-thickness: 1.5px; color: #b33a3a; background: color-mix(in srgb, #d64d4d 14%, transparent); border-radius: 2px; padding: 0 1px; }
+.fr-preview-snippet .gr-ins { text-decoration: none; color: #1e7a35; background: color-mix(in srgb, #37a854 18%, transparent); border-radius: 2px; padding: 0 1px; margin-left: 1px; }
+.fr-preview-snippet .gr-space { opacity: .75; font-weight: 700; }
+[data-theme="dark"] .fr-preview-snippet .gr-del { color: #f08a8a; }
+[data-theme="dark"] .fr-preview-snippet .gr-ins { color: #7fd99a; }
 
 .grammar-suggestions { margin-top: 4px; }
 .grammar-rule-group { margin-bottom: 8px; border: 1px solid var(--border-subtle); border-radius: var(--r-sm); overflow: hidden; }
@@ -1672,8 +1678,14 @@ html.is-pinching .doc-viewport { overflow: hidden; }
 .compare-cell.removed { border-color: color-mix(in srgb, #c43d3d 38%, var(--border)); }
 .compare-cell.changed { border-color: color-mix(in srgb, #bb7b00 38%, var(--border)); }
 .compare-results { display: flex; flex-direction: column; gap: 6px; max-height: 330px; overflow: auto; overscroll-behavior: contain; }
-.compare-item { position: relative; padding: 7px 8px 7px 34px; border: 1px solid var(--border-subtle); border-radius: 7px; background: var(--surface); font-size: 12px; line-height: 1.4; word-break: break-word; }
-.compare-kind { position: absolute; left: 7px; top: 8px; color: var(--muted); font-size: 9px; font-weight: 700; text-transform: uppercase; writing-mode: vertical-rl; transform: rotate(180deg); }
+.compare-item { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 7px 9px 8px; border: 1px solid var(--border-subtle); border-radius: 7px; background: var(--surface); font-size: 12px; line-height: 1.4; word-break: break-word; }
+/* rodzaj zmiany jako mała plakietka nad tekstem — dawniej pionowa etykieta łamała się na litery
+   („ZMIENIO / NO”), gdy wpis był niższy niż słowo */
+.compare-kind { padding: 1px 6px; border-radius: 999px; background: var(--field); color: var(--muted-strong, var(--muted)); font-size: 9.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; white-space: nowrap; }
+.compare-item-added .compare-kind { background: color-mix(in srgb, #37a854 16%, transparent); color: color-mix(in srgb, #1e7a35 80%, var(--ink)); }
+.compare-item-removed .compare-kind { background: color-mix(in srgb, #d64d4d 14%, transparent); color: color-mix(in srgb, #a83232 80%, var(--ink)); }
+.compare-item-changed .compare-kind { background: color-mix(in srgb, #bb7b00 15%, transparent); color: color-mix(in srgb, #8a5a00 80%, var(--ink)); }
+.compare-item .compare-line { align-self: stretch; }
 .compare-line { white-space: pre-wrap; }
 .compare-line.compare-added, .compare-word.compare-added { background: color-mix(in srgb, #37a854 23%, transparent); }
 .compare-line.compare-removed, .compare-word.compare-removed { background: color-mix(in srgb, #d64d4d 20%, transparent); text-decoration: line-through; }

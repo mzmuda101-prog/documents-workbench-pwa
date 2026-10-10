@@ -57,6 +57,9 @@ async function run() {
   await page.waitForSelector("#stGrid .stat-cell");
   const cells = await page.$$eval("#stGrid .stat-cell", (els) => els.map((e) => e.textContent));
   check("Statystyki: 8 kafelków z liczbami", cells.length === 8 && /\d/.test(cells[0]), cells.join(" | "));
+  // liczby w języku aplikacji, nie przeglądarki (Playwright = en): bez „5,043” i „10.1”
+  const fmt = await page.evaluate(() => ({ big: fmtNum(12345), small: fmtNum(5043), dec: fmtNum(10.14, { maximumFractionDigits: 1 }) }));
+  check("Statystyki: liczby po polsku (12 345 · 5043 · 10,1)", /^12\s345$/.test(fmt.big) && fmt.small === "5043" && fmt.dec === "10,1" && !cells.some((c) => /\d,\d{3}\b|\d\.\d/.test(c)), JSON.stringify({ fmt, cells }));
   const calc = await page.evaluate(() => stTextStats("Ala ma kota. Kot ma Alę! Czy tak?"));
   check("stTextStats: słowa/zdania/znaki", calc.words === 8 && calc.sentences === 3 && calc.chars === 33, JSON.stringify(calc));
   await page.fill("#stLongLimit", "10"); // fokus zostaje w polu — klik w wiersz musi zadziałać mimo to

@@ -37,6 +37,26 @@ async function run() {
   check("panel shows paragraph missing from open document", Number(view.removed || 0) >= 1 && view.rows >= 2, JSON.stringify(view));
   check("comparison leaves open document unchanged", await page.evaluate(() => !hasUnsavedChanges && pendingDocEdits.length === 0));
   check("word-level diff marks edited words", await page.evaluate(() => document.querySelectorAll(".compare-word.compare-added, .compare-word.compare-removed").length >= 2));
+  // Kierunek (jak w Wordzie: starsza → nowsza). Domyślnie nowszy = otwarty: akapit, którego nie ma
+  // w otwartym, jest „usunięty”; po wyborze „Drugi plik” — „dodany”.
+  const kindOf = (text) => page.evaluate((text) => [...document.querySelectorAll(".compare-item")].find((el) => el.textContent.includes(text))?.className.match(/compare-item-(\w+)/)?.[1], text);
+  check("domyślnie nowszy = otwarty: akapit tylko w drugim pliku jest usunięty", await kindOf("Dodany akapit porównawczy") === "removed", await kindOf("Dodany akapit porównawczy"));
+  await page.click('#compareNewer button[data-newer="reference"]');
+  const flipped = await page.evaluate(() => ({
+    added: document.querySelector(".compare-cell.added strong")?.textContent,
+    removed: document.querySelector(".compare-cell.removed strong")?.textContent,
+    checked: document.querySelector('#compareNewer button[data-newer="reference"]').getAttribute("aria-checked"),
+    newWordAdded: [...document.querySelectorAll(".compare-item-changed .compare-word.compare-added")].some((m) => /redakcji/.test(m.textContent)),
+  }));
+  check("„Nowsza: Drugi plik” — ten akapit staje się dodany (bez ponownego porównania)", await kindOf("Dodany akapit porównawczy") === "added" && flipped.checked === "true", JSON.stringify(flipped));
+  check("zmieniony akapit: słowa z nowszej wersji jako dodane", flipped.newWordAdded, JSON.stringify(flipped));
+  await page.click('#compareNewer button[data-newer="current"]');
+  check("powrót do „Otwarty dokument” przywraca kierunek", await kindOf("Dodany akapit porównawczy") === "removed");
+  // plakietka rodzaju zmiany w jednym wierszu (dawniej pionowa łamała się na litery)
+  const badges = await page.evaluate(() => [...document.querySelectorAll(".compare-kind")].slice(0, 6).map((b) => {
+    const r = b.getBoundingClientRect(); return { h: Math.round(r.height), w: Math.round(r.width), wm: getComputedStyle(b).writingMode };
+  }));
+  check("plakietki rodzaju zmiany poziome, w jednym wierszu", badges.length && badges.every((b) => b.wm === "horizontal-tb" && b.h <= 18 && b.w > b.h), JSON.stringify(badges));
   assertNoErrors(errors, "compare");
   await browser.close();
   let failed = 0;

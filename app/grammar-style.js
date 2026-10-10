@@ -31,6 +31,16 @@ function isCapAfterPeriodException(text, matchStart, letterPos) {
   return /\w\.\w/.test(text.slice(Math.max(0, letterPos - 4), letterPos + 2));
 }
 
+// domeny i rozszerzenia plików („firma.pl”, „raport.docx”) — kropka w nich to nie koniec zdania
+const ADDRESS_TLDS = /^(pl|com|org|net|eu|io|gov|edu|info|de|uk|us|fr|it|es|cz|sk|ua|app|dev|ai|docx?|xlsx?|pptx?|pdf|txt|md|html?|csv|odt|rtf|jpe?g|png|gif|heic|zip|json|js|xml)(?![\p{L}])/iu;
+function isAddressLike(text, pos) {
+  const startTok = text.lastIndexOf(" ", pos) + 1;
+  const endRel = text.slice(pos).search(/\s/);
+  const token = text.slice(startTok, endRel < 0 ? text.length : pos + endRel);
+  if (/@|:\/\/|^www\./i.test(token)) return true;
+  return text[pos] === "." && ADDRESS_TLDS.test(text.slice(pos + 1));
+}
+
 const GRAMMAR_RULES = [
   {
     id: "double-space",
@@ -59,6 +69,26 @@ const GRAMMAR_RULES = [
       return hits;
     },
     fixAll(text) { return text.replace(/\s+([,.;:!?])/g, "$1"); },
+  },
+  {
+    // „koniec.nowe”, „tak,jak” — brak spacji po znaku. Oba sąsiednie wyrazy z co najmniej 2 liter:
+    // skróty z kropkami w środku („o.o.”, „m.in.”) i liczby („3,5”) zostają. Pomijamy adresy:
+    // token z „@”, „://”, „www.” albo kończący się domeną („firma.pl”, „example.com/x”).
+    id: "space-after-punct",
+    langs: ["pl", "en"],
+    scan(text) {
+      const hits = [];
+      const re = /(?<=[\p{L}]{2})([.,;:!?])(?=[\p{L}]{2})/gu;
+      let m;
+      while ((m = re.exec(text)) !== null) {
+        if (isAddressLike(text, m.index)) continue;
+        hits.push({ start: m.index, end: m.index + 1, before: m[1], after: `${m[1]} ` });
+      }
+      return hits;
+    },
+    fixAll(text) {
+      return text.replace(/(?<=[\p{L}]{2})([.,;:!?])(?=[\p{L}]{2})/gu, (full, punct, offset, src) => (isAddressLike(src, offset) ? full : `${punct} `));
+    },
   },
   {
     id: "ellipsis",
@@ -182,6 +212,16 @@ function applyHitToParagraph(text, hit) {
   return text.slice(0, hit.start) + hit.after + text.slice(hit.end);
 }
 
+// Kontekst wokół zmiany do podglądu w panelu (sama zmiana pokazana osobno: skreślone → wstawione)
+function grammarContext(text, hit, ctx = 22) {
+  const from = Math.max(0, hit.start - ctx);
+  const to = Math.min(text.length, hit.end + ctx);
+  return {
+    ctxBefore: (from > 0 ? "…" : "") + text.slice(from, hit.start),
+    ctxAfter: text.slice(hit.end, to) + (to < text.length ? "…" : ""),
+  };
+}
+
 function buildGrammarSnippet(text, hit, maxLen = 80) {
   const ctx = 18;
   const from = Math.max(0, hit.start - ctx);
@@ -209,6 +249,7 @@ function scanParagraph(text, lang, opts = {}) {
         before: m.before,
         after: m.after,
         snippet: buildGrammarSnippet(text, m),
+        ...grammarContext(text, m),
         fixedParagraph: applyHitToParagraph(text, m),
       });
     });
@@ -243,6 +284,7 @@ async function scanDocument(bytes, opts = {}) {
           before: m.before,
           after: m.after,
           snippet: buildGrammarSnippet(text, m),
+          ...grammarContext(text, m),
           fixedParagraph: applyHitToParagraph(text, m),
         };
         hits.push(hit);

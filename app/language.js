@@ -302,11 +302,14 @@ const I18N = {
     compareIntro: "Porównaj otwarty dokument z drugim plikiem .docx. Analiza jest lokalna; nie zmienia żadnego z plików.",
     compareReferenceLabel: "Druga wersja",
     compareRun: "Porównaj dokumenty",
+    compareNewerLabel: "Nowsza wersja",
+    compareNewerCurrent: "Otwarty dokument",
+    compareNewerReference: "Drugi plik",
     comparePickFile: "Wybierz drugi plik .docx.",
     compareBadFile: "Wybierz dokument Worda w formacie .docx.",
     compareWorking: "Porównywanie dokumentów lokalnie…",
     compareFailed: "Nie udało się porównać tych dokumentów.",
-    compareDone: "Porównano: otwarty {current} akapitów · druga wersja {reference}.",
+    compareDone: "Porównano: otwarty {current} akapitów · drugi plik {reference}. Dodane i usunięte — w nowszej wersji względem starszej.",
     compareDoneApprox: "Porównano w trybie oszczędnym dla dużych dokumentów — różnice mogą być mniej precyzyjne.",
     compareAdded: "Dodane",
     compareRemoved: "Usunięte",
@@ -332,7 +335,7 @@ const I18N = {
     snImported: "Import: {added} nowych, {updated} nadpisanych",
     importBadFile: "To nie jest plik z tej aplikacji (JSON).",
     metadataPanel: "Metadane",
-    metadataIntro: "Właściwości pliku z docProps/core.xml — widoczne w Eksploratorze / Wordzie, nie w treści dokumentu.",
+    metadataIntro: "Właściwości pliku (Plik → Informacje w Wordzie, Finder, Eksplorator) — nie są częścią treści dokumentu.",
     metadataTitleLabel: "Tytuł",
     metadataCreatorLabel: "Autor",
     metadataKeywordsLabel: "Słowa kluczowe",
@@ -539,6 +542,7 @@ const I18N = {
     grammarAppliedOne: "Zastosowano poprawkę",
     grammarRuleDoubleSpace: "Podwójne spacje",
     grammarRuleSpaceBeforePunct: "Spacja przed interpunkcją",
+    grammarRuleSpaceAfterPunct: "Brak spacji po interpunkcji",
     grammarRuleEllipsis: "Wielokropek",
     grammarRuleQuotesPl: "Cudzysłowy polskie",
     grammarRuleCapAfterPeriod: "Wielka litera po kropce",
@@ -1243,11 +1247,14 @@ const I18N = {
     compareIntro: "Compare the open document with another .docx file. Analysis is local and changes neither file.",
     compareReferenceLabel: "Other version",
     compareRun: "Compare documents",
+    compareNewerLabel: "Newer version",
+    compareNewerCurrent: "Open document",
+    compareNewerReference: "Other file",
     comparePickFile: "Choose another .docx file.",
     compareBadFile: "Choose a Word document in .docx format.",
     compareWorking: "Comparing documents locally…",
     compareFailed: "These documents could not be compared.",
-    compareDone: "Compared: open document {current} paragraphs · other version {reference}.",
+    compareDone: "Compared: open document {current} paragraphs · other file {reference}. Added and removed — in the newer version relative to the older one.",
     compareDoneApprox: "Compared in a memory-saving mode for large documents — differences may be less precise.",
     compareAdded: "Added",
     compareRemoved: "Removed",
@@ -1273,7 +1280,7 @@ const I18N = {
     snImported: "Import: {added} new, {updated} overwritten",
     importBadFile: "This is not a file from this app (JSON).",
     metadataPanel: "Metadata",
-    metadataIntro: "File properties from docProps/core.xml — shown in Explorer / Word, not in document body.",
+    metadataIntro: "File properties (File → Info in Word, Finder, Explorer) — not part of the document body.",
     metadataTitleLabel: "Title",
     metadataCreatorLabel: "Author",
     metadataKeywordsLabel: "Keywords",
@@ -1480,6 +1487,7 @@ const I18N = {
     grammarAppliedOne: "Fix applied",
     grammarRuleDoubleSpace: "Double spaces",
     grammarRuleSpaceBeforePunct: "Space before punctuation",
+    grammarRuleSpaceAfterPunct: "Missing space after punctuation",
     grammarRuleEllipsis: "Ellipsis",
     grammarRuleQuotesPl: "Polish quotation marks",
     grammarRuleCapAfterPeriod: "Capital after period",
@@ -1886,6 +1894,12 @@ const I18N = {
     mergeAcross: "These paragraphs can't be joined — they live in different places (table cell, whole-paragraph field).",
   },
 };
+
+// Liczby w języku aplikacji, nie przeglądarki („5043”, „12 345”, „10,1” po polsku) —
+// toLocaleString() bez języka dawał w angielskiej przeglądarce „5,043” i „10.1”.
+function fmtNum(n, opts) {
+  return Number(n || 0).toLocaleString(currentLang === "en" ? "en-US" : "pl-PL", opts);
+}
 
 function t(key, vars) {
   const copy = I18N[currentLang][key] ?? I18N.pl[key] ?? key;

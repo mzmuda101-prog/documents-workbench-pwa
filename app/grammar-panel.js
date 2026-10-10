@@ -18,6 +18,16 @@ function grammarScanOpts() {
   };
 }
 
+// Podgląd poprawki: kontekst + skreślone (przed) → wstawione (po). Spacje w zmianie są widoczne
+// („·”) — inaczej poprawki podwójnej spacji czy spacji przed przecinkiem nie dało się zobaczyć.
+function grammarVisibleSpaces(s) { return escapeGrammarHtml(s).replace(/ /g, '<span class="gr-space">·</span>'); }
+function grammarPreviewHtml(hit) {
+  if (hit.ctxBefore == null) return escapeGrammarHtml(hit.snippet);
+  const del = hit.before ? `<del class="gr-del">${grammarVisibleSpaces(hit.before)}</del>` : "";
+  const ins = hit.after ? `<ins class="gr-ins">${grammarVisibleSpaces(hit.after)}</ins>` : "";
+  return `${escapeGrammarHtml(hit.ctxBefore)}${del}${ins}${escapeGrammarHtml(hit.ctxAfter)}`;
+}
+
 function escapeGrammarHtml(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -78,7 +88,8 @@ function renderGrammarSuggestions() {
       const snippet = document.createElement("button");
       snippet.type = "button";
       snippet.className = "fr-preview-item grammar-hit-item";
-      snippet.innerHTML = `<span class="fr-preview-snippet">${escapeGrammarHtml(hit.snippet)}</span>`;
+      snippet.innerHTML = `<span class="fr-preview-snippet">${grammarPreviewHtml(hit)}</span>`;
+      snippet.setAttribute("aria-label", hit.snippet);
       snippet.addEventListener("click", () => {
         grammarActiveHitId = hit.id;
         renderGrammarSuggestions();

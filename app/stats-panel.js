@@ -86,14 +86,14 @@ function renderDocumentStats() {
   const { a, totals, top, long } = computeDocumentStats();
   const avg = totals.sentences ? Math.round((totals.words / totals.sentences) * 10) / 10 : 0;
   stGridEl.append(
-    stStatCell(t("statsWords"), totals.words.toLocaleString()),
-    stStatCell(t("statsChars"), totals.chars.toLocaleString()),
-    stStatCell(t("statsCharsNoSpaces"), totals.charsNoSpaces.toLocaleString()),
-    stStatCell(t("statsSentences"), totals.sentences.toLocaleString()),
-    stStatCell(t("statsParagraphs"), a.paragraphs.toLocaleString()),
-    stStatCell(t("statsTables"), a.tables.toLocaleString()),
+    stStatCell(t("statsWords"), fmtNum(totals.words)),
+    stStatCell(t("statsChars"), fmtNum(totals.chars)),
+    stStatCell(t("statsCharsNoSpaces"), fmtNum(totals.charsNoSpaces)),
+    stStatCell(t("statsSentences"), fmtNum(totals.sentences)),
+    stStatCell(t("statsParagraphs"), fmtNum(a.paragraphs)),
+    stStatCell(t("statsTables"), fmtNum(a.tables)),
     stStatCell(t("statsReading"), stFmtMinutes(totals.words)),
-    stStatCell(t("statsAvgSentence"), String(avg)),
+    stStatCell(t("statsAvgSentence"), fmtNum(avg, { maximumFractionDigits: 1 })),
   );
   if (stTopEl) {
     if (!top.length) stTopEl.appendChild(Object.assign(document.createElement("p"), { className: "hint", textContent: t("statsNoRepeats") }));
