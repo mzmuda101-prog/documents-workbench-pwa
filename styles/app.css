@@ -536,6 +536,15 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
   min-width: 1.6em; text-align: right;
 }
 .fr-preview-snippet { line-height: 1.35; word-break: break-word; }
+/* Ułatwienia dostępu (a11y-check.js): poziom uwagi jak w Wordzie */
+.a11y-results { display: flex; flex-direction: column; gap: 8px; }
+.a11y-level { margin-right: 6px; padding: 1px 6px; border-radius: 999px; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+.a11y-error .a11y-level { background: color-mix(in srgb, #d64d4d 16%, transparent); color: #a83232; }
+.a11y-warning .a11y-level { background: color-mix(in srgb, #bb7b00 16%, transparent); color: #8a5a00; }
+.a11y-tip .a11y-level { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+[data-theme="dark"] .a11y-error .a11y-level { color: #f08a8a; }
+[data-theme="dark"] .a11y-warning .a11y-level { color: #f0c46a; }
+.a11y-why { margin: 2px 8px 6px; }
 /* Korekta: zmiana jak w trybie poprawek — skreślone → wstawione, spacje widoczne */
 .fr-preview-snippet .gr-del { text-decoration: line-through; text-decoration-thickness: 1.5px; color: #b33a3a; background: color-mix(in srgb, #d64d4d 14%, transparent); border-radius: 2px; padding: 0 1px; }
 .fr-preview-snippet .gr-ins { text-decoration: none; color: #1e7a35; background: color-mix(in srgb, #37a854 18%, transparent); border-radius: 2px; padding: 0 1px; margin-left: 1px; }

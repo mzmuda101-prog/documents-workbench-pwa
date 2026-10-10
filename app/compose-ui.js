@@ -2108,6 +2108,23 @@ const composeUi = (() => {
     }
     showImageCard(img);
   }
+  // „Dodaj opis” z sprawdzania ułatwień dostępu: n-ty obraz dokumentu → karta obrazu + okienko opisu
+  async function openImageAlt(nth) {
+    if (readOnlyMode && typeof appFrame !== "undefined") appFrame.setReadOnly(false);
+    await whenEditable();
+    const img = host()?.querySelectorAll("img")[nth];
+    const p = img?.closest("p");
+    const index = p ? resolveParaIndex(p) : -1;
+    if (!img || index < 0) return false;
+    // najpierw przewinięcie — zdarzenie scroll przychodzi z opóźnieniem i zamyka okienka
+    const vp = docViewportEl;
+    const top0 = vp?.scrollTop;
+    img.scrollIntoView({ block: "center" });
+    if (vp && vp.scrollTop !== top0) await new Promise((r) => { let t; const done = () => { clearTimeout(t); t = setTimeout(() => { vp.removeEventListener("scroll", done); r(); }, 120); }; vp.addEventListener("scroll", done, { passive: true }); done(); });
+    showImageCard(img);
+    openAltForm(index, img);
+    return true;
+  }
   function openAltForm(index, img) {
     openPop(imgCard?.el.querySelector(".ic-alt") || insertBtn, (el) => {
       el.classList.add("compose-pop-form");
@@ -3388,5 +3405,5 @@ const composeUi = (() => {
     document.getElementById(id)?.addEventListener("click", openNewDialog);
   });
 
-  return { openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
+  return { openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
 })();
