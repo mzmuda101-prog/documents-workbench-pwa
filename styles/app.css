@@ -1778,6 +1778,24 @@ button.stat-row { cursor: pointer; }
   font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; box-shadow: 0 8px 24px rgba(8, 14, 28, 0.18);
 }
 .link-back:hover { border-color: var(--accent); color: var(--accent); }
+/* „Gotowe” / „Odznacz” (touch.js) — tylko dotyk; w prawym dolnym rogu obszaru dokumentu
+   (nad klawiaturą: przy pisaniu obszar dokumentu kończy się nad nią), z dala od „Wróć” na środku */
+.doc-panel { position: relative; }
+.doc-dismiss {
+  position: absolute; right: 12px; bottom: var(--dismiss-bottom, 12px); z-index: 30;
+  display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 16px 0 13px;
+  border: 1px solid var(--accent-border); border-radius: var(--r-full, 999px);
+  background: var(--surface); color: var(--accent);
+  font: inherit; font-size: 13.5px; font-weight: 600; box-shadow: 0 8px 24px rgba(8, 14, 28, 0.18);
+}
+.doc-dismiss[hidden] { display: none; }
+.doc-dismiss.is-done { background: var(--accent); border-color: var(--accent); color: #fff; }
+.doc-dismiss:not(.is-done) .doc-dismiss-done, .doc-dismiss.is-done .doc-dismiss-clear { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .doc-dismiss:not([hidden]) { animation: dwb-dismiss-in 200ms cubic-bezier(0.22, 1, 0.36, 1); }
+}
+@keyframes dwb-dismiss-in { from { opacity: 0; transform: translateY(8px) scale(0.96); } }
+@media print { .doc-dismiss { display: none !important; } }
 @media (pointer: coarse) { .link-back { padding: 11px 20px; } }
 /* wejście / wyjście (doc-links.js): tylko opacity + transform, krótko */
 @media (prefers-reduced-motion: no-preference) {
@@ -1874,13 +1892,6 @@ textarea.ff-pop-input { min-height: 4.5em; resize: vertical; }
 .tb-sep { width: 1px; height: 20px; margin: 0 3px; background: var(--border-subtle); }
 .insert-btn { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px 0 8px; color: var(--accent); }
 .insert-btn span { font-size: 12.5px; }
-/* „Gotowe” (touch.js) — tylko dotyk: bez klawiatury zewnętrznej nie ma Esc, którym wychodzi się z pisania */
-.done-edit-btn { display: none; }
-@media (pointer: coarse) {
-  .done-edit-btn { display: inline-flex; }
-  .done-edit-btn:not(:disabled) { background: var(--accent-light); border-color: var(--accent-border); }
-  .done-edit-btn:disabled { opacity: .38; cursor: default; color: var(--ink-2); }
-}
 .tb-select-style { max-width: 124px; }
 /* krój i rozmiar w miejscu kursora (pole puste = w zaznaczeniu kilka różnych) */
 .tb-select-font { width: 136px; max-width: 136px; text-overflow: ellipsis; }

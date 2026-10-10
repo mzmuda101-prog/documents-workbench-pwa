@@ -105,18 +105,40 @@ async function run() {
   const afterEnter = await page.evaluate(() => ({ pos: document.getElementById("searchPos").textContent, focused: document.activeElement?.id }));
   check("Enter w szukaniu: wynik + klawiatura schowana (pole bez fokusu)", /1 \/ 21/.test(afterEnter.pos) && afterEnter.focused !== "searchQuery", JSON.stringify(afterEnter));
 
-  // Wyjście z pisania bez klawiatury zewnętrznej (Esc nie ma): „Gotowe” i stuknięcie w szare tło
-  await page.evaluate(() => appFrame.setReadOnly(false));
-  await page.waitForTimeout(300);
+  // Bez klawiatury zewnętrznej nie ma Esc: pływające „Odznacz” / „Gotowe” w rogu dokumentu
+  // i stuknięcie w szare tło. Najpierw Czytanie: podświetlenie akapitu z Korekty (widok mobilny).
   const editing = () => page.evaluate(() => {
     const a = document.activeElement;
     const sel = getSelection();
+    const btn = document.getElementById("docDismissBtn");
     return {
       focus: !!a?.closest?.(".docx-edit-root, .docx-editable-p"),
       sel: !!sel.rangeCount && document.getElementById("docCanvas").contains(sel.anchorNode),
-      done: !document.getElementById("doneEditBtn").disabled,
+      hl: document.querySelectorAll("#docCanvas .search-hit, #docCanvas .semantic-hit").length,
+      btn: btn.hidden ? null : btn.textContent.trim(),
     };
   });
+  await page.evaluate(() => { document.getElementById("searchQuery").value = ""; window.dwbKeyboard.clearHighlights(); });
+  await page.waitForTimeout(150);
+  const quiet = await editing();
+  check("Czytanie bez podświetleń: przycisk schowany", !quiet.btn && !quiet.hl, JSON.stringify(quiet));
+  await page.evaluate(async () => { await ensureLazyFeature("grammar"); scrollToGrammarParagraph(3); });
+  await page.waitForTimeout(500);
+  const marked = await editing();
+  check("podświetlenie z Korekty w Czytaniu → „Odznacz”", marked.hl > 0 && marked.btn === "Odznacz", JSON.stringify(marked));
+  const btnBox = await page.evaluate(() => {
+    const b = document.getElementById("docDismissBtn").getBoundingClientRect();
+    const v = document.getElementById("docViewport").getBoundingClientRect();
+    return { inside: b.bottom <= v.bottom && b.right <= v.right && b.top >= v.top, h: Math.round(b.height) };
+  });
+  check("„Odznacz” w rogu obszaru dokumentu, cel ≥ 40 px", btnBox.inside && btnBox.h >= 40, JSON.stringify(btnBox));
+  await page.tap("#docDismissBtn");
+  await page.waitForTimeout(250);
+  const cleared = await editing();
+  check("„Odznacz” gasi podświetlenie i samo znika", !cleared.hl && !cleared.btn, JSON.stringify(cleared));
+
+  await page.evaluate(() => appFrame.setReadOnly(false));
+  await page.waitForTimeout(300);
   const tapParagraph = async () => {
     const r = await page.evaluate(() => {
       const p = [...document.querySelectorAll(".docx-editable-p")].find((el) => el.textContent.trim().length > 20 && el.getBoundingClientRect().top > 200);
@@ -127,18 +149,15 @@ async function run() {
     await page.touchscreen.tap(r.x, r.y);
     await page.waitForTimeout(250);
   };
-  const doneShown = await page.evaluate(() => getComputedStyle(document.getElementById("doneEditBtn")).display !== "none");
-  check("„Gotowe” widoczne na dotyku w Edycji", doneShown);
   const idle = await editing();
-  check("„Gotowe” nieaktywne, gdy nic się nie pisze", !idle.done, JSON.stringify(idle));
-
+  check("Edycja bez pisania: przycisk schowany", !idle.btn, JSON.stringify(idle));
   await tapParagraph();
   const typing = await editing();
-  check("stuknięcie w akapit = pisanie („Gotowe” aktywne)", typing.focus && typing.done, JSON.stringify(typing));
-  await page.tap("#doneEditBtn");
-  await page.waitForTimeout(200);
+  check("stuknięcie w akapit = pisanie → „Gotowe”", typing.focus && typing.btn === "Gotowe", JSON.stringify(typing));
+  await page.tap("#docDismissBtn");
+  await page.waitForTimeout(250);
   const afterDone = await editing();
-  check("„Gotowe” zdejmuje fokus i kursor z dokumentu", !afterDone.focus && !afterDone.sel && !afterDone.done, JSON.stringify(afterDone));
+  check("„Gotowe” zdejmuje fokus i kursor z dokumentu", !afterDone.focus && !afterDone.sel && !afterDone.btn, JSON.stringify(afterDone));
 
   // szare tło: pas przerwy między stronami (widok stronami) albo pole pod ostatnią kartką
   // (widok mobilny przepływa bez przerw)

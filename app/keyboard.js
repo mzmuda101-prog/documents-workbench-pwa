@@ -227,5 +227,11 @@
 
   syncInert();
   syncChipTabindex();
-  window.dwbKeyboard = { focusPanel, focusToolbar, focusDocument, cycleRegion, isMac };
+  // podświetlenia akapitów i trafień (Korekta, Struktura, szukanie, po znaczeniu) — to samo co Esc;
+  // na dotyku przycisk „Odznacz” (touch.js)
+  function clearHighlights() {
+    const semantic = typeof clearSemanticHighlights === "function" && clearSemanticHighlights();
+    return dismissDocumentSelection() || semantic;
+  }
+  window.dwbKeyboard = { focusPanel, focusToolbar, focusDocument, cycleRegion, isMac, clearHighlights };
 })();

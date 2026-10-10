@@ -42,7 +42,8 @@
     const visibleBottom = vv ? vv.height : window.innerHeight;
     const vpRect = docViewportEl.getBoundingClientRect();
     // dolna granica = niższa z: dół okna dokumentu, górna krawędź klawiatury
-    const limit = Math.min(vpRect.bottom, visibleBottom) - MARGIN;
+    // pływające „Gotowe” w rogu nie może przykryć kursora
+    const limit = Math.min(vpRect.bottom, visibleBottom) - MARGIN - (dismissShown() ? 52 : 0);
     if (r.bottom > limit) {
       docViewportEl.scrollTop += r.bottom - limit + 24;
     } else if (r.top < vpRect.top + MARGIN) {
@@ -125,33 +126,64 @@
   document.addEventListener("focusin", () => setTimeout(syncKeyboard, 60));
   document.addEventListener("focusout", () => setTimeout(syncKeyboard, 120));
 
-  // ── 5) wyjście z pisania bez klawiatury zewnętrznej ─────────────────────────
-  // Akapit z kursorem jest podświetlony, dopóki dokument ma fokus. Cały dokument to jedno
-  // pole edycji (także szare tło między kartkami), więc stuknięcie obok tekstu tylko
-  // przestawiało kursor, a Esc na dotyku nie ma — z podświetlenia nie dało się wyjść
-  // (iPad po schowaniu klawiatury zostawia fokus). Dwie drogi, jak Esc: przycisk „Gotowe”
-  // na pasku Edycji i stuknięcie w szare tło poza kartkami.
-  const doneBtn = document.getElementById("doneEditBtn");
+  // ── 5) „Gotowe” / „Odznacz” — to, co na klawiaturze robi Esc ─────────────────
+  // Bez klawiatury zewnętrznej nie dało się zdjąć podświetlenia: akapitu z kursorem (cały
+  // dokument to jedno pole edycji, iPad po schowaniu klawiatury zostawia fokus) ani akapitów
+  // wskazanych z panelu (Korekta, Struktura, szukanie — także w Czytaniu). Pasek bywa
+  // przewijany w bok, a w widoku mobilnym nie ma szarego tła do stuknięcia — dlatego jeden
+  // pływający przycisk w rogu dokumentu, widoczny tylko wtedy, gdy jest co zdjąć:
+  // „Gotowe” przy pisaniu (wychodzi z pisania i gasi podświetlenia), inaczej „Odznacz”.
+  const dismissBtn = document.getElementById("docDismissBtn");
+  const dismissLabel = document.getElementById("docDismissLabel");
   function typingInDoc() {
     const a = document.activeElement;
     return !readOnlyMode && !!a?.closest?.(".docx-edit-root, .docx-editable-p") && !!docCanvasEl?.contains(a);
+  }
+  function hasHighlights() {
+    return !!docCanvasEl?.querySelector(".search-hit, .semantic-hit") || !!window.CSS?.highlights?.has?.("dwb-find");
   }
   function dismissEditing() {
     const a = document.activeElement;
     if (a?.closest?.(".docx-edit-root, .docx-editable-p") && docCanvasEl?.contains(a)) a.blur();
     const sel = window.getSelection?.();
     if (sel?.rangeCount && docCanvasEl?.contains(sel.anchorNode)) sel.removeAllRanges();
-    syncDoneBtn();
+    window.dwbKeyboard?.clearHighlights?.();
+    syncDismiss();
   }
-  function syncDoneBtn() {
-    if (doneBtn) doneBtn.disabled = !typingInDoc();
+  function dismissShown() { return !!dismissBtn && !dismissBtn.hidden; }
+  function syncDismiss() {
+    if (!dismissBtn) return;
+    const typing = typingInDoc();
+    const show = coarse.matches && document.body.classList.contains("has-document") && (typing || hasHighlights());
+    if (show) {
+      dismissBtn.classList.toggle("is-done", typing);
+      const label = t(typing ? "doneEditing" : "dismissHighlights");
+      if (dismissLabel.textContent !== label) dismissLabel.textContent = label;
+      // w rogu OBSZARU dokumentu (pod nim w panelu stoi pasek stanu, przy pisaniu — klawiatura)
+      const panel = dismissBtn.offsetParent;
+      if (panel && docViewportEl) {
+        const gap = panel.getBoundingClientRect().bottom - docViewportEl.getBoundingClientRect().bottom;
+        dismissBtn.style.setProperty("--dismiss-bottom", `${Math.max(0, Math.round(gap)) + 12}px`);
+      }
+    }
+    if (dismissBtn.hidden === show) dismissBtn.hidden = !show;
   }
-  // mousedown bez domyślnej akcji: przycisk nie zabiera fokusu (Android), dokument go oddaje w click
-  doneBtn?.addEventListener("mousedown", (e) => e.preventDefault());
-  doneBtn?.addEventListener("click", dismissEditing);
-  document.addEventListener("focusin", syncDoneBtn);
-  document.addEventListener("focusout", () => setTimeout(syncDoneBtn, 0));
-  docCanvasEl && new MutationObserver(syncDoneBtn).observe(docCanvasEl, { attributes: true, attributeFilter: ["class"] });
+  let dismissQueued = false;
+  function queueDismissSync() {
+    if (dismissQueued) return;
+    dismissQueued = true;
+    requestAnimationFrame(() => { dismissQueued = false; syncDismiss(); });
+  }
+  // mousedown bez domyślnej akcji: przycisk nie zabiera fokusu (Android) — dokument oddaje go w click
+  dismissBtn?.addEventListener("mousedown", (e) => e.preventDefault());
+  dismissBtn?.addEventListener("click", dismissEditing);
+  document.addEventListener("focusin", queueDismissSync);
+  document.addEventListener("focusout", () => setTimeout(queueDismissSync, 0));
+  vv?.addEventListener("resize", queueDismissSync);
+  // podświetlenia z paneli to klasy w dokumencie; dokładne trafienia szukania — klasa na <html>
+  if (docCanvasEl) new MutationObserver(queueDismissSync).observe(docCanvasEl, { attributes: true, attributeFilter: ["class"], subtree: true });
+  new MutationObserver(queueDismissSync).observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+  new MutationObserver(queueDismissSync).observe(document.body, { attributes: true, attributeFilter: ["class"] });
 
   // Szare tło = obszar dokumentu poza kartkami: sam pojemnik (odstępy nad/pod/między sekcjami),
   // pasy przerw między stronami i pole wokół. Przez mousedown, NIE pointerdown (w Safari/iOS
@@ -161,7 +193,7 @@
     if (t === docViewportEl || t === docCanvasEl) return true;
     return t.matches(".docx-preview-host, .docx-edit-root") || !!t.closest(".dwb-page-gap-band");
   }
-  const backdropTap = (e) => coarse.matches && !readOnlyMode && e.button === 0 && isBackdrop(e.target);
+  const backdropTap = (e) => coarse.matches && e.button === 0 && isBackdrop(e.target);
   docViewportEl?.addEventListener("mousedown", (e) => {
     if (!backdropTap(e)) return;
     e.preventDefault();
@@ -171,5 +203,5 @@
   // ale na dotyku stuknięcie w szare tło ma wyjść z pisania, więc ten klik nie idzie dalej
   docViewportEl?.addEventListener("click", (e) => { if (backdropTap(e)) e.stopPropagation(); }, true);
 
-  window.dwbTouch = { keepCaretVisible, restorePageScroll, syncKeyboard, dismissEditing };
+  window.dwbTouch = { keepCaretVisible, restorePageScroll, syncKeyboard, dismissEditing, syncDismiss };
 })();
