@@ -222,6 +222,18 @@ const dwbSel = (() => {
     return true;
   }
 
+  // Pusty akapit za tabelą (Backspace, docx-inline-edit.js): znika, następny zostaje bez zmian,
+  // kursor na końcu ostatniej komórki tabeli — jak w Wordzie.
+  function removeEmptyParagraph(index, p, next, caretAt) {
+    p.remove();
+    pristineParas.delete(next);
+    placeCaret(caretAt, Number.MAX_SAFE_INTEGER);
+    const mergedRuns = extractRunsFromPreviewParagraph(next);
+    mirrorBaseline(index, 2, mergedRuns);
+    queue({ op: "deleteRange", from: index, to: index + 1, keep: "last", mergedRuns }, true);
+    return true;
+  }
+
   function insertAfterDelete(info, text) {
     const style = styleOfFirst(info);
     const p = deleteSpan(info);
@@ -488,5 +500,5 @@ const dwbSel = (() => {
     if (range && !range.collapsed && analyze(range)?.rawCross) e.preventDefault();
   });
 
-  return { keydown, beforeInput, collapseForInsert, selectAll, removeBreakParagraph, analyze: () => analyze(selRange()) };
+  return { keydown, beforeInput, collapseForInsert, selectAll, removeBreakParagraph, removeEmptyParagraph, analyze: () => analyze(selRange()) };
 })();

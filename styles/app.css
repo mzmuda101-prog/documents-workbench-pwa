@@ -720,7 +720,11 @@ html.is-mobile .dwb-page-margin-guide { display: none; }
 .compose-cellalign-scope button, .compose-shade-scope button { padding: 5px 6px; font-size: 12px; }
 .compose-cellalign { display: grid; grid-template-columns: repeat(3, 36px); gap: 4px; padding: 0 8px 6px; }
 .compose-cellalign .compose-align { width: 36px; height: 32px; }
+/* bieżące ustawienie (marginesy, orientacja, rozmiar…) — widać od razu, nie tylko po kolorze napisu */
+.compose-item.is-current { background: var(--accent-light); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent); }
 .compose-item.is-current .compose-item-label { font-weight: 700; color: var(--accent); }
+.compose-item.is-current .compose-item-icon { background: var(--accent); color: var(--on-accent); }
+.compose-item.is-current::after { content: "✓"; flex: none; margin-left: auto; font-weight: 700; color: var(--accent); }
 
 /* Lista z wcięciem wiszącym (docx-render-fixes.js): tekst na lewym wcięciu, numer w wysunięciu */
 .docx-preview-host p.dwb-list-hang { text-indent: 0 !important; position: relative; }

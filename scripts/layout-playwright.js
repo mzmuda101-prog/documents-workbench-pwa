@@ -125,6 +125,13 @@ async function run() {
   await idle();
   sp = await sectPrs();
   check("niestandardowe zapisane: lewy 3,5 cm (1984 tw), górny 0,4 cm (227 tw)", /w:top="227"/.test(sp[0]) && /w:left="1984"/.test(sp[0]) && /w:right="1417"/.test(sp[0]), sp[0]);
+  await openLayout();
+  const customMark = await page.evaluate(() => ({
+    checked: [...document.querySelectorAll(".compose-pop [data-preset]")].filter((b) => b.getAttribute("aria-checked") === "true").map((b) => b.dataset.preset),
+    tick: getComputedStyle(document.querySelector('.compose-pop [data-preset="custom"]'), "::after").content,
+  }));
+  check("marginesy spoza gotowych → zaznaczone „niestandardowe” (z ✓), żadne gotowe", JSON.stringify(customMark.checked) === '["custom"]' && /✓/.test(customMark.tick), JSON.stringify(customMark));
+  await page.keyboard.press("Escape");
 
   // ── Podgląd wydruku ──
   const livePages = await page.evaluate(() => document.querySelectorAll("#docCanvas section.docx").length + document.querySelectorAll("#docCanvas .dwb-page-break").length);

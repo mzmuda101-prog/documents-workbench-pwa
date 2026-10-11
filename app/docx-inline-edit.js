@@ -1259,6 +1259,7 @@ async function handleInlineBackspace(p, paraIndex, e) {
   // różne „pojemniki” w pliku (komórka tabeli, blok kontrolki, treść główna): sklejenie
   // przeniosłoby akapit z jednego do drugiego i zostawiło pusty pojemnik (Word też tu nie skleja)
   if ((prev.dataset.box || "") !== (p.dataset.box || "")) {
+    if (await removeEmptyAfterTable(p, paraIndex, prev, paras)) return;
     toast(t("mergeAcross"), "info");
     return;
   }
@@ -1269,6 +1270,33 @@ async function handleInlineBackspace(p, paraIndex, e) {
   pristineParas.delete(prev);
   mirrorBaseline(paraIndex - 1, 2, mergedRuns);
   await applyInlineStructuralEdit({ op: "mergeParagraph", index: paraIndex, mergedRuns });
+}
+
+// Pusty akapit tuż za tabelą — zwykle „pusta strona na końcu”: tabela wypełnia stronę, a za nią
+// plik Worda MUSI mieć akapit, który spada na nową kartkę. Backspace (dawniej „nie da się
+// skleić”): gdy dalej jest treść — akapit znika, kursor na końcu tabeli (jak w Wordzie).
+// Ostatniego akapitu dokumentu/komórki usunąć nie wolno — zmniejszamy go do 1 pt bez odstępów
+// (sposób z porad Microsoftu), więc mieści się pod tabelą i pusta strona znika.
+const SKIP_PAGE_MARKS = ".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-break";
+function siblingSkippingPageMarks(el, dir) {
+  let s = el?.[dir];
+  while (s?.matches?.(SKIP_PAGE_MARKS)) s = s[dir];
+  return s || null;
+}
+async function removeEmptyAfterTable(p, paraIndex, prev, paras) {
+  const table = siblingSkippingPageMarks(p, "previousElementSibling");
+  if (table?.tagName !== "TABLE" || !table.contains(prev)) return false;
+  if (previewRunsToPlainText(extractRunsFromPreviewParagraph(p)) || p.querySelector("img, svg, canvas, .ff-field, [data-cm]")) return false;
+  const next = paras[paraIndex + 1];
+  if (next && siblingSkippingPageMarks(p, "nextElementSibling") === next && (next.dataset.box || "") === (p.dataset.box || "")
+    && !next.dataset.lock && typeof dwbSel !== "undefined") {
+    return dwbSel.removeEmptyParagraph(paraIndex, p, next, prev);
+  }
+  if (p.getBoundingClientRect().height <= 4) { toast(t("emptyAfterTableKept"), "info"); return true; }
+  pendingInlineCursor = { paraIndex: paraIndex - 1, offset: previewRunsToPlainText(extractRunsFromPreviewParagraph(prev)).length };
+  await applyDocumentEdit({ op: "paraFormat", indices: [paraIndex], spacing: { before: 0, after: 0, line: 20, lineRule: "exact" } });
+  toast(t("emptyAfterTableShrunk"), "info");
+  return true;
 }
 
 async function handleInlineTab(p, paraIndex, e) {

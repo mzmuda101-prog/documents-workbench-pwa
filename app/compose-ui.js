@@ -1597,6 +1597,7 @@ const composeUi = (() => {
     const cur = ctx.cur || { w: 11906, h: 16838, orient: "portrait", top: 1418, bottom: 1418, left: 1418, right: 1418, sections: 1 };
     const mark = (b, on) => { b.setAttribute("role", "menuitemradio"); b.setAttribute("aria-checked", String(on)); b.classList.toggle("is-current", on); };
     popCap(el, t("pageMargins"));
+    let presetHit = false;
     MARGIN_PRESETS.forEach(([key, label, m]) => {
       const desc = m.left === m.top ? t("marginAll", { v: cmText(m.top) }) : t("marginTBLR", { tb: cmText(m.top), lr: cmText(m.left) });
       const b = popItem(el, {
@@ -1608,7 +1609,9 @@ const composeUi = (() => {
         },
       });
       b.dataset.preset = key;
-      mark(b, ["top", "bottom", "left", "right"].every((k) => sameTw(m[k], cur[k])));
+      const on = ["top", "bottom", "left", "right"].every((k) => sameTw(m[k], cur[k]));
+      if (on) presetHit = true;
+      mark(b, on);
     });
     const custom = popItem(el, {
       label: t("marginCustom"),
@@ -1617,6 +1620,9 @@ const composeUi = (() => {
       onPick: () => openPop(pageSetupAnchor || insertBtn, (form) => buildMarginForm(form, ctx, cur)),
     });
     custom.dataset.preset = "custom";
+    // marginesy spoza gotowych zestawów (np. z pliku Worda) — zaznaczamy „niestandardowe”, żeby
+    // zawsze było widać, które ustawienie jest teraz
+    mark(custom, !presetHit);
     popCap(el, t("pageOrient"));
     [["portrait", "orientPortrait", '<rect x="6" y="2.5" width="12" height="19" rx="1.5"/>'], ["landscape", "orientLandscape", '<rect x="2.5" y="6" width="19" height="12" rx="1.5"/>']].forEach(([val, key, svg]) => {
       const b = popItem(el, { label: t(key), icon: ICON(svg), onPick: () => runPageSetup({ orient: val }, ctx) });

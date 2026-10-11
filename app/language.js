@@ -1061,6 +1061,8 @@ const I18N = {
     hfWordUpdates: "Numery stron liczy Word; w podglądzie są szacunkowe.",
     undoOpHeaderFooter: "nagłówek i stopka",
     mergeAcross: "Tych akapitów nie da się skleić — są w różnych miejscach (komórka tabeli, pole na cały akapit).",
+    emptyAfterTableShrunk: "Za tabelą na końcu Word wymaga pustego akapitu — zmniejszony do 1 pt, nie robi już pustej strony.",
+    emptyAfterTableKept: "Tego akapitu za tabelą nie da się usunąć (Word go wymaga) — jest już zmniejszony do minimum.",
   },
   en: {
     locale: "en-US",
@@ -2118,6 +2120,8 @@ const I18N = {
     hfWordUpdates: "Word counts the page numbers; in the preview they're estimates.",
     undoOpHeaderFooter: "header and footer",
     mergeAcross: "These paragraphs can't be joined — they live in different places (table cell, whole-paragraph field).",
+    emptyAfterTableShrunk: "Word needs an empty paragraph after a final table — shrunk to 1 pt so it no longer makes a blank page.",
+    emptyAfterTableKept: "This paragraph after the table can't be removed (Word requires it) — it's already as small as it gets.",
   },
 };
 
