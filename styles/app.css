@@ -2057,6 +2057,16 @@ section.docx p { min-height: 1lh; }
    fragment w innej czcionce (punktor z Symbol, inny rozmiar) rozpychał linijkę o 1–3 pt —
    fragmenty nie wnoszą wysokości, linijkę wyznacza sam akapit (docx-render-fixes.js). */
 p.dwb-exact span { line-height: 0; }
+/* Pusty akapit 1 pt (za tabelą na końcu — bez pustej strony). Kursor przeglądarki miałby w nim
+   1 px — gdy tam stoi, rysujemy zwykłej wysokości kreskę obok (absolute: układ i podział stron
+   bez zmian). Kliknięcie pod tabelą stawia tu kursor (docx-inline-edit.js). */
+.docx-edit-root p.dwb-tiny-para.dwb-tiny-active { position: relative; caret-color: transparent; }
+.docx-edit-root p.dwb-tiny-para.dwb-tiny-active::after {
+  content: ""; position: absolute; left: 0; top: -2px; width: 1.5px; height: 15px; background: currentColor;
+  animation: dwb-tiny-caret 1.1s steps(1) infinite; pointer-events: none;
+}
+@keyframes dwb-tiny-caret { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .docx-edit-root p.dwb-tiny-para.dwb-tiny-active::after { animation: none; } }
 /* Rozłożony tabulator (inline-block z overflow: hidden) ma linię bazową na DOLNEJ krawędzi —
    z wysokością linijki tekstu podnosił każdą linijkę z tabulatorem o ~5 px (spis treści w „Opisie
    pras”: 25 px zamiast 20 px na pozycję, strona więcej). Niskie pudełko od −0,2 em do 0,7 em

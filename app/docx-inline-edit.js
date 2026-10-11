@@ -1197,6 +1197,7 @@ async function handleInlineEnter(p, paraIndex, e) {
   // Enter w PUSTYM akapicie „wyróżnionym” (ramka, cytat) — akapit wraca do Normalnego (wyjście
   // jak z listy); dawniej powstawał kolejny pusty w ramce i nie było jak z niej wyjść
   if (!previewRunsToPlainText(extractRunsFromPreviewParagraph(p)) && typeof composeUi !== "undefined" && composeUi.plainStyleAt?.(p)) return;
+  restoreTinyParagraph(p); // Enter w akapicie 1 pt za tabelą — oba akapity w zwykłej wysokości
   const newP = splitParagraphDomAtCaret(p);
   if (!newP) return;
   prepareEditableParagraph(newP);
@@ -1298,6 +1299,43 @@ async function removeEmptyAfterTable(p, paraIndex, prev, paras) {
   toast(t("emptyAfterTableShrunk"), "info");
   return true;
 }
+
+// Pisanie (albo Enter) w zmniejszonym pustym akapicie: akapit wraca do zwykłej wysokości —
+// w podglądzie od razu, w pliku w kolejce (bez przerysowania, litery się nie gubią).
+function restoreTinyParagraph(p) {
+  if (!p?.classList.contains("dwb-tiny-para")) return false;
+  const index = resolveParaIndex(p);
+  if (index < 0) return false;
+  p.classList.remove("dwb-tiny-para", "dwb-tiny-active", "dwb-exact");
+  ["line-height", "min-height", "margin-top", "margin-bottom"].forEach((k) => p.style.removeProperty(k));
+  pristineParas.delete(p);
+  applyInlineStructuralEdit({ op: "paraFormat", indices: [index], spacing: { before: null, after: null, line: null, lineRule: null } });
+  return true;
+}
+docCanvasEl?.addEventListener("input", (e) => {
+  if (readOnlyMode) return;
+  const p = docCaretParagraph(e.target);
+  if (p?.classList.contains("dwb-tiny-para") && p.textContent.replace(/\uFEFF/g, "")) restoreTinyParagraph(p);
+});
+// Akapit 1 pt jest za niski, żeby trafić w niego kliknięciem — klik pod tabelą (do ~1,5 cm
+// niżej, w szerokości akapitu) stawia w nim kursor, jak w Wordzie.
+docCanvasEl?.addEventListener("click", (e) => {
+  if (readOnlyMode || e.button !== 0 || e.shiftKey || !window.getSelection()?.isCollapsed) return;
+  if (e.target.closest?.(".docx-editable-p:not(.dwb-tiny-para), td, th, img, a")) return;
+  const hit = [...docCanvasEl.querySelectorAll(".docx-edit-root p.dwb-tiny-para")].find((p) => {
+    const r = p.getBoundingClientRect();
+    return e.clientY >= r.top - 4 && e.clientY <= r.bottom + 56 && e.clientX >= r.left - 8 && e.clientX <= r.right + 8;
+  });
+  if (hit) placeCaret(hit, 0);
+});
+// kreska kursora przy akapicie 1 pt (CSS .dwb-tiny-active)
+document.addEventListener("selectionchange", () => {
+  const sel = window.getSelection();
+  const n = sel?.rangeCount && sel.isCollapsed ? sel.anchorNode : null;
+  const p = (n?.nodeType === 1 ? n : n?.parentElement)?.closest?.("p.dwb-tiny-para") || null;
+  docCanvasEl?.querySelectorAll("p.dwb-tiny-active").forEach((x) => { if (x !== p) x.classList.remove("dwb-tiny-active"); });
+  p?.classList.add("dwb-tiny-active");
+});
 
 async function handleInlineTab(p, paraIndex, e) {
   // w tabeli Tab / Shift+Tab chodzi po komórkach (compose-ui.js), jak w Wordzie

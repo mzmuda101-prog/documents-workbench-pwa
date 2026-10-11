@@ -730,6 +730,10 @@ function applyWordLineMetrics(host) {
         // (podpis 6 pt przy domyślnych 10 pt) zajmował więcej miejsca niż w Wordzie. Wysokość
         // = podana wysokość linijki (pusty akapit-odstęp też ją ma — bez min-height miałby 0).
         if (p.style.minHeight || empty) p.style.minHeight = p.style.lineHeight;
+        // pusty akapit zmniejszony do ~1 pt (pusta strona za tabelą, docx-inline-edit.js) — CSS
+        // daje mu większe pole kliknięcia, pisanie w nim przywraca zwykłą wysokość
+        const px = parseFloat(p.style.lineHeight) * (p.style.lineHeight.endsWith("pt") ? 4 / 3 : 1);
+        p.classList.toggle("dwb-tiny-para", empty && px <= 3);
         const run = [...p.querySelectorAll("span")].find((sp) => sp.textContent.trim());
         if (run) {
           const fs = parseFloat(getComputedStyle(run).fontSize);

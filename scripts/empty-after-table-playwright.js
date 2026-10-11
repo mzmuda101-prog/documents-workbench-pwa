@@ -99,10 +99,33 @@ async function run() {
   check("Backspace: akapit 1 pt bez odstępów w pliku", /<w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"\/>/.test(shrunk.afterTable), shrunk.afterTable);
   check("…pusta strona znika (bez granicy przed nim), akapit zostaje", shrunk.gaps === 0 && shrunk.lastH < 4 && shrunk.paras === before.paras, JSON.stringify(shrunk));
   check("…bez komunikatu „nie da się skleić”", await page.evaluate(() => ![...document.querySelectorAll("[class*='toast']")].some((t) => /skleić|joined/.test(t.textContent))));
-  await page.keyboard.press(`${MOD}+KeyZ`);
+  // Zmniejszony akapit ma 1 pt — kliknięcie pod tabelą musi w niego trafić, a pisanie przywraca
+  // mu zwykłą wysokość (zgłoszenie: „ciężko by było w to trafić palcem, kursorem”).
+  const below = await page.evaluate(() => {
+    const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).at(-1);
+    p.scrollIntoView({ block: "center" });
+    const r = p.getBoundingClientRect();
+    return { x: r.left + 40, y: r.bottom + 30 };
+  });
+  await page.waitForTimeout(300);
+  await page.mouse.click(below.x, below.y);
+  await page.waitForTimeout(300);
+  const caret = await page.evaluate(() => {
+    const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).at(-1);
+    const a = getSelection().anchorNode;
+    return { inside: p.contains(a) || p === a, active: p.classList.contains("dwb-tiny-active"), bar: getComputedStyle(p, "::after").height };
+  });
+  check("klik 30 px pod tabelą: kursor w akapicie 1 pt, widoczna kreska kursora", caret.inside && caret.active && caret.bar === "15px", JSON.stringify(caret));
+  await page.keyboard.type("Dalej");
   await page.waitForTimeout(1500);
+  const typed = await state();
+  check("…pisanie przywraca zwykły akapit (w pliku bez 1 pt, tekst jest)", typed.lastText === "Dalej" && typed.lastH > 10 && !/w:lineRule="exact"/.test(typed.afterTable) && /Dalej/.test(typed.afterTable), JSON.stringify(typed));
+  for (let i = 0; i < 2; i++) {
+    await page.keyboard.press(`${MOD}+KeyZ`);
+    await page.waitForTimeout(1200);
+  }
   const undone = await state();
-  check("Cofnij przywraca zwykły akapit (i stronę)", !/w:lineRule="exact"/.test(undone.afterTable) && undone.lastH > 10, JSON.stringify(undone));
+  check("Cofnij (pisanie, potem zmniejszenie) przywraca pusty zwykły akapit", !/w:lineRule="exact"/.test(undone.afterTable) && undone.lastH > 10 && !undone.lastText, JSON.stringify(undone));
 
   // ── pusty akapit za tabelą, a dalej tekst ──
   file = await buildDocx(30, true);
