@@ -366,20 +366,31 @@ const dwbSel = (() => {
     const cutInfo = analyze(cutRange);
     if (!cutInfo) return;
     e.preventDefault();
-    const box = document.createElement("div");
-    box.appendChild(cutRange.cloneContents());
-    box.querySelectorAll('[contenteditable], .dwb-page-break').forEach((el) => { if (el.classList.contains("dwb-page-break")) el.remove(); else el.removeAttribute("contenteditable"); });
+    const box = clipboardBox(cutRange);
+    // Połówki komentarzy wyciętych tylko częściowo (np. początek bez końca) zostają w dokumencie,
+    // w miejscu wycięcia — jak w Wordzie zakres komentarza się skraca. Dawniej szły do schowka:
+    // wklejony wyżej początek łączył się z końcem w starym miejscu i podświetlał kilka akapitów.
+    const kept = orphanMarks(cutRange);
     // Natywny Selection zachowuje separator między akapitami; Range#toString go pomija.
     e.clipboardData?.setData("text/plain", window.getSelection().toString());
     e.clipboardData?.setData("text/html", box.innerHTML);
-    if (box.querySelector("[data-cm-kind='start'], [data-cm-kind='end'], [data-cm-kind='ref']")) {
+    if (box.querySelector(COMMENT_MARKS)) {
       // Typ działa tylko w naszej aplikacji; zewnętrzne programy dalej dostają zwykły HTML/tekst.
       e.clipboardData?.setData("application/x-dwb-comment-fragment", box.innerHTML);
     }
-    asUndoStep("undoOpCut", () => deleteSpan(cutInfo));
-    if (box.querySelector("[data-cm-kind='start'], [data-cm-kind='end'], [data-cm-kind='ref']")) {
-      composeUi?.paintCommentHighlights?.();
-    }
+    asUndoStep("undoOpCut", () => {
+      const p = deleteSpan(cutInfo);
+      if (!p || !kept.length) return p;
+      const at = selRange();
+      if (!at) return p;
+      const frag = document.createDocumentFragment();
+      kept.forEach((mark) => frag.appendChild(mark));
+      at.insertNode(frag); // zwinięty zakres po insertNode obejmuje wstawione znaczniki
+      setCaret(at.endContainer, at.endOffset);
+      onInlineParagraphInput();
+      return p;
+    });
+    if (box.querySelector(COMMENT_MARKS) || kept.length) composeUi?.paintCommentHighlights?.();
   }
 
   // Przeglądarka nie wkłada znaczników komentarza do zwykłego HTML-a schowka. Dla kopiowania
@@ -389,14 +400,53 @@ const dwbSel = (() => {
     const range = selRange();
     if (!range || range.collapsed) return;
     const copyRange = expandRangeToWholeComments(range);
-    const box = document.createElement("div");
-    box.appendChild(copyRange.cloneContents());
-    box.querySelectorAll('[contenteditable], .dwb-page-break').forEach((el) => { if (el.classList.contains("dwb-page-break")) el.remove(); else el.removeAttribute("contenteditable"); });
-    if (!box.querySelector("[data-cm-kind='start'], [data-cm-kind='end'], [data-cm-kind='ref']")) return;
+    const box = clipboardBox(copyRange);
+    if (!box.querySelector(COMMENT_MARKS)) return;
     e.preventDefault();
     e.clipboardData?.setData("text/plain", window.getSelection().toString());
     e.clipboardData?.setData("text/html", box.innerHTML);
     e.clipboardData?.setData("application/x-dwb-comment-fragment", box.innerHTML);
+  }
+
+  const COMMENT_MARKS = "[data-cm-kind='start'], [data-cm-kind='end'], [data-cm-kind='ref']";
+
+  // HTML do schowka: kopia zaznaczenia bez łamań stron i bez połówek komentarzy. Komentarz
+  // przechodzi tylko w komplecie (początek + koniec + odwołanie); sam początek albo sam koniec
+  // po wklejeniu sparowałby się z drugą połówką w zupełnie innym miejscu dokumentu.
+  function clipboardBox(range) {
+    const box = document.createElement("div");
+    box.appendChild(range.cloneContents());
+    box.querySelectorAll('[contenteditable], .dwb-page-break').forEach((el) => { if (el.classList.contains("dwb-page-break")) el.remove(); else el.removeAttribute("contenteditable"); });
+    const whole = wholeCommentIds(box.querySelectorAll(COMMENT_MARKS));
+    box.querySelectorAll(COMMENT_MARKS).forEach((mark) => { if (!whole.has(mark.dataset.cmId)) mark.remove(); });
+    return box;
+  }
+
+  function wholeCommentIds(marks) {
+    const kinds = new Map();
+    marks.forEach((mark) => {
+      if (!kinds.has(mark.dataset.cmId)) kinds.set(mark.dataset.cmId, new Set());
+      kinds.get(mark.dataset.cmId).add(mark.dataset.cmKind);
+    });
+    return new Set([...kinds].filter(([, k]) => k.has("start") && k.has("end") && k.has("ref")).map(([id]) => id));
+  }
+
+  // Znaczniki komentarzy w zakresie, których komentarz NIE jest w nim cały (oryginalne węzły).
+  function orphanMarks(range) {
+    const h = host();
+    if (!h) return [];
+    const inside = [...h.querySelectorAll(COMMENT_MARKS)].filter((mark) => range.intersectsNode(mark)
+      && range.comparePoint(mark, 0) === 0 && range.comparePoint(mark, mark.childNodes.length) === 0);
+    const whole = wholeCommentIds(inside);
+    return inside.filter((mark) => !whole.has(mark.dataset.cmId));
+  }
+
+  // Między dwoma miejscami są tylko niewidoczne znaczniki (bez znaków, obrazów, pól, tabulatorów).
+  function onlyMarksBetween(aNode, aOffset, bNode, bOffset) {
+    const r = document.createRange();
+    try { r.setStart(aNode, aOffset); r.setEnd(bNode, bOffset); } catch (_) { return false; }
+    return !r.toString().replace(/﻿/g, "").length
+      && !r.cloneContents().querySelector?.("img, svg, canvas, [data-cm-kind='note'], [data-cm-kind='obj'], .ff-field, br:not([data-dwb-ph]), .docx-tab");
   }
 
   function expandRangeToWholeComments(range) {
@@ -413,8 +463,13 @@ const dwbSel = (() => {
       content.setEndBefore(end);
       // Tylko pełny zakres komentarza: wycięcie części słowa zachowuje standardowe zachowanie
       // Worda, zamiast nieoczekiwanie rozszerzać zaznaczenie o resztę komentarza.
+      // Zaznaczenie kończące się na ostatniej literze komentowanego tekstu obejmuje go całego,
+      // chociaż w DOM koniec zaznaczenia wypada PRZED niewidocznym znacznikiem końca komentarza
+      // (Word zapisuje koniec i odwołanie za tekstem — np. komentarz do końca akapitu).
       if (range.compareBoundaryPoints(Range.START_TO_START, content) > 0
-        || range.compareBoundaryPoints(Range.END_TO_END, content) < 0) return;
+        && !onlyMarksBetween(content.startContainer, content.startOffset, range.startContainer, range.startOffset)) return;
+      if (range.compareBoundaryPoints(Range.END_TO_END, content) < 0
+        && !onlyMarksBetween(range.endContainer, range.endOffset, content.endContainer, content.endOffset)) return;
       const markers = document.createRange();
       markers.setStartBefore(start);
       markers.setEndAfter(ref);
