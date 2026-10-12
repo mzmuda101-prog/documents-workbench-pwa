@@ -394,6 +394,8 @@ const dwbSel = (() => {
       // treść komentarza czeka w pliku na wklejenie (docx-inline-edit.js, dwbClipComments)
       box.querySelectorAll("[data-cm-kind='ref']").forEach((ref) => dwbClipComments.add(ref.dataset.cmId));
     }
+    // przypis wycięty razem z odnośnikiem czeka na wklejenie (doc-notes.js pruneOrphanNotesInZip)
+    noteIdsIn(box).forEach((key) => dwbClipNotes.add(key));
     asUndoStep("undoOpCut", () => {
       const p = deleteSpan(cutInfo);
       if (!p || !kept.length) return p;
@@ -436,9 +438,8 @@ const dwbSel = (() => {
     try {
       let info = analyze(range);
       if (!info) return null;
-      let { a, b, ia, ib, end } = info;
-      const { list, start } = info;
-      if ((a.dataset.box || "") !== (b.dataset.box || "")) return null;
+      let { b, ib, end } = info;
+      const { list, start, a, ia } = info;
       let lastMark = false;
       if (ib > ia && atParaStart(b, end.node, end.offset)) {
         ib -= 1;
@@ -446,6 +447,8 @@ const dwbSel = (() => {
         end = { node: b, offset: b.childNodes.length };
         lastMark = true;
       }
+      // (dopiero po odcięciu: cały akapit tuż nad tabelą kończy zaznaczenie na początku komórki)
+      if ((a.dataset.box || "") !== (b.dataset.box || "")) return null;
       const paras = [];
       for (let i = ia; i <= ib; i++) {
         const p = list[i];
@@ -538,6 +541,16 @@ const dwbSel = (() => {
       if (xml) el.dataset.cmXml = xml;
     });
     return copy.innerHTML;
+  }
+
+  // „footnote:N” / „endnote:N” odnośników przypisów we fragmencie (wyspy z XML-em)
+  function noteIdsIn(box) {
+    const out = [];
+    box.querySelectorAll("[data-cm]").forEach((el) => {
+      const xml = docIslandXml.get(el.dataset.cm) || el.dataset.cmXml || "";
+      for (const m of xml.matchAll(/<w:(footnote|endnote)Reference\b[^>]*\bw:id="(\d+)"/g)) out.push(`${m[1]}:${m[2]}`);
+    });
+    return out;
   }
 
   function wholeCommentIds(marks) {

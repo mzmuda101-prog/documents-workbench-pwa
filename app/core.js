@@ -1,6 +1,6 @@
 // Core runtime: DOM refs, shared state, and base UI helpers.
 
-const APP_BUILD_VERSION = "20261012-03";
+const APP_BUILD_VERSION = "20261012-04";
 
 const IS_LOW_POWER = (() => {
   try {
@@ -236,6 +236,7 @@ function clearDocumentState() {
   originalFileBytes = null;
   pendingDocEdits = [];
   if (typeof dwbClipComments !== "undefined") dwbClipComments.clear();
+  if (typeof dwbClipNotes !== "undefined") dwbClipNotes.clear();
   fileHandle = null;
   documentStructure = null;
   searchMatches = [];

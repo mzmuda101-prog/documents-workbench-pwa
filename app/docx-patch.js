@@ -791,6 +791,19 @@ function recordPendingEdit(edit) {
   pendingDocEdits.push({ ...edit, ts: Date.now() });
 }
 
+// Numery obrazów/kształtów (wp:docPr id) muszą być jedyne — kopia obrazu (Kopiuj/Wklej) dostaje
+// kolejny wolny numer (tak robi Word).
+function dedupeDocPrIds(xml) {
+  const ids = [...String(xml).matchAll(/<wp:docPr\b[^>]*?\sid="(\d+)"/g)].map((m) => m[1]);
+  if (ids.length === new Set(ids).size) return xml;
+  let next = Math.max(...ids.map(Number)) + 1;
+  const seen = new Set();
+  return String(xml).replace(/(<wp:docPr\b[^>]*?\sid=")(\d+)(")/g, (m, a, id, b) => {
+    if (!seen.has(id)) { seen.add(id); return m; }
+    return `${a}${next++}${b}`;
+  });
+}
+
 function commentRefIds(xml) {
   return new Set([...String(xml).matchAll(/<w:commentReference\b[^>]*\bw:id="(-?\d+)"/g)].map((m) => m[1]));
 }
@@ -977,8 +990,12 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
     if (normalized.op === "replace" && normalized.otherParts && !opts.target) total += await replaceInOtherParts(zip, normalized);
   }
   if (typeof finalizeComposeParts === "function") xml = await finalizeComposeParts(zip, xml); // nowe linki: powiązania + styl
+  // ten sam przypis dwa razy w treści (Kopiuj/Wklej) — kopia przypisu z nowym numerem, jak w Wordzie
+  if (list.length && typeof dedupeNoteRefsInZip === "function") xml = await dedupeNoteRefsInZip(zip, xml);
+  // ten sam numer obrazu (wp:docPr) dwa razy — kolejne dostają nowe (Word: plik do naprawy)
+  if (list.length) xml = dedupeDocPrIds(xml);
   // przypis bez odnośnika w treści (odnośnik skasowany) znika z pliku — jak w Wordzie
-  if (list.length && typeof pruneOrphanNotesInZip === "function") await pruneOrphanNotesInZip(zip, xml);
+  if (list.length && typeof pruneOrphanNotesInZip === "function") await pruneOrphanNotesInZip(zip, xml, { force: !!lastEditOpts?.forcePrune });
   // komentarz, któremu ta zmiana skasowała odwołanie w treści (np. zaznacz wszystko + Delete) — też
   // znika, razem z resztką zakresu i wpisami w commentsExtended (dawniej zostawał bez kotwicy)
   if (list.length && commentRefsBefore.size && typeof applyRevisionsInZip === "function") {

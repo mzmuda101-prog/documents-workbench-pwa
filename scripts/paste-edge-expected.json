@@ -1,0 +1,290 @@
+{
+ "_opis": "Wyniki Worda (Microsoft Word dla Maca, AppleScript copy object / paste object, 2026-10-12) dla przypadków z paste-edge-playwright.js — streszczenie scripts/paste-edge-summary.js",
+ "cases": [
+  {
+   "id": "E1",
+   "name": "zwykłe słowo w środek czerwonego pogrubionego zdania",
+   "src": [
+    "Punkt A",
+    8,
+    "Punkt A",
+    14
+   ],
+   "dst": [
+    "Ważne",
+    6
+   ],
+   "word": [
+    "\"Rozdział pierwszy\" styl=heading 1 lista=-",
+    "\"Ważne zwykły zdanie na czerwono\" styl=- lista=- fmt: Ważne <BC00000>| zdanie na czerwono<BC00000>",
+    "\"Punkt A zwykły\" styl=- lista=tak fmt: Punkt A <B>",
+    "\"Punkt B\" styl=- lista=tak",
+    "\"Numer jeden\" styl=- lista=tak",
+    "\"Tekst z przypisem[PRZYPIS] i dalej\" styl=- lista=-",
+    "\"Obrazek [OBRAZ] w tekście\" styl=- lista=-",
+    "\"Wskazówka w ramce\" styl=wskazówka lista=-",
+    "[KOM] \"Komórka A1 tekst\" styl=- lista=-",
+    "[KOM] \"Komórka B1\" styl=- lista=-",
+    "[KOM] \"Komórka A2\" styl=- lista=-",
+    "[KOM] \"Komórka B2\" styl=- lista=-",
+    "\"Koniec dokumentu\" styl=- lista=-",
+    "\"\" styl=- lista=-",
+    "przypisów: 1, odwołań: 1, obrazów: 1, numery obrazów jedyne: true"
+   ]
+  },
+  {
+   "id": "E2",
+   "name": "dwa punkty listy w środek nagłówka",
+   "src": [
+    "Punkt A",
+    0,
+    "Punkt B",
+    "mark"
+   ],
+   "dst": [
+    "Rozdział",
+    9
+   ],
+   "word": [
+    "\"Rozdział Punkt A zwykły\" styl=- lista=tak fmt: Punkt A <B>",
+    "\"Punkt B\" styl=- lista=tak",
+    "\"pierwszy\" styl=heading 1 lista=-",
+    "\"Ważne zdanie na czerwono\" styl=- lista=- fmt: Ważne zdanie na czerwono<BC00000>",
+    "\"Punkt A zwykły\" styl=- lista=tak fmt: Punkt A <B>",
+    "\"Punkt B\" styl=- lista=tak",
+    "\"Numer jeden\" styl=- lista=tak",
+    "\"Tekst z przypisem[PRZYPIS] i dalej\" styl=- lista=-",
+    "\"Obrazek [OBRAZ] w tekście\" styl=- lista=-",
+    "\"Wskazówka w ramce\" styl=wskazówka lista=-",
+    "[KOM] \"Komórka A1 tekst\" styl=- lista=-",
+    "[KOM] \"Komórka B1\" styl=- lista=-",
+    "[KOM] \"Komórka A2\" styl=- lista=-",
+    "[KOM] \"Komórka B2\" styl=- lista=-",
+    "\"Koniec dokumentu\" styl=- lista=-",
+    "\"\" styl=- lista=-",
+    "przypisów: 1, odwołań: 1, obrazów: 1, numery obrazów jedyne: true"
+   ]
+  },
+  {
+   "id": "E3",
+   "name": "cały zwykły akapit w środek punktu numerowanego",
+   "src": [
+    "Ważne",
+    0,
+    "Ważne",
+    "mark"
+   ],
+   "dst": [
+    "Numer",
+    6
+   ],
+   "word": [
+    "\"Rozdział pierwszy\" styl=heading 1 lista=-",
+    "\"Ważne zdanie na czerwono\" styl=- lista=- fmt: Ważne zdanie na czerwono<BC00000>",
+    "\"Punkt A zwykły\" styl=- lista=tak fmt: Punkt A <B>",
+    "\"Punkt B\" styl=- lista=tak",
+    "\"Numer Ważne zdanie na czerwono\" styl=- lista=- fmt: Ważne zdanie na czerwono<BC00000>",
+    "\"jeden\" styl=- lista=tak",
+    "\"Tekst z przypisem[PRZYPIS] i dalej\" styl=- lista=-",
+    "\"Obrazek [OBRAZ] w tekście\" styl=- lista=-",
+    "\"Wskazówka w ramce\" styl=wskazówka lista=-",
+    "[KOM] \"Komórka A1 tekst\" styl=- lista=-",
+    "[KOM] \"Komórka B1\" styl=- lista=-",
+    "[KOM] \"Komórka A2\" styl=- lista=-",
+    "[KOM] \"Komórka B2\" styl=- lista=-",
+    "\"Koniec dokumentu\" styl=- lista=-",
+    "\"\" styl=- lista=-",
+    "przypisów: 1, odwołań: 1, obrazów: 1, numery obrazów jedyne: true"
+   ]
+  },
+  {
+   "id": "E4",
+   "name": "dwa punkty listy w środek komórki tabeli",
+   "src": [
+    "Punkt A",
+    0,
+    "Punkt B",
+    "mark"
+   ],
+   "dst": [
+    "Komórka A1",
+    8
+   ],
+   "word": [
+    "\"Rozdział pierwszy\" styl=heading 1 lista=-",
+    "\"Ważne zdanie na czerwono\" styl=- lista=- fmt: Ważne zdanie na czerwono<BC00000>",
+    "\"Punkt A zwykły\" styl=- lista=tak fmt: Punkt A <B>",
+    "\"Punkt B\" styl=- lista=tak",
+    "\"Numer jeden\" styl=- lista=tak",
+    "\"Tekst z przypisem[PRZYPIS] i dalej\" styl=- lista=-",
+    "\"Obrazek [OBRAZ] w tekście\" styl=- lista=-",
+    "\"Wskazówka w ramce\" styl=wskazówka lista=-",
+    "[KOM] \"Komórka Punkt A zwykły\" styl=- lista=tak fmt: Punkt A <B>",
+    "[KOM] \"Punkt B\" styl=- lista=tak",
+    "[KOM] \"A1 tekst\" styl=- lista=-",
+    "[KOM] \"Komórka B1\" styl=- lista=-",
+    "[KOM] \"Komórka A2\" styl=- lista=-",
+    "[KOM] \"Komórka B2\" styl=- lista=-",
+    "\"Koniec dokumentu\" styl=- lista=-",
+    "\"\" styl=- lista=-",
+    "przypisów: 1, odwołań: 1, obrazów: 1, numery obrazów jedyne: true"
+   ]
+  },
+  {
+   "id": "E5",
+   "name": "kawałek z komórki tabeli do zwykłego akapitu",
+   "src": [
+    "Komórka A1",
+    8,
+    "Komórka A1",
+    16
+   ],
+   "dst": [
+    "Koniec",
+    7
+   ],
+   "word": [
+    "\"Rozdział pierwszy\" styl=heading 1 lista=-",
+    "\"Ważne zdanie na czerwono\" styl=- lista=- fmt: Ważne zdanie na czerwono<BC00000>",
+    "\"Punkt A zwykły\" styl=- lista=tak fmt: Punkt A <B>",
+    "\"Punkt B\" styl=- lista=tak",
+    "\"Numer jeden\" styl=- lista=tak",
+    "\"Tekst z przypisem[PRZYPIS] i dalej\" styl=- lista=-",
+    "\"Obrazek [OBRAZ] w tekście\" styl=- lista=-",
+    "\"Wskazówka w ramce\" styl=wskazówka lista=-",
+    "[KOM] \"Komórka A1 tekst\" styl=- lista=-",
+    "[KOM] \"Komórka B1\" styl=- lista=-",
+    "[KOM] \"Komórka A2\" styl=- lista=-",
+    "[KOM] \"Komórka B2\" styl=- lista=-",
+    "\"Koniec A1 tekst dokumentu\" styl=- lista=-",
+    "\"\" styl=- lista=-",
+    "przypisów: 1, odwołań: 1, obrazów: 1, numery obrazów jedyne: true"
+   ]
+  },
+  {
+   "id": "E6",
+   "name": "tekst z przypisem do innego akapitu",
+   "src": [
+    "Tekst z przypisem",
+    0,
+    "Tekst z przypisem",
+    "end"
+   ],
+   "dst": [
+    "Koniec",
+    7
+   ],
+   "word": [
+    "\"Rozdział pierwszy\" styl=heading 1 lista=-",
+    "\"Ważne zdanie na czerwono\" styl=- lista=- fmt: Ważne zdanie na czerwono<BC00000>",
+    "\"Punkt A zwykły\" styl=- lista=tak fmt: Punkt A <B>",
+    "\"Punkt B\" styl=- lista=tak",
+    "\"Numer jeden\" styl=- lista=tak",
+    "\"Tekst z przypisem[PRZYPIS] i dalej\" styl=- lista=-",
+    "\"Obrazek [OBRAZ] w tekście\" styl=- lista=-",
+    "\"Wskazówka w ramce\" styl=wskazówka lista=-",
+    "[KOM] \"Komórka A1 tekst\" styl=- lista=-",
+    "[KOM] \"Komórka B1\" styl=- lista=-",
+    "[KOM] \"Komórka A2\" styl=- lista=-",
+    "[KOM] \"Komórka B2\" styl=- lista=-",
+    "\"Koniec Tekst z przypisem[PRZYPIS] i dalej dokumentu\" styl=- lista=-",
+    "\"\" styl=- lista=-",
+    "przypisów: 2, odwołań: 2, obrazów: 1, numery obrazów jedyne: true"
+   ]
+  },
+  {
+   "id": "E7",
+   "name": "tekst z obrazkiem do innego akapitu",
+   "src": [
+    "Obrazek",
+    0,
+    "Obrazek",
+    "end"
+   ],
+   "dst": [
+    "Koniec",
+    7
+   ],
+   "word": [
+    "\"Rozdział pierwszy\" styl=heading 1 lista=-",
+    "\"Ważne zdanie na czerwono\" styl=- lista=- fmt: Ważne zdanie na czerwono<BC00000>",
+    "\"Punkt A zwykły\" styl=- lista=tak fmt: Punkt A <B>",
+    "\"Punkt B\" styl=- lista=tak",
+    "\"Numer jeden\" styl=- lista=tak",
+    "\"Tekst z przypisem[PRZYPIS] i dalej\" styl=- lista=-",
+    "\"Obrazek [OBRAZ] w tekście\" styl=- lista=-",
+    "\"Wskazówka w ramce\" styl=wskazówka lista=-",
+    "[KOM] \"Komórka A1 tekst\" styl=- lista=-",
+    "[KOM] \"Komórka B1\" styl=- lista=-",
+    "[KOM] \"Komórka A2\" styl=- lista=-",
+    "[KOM] \"Komórka B2\" styl=- lista=-",
+    "\"Koniec Obrazek [OBRAZ] w tekście dokumentu\" styl=- lista=-",
+    "\"\" styl=- lista=-",
+    "przypisów: 1, odwołań: 1, obrazów: 2, numery obrazów jedyne: true"
+   ]
+  },
+  {
+   "id": "E8",
+   "name": "cała ramka Wskazówka w środek zwykłego akapitu",
+   "src": [
+    "Wskazówka",
+    0,
+    "Wskazówka",
+    "mark"
+   ],
+   "dst": [
+    "Ważne",
+    6
+   ],
+   "word": [
+    "\"Rozdział pierwszy\" styl=heading 1 lista=-",
+    "\"Ważne Wskazówka w ramce\" styl=wskazówka lista=- fmt: Ważne <BC00000>",
+    "\"zdanie na czerwono\" styl=- lista=- fmt: zdanie na czerwono<BC00000>",
+    "\"Punkt A zwykły\" styl=- lista=tak fmt: Punkt A <B>",
+    "\"Punkt B\" styl=- lista=tak",
+    "\"Numer jeden\" styl=- lista=tak",
+    "\"Tekst z przypisem[PRZYPIS] i dalej\" styl=- lista=-",
+    "\"Obrazek [OBRAZ] w tekście\" styl=- lista=-",
+    "\"Wskazówka w ramce\" styl=wskazówka lista=-",
+    "[KOM] \"Komórka A1 tekst\" styl=- lista=-",
+    "[KOM] \"Komórka B1\" styl=- lista=-",
+    "[KOM] \"Komórka A2\" styl=- lista=-",
+    "[KOM] \"Komórka B2\" styl=- lista=-",
+    "\"Koniec dokumentu\" styl=- lista=-",
+    "\"\" styl=- lista=-",
+    "przypisów: 1, odwołań: 1, obrazów: 1, numery obrazów jedyne: true"
+   ]
+  },
+  {
+   "id": "E9",
+   "name": "zwykły kawałek na początek punktu listy",
+   "src": [
+    "Ważne",
+    0,
+    "Ważne",
+    5
+   ],
+   "dst": [
+    "Punkt B",
+    0
+   ],
+   "word": [
+    "\"Rozdział pierwszy\" styl=heading 1 lista=-",
+    "\"Ważne zdanie na czerwono\" styl=- lista=- fmt: Ważne zdanie na czerwono<BC00000>",
+    "\"Punkt A zwykły\" styl=- lista=tak fmt: Punkt A <B>",
+    "\"Ważne Punkt B\" styl=- lista=tak fmt: Ważne<BC00000>",
+    "\"Numer jeden\" styl=- lista=tak",
+    "\"Tekst z przypisem[PRZYPIS] i dalej\" styl=- lista=-",
+    "\"Obrazek [OBRAZ] w tekście\" styl=- lista=-",
+    "\"Wskazówka w ramce\" styl=wskazówka lista=-",
+    "[KOM] \"Komórka A1 tekst\" styl=- lista=-",
+    "[KOM] \"Komórka B1\" styl=- lista=-",
+    "[KOM] \"Komórka A2\" styl=- lista=-",
+    "[KOM] \"Komórka B2\" styl=- lista=-",
+    "\"Koniec dokumentu\" styl=- lista=-",
+    "\"\" styl=- lista=-",
+    "przypisów: 1, odwołań: 1, obrazów: 1, numery obrazów jedyne: true"
+   ]
+  }
+ ]
+}

@@ -623,16 +623,49 @@ async function applyNoteInsertInZip(zip, xml, edit) {
 
 // Przypisy bez odnośnika w treści (odnośnik usunięty razem z tekstem) — usuwane z pliku jak
 // w Wordzie; separatory (w:type) zostają.
-async function pruneOrphanNotesInZip(zip, docXml) {
+// force — przy zapisie (buildDocumentForSave): też przypisy wycięte do schowka i niewklejone
+async function pruneOrphanNotesInZip(zip, docXml, { force = false } = {}) {
   for (const kind of ["footnote", "endnote"]) {
     const file = zip.file(NOTE_PART[kind]);
     if (!file) continue;
     const used = new Set([...String(docXml).matchAll(new RegExp(`<w:${kind}Reference\\b[^>]*\\bw:id="(-?\\d+)"`, "g"))].map((m) => m[1]));
+    // wycięty przypis czeka w schowku na wklejenie (docx-inline-edit.js dwbClipNotes) — jak komentarz
+    const clip = !force && typeof dwbClipNotes !== "undefined" ? dwbClipNotes : new Set();
     const xml = await file.async("string");
     const doc = composeParse(xml);
-    const orphans = Array.from(doc.getElementsByTagNameNS(W_NS, kind)).filter((n) => !n.getAttributeNS(W_NS, "type") && !used.has(n.getAttributeNS(W_NS, "id")));
+    const orphans = Array.from(doc.getElementsByTagNameNS(W_NS, kind)).filter((n) => !n.getAttributeNS(W_NS, "type") && !used.has(n.getAttributeNS(W_NS, "id")) && !clip.has(`${kind}:${n.getAttributeNS(W_NS, "id")}`));
     if (!orphans.length) continue;
     orphans.forEach((n) => n.parentNode.removeChild(n));
     zip.file(NOTE_PART[kind], composeSerialize(doc));
   }
+}
+
+// Odnośnik do tego samego przypisu dwa razy w treści (Kopiuj/Wklej tekstu z przypisem) — błąd
+// pliku dla Worda. Word przy kopii tworzy NOWY przypis z tą samą treścią — tak samo tu: kolejne
+// odnośniki dostają nowe numery i kopie przypisów (nowe w14:paraId).
+async function dedupeNoteRefsInZip(zip, xml) {
+  for (const kind of ["footnote", "endnote"]) {
+    const re = new RegExp(`(<w:${kind}Reference\\b[^>]*\\bw:id=")(-?\\d+)(")`, "g");
+    const ids = [...String(xml).matchAll(re)].map((m) => m[2]);
+    if (ids.length === new Set(ids).size) continue;
+    const file = zip.file(NOTE_PART[kind]);
+    if (!file) continue;
+    const ndoc = composeParse(await file.async("string"));
+    const notes = Array.from(ndoc.getElementsByTagNameNS(W_NS, kind));
+    const paraIds = new Set(Array.from(ndoc.getElementsByTagNameNS(W_NS, "p")).map((p) => (p.getAttributeNS(COMPOSE_W14, "paraId") || "").toUpperCase()).filter(Boolean));
+    let next = Math.max(0, ...notes.map((n) => parseInt(n.getAttributeNS(W_NS, "id"), 10) || 0)) + 1;
+    const seen = new Set();
+    xml = String(xml).replace(re, (m, a, id, b) => {
+      if (!seen.has(id)) { seen.add(id); return m; }
+      const src = notes.find((n) => n.getAttributeNS(W_NS, "id") === id);
+      if (!src) return m;
+      const copy = src.cloneNode(true);
+      copy.setAttributeNS(W_NS, "w:id", String(next));
+      Array.from(copy.getElementsByTagNameNS(W_NS, "p")).forEach((p) => { if (p.hasAttributeNS(COMPOSE_W14, "paraId")) p.setAttributeNS(COMPOSE_W14, "w14:paraId", composeParaId(paraIds)); });
+      src.parentNode.appendChild(copy);
+      return `${a}${next++}${b}`;
+    });
+    zip.file(NOTE_PART[kind], composeSerialize(ndoc));
+  }
+  return xml;
 }

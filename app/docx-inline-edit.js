@@ -915,6 +915,7 @@ const dwbClipComments = new Set();
 // Rekordy schowka z Kopiuj/Wytnij (doc-selection.js rememberClip) i numer otwartego dokumentu —
 // wklejamy z formatowaniem tylko w tym samym dokumencie (obrazy i komentarze to jego części).
 const dwbClip = new Map();
+const dwbClipNotes = new Set(); // „footnote:N” wyciętych przypisów — jak dwbClipComments
 let dwbDocSerial = 0;
 
 // Własny fragment ze schowka po Wytnij: markerom komentarza odpowiada XML w docIslandXml,
@@ -942,10 +943,31 @@ function insertInternalCommentFragment(html, opts = {}) {
     if (p) {
       // inteligentne wklejanie (Word): całe słowa wklejone tuż przy słowie dostają spację
       const [left, right] = textAroundCaret(p, r);
-      // (spacja osobno, bez formatowania wklejonego fragmentu — nie „pogrubiona spacja”)
+      // Spacja należy do tekstu MIEJSCA wklejenia (jak w Wordzie: przy czerwonym pogrubionym zdaniu
+      // spacja jest czerwona pogrubiona), nie do wklejonego fragmentu.
       const pasted = template.content.textContent.replace(/\uFEFF/g, "");
-      if (opts.sb && SMART_WORD.test(left) && SMART_WORD.test(pasted.charAt(0))) template.content.prepend(document.createTextNode(" "));
-      if (opts.eb && SMART_WORD.test(right) && SMART_WORD.test(pasted.slice(-1))) template.content.append(document.createTextNode(" "));
+      const near = (dir) => {
+        const w = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+        let best = null;
+        for (let n = w.nextNode(); n; n = w.nextNode()) {
+          if (!n.data.replace(/\uFEFF/g, "") || n.parentElement?.closest('[contenteditable="false"]')) continue;
+          if (n === r.startContainer) { best = n; if (dir > 0) break; continue; } // kursor w tym węźle
+          const pos = r.comparePoint(n, dir < 0 ? n.length : 0);
+          if (dir < 0 && pos <= 0) best = n;
+          if (dir > 0 && pos >= 0) { best = n; break; }
+        }
+        return best;
+      };
+      if (opts.sb && SMART_WORD.test(left) && SMART_WORD.test(pasted.charAt(0))) {
+        const t = near(-1);
+        if (t && t === r.startContainer) { t.insertData(r.startOffset, " "); r.setStart(t, r.startOffset + 1); r.collapse(true); }
+        else if (t) t.appendData(" ");
+      }
+      if (opts.eb && SMART_WORD.test(right) && SMART_WORD.test(pasted.slice(-1))) {
+        const t = near(1);
+        if (t && t === r.startContainer) t.insertData(r.startOffset, " ");
+        else if (t) t.insertData(0, " ");
+      }
     }
     if (p && p.contains(r.startContainer)) {
       const at = splitToParagraphLevel(p, r.startContainer, r.startOffset);
@@ -968,8 +990,14 @@ function insertInternalCommentFragment(html, opts = {}) {
   const range = sel.getRangeAt(0);
   range.deleteContents();
   const last = template.content.lastChild;
+  const notes = marks.flatMap((m) => [...(docIslandXml.get(m.dataset.cm) || "").matchAll(/<w:(footnote|endnote)Reference\b[^>]*\bw:id="(\d+)"/g)].map((x) => `${x[1]}:${x[2]}`));
+  const objects = marks.some((m) => /<w:(footnote|endnote)Reference\b|<w:drawing\b|<w:pict\b/.test(docIslandXml.get(m.dataset.cm) || ""));
   range.insertNode(template.content);
   renumberCopiedComments(marks);
+  notes.forEach((key) => dwbClipNotes.delete(key));
+  // przypis / obraz we wklejce: plik nadaje kopii nowy numer (dedupeNoteRefsInZip, dedupeDocPrIds) —
+  // przerysowanie, żeby numer przypisu i treść na dole strony zgadzały się z plikiem od razu
+  if (objects) queueMicrotask(() => refreshAfterObjectPaste());
   if (last) {
     range.setStartAfter(last);
     range.collapse(true);
@@ -989,6 +1017,14 @@ function textAroundCaret(p, r) {
   b.selectNodeContents(p);
   b.setStart(r.endContainer, r.endOffset);
   return [a.toString().replace(/\uFEFF/g, "").slice(-1), b.toString().replace(/\uFEFF/g, "").charAt(0)];
+}
+
+async function refreshAfterObjectPaste() {
+  const p = typeof restoreDocCaret === "function" ? restoreDocCaret() : null;
+  const caret = p ? { paraIndex: resolveParaIndex(p), offset: getCaretOffset(p) } : null;
+  await mergeInlineEditsIntoBytes();
+  if (caret) pendingInlineCursor = caret;
+  await reloadFromBytes(originalFileBytes);
 }
 
 // Pozycja (node, offset) w akapicie p przeniesiona na poziom dzieci p: elementy po drodze
@@ -1040,18 +1076,22 @@ function pasteClipParagraphs(p, clip) {
     const pPrs = await clip.pPrs;
     const paras = clip.paras.map((q, i) => ({ runs: q.runs.map((r) => ({ ...r })), mark: q.mark, pPr: pPrs[i] || "" }));
     // inteligentne wklejanie (Word): całe słowa przy słowie — spacja na styku
+    // (spacja w tekście miejsca wklejenia — jego formatowanie, jak w Wordzie)
     const plain = (runs) => previewRunsToPlainText(runs);
-    const firstRun = paras[0].runs.find((r) => !r.island && !r.break && r.text);
-    if (clip.sb && firstRun && SMART_WORD.test(plain(beforeRuns).slice(-1)) && SMART_WORD.test(firstRun.text.charAt(0))) firstRun.text = ` ${firstRun.text}`;
+    const textRun = (runs, fromEnd) => (fromEnd ? [...runs].reverse() : runs).find((r) => !r.island && !r.break && r.text);
+    const pastedText = plain(paras.flatMap((q) => q.runs));
+    const beforeRun = textRun(beforeRuns, true);
+    if (clip.sb && beforeRun && SMART_WORD.test(plain(beforeRuns).slice(-1)) && SMART_WORD.test(pastedText.charAt(0))) beforeRun.text += " ";
     const tail = paras[paras.length - 1];
-    const lastRun = [...tail.runs].reverse().find((r) => !r.island && !r.break && r.text);
-    if (!tail.mark && clip.eb && lastRun && SMART_WORD.test(plain(afterRuns).charAt(0)) && SMART_WORD.test(lastRun.text.slice(-1))) lastRun.text = `${lastRun.text} `;
+    const afterRun = textRun(afterRuns, false);
+    if (!tail.mark && clip.eb && afterRun && SMART_WORD.test(plain(afterRuns).charAt(0)) && SMART_WORD.test(plain(tail.runs).slice(-1))) afterRun.text = ` ${afterRun.text}`;
     const added = paras.filter((q) => q.mark).length;
     const last = paras[paras.length - 1];
     pendingInlineCursor = { paraIndex: index + added, offset: last.mark ? 0 : previewRunsToPlainText(last.runs).length };
     paras.forEach((q) => q.runs.forEach((r) => {
       const m = r.island && /<w:commentReference\b[^>]*\bw:id="(\d+)"/.exec(r.island);
       if (m) dwbClipComments.delete(m[1]);
+      for (const n of (r.island || "").matchAll(/<w:(footnote|endnote)Reference\b[^>]*\bw:id="(\d+)"/g)) dwbClipNotes.delete(`${n[1]}:${n[2]}`);
     }));
     await applyDocumentEdit({ op: "pasteParas", index, beforeRuns, afterRuns, paras });
   })().catch((err) => log(`Wklejanie: ${err.message || err}`, "error"));
