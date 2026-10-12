@@ -99,6 +99,7 @@ async function ingestFile(file, options = {}) {
     const buf = await file.arrayBuffer();
     originalFileBytes = new Uint8Array(buf);
     if (typeof dwbClipComments !== "undefined") dwbClipComments.clear(); // schowek komentarzy dotyczył poprzedniego pliku
+    if (typeof dwbDocSerial !== "undefined") dwbDocSerial++; // wklejka z formatowaniem tylko w tym samym dokumencie
     // zepsute nazwy krojów ze starszych wersji (naprawa w pamięci; trafi do pliku przy zapisie)
     if (typeof repairDocxFontNames === "function") originalFileBytes = await repairDocxFontNames(originalFileBytes);
     pendingDocEdits = [];

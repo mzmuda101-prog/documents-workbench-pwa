@@ -383,9 +383,11 @@ const dwbSel = (() => {
     // w miejscu wycięcia — jak w Wordzie zakres komentarza się skraca. Dawniej szły do schowka:
     // wklejony wyżej początek łączył się z końcem w starym miejscu i podświetlał kilka akapitów.
     const kept = orphanMarks(cutRange);
+    const clipId = rememberClip(cutRange, box, true);
     // Natywny Selection zachowuje separator między akapitami; Range#toString go pomija.
     e.clipboardData?.setData("text/plain", window.getSelection().toString());
     e.clipboardData?.setData("text/html", box.innerHTML);
+    if (clipId) e.clipboardData?.setData("application/x-dwb-clip", clipId);
     if (box.querySelector(COMMENT_MARKS)) {
       // Typ działa tylko w naszej aplikacji; zewnętrzne programy dalej dostają zwykły HTML/tekst.
       e.clipboardData?.setData("application/x-dwb-comment-fragment", fragmentHtml(box));
@@ -407,19 +409,90 @@ const dwbSel = (() => {
     if (box.querySelector(COMMENT_MARKS) || kept.length) composeUi?.paintCommentHighlights?.();
   }
 
-  // Przeglądarka nie wkłada znaczników komentarza do zwykłego HTML-a schowka. Dla kopiowania
-  // pełnego komentowanego fragmentu dodajemy nasz typ pomocniczy; poza aplikacją nadal trafia
-  // zwyczajny tekst/HTML, a częściowe zaznaczenie działa jak standardowe kopiowanie.
+  // Kopiuj: zwykły tekst/HTML dla innych programów + nasz rekord schowka (dwbClip) — wklejenie
+  // w tym dokumencie zachowuje formatowanie źródła jak w Wordzie (punktory, wcięcia, styl akapitu,
+  // krój, rozmiar, kolor). Dawniej wklejka szła filtrem „jak ze strony WWW”: kilka punktów listy
+  // wklejało się jako jeden sklejony akapit bez punktorów i kolorów (pomiar 2026-10-12).
   function onCopy(e) {
     const range = selRange();
     if (!range || range.collapsed) return;
     const copyRange = expandRangeToWholeComments(range);
     const box = clipboardBox(copyRange);
-    if (!box.querySelector(COMMENT_MARKS)) return;
+    const clipId = rememberClip(copyRange, box, false);
+    if (!clipId && !box.querySelector(COMMENT_MARKS)) return;
     e.preventDefault();
     e.clipboardData?.setData("text/plain", window.getSelection().toString());
     e.clipboardData?.setData("text/html", box.innerHTML);
-    e.clipboardData?.setData("application/x-dwb-comment-fragment", fragmentHtml(box));
+    if (clipId) e.clipboardData?.setData("application/x-dwb-clip", clipId);
+    if (box.querySelector(COMMENT_MARKS)) e.clipboardData?.setData("application/x-dwb-comment-fragment", fragmentHtml(box));
+  }
+
+  // Rekord schowka: akapity zaznaczenia z formatowaniem. Jeden akapit bez jego znacznika (kawałek
+  // tekstu) — fragment HTML z formatowaniem fragmentów; akapity ze znacznikiem (cały akapit,
+  // kilka akapitów) — fragmenty + właściwości akapitów z pliku (w:pPr), wklejane jak w Wordzie
+  // (docx-inline-edit.js pasteClipParagraphs, op „pasteParas”). Tylko w obrębie jednego „pojemnika”
+  // (treść główna albo jedna komórka) — przez komórki tabeli zostaje zwykłe kopiowanie.
+  function rememberClip(range, box, cut) {
+    try {
+      let info = analyze(range);
+      if (!info) return null;
+      let { a, b, ia, ib, end } = info;
+      const { list, start } = info;
+      if ((a.dataset.box || "") !== (b.dataset.box || "")) return null;
+      let lastMark = false;
+      if (ib > ia && atParaStart(b, end.node, end.offset)) {
+        ib -= 1;
+        b = list[ib];
+        end = { node: b, offset: b.childNodes.length };
+        lastMark = true;
+      }
+      const paras = [];
+      for (let i = ia; i <= ib; i++) {
+        const p = list[i];
+        if (p.dataset.lock || p.dataset.noteKey) return null;
+        const r = document.createRange();
+        if (i === ia) r.setStart(start.node, start.offset); else r.setStart(p, 0);
+        if (i === ib) r.setEnd(end.node, end.offset); else r.setEnd(p, p.childNodes.length);
+        const tmp = document.createElement("p");
+        tmp.appendChild(cloneWithFormat(r));
+        tmp.querySelectorAll(".dwb-page-break, .dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band").forEach((x) => x.remove());
+        paras.push({ index: i, runs: extractRunsFromPreviewParagraph(tmp), mark: i < ib || lastMark });
+      }
+      // inteligentne wklejanie (Word): skopiowano całe słowa? — wtedy przy wklejeniu obok słowa spacja
+      const WORD = /[\p{L}\p{N}]/u;
+      const before = document.createRange();
+      before.setStart(a, 0);
+      before.setEnd(start.node, start.offset);
+      const after = document.createRange();
+      after.setStart(end.node, end.offset);
+      after.setEnd(b, b.childNodes.length);
+      const sb = !WORD.test(before.toString().replace(/\uFEFF/g, "").slice(-1));
+      const eb = !WORD.test(after.toString().replace(/\uFEFF/g, "").slice(0, 1));
+      const rec = { doc: dwbDocSerial, cut, paras, sb, eb };
+      if (paras.length === 1 && !paras[0].mark) rec.html = fragmentHtml(box);
+      else {
+        // w:pPr z pliku w stanie z chwili kopiowania: po Enterach jeszcze w kolejce, przed
+        // usunięciem tego zaznaczenia (Wytnij) — nasz then rejestruje się przed nim
+        rec.pPrs = inlineStructuralChain.then(async () => {
+          const bytes = originalFileBytes;
+          const zip = await JSZip.loadAsync(bytes);
+          const doc = new DOMParser().parseFromString(await zip.file("word/document.xml").async("string"), "application/xml");
+          const xps = collectParagraphElements(doc.documentElement, "all");
+          return paras.map((q) => {
+            const pPr = Array.from(xps[q.index]?.childNodes || []).find((n) => n.nodeType === 1 && n.localName === "pPr");
+            return pPr ? new XMLSerializer().serializeToString(pPr) : "";
+          });
+        });
+        rec.pPrs.catch(() => {});
+      }
+      const id = `clip${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+      dwbClip.set(id, rec);
+      if (dwbClip.size > 8) dwbClip.delete(dwbClip.keys().next().value);
+      return id;
+    } catch (err) {
+      log(`Schowek: ${err.message || err}`, "error");
+      return null;
+    }
   }
 
   const COMMENT_MARKS = "[data-cm-kind='start'], [data-cm-kind='end'], [data-cm-kind='ref']";
@@ -427,9 +500,28 @@ const dwbSel = (() => {
   // HTML do schowka: kopia zaznaczenia bez łamań stron i bez połówek komentarzy. Komentarz
   // przechodzi tylko w komplecie (początek + koniec + odwołanie); sam początek albo sam koniec
   // po wklejeniu sparowałby się z drugą połówką w zupełnie innym miejscu dokumentu.
+  // Kopia zaznaczenia razem z formatowaniem: gdy zaznaczenie leży w JEDNYM fragmencie (np. wewnątrz
+  // pogrubionego), cloneContents daje sam tekst — opakowujemy go płytkimi kopiami przodków do
+  // poziomu akapitu (Word: skopiowany kawałek pogrubionego tekstu wkleja się pogrubiony).
+  function cloneWithFormat(range) {
+    let frag = range.cloneContents();
+    let anc = range.commonAncestorContainer;
+    if (anc.nodeType !== 1) anc = anc.parentNode;
+    const p = anc?.closest?.(".docx-editable-p");
+    while (p && anc && anc !== p && p.contains(anc)) {
+      const wrap = anc.cloneNode(false);
+      wrap.removeAttribute?.("contenteditable");
+      wrap.appendChild(frag);
+      frag = document.createDocumentFragment();
+      frag.appendChild(wrap);
+      anc = anc.parentNode;
+    }
+    return frag;
+  }
+
   function clipboardBox(range) {
     const box = document.createElement("div");
-    box.appendChild(range.cloneContents());
+    box.appendChild(cloneWithFormat(range));
     box.querySelectorAll('[contenteditable], .dwb-page-break').forEach((el) => { if (el.classList.contains("dwb-page-break")) el.remove(); else el.removeAttribute("contenteditable"); });
     const whole = wholeCommentIds(box.querySelectorAll(COMMENT_MARKS));
     box.querySelectorAll(COMMENT_MARKS).forEach((mark) => { if (!whole.has(mark.dataset.cmId)) mark.remove(); });

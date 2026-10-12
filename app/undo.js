@@ -42,6 +42,7 @@ const UNDO_OP_LABEL = {
   formInsert: "undoOpFormInsert",
   snippetInsert: "undoOpSnippet",
   pasteBlocks: "undoOpPaste",
+  pasteParas: "undoOpPaste",
   pageVAlign: "undoOpFormat",
   pageSetup: "undoOpPageSetup",
   noteInsert: "undoOpNote",

@@ -189,6 +189,41 @@ function deleteParagraphRangeInXml(xml, edit) {
   return { xml: new XMLSerializer().serializeToString(doc), count: 1 };
 }
 
+// Wklejenie akapitów ze schowka (docx-inline-edit.js pasteClipParagraphs): akapit index rozcięty
+// w miejscu kursora (beforeRuns | afterRuns); paras = [{ runs, mark, pPr }] — pPr (XML w:pPr)
+// akapitu źródła, mark = skopiowany razem ze znacznikiem akapitu. Każdy znacznik kończy nowy
+// akapit z formatowaniem źródła; reszta + afterRuns zostaje w akapicie index (jego formatowanie).
+// Podział sekcji (w:sectPr) i zmiany śledzone formatu (w:pPrChange) nie przechodzą z kopią.
+function pasteParagraphsInXml(xml, edit) {
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  const target = collectParagraphElements(doc.documentElement, "all")[edit.index];
+  if (!target || !edit.paras?.length) return { xml, count: 0 };
+  const groups = [];
+  let cur = { pPr: "", runs: [...(edit.beforeRuns || [])] };
+  edit.paras.forEach((q) => {
+    cur.runs.push(...(q.runs || []));
+    if (q.mark) { cur.pPr = q.pPr || ""; groups.push(cur); cur = { pPr: "", runs: [] }; }
+  });
+  cur.runs.push(...(edit.afterRuns || []));
+  groups.forEach((g) => {
+    const el = doc.createElementNS(W_NS, "w:p");
+    if (g.pPr) {
+      const src = new DOMParser().parseFromString(g.pPr, "application/xml").documentElement;
+      if (src?.localName === "pPr" && src.namespaceURI === W_NS) {
+        const pPr = doc.importNode(src, true);
+        // deklaracja xmlns:w z fragmentu (jest już w dokumencie) — bez niej <w:pPr> jak u Worda
+        Array.from(pPr.attributes).filter((a) => a.name.startsWith("xmlns")).forEach((a) => pPr.removeAttributeNode(a));
+        Array.from(pPr.childNodes).forEach((n) => { if (n.nodeType === 1 && (n.localName === "sectPr" || n.localName === "pPrChange")) pPr.removeChild(n); });
+        el.appendChild(pPr);
+      }
+    }
+    target.parentNode.insertBefore(el, target);
+    applyRunsToParagraphXml(el, mergeAdjacentRuns(g.runs));
+  });
+  applyRunsToParagraphXml(target, mergeAdjacentRuns(cur.runs));
+  return { xml: new XMLSerializer().serializeToString(doc), count: 1 };
+}
+
 function changeListLevelInXml(xml, index, delta) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xml, "application/xml");
@@ -746,6 +781,7 @@ function applyEditToXml(xml, edit, opts = {}) {
   if (edit.op === "image") return applyImageInXml(xml, edit);
   if (edit.op === "mergeParagraph") return mergeParagraphInXml(xml, edit.index, edit.mergedRuns);
   if (edit.op === "deleteRange") return deleteParagraphRangeInXml(xml, edit); // doc-selection.js
+  if (edit.op === "pasteParas") return pasteParagraphsInXml(xml, edit); // docx-inline-edit.js
   if (edit.op === "listLevel") return changeListLevelInXml(xml, edit.index, edit.delta);
   if (edit.op === "case" || edit.op === "trim" || edit.op === "affix") return applyParagraphTransformInXml(xml, edit, scope);
   return applyReplaceInXml(xml, edit, scope, opts);

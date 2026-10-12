@@ -856,6 +856,21 @@ function onDocPaste(e) {
   if (typeof dwbSel !== "undefined") dwbSel.collapseForInsert();
   const p = docCaretParagraph(e.target);
   if (!p) return;
+  // nasz schowek (Kopiuj/Wytnij w tym dokumencie): formatowanie źródła, jak w Wordzie
+  const clip = dwbClip.get(e.clipboardData?.getData("application/x-dwb-clip") || "");
+  if (clip && clip.doc === dwbDocSerial && !p.dataset.noteKey) {
+    if (clip.pPrs) {
+      e.preventDefault();
+      pasteClipParagraphs(p, clip);
+      return;
+    }
+    if (clip.html && insertInternalCommentFragment(clip.html, { own: true, sb: clip.sb, eb: clip.eb })) {
+      e.preventDefault();
+      onInlineParagraphInput();
+      composeUi?.paintCommentHighlights?.();
+      return;
+    }
+  }
   const commentFragment = e.clipboardData?.getData("application/x-dwb-comment-fragment");
   if (commentFragment && insertInternalCommentFragment(commentFragment)) {
     e.preventDefault();
@@ -897,20 +912,50 @@ function onDocPaste(e) {
 // odwołania w tekście). Wklejenie zdejmuje je z listy; niewklejone znikają przy zapisie
 // (buildDocumentForSave) — jak w Wordzie. Dawniej: po Wklej samo podświetlenie, bez komentarza.
 const dwbClipComments = new Set();
+// Rekordy schowka z Kopiuj/Wytnij (doc-selection.js rememberClip) i numer otwartego dokumentu —
+// wklejamy z formatowaniem tylko w tym samym dokumencie (obrazy i komentarze to jego części).
+const dwbClip = new Map();
+let dwbDocSerial = 0;
 
 // Własny fragment ze schowka po Wytnij: markerom komentarza odpowiada XML w docIslandXml,
 // więc można je bezpiecznie przenieść wyłącznie wewnątrz tego samego otwartego dokumentu.
 // Nie używamy go dla zwykłego HTML-a z systemowego schowka — zewnętrzna treść nadal przechodzi
 // przez sanitizację w paste-rich.js.
-function insertInternalCommentFragment(html) {
+// opts.own — kawałek tekstu z naszego schowka (bez znacznika akapitu): fragmenty niosą własne
+// formatowanie, więc wstawiamy je na poziomie akapitu (rozcięty fragment w miejscu kursora) —
+// pogrubienie miejsca wklejenia nie „zarazi” wklejonego tekstu (Word: formatowanie źródła).
+function insertInternalCommentFragment(html, opts = {}) {
   const sel = window.getSelection();
   if (!sel?.rangeCount) return false;
   const template = document.createElement("template");
   template.innerHTML = html;
+  template.content.querySelectorAll("br[data-dwb-ph], .dwb-page-break, .dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band").forEach((x) => x.remove());
+  template.content.querySelectorAll("[id]").forEach((x) => x.removeAttribute("id"));
   const marks = [...template.content.querySelectorAll("[data-cm]")];
   // XML znacznika z fragmentu (doc-selection.js fragmentHtml); stary klucz tylko awaryjnie
   const xmlOf = (mark) => mark.dataset.cmXml || docIslandXml.get(mark.dataset.cm);
-  if (!marks.length || marks.some((mark) => !xmlOf(mark))) return false;
+  if ((!marks.length && !opts.own) || marks.some((mark) => !xmlOf(mark))) return false;
+  if (opts.own) {
+    const p = docCaretParagraph(sel.anchorNode?.nodeType === 1 ? sel.anchorNode : sel.anchorNode?.parentElement);
+    const r = sel.getRangeAt(0);
+    r.deleteContents();
+    if (p) {
+      // inteligentne wklejanie (Word): całe słowa wklejone tuż przy słowie dostają spację
+      const [left, right] = textAroundCaret(p, r);
+      // (spacja osobno, bez formatowania wklejonego fragmentu — nie „pogrubiona spacja”)
+      const pasted = template.content.textContent.replace(/\uFEFF/g, "");
+      if (opts.sb && SMART_WORD.test(left) && SMART_WORD.test(pasted.charAt(0))) template.content.prepend(document.createTextNode(" "));
+      if (opts.eb && SMART_WORD.test(right) && SMART_WORD.test(pasted.slice(-1))) template.content.append(document.createTextNode(" "));
+    }
+    if (p && p.contains(r.startContainer)) {
+      const at = splitToParagraphLevel(p, r.startContainer, r.startOffset);
+      const q = document.createRange();
+      q.setStart(at.node, at.offset);
+      q.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(q);
+    }
+  }
   marks.forEach((mark) => {
     const key = `paste${++pastedIslandSeq}`;
     docIslandXml.set(key, xmlOf(mark));
@@ -932,6 +977,84 @@ function insertInternalCommentFragment(html) {
     sel.addRange(range);
   }
   return true;
+}
+
+const SMART_WORD = /[\p{L}\p{N}]/u;
+// Znak tuż przed i tuż za kursorem w akapicie (bez pomocników kursora).
+function textAroundCaret(p, r) {
+  const a = document.createRange();
+  a.selectNodeContents(p);
+  a.setEnd(r.startContainer, r.startOffset);
+  const b = document.createRange();
+  b.selectNodeContents(p);
+  b.setStart(r.endContainer, r.endOffset);
+  return [a.toString().replace(/\uFEFF/g, "").slice(-1), b.toString().replace(/\uFEFF/g, "").charAt(0)];
+}
+
+// Pozycja (node, offset) w akapicie p przeniesiona na poziom dzieci p: elementy po drodze
+// (fragment ze stylem, link) rozcięte na dwa w tym miejscu.
+function splitToParagraphLevel(p, node, offset) {
+  while (node !== p && p.contains(node)) {
+    const parent = node.parentNode;
+    if (node.nodeType === 3) {
+      if (offset <= 0) { offset = [...parent.childNodes].indexOf(node); }
+      else if (offset >= node.length) { offset = [...parent.childNodes].indexOf(node) + 1; }
+      else { node.splitText(offset); offset = [...parent.childNodes].indexOf(node) + 1; }
+      node = parent;
+      continue;
+    }
+    if (node.matches?.('[contenteditable="false"]')) { offset = [...parent.childNodes].indexOf(node) + 1; node = parent; continue; }
+    const idx = [...parent.childNodes].indexOf(node);
+    if (offset <= 0) { offset = idx; node = parent; continue; }
+    if (offset >= node.childNodes.length) { offset = idx + 1; node = parent; continue; }
+    const tail = node.cloneNode(false);
+    while (node.childNodes.length > offset) tail.appendChild(node.childNodes[offset]);
+    parent.insertBefore(tail, node.nextSibling);
+    offset = idx + 1;
+    node = parent;
+  }
+  return { node, offset };
+}
+
+// Wklejenie akapitów z naszego schowka (jak „Zachowaj formatowanie źródła” w Wordzie, sprawdzone
+// w Wordzie 2026-10-12): tekst przed kursorem + 1. wklejony akapit → akapit z formatowaniem
+// wklejonego (np. punkt listy); kolejne akapity — każdy swoje; ostatni kawałek bez znacznika
+// akapitu + tekst za kursorem → akapit z formatowaniem miejsca wklejenia. Jeden krok Cofnij.
+function pasteClipParagraphs(p, clip) {
+  const sel = window.getSelection();
+  if (!sel?.rangeCount) return;
+  const caret = sel.getRangeAt(0);
+  const part = (fromStart) => {
+    const r = document.createRange();
+    r.selectNodeContents(p);
+    if (fromStart) r.setEnd(caret.startContainer, caret.startOffset); else r.setStart(caret.startContainer, caret.startOffset);
+    const tmp = document.createElement("p");
+    tmp.appendChild(r.cloneContents());
+    return extractRunsFromPreviewParagraph(tmp);
+  };
+  const beforeRuns = part(true);
+  const afterRuns = part(false);
+  const index = resolveParaIndex(p);
+  if (index < 0) return;
+  (async () => {
+    const pPrs = await clip.pPrs;
+    const paras = clip.paras.map((q, i) => ({ runs: q.runs.map((r) => ({ ...r })), mark: q.mark, pPr: pPrs[i] || "" }));
+    // inteligentne wklejanie (Word): całe słowa przy słowie — spacja na styku
+    const plain = (runs) => previewRunsToPlainText(runs);
+    const firstRun = paras[0].runs.find((r) => !r.island && !r.break && r.text);
+    if (clip.sb && firstRun && SMART_WORD.test(plain(beforeRuns).slice(-1)) && SMART_WORD.test(firstRun.text.charAt(0))) firstRun.text = ` ${firstRun.text}`;
+    const tail = paras[paras.length - 1];
+    const lastRun = [...tail.runs].reverse().find((r) => !r.island && !r.break && r.text);
+    if (!tail.mark && clip.eb && lastRun && SMART_WORD.test(plain(afterRuns).charAt(0)) && SMART_WORD.test(lastRun.text.slice(-1))) lastRun.text = `${lastRun.text} `;
+    const added = paras.filter((q) => q.mark).length;
+    const last = paras[paras.length - 1];
+    pendingInlineCursor = { paraIndex: index + added, offset: last.mark ? 0 : previewRunsToPlainText(last.runs).length };
+    paras.forEach((q) => q.runs.forEach((r) => {
+      const m = r.island && /<w:commentReference\b[^>]*\bw:id="(\d+)"/.exec(r.island);
+      if (m) dwbClipComments.delete(m[1]);
+    }));
+    await applyDocumentEdit({ op: "pasteParas", index, beforeRuns, afterRuns, paras });
+  })().catch((err) => log(`Wklejanie: ${err.message || err}`, "error"));
 }
 
 // Wklejona KOPIA komentarza (oryginał dalej w tekście): nowy numer i własny wpis w pliku, jak
