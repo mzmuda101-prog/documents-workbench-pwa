@@ -942,7 +942,9 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
   // znika, razem z resztką zakresu i wpisami w commentsExtended (dawniej zostawał bez kotwicy)
   if (list.length && commentRefsBefore.size && typeof applyRevisionsInZip === "function") {
     const after = commentRefIds(xml);
-    const lost = [...commentRefsBefore].filter((id) => !after.has(id));
+    // wycięty w całości komentarz czeka w schowku na wklejenie (dwbClipComments) — nie kasujemy
+    const clip = typeof dwbClipComments !== "undefined" ? dwbClipComments : new Set();
+    const lost = [...commentRefsBefore].filter((id) => !after.has(id) && !clip.has(id));
     if (lost.length) xml = (await applyRevisionsInZip(zip, xml, { op: "revisions", action: "removeComments", ids: lost })).xml;
   }
   xml = keepXmlProlog(xmlIn, repairFontNames(xml));

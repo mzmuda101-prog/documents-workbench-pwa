@@ -98,6 +98,7 @@ async function ingestFile(file, options = {}) {
 
     const buf = await file.arrayBuffer();
     originalFileBytes = new Uint8Array(buf);
+    if (typeof dwbClipComments !== "undefined") dwbClipComments.clear(); // schowek komentarzy dotyczył poprzedniego pliku
     // zepsute nazwy krojów ze starszych wersji (naprawa w pamięci; trafi do pliku przy zapisie)
     if (typeof repairDocxFontNames === "function") originalFileBytes = await repairDocxFontNames(originalFileBytes);
     pendingDocEdits = [];
@@ -292,8 +293,15 @@ async function buildDocumentForSave() {
   const inlineEdits = collectInlineParagraphEdits();
   const edits = [...pendingDocEdits];
   if (inlineEdits.length) edits.push({ op: "paragraphBatch", items: inlineEdits });
-  if (!edits.length) return originalFileBytes;
-  const { bytes } = await buildPatchedDocx(originalFileBytes, edits);
+  // komentarze wycięte i niewklejone (docx-inline-edit.js, dwbClipComments) — w zapisanym pliku
+  // ich nie ma (jak w Wordzie); w otwartym dokumencie dalej czekają na wklejenie
+  const clipIds = typeof dwbClipComments !== "undefined" ? [...dwbClipComments] : [];
+  let bytes = edits.length ? (await buildPatchedDocx(originalFileBytes, edits)).bytes : originalFileBytes;
+  if (clipIds.length) {
+    const refs = commentRefIds(await getDocumentXmlString(bytes));
+    const gone = clipIds.filter((id) => !refs.has(id));
+    if (gone.length) bytes = (await buildPatchedDocx(bytes, [{ op: "revisions", action: "removeComments", ids: gone }])).bytes;
+  }
   return bytes;
 }
 

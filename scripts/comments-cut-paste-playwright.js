@@ -103,6 +103,19 @@ async function run() {
     throw new Error(`Częściowe wycięcie komentarza rozjechało zakres: ${JSON.stringify(part)}`);
   }
 
+  // Przebudowa pliku między Wytnij a Wklej: komentarz ma przejść z treścią (dawniej zostawało samo
+  // podświetlenie — kliknięcie nic nie otwierało, a w zapisanym pliku komentarza nie było).
+  const merged = await cutPasteCase(page, (text) => [0, text.length], "Czy życie stworzone", { mergeBetween: true });
+  const mergedId = merged.ranges[0]?.id;
+  if (merged.ranges.length !== 1 || merged.ranges[0].text !== "Czy życie stworzone" || !merged.known.includes(mergedId) || !merged.savedComment) {
+    throw new Error(`Komentarz zgubiony, gdy plik przebudował się między Wytnij a Wklej: ${JSON.stringify(merged)}`);
+  }
+  // Wytnij bez wklejenia + zapis: komentarza nie ma w pliku (jak w Wordzie), żadnych resztek
+  const dropped = await cutPasteCase(page, (text) => [0, text.length], "Czy życie stworzone", { mergeBetween: true, noPaste: true });
+  if (dropped.starts !== 0 || dropped.ends !== 0 || dropped.savedComment) {
+    throw new Error(`Wycięty i niewklejony komentarz został w zapisanym pliku: ${JSON.stringify(dropped)}`);
+  }
+
   // To samo na pliku z Worda: tekst siedzi w <span> przebiegu, więc koniec zaznaczenia w DOM wypada
   // wewnątrz spanu, przed znacznikiem końca komentarza (stary kod uznawał komentarz za częściowy).
   const file = await wordFileCase(page);
@@ -118,7 +131,7 @@ async function run() {
 // Nowy dokument: „Pierwszy akapit” + „Wskazówka z broszury <komentarz>” (komentarz do końca).
 // Wycina zakres [od, do) z drugiego akapitu (koniec zaznaczenia w tekście, jak przy przeciąganiu)
 // i wkleja na końcu pierwszego. Zwraca znaczniki w pliku i zakresy komentarzy w podglądzie.
-async function cutPasteCase(page, pick, commented) {
+async function cutPasteCase(page, pick, commented, opts = {}) {
   await page.evaluate(() => composeUi.createNew("blank"));
   await page.waitForSelector(".docx-preview-host p.docx-editable-p", { timeout: 20000 });
   await page.waitForTimeout(300);
@@ -139,7 +152,7 @@ async function cutPasteCase(page, pick, commented) {
   await page.click(".compose-pop-form .lf-ok");
   await page.waitForTimeout(500);
 
-  return page.evaluate(async (pickSrc) => {
+  return page.evaluate(async ([pickSrc, opts]) => {
     const paras = () => collectPreviewParagraphElements(document.querySelector(".docx-preview-host"));
     const p = paras()[1];
     // eslint-disable-next-line no-new-func
@@ -163,17 +176,22 @@ async function cutPasteCase(page, pick, commented) {
     getSelection().addRange(r);
     const clip = new DataTransfer();
     docEditRoot().dispatchEvent(new ClipboardEvent("cut", { clipboardData: clip, bubbles: true, cancelable: true }));
+    // przebudowa pliku między Wytnij a Wklej (Enter, wycięcie przez akapity, panel) — kasowała
+    // komentarz „bez kotwicy”, choć był w schowku (zgłoszenie 2026-10-12)
+    if (opts.mergeBetween) await mergeInlineEditsIntoBytes();
     const first = paras()[0];
     const atEnd = document.createRange();
     atEnd.selectNodeContents(first);
     atEnd.collapse(false);
     getSelection().removeAllRanges();
     getSelection().addRange(atEnd);
-    docEditRoot().dispatchEvent(new ClipboardEvent("paste", { clipboardData: clip, bubbles: true, cancelable: true }));
+    if (!opts.noPaste) docEditRoot().dispatchEvent(new ClipboardEvent("paste", { clipboardData: clip, bubbles: true, cancelable: true }));
     composeUi.paintCommentHighlights();
+    const known = [...(await composeUi.loadComments()).keys()];
     const bytes = await buildDocumentForSave();
     const zip = await JSZip.loadAsync(bytes);
     const xml = await zip.file("word/document.xml").async("string");
+    const commentsXml = await zip.file("word/comments.xml")?.async("string") || "";
     const list = paras();
     const ranges = [...document.querySelectorAll("span[data-cm-kind='start']")].map((start) => {
       const end = [...document.querySelectorAll(`span[data-cm-kind="end"][data-cm-id="${CSS.escape(start.dataset.cmId)}"]`)]
@@ -190,8 +208,10 @@ async function cutPasteCase(page, pick, commented) {
       starts: (xml.match(/<w:commentRangeStart\b/g) || []).length,
       ends: (xml.match(/<w:commentRangeEnd\b/g) || []).length,
       ranges,
+      known,
+      savedComment: commentsXml.includes("Tajemnice płetw"),
     };
-  }, pick.toString());
+  }, [pick.toString(), opts]);
 }
 
 // review-sample.docx: „Ostatni akapit.” z komentarzem 20 na całym tekście (koniec + odwołanie za

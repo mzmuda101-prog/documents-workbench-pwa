@@ -389,6 +389,8 @@ const dwbSel = (() => {
     if (box.querySelector(COMMENT_MARKS)) {
       // Typ działa tylko w naszej aplikacji; zewnętrzne programy dalej dostają zwykły HTML/tekst.
       e.clipboardData?.setData("application/x-dwb-comment-fragment", box.innerHTML);
+      // treść komentarza czeka w pliku na wklejenie (docx-inline-edit.js, dwbClipComments)
+      box.querySelectorAll("[data-cm-kind='ref']").forEach((ref) => dwbClipComments.add(ref.dataset.cmId));
     }
     asUndoStep("undoOpCut", () => {
       const p = deleteSpan(cutInfo);

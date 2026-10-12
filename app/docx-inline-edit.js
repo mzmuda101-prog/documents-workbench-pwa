@@ -892,6 +892,12 @@ function onDocPaste(e) {
   onInlineParagraphInput();
 }
 
+// Komentarze wycięte w całości (doc-selection.js, Wytnij) — są w schowku, więc przebudowa pliku
+// przed wklejeniem NIE kasuje ich treści z comments.xml (buildPatchedDocx usuwa komentarze bez
+// odwołania w tekście). Wklejenie zdejmuje je z listy; niewklejone znikają przy zapisie
+// (buildDocumentForSave) — jak w Wordzie. Dawniej: po Wklej samo podświetlenie, bez komentarza.
+const dwbClipComments = new Set();
+
 // Własny fragment ze schowka po Wytnij: markerom komentarza odpowiada XML w docIslandXml,
 // więc można je bezpiecznie przenieść wyłącznie wewnątrz tego samego otwartego dokumentu.
 // Nie używamy go dla zwykłego HTML-a z systemowego schowka — zewnętrzna treść nadal przechodzi
@@ -906,6 +912,7 @@ function insertInternalCommentFragment(html) {
   marks.forEach((mark) => {
     mark.contentEditable = "false";
     mark.className = "cm-mark";
+    if (mark.dataset.cmKind === "ref") dwbClipComments.delete(mark.dataset.cmId);
   });
   const range = sel.getRangeAt(0);
   range.deleteContents();
