@@ -872,6 +872,11 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
       total += res.count;
       continue;
     }
+    if (normalized.op === "commentClone") { // docx-compose.js — kopia komentarza przy Kopiuj/Wklej
+      const res = await applyCommentCloneInZip(zip, xml, normalized);
+      total += res.count;
+      continue;
+    }
     if (normalized.op === "commentAdd" || normalized.op === "commentReply" || normalized.op === "commentDone" || normalized.op === "commentEdit") { // docx-compose.js
       const res = normalized.op === "commentAdd" ? await applyCommentAddInZip(zip, xml, normalized)
         : normalized.op === "commentEdit" ? await applyCommentEditInZip(zip, xml, normalized)
@@ -947,6 +952,8 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
     const lost = [...commentRefsBefore].filter((id) => !after.has(id) && !clip.has(id));
     if (lost.length) xml = (await applyRevisionsInZip(zip, xml, { op: "revisions", action: "removeComments", ids: lost })).xml;
   }
+  // ten sam numer komentarza dwa razy w treści = plik, którego Word nie odczyta — kopie dostają nowe
+  if (list.length && typeof dedupeCommentIdsInZip === "function") xml = await dedupeCommentIdsInZip(zip, xml);
   xml = keepXmlProlog(xmlIn, repairFontNames(xml));
   zip.file("word/document.xml", xml);
   if (coreXml !== null) zip.file("docProps/core.xml", coreXml);

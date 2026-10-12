@@ -908,8 +908,14 @@ function insertInternalCommentFragment(html) {
   const template = document.createElement("template");
   template.innerHTML = html;
   const marks = [...template.content.querySelectorAll("[data-cm]")];
-  if (!marks.length || marks.some((mark) => !docIslandXml.has(mark.dataset.cm))) return false;
+  // XML znacznika z fragmentu (doc-selection.js fragmentHtml); stary klucz tylko awaryjnie
+  const xmlOf = (mark) => mark.dataset.cmXml || docIslandXml.get(mark.dataset.cm);
+  if (!marks.length || marks.some((mark) => !xmlOf(mark))) return false;
   marks.forEach((mark) => {
+    const key = `paste${++pastedIslandSeq}`;
+    docIslandXml.set(key, xmlOf(mark));
+    mark.dataset.cm = key;
+    delete mark.dataset.cmXml;
     mark.contentEditable = "false";
     mark.className = "cm-mark";
     if (mark.dataset.cmKind === "ref") dwbClipComments.delete(mark.dataset.cmId);
@@ -918,6 +924,7 @@ function insertInternalCommentFragment(html) {
   range.deleteContents();
   const last = template.content.lastChild;
   range.insertNode(template.content);
+  renumberCopiedComments(marks);
   if (last) {
     range.setStartAfter(last);
     range.collapse(true);
@@ -925,6 +932,34 @@ function insertInternalCommentFragment(html) {
     sel.addRange(range);
   }
   return true;
+}
+
+// Wklejona KOPIA komentarza (oryginał dalej w tekście): nowy numer i własny wpis w pliku, jak
+// w Wordzie — ten sam numer dwa razy to plik, którego Word nie odczyta. Numer z comments.xml
+// (z osieroconymi też) i z poprzednich wklejeń; wpis dokłada op „commentClone” w kolejce.
+let pastedIslandSeq = 0;
+let lastClonedCommentId = -1;
+function renumberCopiedComments(marks) {
+  const host = docCanvasEl?.querySelector(".docx-preview-host");
+  const refs = marks.filter((m) => m.dataset.cmKind === "ref");
+  const dup = [...new Set(refs.map((m) => m.dataset.cmId))].filter((id) => host?.querySelectorAll(`span[data-cm-kind="ref"][data-cm-id="${CSS.escape(id)}"]`).length > 1);
+  if (!dup.length || !originalFileBytes) return;
+  (async () => {
+    const zip = await loadDocxZipCached(originalFileBytes);
+    const cXml = (await zip.file("word/comments.xml")?.async("string")) || "";
+    let next = Math.max(lastClonedCommentId, ...[...cXml.matchAll(/<w:comment\b[^>]*\bw:id="(\d+)"/g)].map((m) => +m[1]), -1) + 1;
+    const pairs = dup.map((from) => ({ from, to: String(next++) }));
+    lastClonedCommentId = next - 1;
+    pairs.forEach(({ from, to }) => {
+      marks.filter((m) => m.dataset.cmId === from && m.isConnected).forEach((m) => {
+        const xml = docIslandXml.get(m.dataset.cm) || "";
+        docIslandXml.set(m.dataset.cm, xml.replace(/(<w:comment(?:RangeStart|RangeEnd|Reference)\b[^>]*\bw:id=")-?\d+(")/g, `$1${to}$2`));
+        m.dataset.cmId = to;
+      });
+    });
+    await applyInlineStructuralEdit({ op: "commentClone", pairs });
+    composeUi?.paintCommentHighlights?.();
+  })().catch((err) => log(`Kopia komentarza: ${err.message || err}`, "error"));
 }
 
 function insertTextAtCaret(text) {

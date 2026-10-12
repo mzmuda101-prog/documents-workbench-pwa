@@ -388,7 +388,7 @@ const dwbSel = (() => {
     e.clipboardData?.setData("text/html", box.innerHTML);
     if (box.querySelector(COMMENT_MARKS)) {
       // Typ działa tylko w naszej aplikacji; zewnętrzne programy dalej dostają zwykły HTML/tekst.
-      e.clipboardData?.setData("application/x-dwb-comment-fragment", box.innerHTML);
+      e.clipboardData?.setData("application/x-dwb-comment-fragment", fragmentHtml(box));
       // treść komentarza czeka w pliku na wklejenie (docx-inline-edit.js, dwbClipComments)
       box.querySelectorAll("[data-cm-kind='ref']").forEach((ref) => dwbClipComments.add(ref.dataset.cmId));
     }
@@ -419,7 +419,7 @@ const dwbSel = (() => {
     e.preventDefault();
     e.clipboardData?.setData("text/plain", window.getSelection().toString());
     e.clipboardData?.setData("text/html", box.innerHTML);
-    e.clipboardData?.setData("application/x-dwb-comment-fragment", box.innerHTML);
+    e.clipboardData?.setData("application/x-dwb-comment-fragment", fragmentHtml(box));
   }
 
   const COMMENT_MARKS = "[data-cm-kind='start'], [data-cm-kind='end'], [data-cm-kind='ref']";
@@ -434,6 +434,18 @@ const dwbSel = (() => {
     const whole = wholeCommentIds(box.querySelectorAll(COMMENT_MARKS));
     box.querySelectorAll(COMMENT_MARKS).forEach((mark) => { if (!whole.has(mark.dataset.cmId)) mark.remove(); });
     return box;
+  }
+
+  // Własny fragment schowka: znaczniki niosą swój XML. Klucze data-cm są ważne tylko do
+  // następnego przerysowania dokumentu — po nim ten sam klucz wskazywał znacznik INNEGO
+  // komentarza (wklejone zdanie dostawało cudzy komentarz, plik z powtórzonym numerem).
+  function fragmentHtml(box) {
+    const copy = box.cloneNode(true);
+    copy.querySelectorAll("[data-cm]").forEach((el) => {
+      const xml = docIslandXml.get(el.dataset.cm);
+      if (xml) el.dataset.cmXml = xml;
+    });
+    return copy.innerHTML;
   }
 
   function wholeCommentIds(marks) {

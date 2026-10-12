@@ -2347,6 +2347,91 @@ function composeCommentEx(exDoc, paraId) {
   return ex;
 }
 
+// ── kopia komentarza (Kopiuj/Wklej fragmentu z komentarzem, jak w Wordzie) ───────────────────
+// Ten sam numer komentarza dwa razy w treści to błąd pliku — Word: „zawartość, której nie można
+// odczytać” (zgłoszenie 2026-10-12). Kopia dostaje nowy numer i własny wpis w comments.xml
+// (nowe w14:paraId), w commentsExtended (stan „rozwiązany”) i w commentsIds, gdy jest.
+const COMPOSE_W16CID = "http://schemas.microsoft.com/office/word/2016/wordml/cid";
+async function composeCloneComments(zip, pairs) {
+  if (!pairs.length || !zip.file("word/comments.xml")) return 0;
+  const cDoc = await composeCommentsParts(zip);
+  const info = composeCommentInfo(cDoc);
+  const exDoc = zip.file("word/commentsExtended.xml") ? await composeCommentsExDoc(zip) : null;
+  const idsXml = await zip.file("word/commentsIds.xml")?.async("string");
+  const idsDoc = idsXml ? composeParse(idsXml) : null;
+  let done = 0;
+  for (const { from, to } of pairs) {
+    const src = info.comments.find((c) => c.getAttributeNS(W_NS, "id") === String(from));
+    if (!src || info.comments.some((c) => c.getAttributeNS(W_NS, "id") === String(to))) continue;
+    const copy = src.cloneNode(true);
+    copy.setAttributeNS(W_NS, "w:id", String(to));
+    const ps = Array.from(copy.getElementsByTagNameNS(W_NS, "p"));
+    const lastOld = ps.length ? (ps[ps.length - 1].getAttributeNS(COMPOSE_W14, "paraId") || "").toUpperCase() : "";
+    let lastNew = "";
+    ps.forEach((p) => {
+      if (p.hasAttributeNS(COMPOSE_W14, "paraId")) { lastNew = composeParaId(info.paraIds); p.setAttributeNS(COMPOSE_W14, "w14:paraId", lastNew); }
+      if (p.hasAttributeNS(COMPOSE_W14, "textId")) p.setAttributeNS(COMPOSE_W14, "w14:textId", "77777777");
+    });
+    src.parentNode.insertBefore(copy, src.nextSibling);
+    info.comments.push(copy);
+    if (exDoc && lastOld && lastNew) {
+      const ex = Array.from(exDoc.getElementsByTagNameNS(COMPOSE_W15, "commentEx")).find((e) => (e.getAttributeNS(COMPOSE_W15, "paraId") || "").toUpperCase() === lastOld);
+      if (ex) {
+        const exCopy = ex.cloneNode(false);
+        exCopy.setAttributeNS(COMPOSE_W15, "w15:paraId", lastNew);
+        ex.parentNode.insertBefore(exCopy, ex.nextSibling);
+      }
+    }
+    if (idsDoc && lastNew) {
+      const el = idsDoc.createElementNS(COMPOSE_W16CID, "w16cid:commentId");
+      el.setAttributeNS(COMPOSE_W16CID, "w16cid:paraId", lastNew);
+      el.setAttributeNS(COMPOSE_W16CID, "w16cid:durableId", composeParaId(new Set()));
+      idsDoc.documentElement.appendChild(el);
+    }
+    done++;
+  }
+  if (!done) return 0;
+  zip.file("word/comments.xml", composeSerialize(cDoc));
+  if (exDoc) zip.file("word/commentsExtended.xml", composeSerialize(exDoc));
+  if (idsDoc) zip.file("word/commentsIds.xml", composeSerialize(idsDoc));
+  return done;
+}
+
+// op "commentClone": { pairs: [{ from, to }] } — znaczniki kopii (nowy numer) są już w treści
+async function applyCommentCloneInZip(zip, xml, edit) {
+  return { xml, count: await composeCloneComments(zip, edit.pairs || []) };
+}
+
+// Bezpiecznik przy każdej przebudowie pliku: komentarz, którego znaczniki występują w treści
+// więcej niż raz (kopia z innej drogi, plik z zewnątrz), dostaje dla kolejnych wystąpień nowe
+// numery i kopie wpisu — plik zawsze otworzy się w Wordzie bez naprawiania.
+async function dedupeCommentIdsInZip(zip, xml) {
+  const refs = [...String(xml).matchAll(/<w:commentReference\b[^>]*\bw:id="(-?\d+)"/g)].map((m) => m[1]);
+  if (refs.length === new Set(refs).size || !zip.file("word/comments.xml")) return xml;
+  const doc = composeParse(xml);
+  const cDoc = await composeCommentsParts(zip);
+  let next = composeCommentInfo(cDoc).nextId;
+  const seen = new Map(); // id → { start, end, ref } — ile wystąpień każdego znacznika
+  const remap = new Map(); // `${id}#${k}` → nowy numer
+  const pairs = [];
+  const tagKind = { commentRangeStart: "start", commentRangeEnd: "end", commentReference: "ref" };
+  const marks = Array.from(doc.getElementsByTagNameNS(W_NS, "*")).filter((el) => tagKind[el.localName]);
+  marks.forEach((el) => {
+    const id = el.getAttributeNS(W_NS, "id");
+    const kind = tagKind[el.localName];
+    const cnt = seen.get(id) || { start: 0, end: 0, ref: 0 };
+    const k = cnt[kind]++;
+    seen.set(id, cnt);
+    if (!k) return;
+    const key = `${id}#${k}`;
+    if (!remap.has(key)) { remap.set(key, String(next)); pairs.push({ from: id, to: String(next) }); next++; }
+    el.setAttributeNS(W_NS, "w:id", remap.get(key));
+  });
+  if (!pairs.length) return xml;
+  await composeCloneComments(zip, pairs);
+  return composeSerialize(doc);
+}
+
 // op "commentAdd": { index, start, end, text | rich, author, initials }
 async function applyCommentAddInZip(zip, xml, edit) {
   const doc = composeParse(xml);
