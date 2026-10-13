@@ -2176,25 +2176,33 @@ function applyImageInXml(xml, edit) {
 // ── op "runStyle": kolor czcionki / wyróżnienie fragmentu akapitu ────────────
 // { index, start, end, color?: "#RRGGBB" | "auto", highlight?: nazwa Worda | "#RRGGBB" | "" }
 // Przez model akapitu (te same zasady co pisanie): linki i pola-wyspy zostają nietknięte.
+// edit.ranges = [{ index, start, end }] — zaznaczenie przez kilka akapitów (jak w Wordzie);
+// stara postać { index, start, end } = jeden akapit
 function applyRunStyleInXml(xml, edit) {
   const doc = composeParse(xml);
-  const p = collectParagraphElements(doc.documentElement, "all")[edit.index];
-  if (!p) return { xml, count: 0 };
-  const runs = extractRunsFromParagraphXml(p);
-  const total = previewRunsToPlainText(runs).length;
-  const start = Math.max(0, Math.min(total, edit.start | 0));
-  const end = Math.max(start, Math.min(total, edit.end | 0));
-  if (end <= start) return { xml, count: 0 };
-  const { before, mid, after } = composeSliceRuns(runs, start, end);
-  const styled = mid.map((r) => {
-    if (r.break || r.island) return r;
-    const out = { ...r };
-    if (edit.color !== undefined) { if (!edit.color || edit.color === "auto") delete out.color; else out.color = edit.color; }
-    if (edit.highlight !== undefined) { if (!edit.highlight) delete out.highlight; else out.highlight = edit.highlight; }
-    return out;
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  const ranges = Array.isArray(edit.ranges) ? edit.ranges : [{ index: edit.index, start: edit.start, end: edit.end }];
+  let count = 0;
+  ranges.forEach((rg) => {
+    const p = paragraphs[rg.index];
+    if (!p) return;
+    const runs = extractRunsFromParagraphXml(p);
+    const total = previewRunsToPlainText(runs).length;
+    const start = Math.max(0, Math.min(total, rg.start | 0));
+    const end = Math.max(start, Math.min(total, rg.end | 0));
+    if (end <= start) return;
+    const { before, mid, after } = composeSliceRuns(runs, start, end);
+    const styled = mid.map((r) => {
+      if (r.break || r.island) return r;
+      const out = { ...r };
+      if (edit.color !== undefined) { if (!edit.color || edit.color === "auto") delete out.color; else out.color = edit.color; }
+      if (edit.highlight !== undefined) { if (!edit.highlight) delete out.highlight; else out.highlight = edit.highlight; }
+      return out;
+    });
+    applyRunsToParagraphXml(p, [...before, ...styled, ...after]);
+    count++;
   });
-  applyRunsToParagraphXml(p, [...before, ...styled, ...after]);
-  return { xml: composeSerialize(doc), count: 1 };
+  return count ? { xml: composeSerialize(doc), count } : { xml, count: 0 };
 }
 
 // ── komentarze: dodaj / odpowiedz / rozwiąż ──────────────────────────────────

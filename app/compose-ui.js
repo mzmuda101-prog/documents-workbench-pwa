@@ -2186,20 +2186,55 @@ const composeUi = (() => {
   }
 
   // Zaznaczenie w akapicie z kursorem (przycięte do akapitu) jako przesunięcia w jego tekście.
+  // Zaznaczenie niezależnie od kierunku (zgłoszenie 2026-10-13: kolor działał przy zaznaczaniu od
+  // prawej do lewej, od lewej do prawej zwykle nie). Dawniej akapit brany był z KOŃCA zaznaczenia
+  // (focus) — przeciągnięcie do końca wiersza kończy się na początku NASTĘPNEGO akapitu, a zakres
+  // liczony w nim wychodził pusty. Teraz: początek i koniec z zakresu (zawsze w kolejności),
+  // koniec na samym początku następnego akapitu = do końca poprzedniego (jak w Wordzie), a dla
+  // kilku akapitów — fragment w każdym (ranges).
+  const plainLen = (p) => previewRunsToPlainText(extractRunsFromPreviewParagraph(p)).length;
   function selectionInParagraph() {
-    const p = caretParagraph();
-    if (!p) return null;
-    const index = resolveParaIndex(p);
-    const range = window.getSelection().getRangeAt(0);
-    const start = p.contains(range.startContainer) ? textOffset(p, range.startContainer, range.startOffset) : 0;
-    const end = p.contains(range.endContainer) ? textOffset(p, range.endContainer, range.endOffset) : previewRunsToPlainText(extractRunsFromPreviewParagraph(p)).length;
-    return { p, index, start, end, collapsed: range.collapsed || end <= start };
+    if (!caretParagraph()) return null;
+    const sel = window.getSelection();
+    if (!sel?.rangeCount) return null;
+    const range = sel.getRangeAt(0);
+    const list = collectPreviewParagraphElements(host());
+    const own = (node) => {
+      const el = node?.nodeType === 1 ? node : node?.parentElement;
+      return el?.closest?.(".docx-editable-p") || null;
+    };
+    const hit = list.filter((p) => range.intersectsNode(p) && p.classList.contains("docx-editable-p"));
+    let a = own(range.startContainer) || hit[0];
+    let b = own(range.endContainer) || hit[hit.length - 1];
+    if (!a || !b) return null;
+    let ia = list.indexOf(a);
+    let ib = list.indexOf(b);
+    const start = a.contains(range.startContainer) ? textOffset(a, range.startContainer, range.startOffset) : 0;
+    let end = b.contains(range.endContainer) ? textOffset(b, range.endContainer, range.endOffset) : plainLen(b);
+    while (ib > ia && end === 0) { ib -= 1; b = list[ib]; end = plainLen(b); }
+    const ranges = [];
+    for (let i = ia; i <= ib; i++) {
+      const p = list[i];
+      if (!p.classList.contains("docx-editable-p") || p.dataset.lock) continue;
+      const from = i === ia ? start : 0;
+      const to = i === ib ? end : plainLen(p);
+      if (to > from) ranges.push({ index: resolveParaIndex(p), start: from, end: to });
+    }
+    const index = resolveParaIndex(a);
+    const firstEnd = ia === ib ? end : plainLen(a);
+    return { p: a, index, start, end: firstEnd, collapsed: range.collapsed || !ranges.length, ranges, last: { index: resolveParaIndex(b), end } };
   }
 
-  function reselect(index, start, end) {
-    const el = collectPreviewParagraphElements(host())[index];
-    const r = el && formDomRange(el, start, end);
+  // Zaznaczenie z powrotem po przerysowaniu (od początku w pierwszym akapicie do końca w ostatnim).
+  function reselect(index, start, end, last = null) {
+    const list = collectPreviewParagraphElements(host());
+    const el = list[index];
+    const r = el && formDomRange(el, start, last ? start : end);
     if (!r) return;
+    if (last) {
+      const e = formDomRange(list[last.index], last.end, last.end);
+      if (e) r.setEnd(e.startContainer, e.startOffset);
+    }
     focusDocParagraph(el);
     const sel = window.getSelection();
     sel.removeAllRanges();
@@ -2219,11 +2254,11 @@ const composeUi = (() => {
       if (!css && activeTypingStyle) delete activeTypingStyle[kind];
       return;
     }
-    const edit = { op: "runStyle", index: ctx.index, start: ctx.start, end: ctx.end };
+    const edit = { op: "runStyle", ranges: ctx.ranges };
     edit[kind] = kind === "color" ? (value ? `#${value}` : "auto") : css;
     await applyDocumentEdit(edit).catch((err) => log(`Kolor: ${err.message || err}`, "error"));
     await whenEditable();
-    if (!readOnlyMode) reselect(ctx.index, ctx.start, ctx.end); // zaznaczenie zostaje — można dodać wyróżnienie
+    if (!readOnlyMode) reselect(ctx.index, ctx.start, ctx.end, ctx.ranges.length > 1 ? ctx.last : null); // zaznaczenie zostaje — można dodać wyróżnienie
   }
 
   function swatch(hex, label, onPick, extraClass = "") {
