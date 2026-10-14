@@ -43,11 +43,14 @@
     const vpRect = docViewportEl.getBoundingClientRect();
     // dolna granica = niższa z: dół okna dokumentu, górna krawędź klawiatury
     // pływające „Gotowe” w rogu nie może przykryć kursora
-    const limit = Math.min(vpRect.bottom, visibleBottom) - MARGIN - (dismissShown() ? 52 : 0);
+    // …ani pod wyspę u dołu (telefon, bez klawiatury — przy pisaniu wyspa się chowa)
+    const limit = Math.min(vpRect.bottom - (window.dwbDocBottomInset?.() || 0), visibleBottom) - MARGIN - (dismissShown() ? 52 : 0);
+    // na telefonie pasek leży NAD dokumentem (app-frame.js) — kursor nie może wejść pod niego
+    const topCover = window.dwbDocTopInset?.() || 0;
     if (r.bottom > limit) {
       docViewportEl.scrollTop += r.bottom - limit + 24;
-    } else if (r.top < vpRect.top + MARGIN) {
-      docViewportEl.scrollTop -= vpRect.top + MARGIN - r.top + 24;
+    } else if (r.top < vpRect.top + topCover + MARGIN) {
+      docViewportEl.scrollTop -= vpRect.top + topCover + MARGIN - r.top + 24;
     }
   }
   let queued = false;
@@ -160,10 +163,13 @@
       const label = t(typing ? "doneEditing" : "dismissHighlights");
       if (dismissLabel.textContent !== label) dismissLabel.textContent = label;
       // w rogu OBSZARU dokumentu (pod nim w panelu stoi pasek stanu, przy pisaniu — klawiatura)
-      const panel = dismissBtn.offsetParent;
+      // nie offsetParent: przy pierwszym pokazaniu przycisk jest jeszcze ukryty (offsetParent = null)
+      const panel = dismissBtn.closest(".doc-panel");
       if (panel && docViewportEl) {
         const gap = panel.getBoundingClientRect().bottom - docViewportEl.getBoundingClientRect().bottom;
-        dismissBtn.style.setProperty("--dismiss-bottom", `${Math.max(0, Math.round(gap)) + 12}px`);
+        // nad wyspą u dołu (telefon), gdy jest widoczna
+        const island = window.dwbDocBottomInset?.() || 0;
+        dismissBtn.style.setProperty("--dismiss-bottom", `${Math.max(0, Math.round(gap)) + (island ? island + 8 : 12)}px`);
       }
     }
     if (dismissBtn.hidden === show) dismissBtn.hidden = !show;

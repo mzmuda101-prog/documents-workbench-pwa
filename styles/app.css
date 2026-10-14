@@ -1521,6 +1521,97 @@ body.drag-active .doc-panel { outline: 2px dashed var(--accent); outline-offset:
   .zoom-now { min-width: 58px; }
 }
 
+/* ── telefon: pasek nad dokumentem unosi się i chowa przy przewijaniu (app-frame.js) ──
+   Klasy ustawia JS (wąskie okno + otwarty dokument). Pasek leży NAD obszarem dokumentu,
+   a dokument ma u góry odstęp jego wysokości — chowanie to tylko transform (bez skoku tekstu).
+   scroll-padding: skoki przez scrollIntoView (szukanie, Struktura, Korekta) nie lądują pod paskiem. */
+body.tb-float .doc-toolbar { position: absolute; top: 0; left: 0; right: 0; z-index: 26; }
+body.tb-float .doc-viewport { padding-top: var(--tb-h, 0px); scroll-padding-top: var(--tb-cover, 0px); }
+body.tb-float.tb-tucked .doc-toolbar { transform: translateY(calc(-100% - 2px)); pointer-events: none; }
+.tb-peek { display: none; }
+body.tb-float.tb-tucked .tb-peek:not([hidden]) {
+  position: absolute; top: 6px; left: 50%; z-index: 27; transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 6px; max-width: calc(100% - 120px); height: 32px; padding: 0 11px 0 14px;
+  border: 1px solid var(--border); border-radius: var(--r-full, 999px);
+  background: var(--surface); color: var(--ink-2);
+  font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  box-shadow: 0 6px 18px rgba(8, 14, 28, 0.16);
+}
+/* dotyk: bez rozmytego cienia nad przewijaną treścią — na iPhonie dławił przewijanie (Sheet, 2026-09-24) */
+@media (pointer: coarse) {
+  body.tb-float.tb-tucked .tb-peek:not([hidden]) { box-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 10%, transparent); }
+}
+.tb-peek-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-peek-text:empty { display: none; }
+.tb-peek svg { flex: none; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) {
+  body.tb-float .doc-toolbar { transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1); }
+  body.tb-float.tb-tucked .tb-peek:not([hidden]) { animation: dwb-peek-in 220ms cubic-bezier(0.22, 1, 0.36, 1); }
+}
+@keyframes dwb-peek-in { from { opacity: 0; transform: translateX(-50%) translateY(-8px) scale(0.96); } }
+@media print { .tb-peek { display: none !important; } }
+
+/* Wyspa u dołu (telefon, app-frame.js): szukanie, ↑ ↓, narzędzia, skupienie — pod kciukiem;
+   nad nią małe wysepki „Niezapisane” / „Śledzenie zmian” (z paska stanu, który tu znika).
+   Dokument ma u dołu odstęp wyspy, więc koniec tekstu da się wysunąć nad nią. */
+body.tb-float .status-bar { display: none; }
+/* Szukanie zeszło na dół — reszta paska ma się zmieścić w JEDNYM rzędzie (390–430 px; 375 bez
+   ikonki widoku przy procencie): Czytanie/Edycja, ↶ ↷, ¶, zoom. Dawniej zoom spadał do 2. rzędu. */
+body.tb-float .doc-toolbar { padding: 8px; }
+body.tb-float .doc-toolbar-row-2 { gap: 4px; }
+body.tb-float .mode-btn { padding-inline: 9px; }
+body.tb-float .doc-toolbar-row-2 > .tb-btn, body.tb-float .undo-group > .tb-btn { min-width: 38px; }
+body.tb-float .zoom-now { min-width: 52px; }
+@media (max-width: 380px) {
+  body.tb-float .zoom-now { min-width: 44px; padding-inline: 5px; }
+  body.tb-float .zoom-now .zn-icon { display: none; }
+  body.tb-float .doc-toolbar-row-2 > .tb-btn, body.tb-float .undo-group > .tb-btn { min-width: 36px; }
+}
+body.tb-float .doc-viewport {
+  padding-bottom: calc(var(--island-h, 0px) + 10px);
+  scroll-padding-bottom: calc(var(--island-h, 0px) + 10px);
+}
+.doc-island[hidden] { display: none; }
+.doc-island {
+  position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 27;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  pointer-events: none; /* przerwa między wysepkami przepuszcza dotyk do dokumentu */
+}
+.doc-island > * { pointer-events: auto; }
+.doc-island-status { display: flex; flex-wrap: wrap; gap: 6px; max-width: 100%; }
+.doc-island-status:not(:has(> :not([hidden]))) { display: none; }
+.doc-island-status > * {
+  display: inline-flex; align-items: center; min-height: 28px; padding: 0 11px; font-size: 12px;
+  border: 1px solid var(--border); border-radius: var(--r-full, 999px); box-shadow: 0 4px 14px rgba(8, 14, 28, 0.14);
+}
+.doc-island-status > .status-dirty { border-color: color-mix(in srgb, var(--warning) 40%, var(--border)); background: color-mix(in srgb, var(--warning) 14%, var(--surface)); }
+.doc-island-status > .status-track { border-color: color-mix(in srgb, #d13438 30%, var(--border)); background: color-mix(in srgb, #d13438 12%, var(--surface)); }
+.doc-island-main {
+  align-self: stretch; display: flex; align-items: center; gap: 6px; padding: 6px;
+  border: 1px solid var(--border); border-radius: 26px; background: var(--surface);
+  box-shadow: 0 10px 28px rgba(8, 14, 28, 0.18);
+}
+[data-theme="dark"] .doc-island-main { background: color-mix(in srgb, var(--surface) 96%, white); }
+.doc-island-main > .doc-toolbar-row { flex: 1 1 auto; gap: 6px; }
+.doc-island .doc-search { height: 40px; border-radius: 20px; }
+.doc-island .tb-btn { border-radius: 50%; }
+@media (max-width: 480px) { .doc-island:not(.has-query) .doc-search-nav { display: none; } }
+/* dotyk: bez rozmytych cieni nad przewijaną treścią (iPhone, Sheet 2026-09-24) */
+@media (pointer: coarse) {
+  .doc-island-main, .doc-island-status > * { box-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 10%, transparent); }
+}
+/* chowa się razem z paskiem; przy pisaniu w dokumencie z klawiaturą też (zostaje dla szukania) */
+body.tb-float.tb-tucked .doc-island,
+body.kb-open .doc-island:not(:focus-within) {
+  transform: translateY(calc(100% + 16px)); opacity: 0; pointer-events: none;
+}
+body.tb-float.tb-tucked .doc-island > *,
+body.kb-open .doc-island:not(:focus-within) > * { pointer-events: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .doc-island { transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease; }
+}
+@media print { .doc-island { display: none !important; } }
+
 /* ── strony dokumentu jak w Wordzie: białe kartki z cieniem na tle obszaru ──
    docx-preview domyślnie kładzie SZARE tło (.docx-wrapper) wewnątrz naszej białej ramki —
    wyglądało to jak szary prostokąt z małą kartką w środku. */

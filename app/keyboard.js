@@ -52,6 +52,8 @@
   const REGIONS = [
     { el: () => document.querySelector(".hero"), focus: () => document.getElementById("appMenuBtn")?.focus() },
     { el: () => document.getElementById("docToolbar"), focus: focusToolbar },
+    // telefon: szukanie i narzędzia są w wyspie u dołu (app-frame.js)
+    { el: () => document.getElementById("docIsland"), focus: focusToolbar, skip: () => !!document.getElementById("docIsland")?.hidden },
     { el: () => docViewportEl, focus: focusDocument },
     { el: () => sidebar, focus: focusPanel, skip: () => !originalFileBytes && !isSidebarOpen() },
   ];

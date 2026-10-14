@@ -558,7 +558,8 @@ const appFrame = (() => {
   ["wheel", "touchstart", "keydown", "pointerdown"].forEach((type) => docViewportEl?.addEventListener(type, () => { jumpToken++; }, { passive: true }));
   function scrollDocTo(el) {
     if (!docViewportEl || !el) return;
-    const offset = () => el.getBoundingClientRect().top - docViewportEl.getBoundingClientRect().top - 12;
+    // pod pasek, który na telefonie leży nad dokumentem (dwbDocTopInset)
+    const offset = () => el.getBoundingClientRect().top - docViewportEl.getBoundingClientRect().top - (window.dwbDocTopInset?.() || 0) - 12;
     const smooth = !matchMedia("(prefers-reduced-motion: reduce)").matches;
     docViewportEl.scrollTo({ top: Math.max(0, docViewportEl.scrollTop + offset()), behavior: smooth ? "smooth" : "auto" });
     if (!smooth) return;
@@ -574,7 +575,7 @@ const appFrame = (() => {
   let currentChip = null;
   function syncCurrentSection() {
     if (!sectionItems.length || !docViewportEl) return;
-    const limit = docViewportEl.getBoundingClientRect().top + 90;
+    const limit = docViewportEl.getBoundingClientRect().top + (window.dwbDocTopInset?.() || 0) + 90;
     let cur = sectionItems[0];
     for (const it of sectionItems) {
       if (it.el.getBoundingClientRect().top <= limit) cur = it; else break;
@@ -585,6 +586,7 @@ const appFrame = (() => {
     currentChip = cur.chip;
     currentChip.classList.add("is-current");
     currentChip.setAttribute("aria-current", "true");
+    if (document.body.classList.contains("tb-tucked")) syncPeek();
     // widoczny w rzędzie, ale bez scrollIntoView (ruszałby też stronę)
     const c = currentChip;
     const left = c.offsetLeft - chipsEl.offsetLeft;
@@ -605,6 +607,7 @@ const appFrame = (() => {
     const r = origRenderStructure.apply(this, args);
     renderSectionChips();
     syncFile();
+    syncToolbarFloat();
     if (typeof refreshReviewCounts === "function") refreshReviewCounts();
     return r;
   };
@@ -613,6 +616,7 @@ const appFrame = (() => {
     const r = origClear.apply(this, args);
     renderSectionChips();
     syncFile();
+    syncToolbarFloat();
     syncPanelCounts();
     return r;
   };
@@ -702,6 +706,186 @@ const appFrame = (() => {
     manualExpandAt = expand ? docViewportEl?.scrollTop || 0 : null;
   });
   narrowMq.addEventListener("change", () => { if (!narrowMq.matches) setHeroCollapsed(false); });
+
+  // ── telefon: pasek nad dokumentem chowa się przy przewijaniu (jak Safari / Word na iPhonie) ──
+  // Pasek LEŻY NAD dokumentem (body.tb-float: position absolute), a dokument ma u góry odstęp
+  // równy jego wysokości (--tb-h). Schowanie to sam transform — układ się nie zmienia, więc
+  // tekst nie skacze (zmiana wysokości obszaru przesuwałaby treść o wysokość paska) i ruch
+  // idzie na kompozytorze. Liczy się tylko przewijanie PALCEM albo kółkiem: skoki programu
+  // (trafienia szukania, sekcje, kursor nad klawiaturą) zostawiają pasek w spokoju.
+  // Pokazuje się: ruch w górę ≥ TB_SHOW_UP, dojechanie pod sam pasek, pigułka, fokus w pasku
+  // (Tab, Ctrl/⌘+F) i zaznaczenie tekstu w Edycji (do formatowania trzeba paska).
+  // Wyspa u dołu (body.tb-float): 1. rząd paska (szukanie, ↑ ↓, narzędzia, skupienie) i wskaźniki
+  // z paska stanu PRZENOSZĄ SIĘ do #docIsland (te same elementy i id — moduły ich nie gubią),
+  // szeroko wracają na swoje miejsca. Pasek stanu na telefonie znika. Wyspa chowa się razem
+  // z paskiem i przy pisaniu w dokumencie z klawiaturą (zostaje, gdy fokus jest w szukaniu).
+  const toolbarEl = document.getElementById("docToolbar");
+  const islandEl = document.getElementById("docIsland");
+  const islandMainEl = document.getElementById("docIslandMain");
+  const islandStatusEl = document.getElementById("docIslandStatus");
+  const searchRowEl = toolbarEl?.querySelector(":scope > .doc-toolbar-row:not(.doc-toolbar-row-2)");
+  const islandMoves = [
+    [searchRowEl, islandMainEl],
+    [statusDirtyEl, islandStatusEl],
+    [document.getElementById("statusTrack"), islandStatusEl],
+  ].filter(([el, to]) => el && to).map(([el, to]) => ({ el, to, mark: document.createComment("dwb-island") }));
+  const ISLAND_GAP = 10; // odstęp wyspy od dołu obszaru dokumentu (CSS: bottom)
+  let islandH = 0;
+  const peekBtn = document.getElementById("tbPeek");
+  const peekTextEl = document.getElementById("tbPeekText");
+  const TB_TUCK_DOWN = 32;
+  const TB_SHOW_UP = 48;
+  const TB_PEEK_COVER = 44; // tyle zasłania pigułka (6 px odstępu + 32 px + zapas)
+  let tbFloat = false;
+  let tbTucked = false;
+  let tbH = 0;
+  let tbTouching = false;
+  let tbUserUntil = 0;
+  let tbLastY = 0;
+  let tbTravel = 0;
+  let tbPinching = false;
+  let tbZoomUntil = 0;
+  function setTbCover() {
+    docPanelEl?.style.setProperty("--tb-cover", `${tbFloat ? (tbTucked ? TB_PEEK_COVER : tbH) : 0}px`);
+  }
+  // ile px u góry obszaru dokumentu zasłania pasek / pigułka — dla kodu, który sam liczy przewinięcie
+  window.dwbDocTopInset = () => (tbFloat ? (tbTucked ? TB_PEEK_COVER : tbH) : 0);
+  // …i u dołu wyspa (0, gdy schowana: przewinięcie, pisanie z klawiaturą)
+  function islandShown() {
+    if (!tbFloat || tbTucked || !islandEl) return false;
+    return !document.body.classList.contains("kb-open") || islandEl.contains(document.activeElement);
+  }
+  window.dwbDocBottomInset = () => (islandShown() ? islandH + ISLAND_GAP : 0);
+  function measureIsland() {
+    const h = tbFloat && islandEl ? islandEl.offsetHeight : 0;
+    if (h === islandH) return;
+    islandH = h;
+    docPanelEl?.style.setProperty("--island-h", `${h}px`);
+  }
+  function placeIsland(on) {
+    for (const m of islandMoves) {
+      if (on && m.el.parentNode !== m.to) { m.el.before(m.mark); m.to.append(m.el); }
+      else if (!on && m.mark.parentNode) { m.mark.replaceWith(m.el); }
+    }
+    if (islandEl) islandEl.hidden = !on;
+    syncIslandQuery();
+  }
+  function syncIslandQuery() {
+    islandEl?.classList.toggle("has-query", !!searchQueryEl?.value.trim());
+  }
+  searchQueryEl?.addEventListener("input", syncIslandQuery);
+  function measureToolbar() {
+    const h = tbFloat && toolbarEl ? toolbarEl.offsetHeight : 0;
+    if (h === tbH) return;
+    const old = tbH;
+    tbH = h;
+    docPanelEl?.style.setProperty("--tb-h", `${h}px`);
+    setTbCover();
+    // pasek urósł / zmalał (Edycja dokłada rząd, skróty sekcji) — treść zostaje w tym samym miejscu
+    if (old && h && docViewportEl && docViewportEl.scrollTop > 0) docViewportEl.scrollTop += h - old;
+  }
+  function syncPeek() {
+    if (!peekTextEl) return;
+    const label = currentChip?.getAttribute("aria-label") || currentChip?.textContent || currentFileName || "";
+    if (peekTextEl.textContent !== label) peekTextEl.textContent = label;
+  }
+  function setToolbarTucked(on) {
+    if (on === tbTucked) return;
+    tbTucked = on;
+    document.body.classList.toggle("tb-tucked", on);
+    if (peekBtn) peekBtn.hidden = !on;
+    if (on) syncPeek();
+    setTbCover();
+  }
+  function syncToolbarFloat() {
+    const on = narrowMq.matches && !!originalFileBytes;
+    if (on === tbFloat) { if (on) measureToolbar(); return; }
+    tbFloat = on;
+    if (!on) setToolbarTucked(false);
+    document.body.classList.toggle("tb-float", on);
+    placeIsland(on);
+    tbH = 0;
+    islandH = 0;
+    if (!on) { docPanelEl?.style.removeProperty("--tb-h"); docPanelEl?.style.removeProperty("--island-h"); }
+    measureToolbar();
+    measureIsland();
+    setTbCover();
+    tbLastY = docViewportEl?.scrollTop || 0;
+    syncDocViewportHeight(); // pasek stanu znika / wraca
+  }
+  function canTuck() {
+    if (!toolbarEl) return false;
+    // pisze w szukaniu / wybiera krój — sam kliknięty przycisk (Edycja, B) nie trzyma paska
+    const a = document.activeElement;
+    const inBars = (el) => toolbarEl.contains(el) || !!islandEl?.contains(el);
+    if (a && inBars(a) && a.matches("input, select, textarea, [contenteditable]")) return false;
+    // otwarte menu z paska (Wstaw, lista…)
+    return !toolbarEl.querySelector('[aria-expanded="true"]') && !islandEl?.querySelector('[aria-expanded="true"]');
+  }
+  function revealToolbar() { tbTravel = 0; setToolbarTucked(false); }
+  if (docViewportEl && toolbarEl) {
+    const userFor = (ms) => { tbUserUntil = Math.max(tbUserUntil, performance.now() + ms); };
+    // powiększanie (dwa palce, Ctrl+kółko / gładzik, −/+) samo przesuwa przewinięcie, żeby
+    // akapit został na miejscu — to nie jest przewijanie, pasek ma stać
+    const zoomFor = (ms) => { tbZoomUntil = Math.max(tbZoomUntil, performance.now() + ms); tbTravel = 0; };
+    docViewportEl.addEventListener("touchstart", (e) => {
+      if (e.touches.length > 1) { tbPinching = true; tbTouching = false; zoomFor(600); } else if (!tbPinching) tbTouching = true;
+    }, { passive: true });
+    const endTouch = (e) => {
+      if (e.touches.length) return;
+      if (tbPinching) { tbPinching = false; tbTouching = false; zoomFor(600); return; }
+      tbTouching = false;
+      userFor(250);
+    };
+    docViewportEl.addEventListener("touchend", endTouch, { passive: true });
+    docViewportEl.addEventListener("touchcancel", endTouch, { passive: true });
+    docViewportEl.addEventListener("wheel", (e) => { if (e.ctrlKey) zoomFor(450); else userFor(250); }, { passive: true });
+    docCanvasEl?.addEventListener("dwb-zoom", () => zoomFor(450));
+    let queued = false;
+    docViewportEl.addEventListener("scroll", () => {
+      if (queued || !tbFloat) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        queued = false;
+        const y = docViewportEl.scrollTop;
+        const dy = y - tbLastY;
+        tbLastY = y;
+        // pod samym paskiem: schowany zostawiłby pusty pas nad tekstem
+        if (y < tbH) { revealToolbar(); return; }
+        // sprężynowanie na dole (iOS) wraca w górę — to nie jest „chcę pasek”
+        if (y >= docViewportEl.scrollHeight - docViewportEl.clientHeight - 2) { tbTravel = 0; return; }
+        if (tbPinching || performance.now() < tbZoomUntil) { tbTravel = 0; return; }
+        const user = tbTouching || performance.now() < tbUserUntil;
+        if (!user) { tbTravel = 0; return; }
+        if (!tbTouching) userFor(140); // rozpęd po puszczeniu palca to dalej ruch użytkownika
+        if (dy === 0) return;
+        if ((dy > 0) !== (tbTravel > 0)) tbTravel = 0;
+        tbTravel += dy;
+        if (!tbTucked && tbTravel > TB_TUCK_DOWN && canTuck()) { tbTravel = 0; setToolbarTucked(true); }
+        else if (tbTucked && tbTravel < -TB_SHOW_UP) revealToolbar();
+      });
+    }, { passive: true });
+    peekBtn?.addEventListener("click", revealToolbar);
+    toolbarEl.addEventListener("focusin", revealToolbar);
+    islandEl?.addEventListener("focusin", revealToolbar);
+    document.addEventListener("selectionchange", () => {
+      if (!tbTucked || readOnlyMode) return;
+      const sel = window.getSelection?.();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+      if (docCanvasEl?.contains(sel.getRangeAt(0).commonAncestorContainer)) revealToolbar();
+    });
+    // pomiar w następnej klatce: zmiana odstępu w samym wywołaniu obserwatora budziła inne
+    // obserwatory obszaru w tej samej klatce (Safari: „ResizeObserver loop…”)
+    let measureQueued = false;
+    const tbRo = typeof ResizeObserver === "function" && new ResizeObserver(() => {
+      if (!tbFloat || measureQueued) return;
+      measureQueued = true;
+      requestAnimationFrame(() => { measureQueued = false; measureToolbar(); measureIsland(); });
+    });
+    if (typeof ResizeObserver === "function") { tbRo.observe(toolbarEl); if (islandEl) tbRo.observe(islandEl); }
+    narrowMq.addEventListener("change", syncToolbarFloat);
+  }
+  syncToolbarFloat();
 
   // ── upuszczenie pliku w dowolnym miejscu okna ──────────────────────────────
   let dragDepth = 0;
