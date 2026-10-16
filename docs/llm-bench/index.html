@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pomiar modeli AI</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #fff; --ink: #1d2330; --muted: #667085; --line: #e3e6eb;
+    --accent: #2f6fde; --ok: #1f8a4c; --bad: #c2372b; --warn: #b7791f;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14161b; --card: #1d2027; --ink: #e8eaef; --muted: #98a1b2; --line: #2d313a; --accent: #6c9cff; --ok: #4cc27f; --bad: #ff7a6b; --warn: #e3b04b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 -apple-system, system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: max(16px, env(safe-area-inset-top)) 16px 48px; }
+  h1 { font-size: 1.35rem; margin: 4px 0 2px; }
+  .lead { color: var(--muted); margin: 0 0 16px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin-bottom: 14px; }
+  h2 { font-size: 1rem; margin: 0 0 10px; }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 0; font-size: 0.9rem; }
+  dt { color: var(--muted); } dd { margin: 0; overflow-wrap: anywhere; }
+  .model { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+  .model:first-of-type { border-top: 0; }
+  .model .name { font-weight: 600; } .model .meta { color: var(--muted); font-size: 0.85rem; grid-column: 2; }
+  .model .state { grid-column: 1 / -1; font-size: 0.85rem; color: var(--muted); min-height: 0; }
+  .bar { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; margin-top: 4px; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 10px; padding: 8px 12px; min-height: 40px; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.85rem; white-space: nowrap; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 500; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); } .warn { color: var(--warn); }
+  details { margin-top: 8px; font-size: 0.85rem; } summary { cursor: pointer; color: var(--accent); }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border-radius: 8px; padding: 8px; margin: 6px 0; }
+  .note { font-size: 0.85rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Pomiar modeli AI na tym urządzeniu</h1>
+  <p class="lead">Etap 0: który model językowy realnie działa tutaj — ile się pobiera, jak szybko pisze i czy przeglądarka go utrzyma. Teksty testów zostają na urządzeniu; z sieci pobierane są tylko wagi modeli (Hugging Face).</p>
+
+  <section>
+    <h2>Urządzenie</h2>
+    <dl id="device"><dt>Sprawdzam…</dt><dd></dd></dl>
+  </section>
+
+  <section>
+    <h2>Modele (od najmniejszego)</h2>
+    <div id="models"></div>
+    <p class="note">Mierz po jednym, najlepiej przy podłączonej ładowarce i Wi-Fi. Jeśli karta się przeładuje w trakcie, to znak, że modelowi zabrakło pamięci — zapisze się to w wynikach.</p>
+  </section>
+
+  <section>
+    <h2>Wyniki</h2>
+    <div class="scroll"><table id="results"></table></div>
+    <div id="details"></div>
+    <div class="row" style="margin-top:12px">
+      <button id="copy" class="primary">Kopiuj wyniki</button>
+      <button id="share">Udostępnij</button>
+      <button id="clearResults">Wyczyść wyniki</button>
+      <button id="clearCache">Usuń pobrane modele</button>
+    </div>
+    <p class="note" id="storage"></p>
+  </section>
+</main>
+
+<script type="module">
+const RESULTS_KEY = "llmbench.results.v1";
+const INFLIGHT_KEY = "llmbench.inflight.v1";
+const CACHE_KEY = "dwb-llm-bench-v1";
+
+// Rozmiary z Hugging Face (MB) dla q4f16 / q4 — do pokazania przed pobraniem.
+const MODELS = [
+  { id: "onnx-community/LFM2.5-350M-ONNX", name: "LFM2.5 350M", kind: "causal", mb: { q4f16: 255, q4: 294 } },
+  { id: "onnx-community/Qwen3.5-0.8B-Text-ONNX", name: "Qwen3.5 0.8B", kind: "causal", mb: { q4f16: 469, q4: 551 } },
+  { id: "onnx-community/gemma-3-1b-it-ONNX", name: "Gemma 3 1B", kind: "causal", mb: { q4f16: 763, q4: 859 } },
+  { id: "onnx-community/LFM2-1.2B-ONNX", name: "LFM2 1.2B", kind: "causal", mb: { q4f16: 760, q4: 850 } },
+  { id: "onnx-community/Qwen3.5-2B-ONNX-OPT", name: "Qwen3.5 2B", kind: "vlm", mb: { q4f16: 1580, q4: 1750 } },
+  { id: "onnx-community/gemma-4-E2B-it-qat-mobile-ONNX", name: "Gemma 4 E2B (mobile)", kind: "vlm", mb: { q4f16: 2570 },
+    f16Only: true },
+];
+
+const $ = (s) => document.querySelector(s);
+const fmtMb = (b) => (b / 1e6).toFixed(0) + " MB";
+const fmtS = (ms) => (ms / 1000).toFixed(1) + " s";
+const fmtN = (n, d = 1) => (Number.isFinite(n) ? n.toFixed(d) : "—");
+
+function readResults() {
+  try { return JSON.parse(localStorage.getItem(RESULTS_KEY) || "[]"); } catch { return []; }
+}
+function saveResults(list) {
+  try { localStorage.setItem(RESULTS_KEY, JSON.stringify(list)); } catch {}
+}
+function setInflight(v) {
+  try { v ? localStorage.setItem(INFLIGHT_KEY, JSON.stringify(v)) : localStorage.removeItem(INFLIGHT_KEY); } catch {}
+}
+
+const device = { ua: navigator.userAgent, cores: navigator.hardwareConcurrency || null, memoryGB: navigator.deviceMemory || null };
+
+async function probeDevice() {
+  device.webgpu = !!navigator.gpu;
+  if (navigator.gpu) {
+    try {
+      const adapter = await navigator.gpu.requestAdapter();
+      if (adapter) {
+        const info = adapter.info || {};
+        device.gpu = [info.vendor, info.architecture, info.device, info.description].filter(Boolean).join(" · ") || "(brak opisu)";
+        device.f16 = adapter.features.has("shader-f16");
+        device.maxBufferMB = Math.round(adapter.limits.maxBufferSize / 1048576);
+        device.maxStorageBindingMB = Math.round(adapter.limits.maxStorageBufferBindingSize / 1048576);
+      } else {
+        // Np. symulator iOS: API jest, ale karty graficznej nie ma — modele i tak nie ruszą.
+        device.gpu = "brak adaptera";
+        device.webgpu = false;
+      }
+    } catch (e) {
+      device.gpu = "błąd: " + e.message;
+      device.webgpu = false;
+    }
+  }
+  try {
+    const est = await navigator.storage.estimate();
+    device.quotaMB = Math.round(est.quota / 1e6);
+    device.usedMB = Math.round(est.usage / 1e6);
+  } catch {}
+  try { device.persisted = await navigator.storage.persisted(); } catch {}
+  renderDevice();
+}
+
+function renderDevice() {
+  const rows = [
+    ["Przeglądarka", device.ua],
+    ["WebGPU", device.webgpu ? "tak" : navigator.gpu ? "jest, ale bez karty graficznej — modele nie ruszą" : "NIE — modele nie ruszą"],
+    ["Karta graficzna", device.gpu || "—"],
+    ["Obliczenia f16", device.f16 == null ? "—" : device.f16 ? "tak (mniejsze modele q4f16)" : "nie (wersje q4)"],
+    ["Największy bufor GPU", device.maxBufferMB ? device.maxBufferMB + " MB" : "—"],
+    ["Bufor danych GPU", device.maxStorageBindingMB ? device.maxStorageBindingMB + " MB" : "—"],
+    ["Rdzenie / RAM", `${device.cores ?? "?"} / ${device.memoryGB ? device.memoryGB + " GB" : "przeglądarka nie podaje"}`],
+    ["Miejsce na dane", device.quotaMB ? `${device.usedMB} MB zajęte z ${device.quotaMB} MB` : "—"],
+  ];
+  $("#device").innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${escapeHtml(String(v))}</dd>`).join("");
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+}
+
+function dtypeFor(m) {
+  if (m.f16Only) return "q2f16";
+  return device.f16 ? "q4f16" : "q4";
+}
+
+function renderModels() {
+  const box = $("#models");
+  box.innerHTML = "";
+  MODELS.forEach((m, i) => {
+    const dt = dtypeFor(m);
+    const mb = m.mb[dt === "q2f16" ? "q4f16" : dt];
+    const unusable = (m.f16Only && device.f16 === false) || !device.webgpu;
+    const el = document.createElement("div");
+    el.className = "model";
+    el.innerHTML = `
+      <span>${i + 1}.</span>
+      <span class="name">${m.name}</span>
+      <button data-i="${i}" ${unusable ? "disabled" : ""}>Zmierz</button>
+      <span class="meta">${dt} · ok. ${mb} MB do pobrania${m.kind === "vlm" ? " · z obrazem" : ""}</span>
+      <div class="state" id="state-${i}"></div>`;
+    box.appendChild(el);
+  });
+  box.querySelectorAll("button[data-i]").forEach((b) => b.addEventListener("click", () => run(Number(b.dataset.i))));
+}
+
+let busy = false;
+
+function run(i) {
+  if (busy) return;
+  busy = true;
+  document.querySelectorAll("button[data-i]").forEach((b) => (b.disabled = true));
+  const m = MODELS[i];
+  const dtype = dtypeFor(m);
+  const state = $(`#state-${i}`);
+  state.innerHTML = `<span id="phase-${i}">start…</span><div class="bar"><i id="bar-${i}"></i></div>`;
+  const spec = { id: m.id, kind: m.kind };
+  const worker = new Worker(new URL("./bench-worker.js?v=2", import.meta.url), { type: "module" });
+  const t0 = performance.now();
+  const inflight = { id: m.id, name: m.name, dtype, phase: "start", at: new Date().toISOString() };
+  setInflight(inflight);
+  // Brak jakiegokolwiek komunikatu przez 2 min = zawieszenie (np. zerwane pobieranie).
+  let lastSignal = Date.now();
+  const STALL_MS = 120000;
+  const stallTimer = setInterval(() => {
+    if (Date.now() - lastSignal > STALL_MS) fail(`zawieszone — brak postępu przez 2 min w fazie „${inflight.phase}”`, "zawieszone");
+  }, 5000);
+  const fail = (error, status = "błąd") => {
+    clearInterval(stallTimer);
+    const list = readResults();
+    list.push({ id: m.id, name: m.name, dtype, status, phase: inflight.phase, error, device: deviceSummary() });
+    saveResults(list);
+    setInflight(null);
+    worker.terminate();
+    state.textContent = `${status}: ${error}`;
+    done();
+  };
+  worker.onmessage = (e) => {
+    const msg = e.data;
+    lastSignal = Date.now();
+    if (msg.type === "fatal") {
+      fail(msg.error);
+    } else if (msg.type === "phase") {
+      inflight.phase = msg.phase;
+      setInflight(inflight);
+      $(`#phase-${i}`).textContent = msg.phase + "…";
+    } else if (msg.type === "progress") {
+      const pct = msg.total ? (msg.loaded / msg.total) * 100 : 0;
+      $(`#bar-${i}`).style.width = pct.toFixed(1) + "%";
+      $(`#phase-${i}`).textContent = `pobieranie… ${fmtMb(msg.loaded)} / ${fmtMb(msg.total)}`;
+    } else if (msg.type === "result") {
+      clearInterval(stallTimer);
+      const r = { ...msg.result, name: m.name, wallMs: performance.now() - t0, device: deviceSummary() };
+      const list = readResults();
+      list.push(r);
+      saveResults(list);
+      setInflight(null);
+      worker.terminate();
+      state.textContent = r.status === "ok" ? `gotowe — ${r.score}/${r.tasks.length} testów` : `błąd: ${r.error}`;
+      done();
+    }
+  };
+  worker.onerror = (e) => fail(e.message || "błąd workera");
+  worker.postMessage({ spec, dtype });
+}
+
+function done() {
+  busy = false;
+  renderModels();
+  renderResults();
+  updateStorage();
+}
+
+function deviceSummary() {
+  return { gpu: device.gpu, f16: device.f16, maxBufferMB: device.maxBufferMB, ua: device.ua };
+}
+
+function cachedCell(r) {
+  if (r.cachedBytes == null || !r.bytes) return "—";
+  const share = r.cachedBytes / r.bytes;
+  const cls = share > 0.98 ? "ok" : share > 0.5 ? "warn" : "bad";
+  return `<span class="${cls}">${share > 0.98 ? "tak" : fmtMb(r.cachedBytes)}</span>`;
+}
+
+function renderResults() {
+  const list = readResults();
+  const t = $("#results");
+  if (!list.length) {
+    t.innerHTML = `<tr><td class="note">Jeszcze nic nie zmierzone.</td></tr>`;
+    $("#details").innerHTML = "";
+    return;
+  }
+  t.innerHTML = `<tr><th>Model</th><th>Stan</th><th>Pobrano</th><th>Zostaje w pamięci</th><th>Wczytanie</th><th>Rozgrzewka</th><th>Czytanie tok/s</th><th>Pisanie tok/s</th><th>Testy</th></tr>` +
+    list.map((r) => {
+      const st = r.status === "ok" ? `<span class="ok">ok</span>` : r.status === "padła" ? `<span class="bad">karta padła</span>` : r.status === "zawieszone" ? `<span class="warn">zawieszone</span>` : `<span class="bad">${escapeHtml(r.status || "?")}</span>`;
+      return `<tr><td>${escapeHtml(r.name || r.id)} <span class="note">${r.dtype || ""}</span></td><td>${st}</td>` +
+        `<td>${r.bytes ? fmtMb(r.bytes) : "—"}</td><td>${cachedCell(r)}</td><td>${r.loadMs ? fmtS(r.loadMs) : "—"}</td><td>${r.warmupMs ? fmtS(r.warmupMs) : "—"}</td>` +
+        `<td>${fmtN(r.speed?.prefillTps, 0)}</td><td>${fmtN(r.speed?.decodeTps)}</td>` +
+        `<td>${r.tasks ? `${r.score}/${r.tasks.length}` : "—"}</td></tr>`;
+    }).join("");
+  $("#details").innerHTML = list.map((r) => {
+    if (r.status !== "ok") return `<details><summary>${escapeHtml(r.name || r.id)} — ${escapeHtml(r.status)}</summary><pre>${escapeHtml(r.error || ("faza: " + (r.phase || "?")))}</pre></details>`;
+    return `<details><summary>${escapeHtml(r.name)} — odpowiedzi</summary>` +
+      `<p class="note">Pierwsze słowo po ${fmtS(r.speed.ttftMs)} (prompt ${r.speed.promptTokens} tok.), pobieranie ${r.downloadMs ? fmtS(r.downloadMs) : "z pamięci"}, przygotowanie ${fmtS(r.initMs)}</p>` +
+      `<pre>${escapeHtml(r.speed.sample)}</pre>` +
+      r.tasks.map((x) => `<p><span class="${x.ok ? "ok" : "bad"}">${x.ok ? "✓" : "✗"}</span> ${escapeHtml(x.label)} <span class="note">— ${escapeHtml(x.note)}, ${fmtS(x.ms)}</span></p><pre>${escapeHtml(x.output)}</pre>`).join("") +
+      `</details>`;
+  }).join("");
+}
+
+async function updateStorage() {
+  try {
+    const est = await navigator.storage.estimate();
+    $("#storage").textContent = `Dane strony: ${Math.round(est.usage / 1e6)} MB z ${Math.round(est.quota / 1e6)} MB.`;
+  } catch {}
+}
+
+function recoverCrash() {
+  let inflight = null;
+  try { inflight = JSON.parse(localStorage.getItem(INFLIGHT_KEY) || "null"); } catch {}
+  if (!inflight) return;
+  const list = readResults();
+  list.push({ id: inflight.id, name: inflight.name, dtype: inflight.dtype, status: "padła", phase: inflight.phase,
+    error: `Strona przeładowała się w fazie „${inflight.phase}” — najpewniej zabrakło pamięci.`, at: inflight.at });
+  saveResults(list);
+  setInflight(null);
+}
+
+function resultsText() {
+  return JSON.stringify({ device, results: readResults() }, null, 1);
+}
+
+$("#copy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(resultsText()); $("#copy").textContent = "Skopiowano ✓"; }
+  catch { $("#copy").textContent = "Nie udało się"; }
+  setTimeout(() => ($("#copy").textContent = "Kopiuj wyniki"), 1800);
+});
+$("#share").addEventListener("click", async () => {
+  const text = resultsText();
+  if (navigator.share) {
+    try { await navigator.share({ title: "Pomiar modeli AI", text }); } catch {}
+  } else {
+    try { await navigator.clipboard.writeText(text); } catch {}
+  }
+});
+$("#clearResults").addEventListener("click", () => { saveResults([]); renderResults(); });
+$("#clearCache").addEventListener("click", async () => {
+  try { await caches.delete(CACHE_KEY); } catch {}
+  updateStorage();
+});
+
+window.__bench = { readResults, device, run, MODELS };
+
+recoverCrash();
+await probeDevice();
+renderModels();
+renderResults();
+updateStorage();
+try { if (!(await navigator.storage.persisted())) await navigator.storage.persist(); } catch {}
+
+const auto = new URLSearchParams(location.search).get("auto");
+if (auto != null && MODELS[Number(auto)]) run(Number(auto));
+</script>
+</body>
+</html>
