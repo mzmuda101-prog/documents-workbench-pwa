@@ -482,12 +482,12 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
 .stack-divider { padding-top: 6px; border-top: 1px solid var(--border-subtle); margin-top: 2px; }
 
 .field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink-3); }
-.field input, .field select, .field textarea {
+.field input, .field select, .field textarea, .doc-ask-row input {
   padding: 9px 11px; border-radius: var(--r-sm); border: 1px solid var(--border);
   background: var(--field); color: var(--ink); font: inherit; font-weight: 400;
   transition: border-color var(--t), box-shadow var(--t);
 }
-.field input:focus, .field select:focus, .field textarea:focus {
+.field input:focus, .field select:focus, .field textarea:focus, .doc-ask-row input:focus {
   outline: none; border-color: var(--border-focus);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
@@ -2858,3 +2858,93 @@ section.docx.dwb-gapped { min-height: var(--dwb-sec-min) !important; }
 .font-step-btn { min-width: 30px; padding: 0 6px; font-weight: 700; font-size: 14px; }
 .font-step-btn sup { font-size: 9px; margin-left: 1px; }
 .font-step-btn .font-step-small { font-size: 11.5px; }
+
+/* ── Asystent AI na urządzeniu (local-ai.js) — ten sam blok w Sheet i Documents ── */
+.lai-dialog {
+  position: fixed; inset: 0; margin: auto; height: fit-content;
+  width: min(520px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto;
+  border: 1px solid var(--border); border-radius: 18px; padding: 0;
+  background: var(--surface); color: var(--ink); box-shadow: 0 18px 48px rgba(8, 14, 28, 0.25);
+}
+.lai-dialog::backdrop { background: rgba(8, 14, 28, 0.38); }
+.lai-box { padding: 18px 18px 16px; display: grid; gap: 10px; }
+.lai-title { margin: 0; font-size: 1.1rem; }
+.lai-intro, .lai-note, .lai-meta { color: var(--muted); font-size: 0.86rem; margin: 0; }
+.lai-reason { margin: 0; font-weight: 600; }
+.lai-warn { margin: 0; color: var(--warning); font-size: 0.88rem; }
+.lai-options { display: grid; gap: 8px; }
+.lai-option {
+  display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: start; cursor: pointer;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--field, var(--surface));
+}
+.lai-option:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.lai-option:has(input:disabled) { opacity: 0.55; cursor: not-allowed; }
+.lai-option input { margin-top: 3px; accent-color: var(--accent); }
+.lai-option-body { display: grid; gap: 2px; }
+.lai-status { font-size: 0.88rem; color: var(--muted); min-height: 1.3em; }
+.lai-status.is-ready { color: var(--success); }
+.lai-status.is-error { color: var(--warning); }
+.lai-bar { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; margin-top: 6px; }
+.lai-bar > i { display: block; height: 100%; background: var(--accent); transition: width 0.2s; }
+.lai-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.lai-btn {
+  font: inherit; font-size: 0.9rem; min-height: 40px; padding: 8px 14px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface); color: var(--ink);
+}
+.lai-btn.is-primary { background: var(--accent); border-color: transparent; color: #fff; }
+.lai-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.lai-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Wynik AI — zawsze podpisany jako propozycja do sprawdzenia */
+.ai-badge {
+  display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 999px;
+  font-size: 0.72rem; font-weight: 600; background: var(--accent-light); color: var(--accent);
+}
+
+/* ── Ortografia w „Korekcie” (spell-check.js) ── */
+.spell-row { display: grid; gap: 6px; padding: 8px 0; border-bottom: 1px solid var(--border-subtle, var(--border)); }
+.spell-row:last-child { border-bottom: 0; }
+.spell-word {
+  justify-self: start; font: inherit; font-weight: 600; background: none; border: 0; padding: 0; cursor: pointer; color: var(--ink);
+  text-decoration: underline wavy color-mix(in srgb, #d0342c 75%, transparent); text-underline-offset: 3px;
+}
+.spell-count { font-weight: 400; color: var(--muted); text-decoration: none; }
+.spell-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.spell-actions .btn { min-height: 32px; padding: 4px 10px; font-size: 0.85rem; }
+.spell-suggestion { font-weight: 600; }
+
+/* ── Opis zmian (compare-describe.js) ── */
+.compare-describe { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--field, var(--surface)); }
+.compare-describe-title { margin: 0; font-size: 0.95rem; }
+.compare-describe h4 { margin: 6px 0 2px; font-size: 0.82rem; color: var(--muted); font-weight: 600; }
+.compare-describe-stats { margin: 0; font-size: 0.86rem; }
+.compare-describe-list { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-size: 0.86rem; overflow-wrap: anywhere; }
+.compare-describe-list.is-numbers li { font-weight: 600; }
+.compare-describe-ai { display: grid; gap: 6px; padding: 10px; border-radius: 10px; background: var(--accent-light); }
+.compare-describe-ai-text { margin: 0; font-size: 0.9rem; white-space: pre-wrap; }
+.compare-describe-ai-text.is-rejected { color: var(--warning); }
+
+/* ── Zapytaj dokument (doc-ask.js) ── */
+.doc-ask { display: grid; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.doc-ask-title { margin: 0; font-size: 0.95rem; }
+.doc-ask-row { display: flex; gap: 8px; }
+.doc-ask-row input { flex: 1 1 auto; min-width: 0; }
+.doc-ask-answer { display: grid; gap: 8px; }
+.doc-ask-text { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--accent-light); font-size: 0.92rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.doc-ask-cite {
+  display: inline-grid; place-items: center; min-width: 22px; height: 22px; margin: 0 2px; padding: 0 5px; vertical-align: 1px;
+  border: 0; border-radius: 6px; background: var(--accent); color: #fff; font: inherit; font-size: 0.75rem; font-weight: 700; cursor: pointer;
+}
+.doc-ask-warn { margin: 0; font-size: 0.84rem; color: var(--warning); }
+.doc-ask-sources { display: grid; gap: 6px; }
+.doc-ask-sources-title { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+
+/* ── ✦ Przepisz (doc-rewrite.js) ── */
+.rewrite-btn > span[aria-hidden] { color: var(--accent); font-size: 0.95em; }
+.rw-original { margin: 0; padding: 8px 10px; border-left: 3px solid var(--border); color: var(--muted); font-size: 0.9rem; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 30vh; overflow: auto; }
+.rw-modes { display: flex; flex-wrap: wrap; gap: 6px; }
+.rw-own { display: flex; gap: 6px; }
+.rw-own input { flex: 1 1 auto; min-width: 0; font: inherit; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); background: var(--field, var(--surface)); color: var(--ink); }
+.rw-diff { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--field, var(--surface)); border: 1px solid var(--border); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; max-height: 45vh; overflow: auto; }
+.rw-diff ins { text-decoration: none; background: color-mix(in srgb, var(--success) 22%, transparent); border-radius: 3px; }
+.rw-diff del { color: #b42318; text-decoration: line-through; }
+.lai-box > .ai-badge, .fx-write-out > .ai-badge, .compare-describe-ai > .ai-badge { justify-self: start; }

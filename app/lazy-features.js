@@ -1,6 +1,6 @@
 // [EN] Lazy-load sidebar feature bundles on first panel open — keeps boot parse lighter.
 const LAZY_FEATURE_SCRIPTS = {
-  grammar: ["app/grammar-panel.js", "app/a11y-check.js"],
+  grammar: ["app/spell-check.js", "app/grammar-panel.js", "app/a11y-check.js"],
   metadata: ["app/metadata-panel.js"],
   placeholders: ["app/placeholders-panel.js"],
   "snippets-panel": ["app/snippets-panel.js"],
@@ -9,7 +9,7 @@ const LAZY_FEATURE_SCRIPTS = {
   stats: ["app/stats-panel.js"],
   review: ["app/review-panel.js"],
   forms: ["app/forms-panel.js"],
-  compare: ["app/compare-panel.js"],
+  compare: ["app/compare-describe.js", "app/compare-panel.js"],
 };
 
 const PANEL_LAZY_FEATURE = {

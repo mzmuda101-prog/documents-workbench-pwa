@@ -223,9 +223,33 @@ function workerMessage(data) {
       return { ...passage, score: semanticScore + lexicalBoost(passage.text, semanticIndex.query), semanticScore };
     })
       .sort((a, b) => b.score - a.score).slice(0, 8);
+    // „Zapytaj dokument” (doc-ask.js) czeka na fragmenty — lista wyników panelu zostaje bez zmian
+    if (semanticAskWaiter) {
+      const waiter = semanticAskWaiter;
+      semanticAskWaiter = null;
+      clearTimeout(waiter.timer);
+      setSemanticStatus("semanticIndexed", { count: semanticIndex.passages.length });
+      waiter.resolve(results.slice(0, waiter.k));
+      return;
+    }
     renderSemanticResults(results);
     setSemanticStatus("semanticResults", { count: results.length });
   }
+}
+
+// Fragmenty dla „Zapytaj dokument”: wyniki wyszukiwania znaczeniowego, gdy model działa,
+// inaczej null (doc-ask.js użyje wtedy dopasowania słów). Indeks buduje się jak przy szukaniu.
+let semanticAskWaiter = null;
+function semanticRetrieve(query, k = 6) {
+  if (!semanticReady || !semanticWorker || !originalFileBytes) return Promise.resolve(null);
+  if (semanticAskWaiter) { clearTimeout(semanticAskWaiter.timer); semanticAskWaiter.resolve(null); }
+  return new Promise((resolve) => {
+    semanticAskWaiter = { resolve, k, timer: setTimeout(() => { semanticAskWaiter = null; resolve(null); }, 90000) };
+    if (!ensureSemanticIndex()) { semanticPendingQuery = query; return; }
+    semanticIndex.query = query;
+    const requestId = ++semanticRequest;
+    semanticWorker.postMessage({ type: "embed-query", requestId, query });
+  });
 }
 
 function ensureSemanticWorker() {
@@ -288,6 +312,9 @@ function semanticDocumentRendered() {
   clearSemanticHighlights();
   semanticResultsEl?.replaceChildren();
   if (semanticReady) setSemanticStatus("semanticNeedsIndex");
+  // odpowiedź „Zapytaj dokument” wskazywała akapity starego rysunku — chowamy ją
+  const askAnswer = document.getElementById("docAskAnswer");
+  if (askAnswer && !askAnswer.hidden && !document.getElementById("docAskBtn")?.disabled) { askAnswer.hidden = true; askAnswer.replaceChildren(); }
   syncSemanticUi();
 }
 

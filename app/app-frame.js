@@ -377,7 +377,7 @@ const appFrame = (() => {
   function syncPanelCounts() {
     const hits = typeof frMatches !== "undefined" ? frMatches.length : 0;
     const pos = typeof frActiveIndex !== "undefined" ? frActiveIndex : -1;
-    const grammar = typeof grammarScan !== "undefined" && grammarScan?.hits ? grammarScan.hits.length : 0;
+    const grammar = typeof grammarScan !== "undefined" && grammarScan?.hits ? grammarScan.hits.length + (grammarScan.spelling?.length || 0) : 0;
     const fields = typeof placeholderScan !== "undefined" && placeholderScan?.fields ? placeholderScan.fields.length : 0;
     setSummaryCount("panel-search", hits);
     setSummaryCount("panel-grammar", grammar);

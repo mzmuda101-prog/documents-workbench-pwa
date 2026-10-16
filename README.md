@@ -88,6 +88,24 @@ Siostrzana aplikacja [Sheet Workbench PWA](../sheet-workbench-pwa/README.md).
   `{{…}}` (ten sam szablon wypełniany wiele razy); **„Usuń dane osobowe”** w Metadanych
   (autor, ostatnio zmieniający, opis, temat — przed wysłaniem pliku dalej)
 
+- **Asystent AI na urządzeniu** (menu ⋯ → „Asystent AI…”, `app/local-ai.js`): model językowy działa w
+  przeglądarce — wbudowany w Chrome albo pobrany raz przez WebGPU (Qwen3.5 2B ok. 1,6 GB / 0.8B ok. 470 MB).
+  Nic nie pobiera się bez zgody, tekst dokumentu nie wychodzi z urządzenia. Model tylko proponuje — wynik
+  jest sprawdzany i zawsze podpisany „AI · sprawdź”. Pomiar modeli na telefonie: `docs/llm-bench/`
+- **Ortografia offline** (Korekta → „Ortografia”, `app/spell-check.js`): Hunspell w WebAssembly + słownik
+  sjp.pl (2026-09-01, PL) i EN; błędny wyraz raz z liczbą wystąpień, podpowiedzi z zachowaniem wielkiej
+  litery, „Pomiń”, „Do słownika” (słownik użytkownika na urządzeniu). Skróty, adresy, iPhone — pomijane.
+  `npm run test:spell`
+- **✦ Przepisz** (pasek Edycji, `app/doc-rewrite.js`): popraw błędy / prościej / formalnie / krócej / uprzejmiej
+  albo własne polecenie; podgląd różnicy, ostrzeżenie o zgubionej liczbie; „Wstaw jako poprawkę” = w:ins/w:del
+  autora „Asystent AI” do przejrzenia w Recenzji (jeden krok Cofnij). `npm run test:rewrite`
+- **Zapytaj dokument** (panel Znajdź sens, `app/doc-ask.js`): odpowiedź tylko z fragmentów dokumentu z
+  odnośnikami [1] [2] do akapitów; bez odnośnika — ostrzeżenie; bez AI — same najlepsze fragmenty
+  (dopasowanie słów z polskimi odmianami albo model znaczeniowy). `npm run test:ask`
+- **Opis zmian** (Porównaj wersje, `app/compare-describe.js`): liczby, kwoty, daty i terminy na początku
+  („§ 3: „14 dni” → „30 dni””), inne zmiany słów, nowe/usunięte akapity — do skopiowania; „Opisz zdaniami (AI)”
+  odrzucany, gdy poda liczbę spoza listy zmian. Przy okazji: parowanie kilku poprawionych akapitów z rzędu
+  i różnica słów (wspólne słowa nie wychodzą już jako „dodane”). `npm run test:describe`
 - **Recenzja**: śledzone zmiany (wstawienia, usunięcia, przeniesienia, formatowanie, akapity,
   wiersze — też w nagłówkach, stopkach i przypisach), komentarze z odpowiedziami i zakomentowanym
   tekstem, przypisy; skok do miejsca, filtr autora, ✓ / ✗ przy każdej zmianie, „Akceptuj / Odrzuć

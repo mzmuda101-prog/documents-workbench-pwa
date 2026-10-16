@@ -11,6 +11,11 @@ const grammarClearBtn = document.getElementById("grammarClearBtn");
 const grammarStatusEl = document.getElementById("grammarStatus");
 const grammarSuggestionsEl = document.getElementById("grammarSuggestions");
 
+const grammarSpellEl = document.getElementById("grammarSpell");
+const GRAMMAR_SPELL_KEY = "dwb.grammarSpell";
+const GRAMMAR_SPELL_SUGGEST_BATCH = 40;
+try { if (grammarSpellEl && localStorage.getItem(GRAMMAR_SPELL_KEY) === "0") grammarSpellEl.checked = false; } catch (_) {}
+
 function grammarScanOpts() {
   return {
     lang: grammarLangEl?.value || "pl",
@@ -40,20 +45,123 @@ function ruleLabel(ruleId) {
 function syncGrammarStatus() {
   if (typeof appFrame !== "undefined") appFrame.syncPanelCounts();
   if (!grammarStatusEl) return;
+  const spelling = grammarScan?.spelling?.length || 0;
+  const spellNote = spelling ? ` ${t("spellFound", { n: spelling })}` : grammarScan?.spellError ? ` ${t("spellFailed")}` : "";
   if (!grammarScan?.hits?.length) {
-    grammarStatusEl.textContent = grammarScan ? t("grammarNoHits") : "";
+    grammarStatusEl.textContent = grammarScan ? (spelling ? spellNote.trim() : t("grammarNoHits") + spellNote) : "";
     return;
   }
   const ruleCount = Object.keys(grammarScan.byRule || {}).length;
   grammarStatusEl.textContent = t("grammarFound", {
     hits: grammarScan.hits.length,
     rules: ruleCount,
+  }) + spellNote;
+}
+
+// ── Ortografia (spell-check.js) — osobna grupa: każdy błędny wyraz raz, z podpowiedziami.
+// „Zastosuj wszystkie” jej NIE obejmuje — wybór poprawnego wyrazu należy do człowieka.
+function renderSpellingGroup() {
+  const list = grammarScan?.spelling;
+  if (!list?.length) return null;
+  const details = document.createElement("details");
+  details.className = "grammar-rule-group spell-group";
+  details.open = true;
+  const summary = document.createElement("summary");
+  summary.className = "grammar-rule-summary";
+  summary.innerHTML = `<span class="grammar-rule-name">${escapeGrammarHtml(t("spellGroup"))}</span><span class="grammar-rule-count">(${list.length})</span>`;
+  details.appendChild(summary);
+  const box = document.createElement("div");
+  box.className = "fr-preview-list grammar-hit-list";
+  list.forEach((entry) => {
+    const row = document.createElement("div");
+    row.className = "spell-row";
+    const word = document.createElement("button");
+    word.type = "button";
+    word.className = "spell-word";
+    word.textContent = entry.word;
+    if (entry.count > 1) word.append(Object.assign(document.createElement("span"), { className: "spell-count", textContent: ` ×${entry.count}` }));
+    word.setAttribute("aria-label", t("spellJump", { word: entry.word }));
+    word.addEventListener("click", () => scrollToGrammarParagraph(entry.occurrences[0].paraIndex));
+    row.appendChild(word);
+    const actions = document.createElement("div");
+    actions.className = "spell-actions";
+    if (entry.suggestions == null) {
+      actions.append(Object.assign(document.createElement("span"), { className: "hint", textContent: "…" }));
+    } else if (!entry.suggestions.length) {
+      actions.append(Object.assign(document.createElement("span"), { className: "hint", textContent: t("spellNoSuggestions") }));
+    }
+    (entry.suggestions || []).slice(0, 3).forEach((sug) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn spell-suggestion";
+      b.textContent = dwbSpell.matchCase(entry.word, sug);
+      b.addEventListener("click", () => applySpellingFix(entry, sug));
+      actions.appendChild(b);
+    });
+    const ignoreBtn = document.createElement("button");
+    ignoreBtn.type = "button";
+    ignoreBtn.className = "btn spell-ignore";
+    ignoreBtn.textContent = t("spellIgnore");
+    ignoreBtn.addEventListener("click", () => {
+      dwbSpell.ignore(entry.word);
+      grammarScan.spelling = grammarScan.spelling.filter((x) => x !== entry);
+      renderGrammarSuggestions();
+      syncGrammarStatus();
+    });
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "btn spell-add";
+    addBtn.textContent = t("spellAdd");
+    addBtn.addEventListener("click", () => {
+      dwbSpell.addToDictionary(entry.word);
+      grammarScan.spelling = grammarScan.spelling.filter((x) => x !== entry);
+      renderGrammarSuggestions();
+      syncGrammarStatus();
+      toast(t("spellAdded", { word: entry.word }), "success");
+    });
+    actions.append(ignoreBtn, addBtn);
+    row.appendChild(actions);
+    box.appendChild(row);
   });
+  details.appendChild(box);
+  return details;
+}
+
+// Podpowiedzi partiami — pierwsze wyrazy od razu, reszta w tle (bez blokowania panelu).
+async function fillSpellingSuggestions(scan) {
+  const lang = grammarScanOpts().lang;
+  while (grammarScan === scan) {
+    const batch = (scan.spelling || []).filter((e) => e.suggestions == null).slice(0, GRAMMAR_SPELL_SUGGEST_BATCH);
+    if (!batch.length) return;
+    let got = {};
+    try { got = await dwbSpell.suggest(batch.map((e) => e.word), lang); } catch (_) { got = {}; }
+    batch.forEach((e) => { e.suggestions = got[e.word] || []; });
+    if (grammarScan === scan) renderGrammarSuggestions();
+  }
+}
+
+async function applySpellingFix(entry, suggestion) {
+  if (!originalFileBytes) return;
+  if (typeof mergeInlineEditsIntoBytes === "function" && (await mergeInlineEditsIntoBytes()) > 0) {
+    toast(t("grammarRescanned"), "info"); // tekst zmienił się od skanu — miejsca wyrazów są nieaktualne
+    await runGrammarScan();
+    return;
+  }
+  const texts = await extractParagraphTextsFromDocx(originalFileBytes);
+  // tylko miejsca, gdzie dalej stoi ten sam wyraz (ochrona przed przesunięciem tekstu)
+  const live = entry.occurrences.filter((o) => texts[o.paraIndex]?.slice(o.start, o.end) === entry.word);
+  const items = dwbSpell.replaceIn(texts, live, suggestion);
+  if (!items.length) { toast(t("editNothing"), "info"); return; }
+  const count = await applyDocumentEdit({ op: "paragraphBatch", items });
+  if (count > 0) toast(t("spellReplaced", { word: entry.word, fix: dwbSpell.matchCase(entry.word, suggestion), n: live.length }), "success");
+  await runGrammarScan();
 }
 
 function renderGrammarSuggestions() {
   if (!grammarSuggestionsEl) return;
   grammarSuggestionsEl.replaceChildren();
+  const spellGroup = renderSpellingGroup();
+  if (spellGroup) grammarSuggestionsEl.appendChild(spellGroup);
   if (!grammarScan?.hits?.length) return;
 
   Object.entries(grammarScan.byRule).forEach(([ruleId, hits]) => {
@@ -140,9 +248,22 @@ async function runGrammarScan() {
   // tekst wpisany w podglądzie musi być w pliku — inaczej „Popraw” liczyłoby poprawkę ze
   // starej wersji akapitu i nadpisało nią świeżo dopisany tekst
   if (typeof mergeInlineEditsIntoBytes === "function") await mergeInlineEditsIntoBytes();
-  grammarScan = await scanDocument(originalFileBytes, grammarScanOpts());
+  const scan = await scanDocument(originalFileBytes, grammarScanOpts());
+  if (grammarSpellEl?.checked && typeof dwbSpell !== "undefined") {
+    try {
+      const texts = await extractParagraphTextsFromDocx(originalFileBytes);
+      scan.spelling = await dwbSpell.scan(texts, grammarScanOpts().lang);
+    } catch (err) {
+      scan.spelling = [];
+      scan.spellError = true;
+      if (typeof log === "function") log(`Ortografia: ${err.message || err}`, "error");
+    }
+  }
+  grammarScan = scan;
   renderGrammarSuggestions();
   syncGrammarStatus();
+  if (scan.spelling?.length) fillSpellingSuggestions(scan);
+  if (!grammarScan.hits.length && scan.spelling?.length) scrollToGrammarParagraph(scan.spelling[0].occurrences[0].paraIndex);
   if (grammarScan.hits.length) {
     grammarActiveHitId = grammarScan.hits[0].id;
     renderGrammarSuggestions();
@@ -215,6 +336,10 @@ function wireGrammarPanel() {
   if (grammarClearBtn) grammarClearBtn.addEventListener("click", () => clearGrammarState());
   if (grammarLangEl) grammarLangEl.addEventListener("change", () => { if (grammarScan) runGrammarScan(); });
   if (grammarNbspEl) grammarNbspEl.addEventListener("change", () => { if (grammarScan) runGrammarScan(); });
+  if (grammarSpellEl) grammarSpellEl.addEventListener("change", () => {
+    try { localStorage.setItem(GRAMMAR_SPELL_KEY, grammarSpellEl.checked ? "1" : "0"); } catch (_) {}
+    if (grammarScan) runGrammarScan();
+  });
 }
 
 wireGrammarPanel();

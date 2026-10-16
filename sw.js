@@ -1,4 +1,4 @@
-const CACHE_VERSION = "20261014-01";
+const CACHE_VERSION = "20261016-01";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
@@ -75,6 +75,10 @@ const SHELL_ASSETS = [
   `./app/keyboard.js?v=${ASSET_V}`,
   `./app/cursor-hint.js?v=${ASSET_V}`,
   `./app/launch-files.js?v=${ASSET_V}`,
+  `./app/local-ai.js?v=${ASSET_V}`,
+  `./app/local-ai-worker.js?v=${ASSET_V}`,
+  `./app/doc-ask.js?v=${ASSET_V}`,
+  `./app/doc-rewrite.js?v=${ASSET_V}`,
   `./app/bootstrap.js?v=${ASSET_V}`,
   "./assets/images/favicon.png",
   "./assets/images/apple-touch-icon.png",
@@ -87,12 +91,15 @@ const SHELL_ASSETS = [
   `./app/stats-panel.js?v=${ASSET_V}`,
   `./app/review-panel.js?v=${ASSET_V}`,
   `./app/forms-panel.js?v=${ASSET_V}`,
+  `./app/spell-check.js?v=${ASSET_V}`,
+  `./app/spell-worker.js?v=${ASSET_V}`,
   `./app/grammar-panel.js?v=${ASSET_V}`,
   `./app/a11y-check.js?v=${ASSET_V}`,
   `./app/placeholders-panel.js?v=${ASSET_V}`,
   `./app/snippets-panel.js?v=${ASSET_V}`,
   `./app/find-replace-workbench.js?v=${ASSET_V}`,
   `./app/metadata-panel.js?v=${ASSET_V}`,
+  `./app/compare-describe.js?v=${ASSET_V}`,
   `./app/compare-panel.js?v=${ASSET_V}`,
   `./app/pdf-import.js?v=${ASSET_V}`,
   `./app/pdf-extract.js?v=${ASSET_V}`,
@@ -115,7 +122,7 @@ const HEAVY_ASSETS = [
 ];
 
 function isStaticAsset(url) {
-  return /\.(?:css|js|mjs|wasm|bcmap|png|svg|jpg|jpeg|gif|webp|ico|woff2?|mp4|docx|pdf)$/i.test(url.pathname);
+  return /\.(?:css|js|mjs|wasm|bcmap|png|svg|jpg|jpeg|gif|webp|ico|woff2?|mp4|docx|pdf|aff|dic)$/i.test(url.pathname);
 }
 
 function isHeavyAsset(url) {

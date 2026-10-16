@@ -54,14 +54,58 @@ function dwbCompareAlign(left, right) {
     else rows.push({ kind: "removed", left: --i });
   }
   rows.reverse();
-  // An adjacent deletion+addition is an edited paragraph, rather than two unrelated events.
-  const compact = [];
-  for (let k = 0; k < rows.length; k++) {
-    const x = rows[k], y = rows[k + 1];
-    if (x?.kind === "removed" && y?.kind === "added") { compact.push({ kind: "changed", left: x.left, right: y.right }); k++; }
-    else compact.push(x);
+  return { rows: dwbComparePairRuns(rows, left, right), approximate: false };
+}
+
+// Akapity w tej samej „dziurze” między wspólnymi fragmentami: usunięty + dodany o podobnych
+// słowach to ten sam akapit po redakcji („changed”), a nie dwa niezależne zdarzenia. Dawniej
+// łączyło się tylko sąsiadów, więc trzy poprawione z rzędu akapity parowały się na krzyż
+// (§ 3 z „Strony ustalają…”). Kolejność zachowana: para idzie w miejscu akapitu nowszego.
+function dwbCompareWordSet(text) {
+  return new Set((dwbCompareKey(text).match(/[\p{L}\p{N}]{2,}/gu) || []));
+}
+function dwbCompareSimilarity(a, b) {
+  if (!a.size || !b.size) return 0;
+  let common = 0;
+  a.forEach((w) => { if (b.has(w)) common++; });
+  return common / (a.size + b.size - common);
+}
+function dwbComparePairRuns(rows, left, right) {
+  const out = [];
+  let k = 0;
+  while (k < rows.length) {
+    if (rows[k].kind === "same") { out.push(rows[k++]); continue; }
+    const run = [];
+    while (k < rows.length && rows[k].kind !== "same") run.push(rows[k++]);
+    const removed = run.filter((r) => r.kind === "removed");
+    const added = run.filter((r) => r.kind === "added");
+    const sets = new Map();
+    const setOf = (side, i) => {
+      const key = `${side}${i}`;
+      if (!sets.has(key)) sets.set(key, dwbCompareWordSet(side === "l" ? left[i] : right[i]));
+      return sets.get(key);
+    };
+    const pairOf = new Map(); // dodany → usunięty
+    // jeden usunięty i jeden dodany w tym samym miejscu — ten sam akapit, nawet całkiem przepisany
+    if (removed.length === 1 && added.length === 1) pairOf.set(added[0], removed[0]);
+    let from = pairOf.size ? added.length : 0;
+    removed.forEach((r) => {
+      for (let j = from; j < added.length; j++) {
+        if (dwbCompareSimilarity(setOf("l", r.left), setOf("r", added[j].right)) >= 0.35) {
+          pairOf.set(added[j], r);
+          from = j + 1;
+          return;
+        }
+      }
+    });
+    const paired = new Set(pairOf.values());
+    run.forEach((r) => {
+      if (r.kind === "removed" && paired.has(r)) return;
+      if (r.kind === "added" && pairOf.has(r)) out.push({ kind: "changed", left: pairOf.get(r).left, right: r.right });
+      else out.push(r);
+    });
   }
-  return { rows: compact, approximate: false };
+  return out;
 }
 
 function dwbCompareWords(before, after) {
@@ -71,7 +115,9 @@ function dwbCompareWords(before, after) {
   for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) grid[i * w + j] = a[i - 1] === b[j - 1] ? grid[(i - 1) * w + j - 1] + 1 : Math.max(grid[(i - 1) * w + j], grid[i * w + j - 1]);
   const out = []; let i = a.length, j = b.length;
   while (i || j) {
-    if (i && j && a[i - 1] === b[j - 1]) out.push({ kind: "same", text: a[--i] });
+    // wspólne słowo — cofamy się w OBU tekstach (dawniej tylko w starszym: każde wspólne słowo
+    // wychodziło drugi raz jako „dodane”)
+    if (i && j && a[i - 1] === b[j - 1]) { out.push({ kind: "same", text: a[--i] }); j--; }
     else if (j && (!i || grid[i * w + j - 1] >= grid[(i - 1) * w + j])) out.push({ kind: "added", text: b[--j] });
     else out.push({ kind: "removed", text: a[--i] });
   }

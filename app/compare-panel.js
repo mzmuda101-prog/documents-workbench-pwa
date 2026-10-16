@@ -92,9 +92,84 @@ function renderCompareLast() {
     return { ...row, side, kind: side === newer ? "added" : "removed" };
   });
   renderComparison(current, reference, { ...result, rows });
+  renderCompareDescription(current, reference, rows, newer);
   if (compareRedlineBtn) compareRedlineBtn.hidden = !rows.some((r) => r.kind !== "same");
   compareSetStatus(t(result.approximate ? "compareDoneApprox" : "compareDone", { current: current.length, reference: reference.length }));
 }
+
+// ── Opis zmian (compare-describe.js) ─────────────────────────────────────────
+const compareDescribeEl = document.getElementById("compareDescribe");
+const compareDescribeBodyEl = document.getElementById("compareDescribeBody");
+const compareDescribeAiEl = document.getElementById("compareDescribeAi");
+const compareDescribeCopyBtn = document.getElementById("compareDescribeCopy");
+const compareDescribeAiBtn = document.getElementById("compareDescribeAiBtn");
+let compareDescribeText = "";
+
+function renderCompareDescription(current, reference, rows, newer) {
+  if (!compareDescribeEl || typeof dwbDescribeChanges !== "function") return;
+  // wiersze w kierunku starsza → nowsza: o = akapit starszej, n = akapit nowszej
+  const newerIsCurrent = newer === "current";
+  const older = newerIsCurrent ? reference : current;
+  const newerTexts = newerIsCurrent ? current : reference;
+  const oriented = rows.map((r) => {
+    const curIdx = r.left, refIdx = r.right;
+    if (r.kind === "changed" || r.kind === "same") return { kind: r.kind, o: newerIsCurrent ? refIdx : curIdx, n: newerIsCurrent ? curIdx : refIdx };
+    const idx = r.side === "current" ? curIdx : refIdx;
+    return r.kind === "added" ? { kind: "added", n: idx } : { kind: "removed", o: idx };
+  });
+  const desc = dwbDescribeChanges(older, newerTexts, oriented);
+  const total = desc.stats.changed + desc.stats.added + desc.stats.removed;
+  compareDescribeEl.hidden = !total;
+  compareDescribeAiEl.hidden = true;
+  compareDescribeAiEl.replaceChildren();
+  if (!total) return;
+  compareDescribeText = dwbDescribeText(desc);
+  compareDescribeBodyEl.replaceChildren();
+  compareDescribeBodyEl.append(Object.assign(document.createElement("p"), { className: "compare-describe-stats", textContent: t("describeStats", desc.stats) }));
+  const group = (title, items, fmt, cls) => {
+    if (!items.length) return;
+    compareDescribeBodyEl.append(Object.assign(document.createElement("h4"), { textContent: title }));
+    const ul = document.createElement("ul");
+    ul.className = `compare-describe-list ${cls || ""}`;
+    items.slice(0, DWB_DESCRIBE_MAX).forEach((it) => ul.append(Object.assign(document.createElement("li"), { textContent: fmt(it) })));
+    if (items.length > DWB_DESCRIBE_MAX) ul.append(Object.assign(document.createElement("li"), { className: "hint", textContent: t("describeMore", { n: items.length - DWB_DESCRIBE_MAX }) }));
+    compareDescribeBodyEl.append(ul);
+  };
+  group(t("describeNumbers"), desc.numbers, dwbDescribePairText, "is-numbers");
+  group(t("describeWording"), desc.wording, dwbDescribePairText);
+  group(t("describeAddedTitle"), desc.added, (it) => `„${it.text}”`);
+  group(t("describeRemovedTitle"), desc.removed, (it) => `„${it.text}”`);
+}
+
+compareDescribeCopyBtn?.addEventListener("click", async () => {
+  const text = [compareDescribeAiEl?.hidden ? "" : compareDescribeAiEl.dataset.text || "", compareDescribeText].filter(Boolean).join("\n\n");
+  try { await navigator.clipboard.writeText(text); toast(t("describeCopied"), "success"); }
+  catch (_) { toast(t("describeCopyFailed"), "warning"); }
+});
+
+compareDescribeAiBtn?.addEventListener("click", async () => {
+  if (!compareDescribeText || typeof LocalAI === "undefined") return;
+  if (!(await LocalAI.ensure({ reason: t("describeAiReason") }))) return;
+  compareDescribeAiBtn.disabled = true;
+  compareDescribeAiEl.hidden = false;
+  compareDescribeAiEl.replaceChildren();
+  const badge = Object.assign(document.createElement("span"), { className: "ai-badge", textContent: t("aiBadge") });
+  const body = Object.assign(document.createElement("p"), { className: "compare-describe-ai-text" });
+  compareDescribeAiEl.append(badge, body);
+  try {
+    const { text, check } = await dwbDescribeWithAi(compareDescribeText, { onPartial: (s) => { body.textContent = s; } });
+    if (!check.ok) {
+      body.textContent = t("describeAiRejected", { nums: check.unknown.join(", ") });
+      body.classList.add("is-rejected");
+      compareDescribeAiEl.dataset.text = "";
+    } else {
+      body.textContent = text;
+      compareDescribeAiEl.dataset.text = text;
+    }
+  } catch (err) {
+    body.textContent = t("aiFailed", { msg: err.message || err });
+  } finally { compareDescribeAiBtn.disabled = false; }
+});
 
 // Dokument z poprawkami (w:ins / w:del) — starsza → nowsza, w nowej karcie: przegląd w Recenzji
 // (Akceptuj/Odrzuć), zapis jak zwykłego pliku. Żaden z porównywanych plików się nie zmienia.
