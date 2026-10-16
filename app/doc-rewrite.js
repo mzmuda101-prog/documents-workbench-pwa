@@ -76,6 +76,47 @@ const dwbRewrite = (() => {
     return [...new Set(numbersOf(original))].filter((n) => !have.has(n));
   }
 
+  // ── „Popraw błędy” bez modelu: słownik Hunspell (spell-check.js) + reguły Korekty ─────────
+  // Działa od razu, także na telefonie bez pobranego asystenta. Zamieniamy tylko pewne
+  // przypadki: brak polskich znaków („prosze” → „proszę”) albo jedna litera różnicy.
+  const fold = (w) => String(w).normalize("NFD").replace(/\p{M}/gu, "").replace(/ł/g, "l").replace(/Ł/g, "L").toLocaleLowerCase("pl");
+  function oneEdit(a, b) {
+    a = a.toLocaleLowerCase("pl"); b = b.toLocaleLowerCase("pl");
+    if (a === b || Math.abs(a.length - b.length) > 1) return a === b;
+    let i = 0; let j = 0; let e = 0;
+    while (i < a.length && j < b.length) {
+      if (a[i] === b[j]) { i++; j++; continue; }
+      if (++e > 1) return false;
+      if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; }
+    }
+    return e + (a.length - i) + (b.length - j) <= 1;
+  }
+  async function offlineFix(text) {
+    if (typeof ensureLazyFeature === "function") await ensureLazyFeature("grammar");
+    let out = text;
+    if (typeof dwbSpell !== "undefined") {
+      const found = await dwbSpell.scan([text], "pl");
+      // wyraz z wielkiej litery: Hunspell podsuwa najpierw nazwy własne („Rosze”) — pytamy też o małą
+      const ask = [...new Set(found.flatMap((e) => [e.word, e.word.toLocaleLowerCase("pl")]))];
+      const sugg = found.length ? await dwbSpell.suggest(ask, "pl") : {};
+      const edits = [];
+      for (const e of found) {
+        const low = e.word.toLocaleLowerCase("pl");
+        const list = [...(sugg[low] || []), ...(sugg[e.word] || [])];
+        // pewne: różnica tylko w polskich znakach, albo jedna litera po ich zdjęciu („dokumęty” → „dokumenty”)
+        const pick = list.find((x) => fold(x) === fold(e.word))
+          || list.find((x) => x === x.toLocaleLowerCase("pl") && oneEdit(fold(x), fold(e.word)));
+        if (!pick) continue;
+        e.occurrences.forEach((o) => edits.push({ ...o, word: dwbSpell.matchCase(e.word, pick) }));
+      }
+      edits.sort((a, b) => b.start - a.start).forEach((o) => { out = out.slice(0, o.start) + o.word + out.slice(o.end); });
+    }
+    if (typeof fixParagraphWithRules === "function" && typeof getEnabledGrammarRules === "function") {
+      out = fixParagraphWithRules(out, getEnabledGrammarRules({ lang: "pl" }), {});
+    }
+    return out;
+  }
+
   // ── okno ──────────────────────────────────────────────────────────────────
   function el(tag, cls, text) {
     const n = document.createElement(tag);
@@ -103,12 +144,16 @@ const dwbRewrite = (() => {
     box.append(h);
     box.append(el("p", "rw-original", target.original.length > 400 ? `${target.original.slice(0, 400)}…` : target.original));
     if (note) box.append(el("p", "lai-note", note));
+    if (typeof LocalAI !== "undefined" && !LocalAI.isReady()) box.append(el("p", "lai-note", t("rewriteOfflineHint")));
     const modes = el("div", "rw-modes");
+    const aiReady = typeof LocalAI !== "undefined" && LocalAI.isReady();
     MODES.forEach((m) => {
       const b = el("button", "lai-btn", t(`rewriteMode_${m}`));
       b.type = "button";
       b.dataset.mode = m;
-      b.addEventListener("click", () => run(PROMPTS[m]));
+      // bez asystenta: „Popraw błędy” działa słownikiem, reszta potrzebuje AI (✦)
+      if (!aiReady && m !== "fix") b.append(el("span", "rw-needs-ai", " ✦"));
+      b.addEventListener("click", () => run(PROMPTS[m], m));
       modes.append(b);
     });
     box.append(modes);
@@ -133,13 +178,13 @@ const dwbRewrite = (() => {
     d.append(box);
   }
 
-  function renderResult(instruction, { pending = false, warn = "" } = {}) {
+  function renderResult(instruction, { pending = false, warn = "", source = "ai" } = {}) {
     const d = ensureDialog();
     d.replaceChildren();
     const box = el("div", "lai-box");
     const h = el("h2", "lai-title", t("rewriteTitle"));
     h.id = "rwTitle";
-    box.append(h, el("span", "ai-badge", t("aiBadge")));
+    box.append(h, el("span", "ai-badge", t(source === "dict" ? "rewriteDictBadge" : "aiBadge")));
     const diff = el("p", "rw-diff");
     if (pending) diff.textContent = suggestion || "…";
     else {
@@ -172,7 +217,15 @@ const dwbRewrite = (() => {
     d.append(box);
   }
 
-  async function run(instruction) {
+  async function run(instruction, mode = "") {
+    // „Popraw błędy” zawsze słownikiem: pewne i natychmiastowe. Mały model „poprawiał” też
+    // dobre słowa (zdążę → zdąży — pomiar docs/llm-bench/prompts.html, 2026-10-17).
+    if (mode === "fix") {
+      if (!dialog.open) dialog.showModal();
+      suggestion = await offlineFix(target.original);
+      renderResult(instruction, { source: "dict", warn: suggestion === target.original ? t("rewriteDictNothing") : "" });
+      return;
+    }
     if (!(await LocalAI.ensure({ reason: t("rewriteAiReason") }))) {
       renderChooser();
       if (!dialog.open) dialog.showModal();
@@ -185,6 +238,8 @@ const dwbRewrite = (() => {
     try {
       const answer = await LocalAI.generate({
         system: SYSTEM,
+        // przykład w poleceniu — mały model trzyma format „tylko nowy tekst” (pomiar v1 → v2)
+        shots: [[`Polecenie: ${PROMPTS.formal}\n\nFragment:\nDajcie znać, czy pasuje wam wtorek o 9.`, "Uprzejmie prosimy o informację, czy termin we wtorek o godzinie 9 jest dla Państwa odpowiedni."]],
         user: `Polecenie: ${instruction}\n\nFragment:\n${target.original}`,
         maxTokens: Math.min(900, Math.max(80, Math.round(target.original.length / 2.2) + 60)),
         signal: abort.signal,
@@ -233,7 +288,7 @@ const dwbRewrite = (() => {
     btn?.addEventListener("click", open);
   }
 
-  return { init, open, clean, missingNumbers, _target: () => target };
+  return { init, open, clean, missingNumbers, offlineFix, _target: () => target };
 })();
 
 document.addEventListener("DOMContentLoaded", () => dwbRewrite.init());

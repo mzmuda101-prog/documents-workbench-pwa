@@ -80,12 +80,12 @@ async function load({ spec, dtype, cacheKey }) {
   post("ready", { key });
 }
 
-async function run({ messages, maxTokens }, id) {
+async function run({ messages, maxTokens, prefix = "" }, id) {
   const { model, tokenizer } = loaded;
-  const text = tokenizer.apply_chat_template(messages, { tokenize: false, add_generation_prompt: true, enable_thinking: false });
+  const text = tokenizer.apply_chat_template(messages, { tokenize: false, add_generation_prompt: true, enable_thinking: false }) + prefix;
   const inputs = tokenizer(text, { add_special_tokens: false });
   const promptTokens = inputs.input_ids.dims.at(-1);
-  let partial = "";
+  let partial = prefix;
   let lastSent = 0;
   const streamer = new lib.TextStreamer(tokenizer, {
     skip_prompt: true,
@@ -110,7 +110,7 @@ async function run({ messages, maxTokens }, id) {
   });
   stopper = null;
   const seq = out.slice(null, [promptTokens, null]);
-  return (tokenizer.batch_decode(seq, { skip_special_tokens: true })[0] || "").replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+  return (prefix + (tokenizer.batch_decode(seq, { skip_special_tokens: true })[0] || "")).replace(/<think>[\s\S]*?<\/think>/g, "").trim();
 }
 
 async function release() {

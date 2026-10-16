@@ -2948,3 +2948,16 @@ section.docx.dwb-gapped { min-height: var(--dwb-sec-min) !important; }
 .rw-diff ins { text-decoration: none; background: color-mix(in srgb, var(--success) 22%, transparent); border-radius: 3px; }
 .rw-diff del { color: #b42318; text-decoration: line-through; }
 .lai-box > .ai-badge, .fx-write-out > .ai-badge, .compare-describe-ai > .ai-badge { justify-self: start; }
+
+/* Zapytaj dokument — osobny panel: zdanie z dokumentu + (opcjonalnie) odpowiedź asystenta */
+.doc-ask-quote { display: grid; gap: 4px; padding: 10px 12px; border-radius: 10px; border-left: 3px solid var(--accent); background: var(--field, var(--surface)); }
+.doc-ask-label { font-size: 0.78rem; font-weight: 600; color: var(--muted); }
+.doc-ask-quote-text { margin: 0; font-size: 0.92rem; line-height: 1.5; overflow-wrap: anywhere; }
+.doc-ask-ai { display: grid; gap: 6px; }
+.doc-ask-ai > .ai-badge { justify-self: start; }
+.doc-ask-sources > summary { cursor: pointer; }
+.doc-ask-sources[open] > summary { margin-bottom: 6px; }
+.doc-ask-engine { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.semantic-advanced > summary { cursor: pointer; font-size: 0.85rem; color: var(--muted-strong, var(--muted)); }
+.semantic-advanced[open] { display: grid; gap: 8px; }
+.rw-needs-ai { color: var(--accent); }

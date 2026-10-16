@@ -115,6 +115,14 @@ async function run() {
   check("brak liczby z oryginału → ostrzeżenie „14”", /14/.test(plain.warn), plain.warn);
   check("„Zamień bez śledzenia” → nowy tekst bez poprawek", plain.revisions === 0 && plain.text === "Prosimy o przesłanie dokumentów do piątku.", JSON.stringify(plain));
 
+  // „Popraw błędy” = słownik (bez modelu, nawet gdy asystent działa): polskie znaki i jedna litera
+  const dict = await page.evaluate(async () => ({
+    a: await dwbRewrite.offlineFix("Prosze przesłać dokumęty do piątku, spotkanie odbedzie sie o 12."),
+    b: await dwbRewrite.offlineFix("Nie wiem czy zdąże, ale postaram sie."),
+  }));
+  check("słownik: „Prosze… dokumęty… odbedzie sie” → poprawione", dict.a === "Proszę przesłać dokumenty do piątku, spotkanie odbędzie się o 12.", dict.a);
+  check("słownik: „zdąże” → „zdążę”, „sie” → „się”", dict.b === "Nie wiem czy zdążę, ale postaram się.", dict.b);
+
   assertNoErrors(errors, "doc-rewrite");
   await browser.close();
   let failed = 0;

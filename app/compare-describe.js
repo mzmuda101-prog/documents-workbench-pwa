@@ -123,15 +123,14 @@ function dwbDescribeCheckAi(aiText, factsText) {
   return { ok: unknown.length === 0, unknown };
 }
 
-const DWB_DESCRIBE_SYSTEM =
-  "Piszesz po polsku krótkie podsumowanie zmian między dwiema wersjami dokumentu. Korzystasz WYŁĄCZNIE " +
-  "z podanej listy zmian. Nie dodajesz faktów, liczb ani ocen, których nie ma na liście. Najpierw najważniejsze " +
-  "zmiany liczb, kwot, dat i terminów. 2–4 zdania, bez wstępu i bez wypunktowania.";
+// Polecenie dostrojone pod małe modele (docs/llm-bench/prompts.html, 2026-10-17: 0.8B 1/2 → 2/2):
+// krótko, „przepisujesz liczby dokładnie”, bez przykładu (przykład przeciekał do odpowiedzi).
+const DWB_DESCRIBE_SYSTEM = "Streszczasz podane zmiany w 1–3 zdaniach po polsku. Najpierw zmiany liczb, kwot, dat i terminów. Przepisujesz liczby dokładnie tak, jak w faktach; nie dodajesz innych.";
 
 async function dwbDescribeWithAi(factsText, { onPartial } = {}) {
   const text = await LocalAI.generate({
     system: DWB_DESCRIBE_SYSTEM,
-    user: `Lista zmian:\n${factsText}\n\nNapisz podsumowanie.`,
+    user: `Fakty:\n${factsText}\n\nStreszczenie:`,
     maxTokens: 220,
     onPartial,
   });

@@ -26,20 +26,20 @@ const LocalAI = (() => {
       id: "onnx-community/Qwen3.5-2B-ONNX-OPT", kind: "vlm", mb: { q4f16: 1580, q4: 1750 },
       files: { q4f16: ["decoder_model_merged_q4f16.onnx", "decoder_model_merged_q4f16.onnx_data", "embed_tokens_q4f16.onnx_data"], q4: ["decoder_model_merged_q4.onnx", "decoder_model_merged_q4.onnx_data", "embed_tokens_q4.onnx_data"] },
       label: { pl: "Qwen3.5 2B — dokładny", en: "Qwen3.5 2B — accurate" },
-      note: { pl: "Najlepszy po polsku z modeli, które działają w przeglądarce.", en: "Best Polish quality among browser models." },
+      note: { pl: "Najlepszy po polsku. Polecany do „Przepisz” i pisania formuł. Duży — raczej na komputer.", en: "Best Polish quality. Recommended for Rewrite and writing formulas. Large — rather for a computer." },
     },
     "qwen3.5-0.8b": {
       id: "onnx-community/Qwen3.5-0.8B-Text-ONNX", kind: "causal", mb: { q4f16: 470, q4: 550 },
       files: { q4f16: ["model_q4f16.onnx", "model_q4f16.onnx_data"], q4: ["model_q4.onnx", "model_q4.onnx_data"] },
       label: { pl: "Qwen3.5 0.8B — lekki", en: "Qwen3.5 0.8B — light" },
-      note: { pl: "Mniej pamięci, ale częściej myli się po polsku.", en: "Less memory, more mistakes in Polish." },
+      note: { pl: "Wystarczy do „Zapytaj dokument” i krótkich podsumowań. Dłuższe teksty pisze słabszą polszczyzną. Dobry na telefon.", en: "Good enough for Ask the document and short summaries. Weaker Polish in longer texts. Good for a phone." },
     },
   };
 
   const TXT = {
     pl: {
       title: "Asystent AI na urządzeniu",
-      intro: "Działa w tej przeglądarce. Treść plików nie jest nigdzie wysyłana — z internetu pobiera się tylko sam model, raz.",
+      intro: "Działa w tej przeglądarce. Treść plików nie jest nigdzie wysyłana — z internetu pobiera się tylko sam model, raz. Wiele funkcji działa też bez niego (słownik, wzory, reguły); asystent jest potrzebny do opcji oznaczonych ✦.",
       chrome: "Wbudowany w Chrome — bez pobierania",
       chromeNote: "Model Google z przeglądarki Chrome (Prompt API).",
       size: "ok. {mb} MB do pobrania",
@@ -62,7 +62,7 @@ const LocalAI = (() => {
     },
     en: {
       title: "On-device AI assistant",
-      intro: "Runs in this browser. File contents are never sent anywhere — only the model itself is downloaded, once.",
+      intro: "Runs in this browser. File contents are never sent anywhere — only the model itself is downloaded, once. Many features work without it (dictionary, templates, rules); the assistant is needed for options marked ✦.",
       chrome: "Built into Chrome — no download",
       chromeNote: "Google's model shipped with Chrome (Prompt API).",
       size: "about {mb} MB to download",
@@ -140,7 +140,10 @@ const LocalAI = (() => {
   function currentChoice() {
     if (prefs.choice === "chrome" && state.chrome && state.chrome !== "unavailable") return "chrome";
     if (MODELS[prefs.choice]) return prefs.choice;
-    return state.chrome === "available" ? "chrome" : "qwen3.5-2b";
+    if (state.chrome === "available") return "chrome";
+    // telefon / mały tablet: domyślnie lekki model (470 MB zamiast 1,6 GB) — pomiar poleceń 2026-10-17
+    const phone = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches && Math.min(screen.width, screen.height) < 820;
+    return phone ? "qwen3.5-0.8b" : "qwen3.5-2b";
   }
 
   // ── WebGPU worker ────────────────────────────────────────────────────────
@@ -263,9 +266,13 @@ const LocalAI = (() => {
     return !!mock() || state.status === "ready";
   }
 
-  async function generate({ system = "", user = "", maxTokens = 256, onPartial = null, signal = null } = {}) {
+  // shots: [[pytanie, odpowiedź], …] — przykłady w poleceniu (małe modele uczą się z nich formatu);
+  // prefix: wymuszony początek odpowiedzi („=”, „{"szukaj": ["”) — model nie zaczyna od „Oto…”.
+  // Pomiar: documents-workbench-pwa/docs/llm-bench/prompts.html.
+  async function generate({ system = "", shots = [], user = "", prefix = "", maxTokens = 256, onPartial = null, signal = null } = {}) {
     const messages = [];
     if (system) messages.push({ role: "system", content: system });
+    for (const [u, a] of shots) messages.push({ role: "user", content: u }, { role: "assistant", content: a });
     messages.push({ role: "user", content: user });
     const m = mock();
     if (m) {
@@ -278,7 +285,7 @@ const LocalAI = (() => {
       // Każde pytanie w świeżej sesji — bez pamięci poprzednich rozmów; rola „system” wolno
       // podać tylko przy tworzeniu sesji (initialPrompts).
       const s = await LanguageModel.create({
-        initialPrompts: system ? [{ role: "system", content: system }] : [],
+        initialPrompts: messages.slice(0, -1),
         expectedInputs: [{ type: "text", languages: ["pl", "en"] }],
         expectedOutputs: [{ type: "text", languages: ["pl"] }],
       });
@@ -298,7 +305,7 @@ const LocalAI = (() => {
     return new Promise((resolve, reject) => {
       pending.set(id, { resolve, reject, onPartial });
       signal?.addEventListener("abort", () => worker?.postMessage({ type: "abort", id }), { once: true });
-      worker.postMessage({ type: "generate", id, messages, maxTokens });
+      worker.postMessage({ type: "generate", id, messages, maxTokens, prefix });
     });
   }
 
@@ -326,13 +333,13 @@ const LocalAI = (() => {
   }
 
   // JSON z walidacją; przy złej odpowiedzi jedna poprawka z informacją, co było źle.
-  async function json({ system, user, maxTokens = 200, validate = null, signal = null } = {}) {
-    let answer = await generate({ system, user, maxTokens, signal });
+  async function json({ system, shots = [], prefix = "", user, maxTokens = 200, validate = null, signal = null } = {}) {
+    let answer = await generate({ system, shots, prefix, user, maxTokens, signal });
     let parsed = firstJson(answer);
     let problem = !parsed ? "invalid-json" : validate ? validate(parsed) : "";
     if (!problem) return { value: parsed, raw: answer };
     const retryUser = `${user}\n\nPoprzednia odpowiedź była niepoprawna (${problem}). Odpowiedz ponownie WYŁĄCZNIE poprawnym obiektem JSON.`;
-    answer = await generate({ system, user: retryUser, maxTokens, signal });
+    answer = await generate({ system, shots, prefix, user: retryUser, maxTokens, signal });
     parsed = firstJson(answer);
     problem = !parsed ? "invalid-json" : validate ? validate(parsed) : "";
     return problem ? { value: null, raw: answer, problem } : { value: parsed, raw: answer };
@@ -481,6 +488,13 @@ const LocalAI = (() => {
     return new Promise((resolve) => { dialogWaiter = resolve; });
   }
 
+  // Nazwa działającego modelu do komunikatów („Odpowiedź pisze Asystent AI (Qwen3.5 0.8B — lekki)”)
+  function readyName() {
+    if (mock()) return "test";
+    if (state.status !== "ready") return "";
+    return state.backend === "chrome" ? tx("chrome") : MODELS[state.loadedChoice]?.label[lang()] || "";
+  }
+
   function onChange(fn) {
     listeners.add(fn);
     return () => listeners.delete(fn);
@@ -494,7 +508,7 @@ const LocalAI = (() => {
     openSettings();
   });
 
-  return { ensure, generate, json, firstJson, isReady, openSettings, onChange, release, probe, status: snapshot, MODELS };
+  return { ensure, generate, json, firstJson, isReady, readyName, openSettings, onChange, release, probe, status: snapshot, MODELS };
 })();
 
 window.LocalAI = LocalAI;

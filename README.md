@@ -96,12 +96,17 @@ Siostrzana aplikacja [Sheet Workbench PWA](../sheet-workbench-pwa/README.md).
   sjp.pl (2026-09-01, PL) i EN; błędny wyraz raz z liczbą wystąpień, podpowiedzi z zachowaniem wielkiej
   litery, „Pomiń”, „Do słownika” (słownik użytkownika na urządzeniu). Skróty, adresy, iPhone — pomijane.
   `npm run test:spell`
-- **✦ Przepisz** (pasek Edycji, `app/doc-rewrite.js`): popraw błędy / prościej / formalnie / krócej / uprzejmiej
+- **✦ Przepisz** (pasek Edycji, `app/doc-rewrite.js`): „Popraw błędy” zawsze słownikiem (bez modelu, pewne poprawki:
+  polskie znaki, jedna litera); prościej / formalnie / krócej / uprzejmiej
   albo własne polecenie; podgląd różnicy, ostrzeżenie o zgubionej liczbie; „Wstaw jako poprawkę” = w:ins/w:del
   autora „Asystent AI” do przejrzenia w Recenzji (jeden krok Cofnij). `npm run test:rewrite`
-- **Zapytaj dokument** (panel Znajdź sens, `app/doc-ask.js`): odpowiedź tylko z fragmentów dokumentu z
-  odnośnikami [1] [2] do akapitów; bez odnośnika — ostrzeżenie; bez AI — same najlepsze fragmenty
-  (dopasowanie słów z polskimi odmianami albo model znaczeniowy). `npm run test:ask`
+- **Zapytaj dokument** (osobny panel, `app/doc-ask.js`): od razu — bez żadnego modelu — najlepiej pasujące
+  ZDANIE z dokumentu (typ pytania: ile dni / kwota / kiedy / kto) z odnośnikiem do miejsca; Asystent AI, jeśli
+  włączony, dopisuje odpowiedź własnymi słowami (krótki kontekst: ~1 s na 0.8B). „Znajdź sens” to OSOBNY, mały
+  model wyszukiwania (210 MB) — gdy działa, poprawia dobór fragmentów. `npm run test:ask`
+- **Strojenie poleceń pod małe modele** (`docs/llm-bench/prompts.html`, narzędzie dewelopera): te same zadania co
+  w aplikacjach, polecenia v1/v2, ocena automatyczna. 2026-10-17: Qwen3.5 0.8B (470 MB) z v2 = 10/17, tyle co 2B
+  (1,6 GB); LFM2.5 1.2B 5/17, Gemma 3 1B 8/17 → domyślnie na telefonie 0.8B
 - **Opis zmian** (Porównaj wersje, `app/compare-describe.js`): liczby, kwoty, daty i terminy na początku
   („§ 3: „14 dni” → „30 dni””), inne zmiany słów, nowe/usunięte akapity — do skopiowania; „Opisz zdaniami (AI)”
   odrzucany, gdy poda liczbę spoza listy zmian. Przy okazji: parowanie kilku poprawionych akapitów z rzędu

@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Strojenie poleceń</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1d2330; --muted:#667085; --line:#e3e6eb; --ok:#1f8a4c; --bad:#c2372b; color-scheme: light dark; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#14161b; --card:#1d2027; --ink:#e8eaef; --muted:#98a1b2; --line:#2d313a; --ok:#4cc27f; --bad:#ff7a6b; } }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 -apple-system, system-ui, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 16px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; } th, td { text-align:left; padding:4px 6px; border-bottom:1px solid var(--line); vertical-align: top; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); } pre { white-space: pre-wrap; margin: 0; font-size: 12px; }
+  button { font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Strojenie poleceń pod małe modele</h1>
+  <p>Narzędzie deweloperskie (Etap 0b): te same zadania co w aplikacjach, dwie wersje polecenia — <b>v1</b> (obecna) i <b>v2</b> (pod małe modele: przykład w poleceniu, krótko, wymuszony początek odpowiedzi, podpowiedź z kodu aplikacji). Ocena automatyczna.</p>
+  <section><div id="models"></div><p id="status"></p></section>
+  <section><table id="summary"></table></section>
+  <section><div id="details"></div></section>
+</main>
+<script type="module">
+const MODELS = [
+  { id: "onnx-community/Qwen3.5-0.8B-Text-ONNX", name: "Qwen3.5 0.8B", kind: "causal" },
+  { id: "LiquidAI/LFM2.5-1.2B-Instruct-ONNX", name: "LFM2.5 1.2B", kind: "causal" },
+  { id: "onnx-community/gemma-3-1b-it-ONNX", name: "Gemma 3 1B", kind: "causal" },
+  { id: "onnx-community/Qwen3.5-2B-ONNX-OPT", name: "Qwen3.5 2B", kind: "vlm" },
+];
+const nums = (s) => (String(s).match(/\d[\d\s .,]*\d|\d/g) || []).map((n) => n.replace(/[\s ]/g, "").replace(/[.,]0+$/, "").replace(/[.,]$/, ""));
+const firstJson = (s) => { const m = String(s).match(/\{[\s\S]*\}/); if (!m) return null; try { return JSON.parse(m[0]); } catch { try { return JSON.parse(m[0].replace(/\}[^}]*$/, "}")); } catch { return null; } } };
+const msgs = (system, pairs, user) => [...(system ? [{ role: "system", content: system }] : []), ...pairs.flatMap(([u, a]) => [{ role: "user", content: u }, { role: "assistant", content: a }]), { role: "user", content: user }];
+
+// ── Zapytaj dokument ───────────────────────────────────────────────────────
+const DOC = [
+  "Czynsz płatny jest do dziesiątego dnia każdego miesiąca na rachunek Wynajmującego.",
+  "Najemca może wypowiedzieć umowę z zachowaniem trzydziestodniowego okresu wypowiedzenia, czyli 30 dni.",
+  "Kaucja zwrotna wynosi dwukrotność miesięcznego czynszu i jest zwracana w ciągu 14 dni od oddania lokalu.",
+  "Wynajmujący odpowiada za naprawy instalacji, a Najemca za drobne naprawy wynikające z używania lokalu.",
+];
+const ASK = [
+  { q: "Ile dni ma najemca na wypowiedzenie umowy?", want: /30 dni|trzydzie/i, cite: 2, best: 1 },
+  { q: "Kiedy zwracana jest kaucja?", want: /14 dni/i, cite: 3, best: 2 },
+  { q: "Kto płaci za naprawę instalacji?", want: /wynajmując/i, cite: 4, best: 3 },
+];
+const frag = () => DOC.map((t, i) => `[${i + 1}] ${t}`).join("\n");
+const ASK_SYS_V1 = "Odpowiadasz na pytanie wyłącznie na podstawie ponumerowanych fragmentów dokumentu. Odpowiadasz krótko, w języku pytania. Po każdym zdaniu podajesz numer fragmentu, z którego pochodzi informacja, w nawiasie kwadratowym, np. [2]. Nie dodajesz wiedzy spoza fragmentów. Jeśli fragmenty nie zawierają odpowiedzi, piszesz tylko: Brak w dokumencie.";
+const ASK_SHOT = [`Fragmenty:\n[1] Umowa obowiązuje od 1 marca 2026 r.\n[2] Opłata wynosi 200 zł miesięcznie.\n\nPytanie: Ile wynosi opłata?\nNajtrafniejsze zdanie: [2]`, "Opłata wynosi 200 zł miesięcznie [2]."];
+const askTask = (variant, c) => variant === "v1"
+  ? { messages: msgs(ASK_SYS_V1, [], `Fragmenty dokumentu:\n${frag()}\n\nPytanie: ${c.q}`), maxTokens: 120 }
+  : { messages: msgs("Odpowiadasz jednym zdaniem po polsku, tylko na podstawie fragmentów. Na końcu numer fragmentu w nawiasie, np. [2].", [ASK_SHOT], `Fragmenty:\n${frag()}\n\nPytanie: ${c.q}\nNajtrafniejsze zdanie: [${c.best + 1}]`), maxTokens: 80 };
+const askCheck = (c, out) => {
+  const cites = [...out.matchAll(/\[(\d)\]/g)].map((m) => Number(m[1]));
+  const ok = c.want.test(out) && cites.includes(c.cite);
+  return { ok, note: `treść ${c.want.test(out) ? "✓" : "✗"}, odnośnik ${cites.includes(c.cite) ? "✓" : "✗"}` };
+};
+
+// ── Przepisz formalnie ─────────────────────────────────────────────────────
+const FORMAL = [
+  { t: "No to wyślijcie nam te papiery do piątku, bo inaczej nie zdążymy.", keep: [/piąt/i, /dokument|papier/i], bad: /nie zdążyliśmy/i },
+  { t: "Szefie, jutro mnie nie będzie, bo mam lekarza o 10.", keep: [/jutr/i, /10/, /lekar|wizyt/i] },
+  { t: "Faktura przyszła za późno, więc zapłacimy dopiero 15 maja.", keep: [/faktur/i, /15 maja/i] },
+];
+const RW_SYS_V1 = "Jesteś redaktorem tekstu. Dostajesz fragment dokumentu i polecenie. Odpowiadasz WYŁĄCZNIE nową wersją fragmentu — bez wstępu, komentarza, cudzysłowów i formatowania Markdown. Zachowujesz język oryginału, wszystkie liczby, kwoty, daty, nazwy własne i odwołania (np. § 3).";
+const FORMAL_SHOT = ["Przepisz formalnie: Dajcie znać, czy pasuje wam wtorek o 9.", "Uprzejmie prosimy o informację, czy termin we wtorek o godzinie 9 jest dla Państwa odpowiedni."];
+const formalTask = (v, c) => v === "v1"
+  ? { messages: msgs(RW_SYS_V1, [], `Polecenie: Przepisz w stylu formalnym, urzędowym, zachowując sens i wszystkie fakty.\n\nFragment:\n${c.t}`), maxTokens: 90 }
+  : { messages: msgs("Przepisujesz zdania po polsku w stylu formalnym. Zachowujesz sens, liczby i daty. Odpowiadasz tylko nowym zdaniem.", [FORMAL_SHOT], `Przepisz formalnie: ${c.t}`), maxTokens: 70 };
+const formalCheck = (c, out) => {
+  const o = out.trim();
+  const kept = c.keep.every((re) => re.test(o));
+  const numsOk = nums(c.t).every((n) => nums(o).includes(n));
+  const ok = kept && numsOk && o !== c.t && o.length < c.t.length * 2.5 && !/^oto|^poniżej/i.test(o) && !(c.bad && c.bad.test(o));
+  return { ok, note: `sens ${kept ? "✓" : "✗"}, liczby ${numsOk ? "✓" : "✗"}` };
+};
+
+// ── Popraw błędy ───────────────────────────────────────────────────────
+const FIX = [
+  { t: "Prosze przesłać dokumęty do piątku.", want: [/Proszę/, /dokumenty/], keep: /piątku/ },
+  { t: "Spotkanie odbedzie sie w czwartek o godz. 12.", want: [/odbędzie/, /się/], keep: /12/ },
+  { t: "Nie wiem czy zdąże, ale postaram sie.", want: [/zdążę/, /się/], keep: /postaram/ },
+];
+const FIX_SHOT = ["Popraw błędy: Bede jutro w biurze napewno.", "Będę jutro w biurze na pewno."];
+const fixTask = (v, c) => v === "v1"
+  ? { messages: msgs(RW_SYS_V1, [], `Polecenie: Popraw błędy ortograficzne, interpunkcyjne i gramatyczne. Nie zmieniaj stylu ani treści.\n\nFragment:\n${c.t}`), maxTokens: 60 }
+  : { messages: msgs("Poprawiasz tylko błędy ortograficzne i polskie znaki. Nie zmieniasz słów ani stylu. Odpowiadasz tylko poprawionym zdaniem.", [FIX_SHOT], `Popraw błędy: ${c.t}`), maxTokens: 50 };
+const fixCheck = (c, out) => {
+  const hits = c.want.filter((re) => re.test(out)).length;
+  const ok = hits === c.want.length && c.keep.test(out) && out.length < c.t.length * 1.6;
+  return { ok, note: `poprawki ${hits}/${c.want.length}` };
+};
+
+// ── Pytanie → filtr arkusza (JSON) ─────────────────────────────────────────
+const NLQ = [
+  { q: "zaległe sprawy Nowaka powyżej dwóch miesięcy", modes: ["@wtoku"], days: 60, text: /nowak/i },
+  { q: "zakończone w ostatnim cyklu u Kowalskiej", modes: ["@zamkniete", "@ostatni"], days: null, text: /kowalsk/i },
+  { q: "sprawy bez daty rozpoczęcia", modes: ["@bezstartu"], days: null, text: null },
+];
+const NLQ_SYS_V1 = "Zamieniasz pytanie o dane z arkusza na filtr aplikacji. Kolumny arkusza: „Nr.”, „Imię i Nazwisko”, „od”, „do”. Dozwolone tryby: @wtoku (sprawa w trakcie), @zamkniete (zakończona), @bezstartu, @niezaczete, @wszystkozamkniete, @ostatni (ostatni cykl), @pierwszy (pierwszy cykl). Odpowiedz WYŁĄCZNIE obiektem JSON: {\"szukaj\": [\"słowa do znalezienia w komórkach\"], \"tryby\": [\"...\"], \"dni_ponad\": liczba albo null, \"grupuj\": \"nazwa kolumny albo null\"}";
+const NLQ_SHOTS = [
+  ["otwarte sprawy Wiśniewskiej dłużej niż tydzień", '{"szukaj": ["Wiśniewsk"], "tryby": ["@wtoku"], "dni_ponad": 7, "grupuj": null}'],
+  ["ile zamkniętych na osobę", '{"szukaj": [], "tryby": ["@zamkniete"], "dni_ponad": null, "grupuj": "Imię i Nazwisko"}'],
+];
+const nlqTask = (v, c) => v === "v1"
+  ? { messages: msgs(NLQ_SYS_V1, [], c.q), maxTokens: 90 }
+  : { messages: msgs("Zamieniasz pytanie na filtr JSON. Tryby: @wtoku = otwarte/zaległe/w trakcie, @zamkniete = zakończone, @bezstartu = bez daty rozpoczęcia, @ostatni = ostatni cykl, @pierwszy = pierwszy cykl. dni_ponad = liczba dni (miesiąc = 30). Kolumna osoby: „Imię i Nazwisko”.", NLQ_SHOTS, c.q), maxTokens: 60, prefix: '{"szukaj": ["' };
+const nlqCheck = (c, out) => {
+  const j = firstJson(out);
+  if (!j) return { ok: false, note: "zły JSON" };
+  const modes = (j.tryby || []).map((x) => String(x).toLowerCase());
+  const modesOk = c.modes.every((m) => modes.includes(m)) && modes.every((m) => c.modes.includes(m));
+  const daysOk = c.days == null ? j.dni_ponad == null || j.dni_ponad === 0 : Number(j.dni_ponad) === c.days;
+  const words = (j.szukaj || []).filter((w) => String(w).trim());
+  const textOk = c.text ? words.some((w) => c.text.test(w)) : !words.length;
+  return { ok: modesOk && daysOk && textOk, note: `tryby ${modesOk ? "✓" : "✗"}, dni ${daysOk ? "✓" : "✗"}, tekst ${textOk ? "✓" : "✗"}` };
+};
+
+// ── Formuła z opisu ─────────────────────────────────────────────────────
+const FX = [
+  { q: "ile dni minęło od daty w kolumnie od", want: /^=(DATEDIF\(C5,TODAY\(\),"[Dd]"\)|TODAY\(\)-C5|DAYS\(TODAY\(\),C5\))$/ },
+  { q: "napisz Zakończone, gdy kolumna do jest wypełniona, inaczej W trakcie", want: /^=IF\((D5<>""|NOT\(ISBLANK\(D5\)\)|ISBLANK\(D5\)|D5="")[,;]/ },
+  { q: "połącz numer i nazwisko z myślnikiem", want: /^=(A5&"\s?-\s?"&B5|CONCAT\(A5,"\s?-\s?",B5\)|CONCATENATE\(A5,"\s?-\s?",B5\))$/ },
+];
+const FX_SYS_V1 = "Piszesz JEDNĄ formułę Excela do komórki F5 (wiersz 5). Kolumny arkusza: A = „Nr.”; B = „Imię i Nazwisko”; C = „od”; D = „do”. Odwołuj się do komórek z tego samego wiersza (np. C5). Używaj angielskich nazw funkcji i przecinków między argumentami. Odpowiedz WYŁĄCZNIE formułą zaczynającą się od =, bez komentarza.";
+const FX_SHOTS = [["suma kolumn A i B", "=A5+B5"], ["napisz Tak, gdy kolumna C jest pusta, inaczej Nie", '=IF(C5="","Tak","Nie")']];
+const fxTask = (v, c) => v === "v1"
+  ? { messages: msgs(FX_SYS_V1, [], c.q), maxTokens: 60 }
+  : { messages: msgs("Jedna formuła Excela do wiersza 5. Kolumny: A = „Nr.”, B = „Imię i Nazwisko”, C = „od” (data), D = „do” (data). Angielskie funkcje, przecinki.", FX_SHOTS, c.q), maxTokens: 40, prefix: "=" };
+const fxCheck = (c, out) => {
+  const line = (String(out).split(/\n/).map((x) => x.trim().replace(/^`+|`+$/g, "")).find((x) => x.startsWith("=")) || "").replace(/\s+(?=[,)(])/g, "");
+  return { ok: c.want.test(line), note: line.slice(0, 60) || "brak formuły" };
+};
+
+// ── Podsumowanie z faktów (opis zmian / raport) ───────────────────────────
+const SUM = [
+  { facts: "Zmieniono akapitów: 3 · dodano: 1 · usunięto: 0.\nLiczby, kwoty, daty i terminy\n• § 3: „14 dni” → „30 dni”\n• § 5: „4 500 zł” → „5 000 zł”\nInne zmiany treści\n• „Strony ustalają…”: „Wykonawca” → „Zleceniobiorca”", want: [/30 dni/, /5\s?000/] },
+  { facts: "Raport obejmuje 563 wierszy.\nNajczęściej w kolumnie Status: „W toku” — 42% (236 z 563).\nKwota: suma 125 400, średnio 222,7, od 10 do 9 800.", want: [/563/, /42\s?%/] },
+];
+const SUM_SYS_V1 = "Piszesz po polsku krótkie podsumowanie (2–4 zdania). Korzystasz WYŁĄCZNIE z podanej listy faktów. Nie dodajesz faktów, liczb ani ocen, których nie ma na liście. Bez wstępu i bez wypunktowania.";
+const SUM_SHOT = ["Fakty:\nRaport obejmuje 40 wierszy.\nNajczęściej w kolumnie Typ: „Faktura” — 60% (24 z 40).", "Raport obejmuje 40 wierszy, z czego najwięcej, 24 (60%), to faktury."];
+const sumTask = (v, c) => v === "v1"
+  ? { messages: msgs(SUM_SYS_V1, [], `Fakty:\n${c.facts}\n\nNapisz podsumowanie.`), maxTokens: 140 }
+  : { messages: msgs("Streszczasz podane fakty w 1–2 zdaniach po polsku. Przepisujesz liczby dokładnie tak, jak w faktach; nie dodajesz innych.", [], `Fakty:\n${c.facts}\n\nStreszczenie:`), maxTokens: 90 };
+const sumCheck = (c, out) => {
+  const known = new Set(nums(c.facts));
+  const unknown = nums(out).filter((n) => !known.has(n));
+  const ok = !unknown.length && c.want.every((re) => re.test(out));
+  return { ok, note: unknown.length ? `obce liczby: ${unknown.join(",")}` : c.want.every((re) => re.test(out)) ? "✓" : "brak kluczowych liczb" };
+};
+
+// ── Słowo → etykieta (wąskie pytanie zamiast całego JSON) ─────────────────
+const CLS = [
+  { w: "zaległe", want: "W_TOKU" }, { w: "niezałatwione", want: "W_TOKU" }, { w: "rozliczone", want: "ZAMKNIETE" },
+  { w: "sfinalizowane", want: "ZAMKNIETE" }, { w: "Nowaka", want: "SZUKAJ" }, { w: "Warszawie", want: "SZUKAJ" },
+  { w: "proszę", want: "POMIN" }, { w: "nierozpoczęte", want: "BEZ_STARTU" },
+];
+const CLS_SHOTS = [["otwarte", "W_TOKU"], ["zakończone", "ZAMKNIETE"], ["Kowalskiej", "SZUKAJ"], ["bez daty startu", "BEZ_STARTU"], ["pokaż", "POMIN"]];
+const clsTask = (v, c) => ({ messages: msgs("Przypisujesz słowo z pytania o sprawy w arkuszu do jednej etykiety: W_TOKU (sprawa trwa, otwarta), ZAMKNIETE (zakończona), BEZ_STARTU (nie rozpoczęta), SZUKAJ (nazwisko, miejsce, nazwa do znalezienia), POMIN (słowo bez znaczenia). Odpowiadasz tylko etykietą.", v === "v2" ? CLS_SHOTS : [], c.w), maxTokens: 6 });
+const clsCheck = (c, out) => { const got = (String(out).toUpperCase().match(/W_TOKU|ZAMKNIETE|BEZ_STARTU|SZUKAJ|POMIN/) || ["?"])[0]; return { ok: got === c.want, note: got }; };
+
+const TASKS = [
+  { key: "cls", label: "Słowo → etykieta", cases: CLS, build: clsTask, check: clsCheck },
+  { key: "ask", label: "Zapytaj dokument", cases: ASK, build: askTask, check: askCheck },
+  { key: "formal", label: "Przepisz formalnie", cases: FORMAL, build: formalTask, check: formalCheck },
+  { key: "fix", label: "Popraw błędy", cases: FIX, build: fixTask, check: fixCheck },
+  { key: "nlq", label: "Pytanie → filtr", cases: NLQ, build: nlqTask, check: nlqCheck },
+  { key: "fx", label: "Formuła z opisu", cases: FX, build: fxTask, check: fxCheck },
+  { key: "sum", label: "Podsumowanie faktów", cases: SUM, build: sumTask, check: sumCheck },
+];
+
+const results = JSON.parse(localStorage.getItem("promptbench.v1") || "{}");
+const save = () => localStorage.setItem("promptbench.v1", JSON.stringify(results));
+const $ = (s) => document.querySelector(s);
+
+function render() {
+  const rows = [];
+  for (const m of MODELS) {
+    const r = results[m.name];
+    if (!r) continue;
+    for (const v of ["v1", "v2"]) {
+      const cells = TASKS.map((tk) => { const xs = (r[v] || {})[tk.key] || []; return xs.length ? `${xs.filter((x) => x.ok).length}/${xs.length}` : "—"; });
+      const all = TASKS.flatMap((tk) => (r[v] || {})[tk.key] || []);
+      const ms = all.length ? Math.round(all.reduce((s, x) => s + x.ms, 0) / all.length) : 0;
+      rows.push(`<tr><td>${m.name}</td><td>${v}</td>${cells.map((c) => `<td>${c}</td>`).join("")}<td><b>${all.filter((x) => x.ok).length}/${all.length}</b></td><td>${ms} ms</td></tr>`);
+    }
+  }
+  $("#summary").innerHTML = `<tr><th>Model</th><th>Polecenia</th>${TASKS.map((tk) => `<th>${tk.label}</th>`).join("")}<th>Razem</th><th>Śr. czas</th></tr>${rows.join("")}`;
+  $("#details").innerHTML = Object.entries(results).map(([name, r]) => ["v1", "v2"].map((v) => `<details><summary>${name} ${v}</summary>${TASKS.map((tk) => ((r[v] || {})[tk.key] || []).map((x) => `<p><span class="${x.ok ? "ok" : "bad"}">${x.ok ? "✓" : "✗"}</span> ${tk.label}: ${x.note}<pre>${x.out.replace(/</g, "&lt;")}</pre></p>`).join("")).join("")}</details>`).join("")).join("");
+}
+
+async function runModel(m) {
+  const worker = new Worker(new URL("./prompts-worker.js?v=1", import.meta.url), { type: "module" });
+  const call = (msg) => new Promise((resolve, reject) => {
+    worker.onmessage = ({ data }) => {
+      if (data.type === "progress") $("#status").textContent = `${m.name}: pobieranie ${Math.round(data.loaded / 1e6)} / ${Math.round(data.total / 1e6)} MB (${data.file})`;
+      else if (data.type === "error") reject(new Error(data.message));
+      else resolve(data);
+    };
+    worker.postMessage(msg);
+  });
+  try {
+    $("#status").textContent = `${m.name}: wczytywanie…`;
+    await call({ type: "load", spec: { id: m.id, kind: m.kind }, dtype: "q4f16" });
+    results[m.name] = { v1: {}, v2: {} };
+    for (const v of ["v1", "v2"]) {
+      for (const tk of TASKS) {
+        results[m.name][v][tk.key] = [];
+        for (const c of tk.cases) {
+          $("#status").textContent = `${m.name}: ${v} · ${tk.label}`;
+          const got = await call({ type: "run", id: 1, task: tk.build(v, c) });
+          const verdict = tk.check(c, got.text);
+          results[m.name][v][tk.key].push({ ok: verdict.ok, note: verdict.note, out: got.text, ms: got.ms });
+          save();
+          render();
+        }
+      }
+    }
+    $("#status").textContent = `${m.name}: gotowe`;
+  } catch (err) {
+    $("#status").textContent = `${m.name}: błąd ${err.message}`;
+  } finally {
+    worker.terminate();
+  }
+}
+
+$("#models").innerHTML = MODELS.map((m, i) => `<button data-i="${i}">Zmierz ${m.name}</button>`).join(" ") + ' <button id="clear">Wyczyść</button>';
+document.querySelectorAll("[data-i]").forEach((b) => b.addEventListener("click", () => runModel(MODELS[Number(b.dataset.i)])));
+$("#clear").addEventListener("click", () => { for (const k of Object.keys(results)) delete results[k]; save(); render(); });
+window.__pb = { runModel, MODELS, results, TASKS };
+render();
+</script>
+</body>
+</html>
