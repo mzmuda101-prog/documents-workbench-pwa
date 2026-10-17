@@ -281,13 +281,64 @@ const dwbUndo = (() => {
   docCanvasEl?.addEventListener("pointerdown", endBurst, true);
 
   // Zapis/wczytanie: setDirtyState(false) poza cofaniem = „ten stan jest zapisany”.
+  let cleanBytes = null; // bajty pliku w chwili zapisu/wczytania (bez poprawek w podglądzie)
   const origSetDirty = window.setDirtyState;
   window.setDirtyState = function setDirtyStateUndo(isDirty, ...rest) {
-    if (!isDirty && !applying) { savedPos = undoStack.length; endBurst(); }
+    if (!isDirty && !applying) { savedPos = undoStack.length; endBurst(); cleanBytes = originalFileBytes; }
     const r = origSetDirty.call(this, isDirty, ...rest);
     sync();
     return r;
   };
+
+  // Powrót do zapisanej treści BEZ Cofnij (zgłoszenie 2026-10-17): wpisane i skasowane słowo,
+  // Enter + Backspace, pogrubienie włączone i wyłączone — dawniej licznik pokazywał np.
+  // „13 zmian”, bo liczy kroki cofania od zapisu, a „Zapisz” świeciło, choć plik byłby taki sam.
+  // Teraz po pauzie sprawdzamy, czy dokument = zapisany plik; jeśli tak, stan jest czysty (jak po
+  // cofnięciu wszystkiego ↶). Najpierw tanio: te same bajty i brak zmian w podglądzie; po
+  // operacjach na pliku (nowe bajty) — porównanie zawartości części .docx, też w tle.
+  async function sameZipContent(a, b) {
+    if (a === b) return true;
+    if (!window.JSZip) return false; // biblioteka dociągana z plikiem .docx — bez niej nie porównamy
+    const [za, zb] = await Promise.all([window.JSZip.loadAsync(a), window.JSZip.loadAsync(b)]);
+    const names = (z) => Object.keys(z.files).filter((n) => !z.files[n].dir).sort();
+    const na = names(za);
+    const nb = names(zb);
+    if (na.length !== nb.length || na.some((n, i) => n !== nb[i])) return false;
+    for (const n of na) {
+      const [x, y] = await Promise.all([za.file(n).async("uint8array"), zb.file(n).async("uint8array")]);
+      if (x.length !== y.length) return false;
+      for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return false;
+    }
+    return true;
+  }
+  let cleanTimer = 0;
+  let cleanRun = 0;
+  function scheduleCleanCheck() {
+    clearTimeout(cleanTimer);
+    cleanTimer = setTimeout(checkBackToSaved, 600);
+  }
+  async function checkBackToSaved() {
+    if (!hasUnsavedChanges || applying || busy || !cleanBytes || !originalFileBytes || readOnlyMode) return;
+    const run = ++cleanRun;
+    if (typeof waitInlineStructuralIdle === "function") await waitInlineStructuralIdle();
+    const bytes = originalFileBytes;
+    const quiet = () => run === cleanRun && !applying && !busy && hasUnsavedChanges && originalFileBytes === bytes
+      && !(typeof pendingDocEdits !== "undefined" && pendingDocEdits.length)
+      && !(typeof collectInlineParagraphEdits === "function" && collectInlineParagraphEdits().length);
+    if (!quiet()) return;
+    if (bytes !== cleanBytes) {
+      let same = false;
+      try { same = await sameZipContent(bytes, cleanBytes); } catch (_) { same = false; }
+      if (!same || !quiet()) return;
+    }
+    window.setDirtyState(false); // = zapisany stan (licznik 0, szkic niepotrzebny)
+  }
+  docCanvasEl?.addEventListener("input", scheduleCleanCheck, true);
+  docCanvasEl?.addEventListener("keyup", (e) => { if (["Backspace", "Delete", "Enter"].includes(e.key)) scheduleCleanCheck(); }, true);
+  // Bez sprawdzania zaraz po operacjach z panelu (applyDocumentEdit): w teście chaosu (ziarno
+  // 102) sprawdzanie tuż po przerysowaniu dawało niestabilne „Execution context was destroyed”.
+  // B / I / U, rozmiar itd. — zmiana w podglądzie bez zdarzenia „input”
+  document.addEventListener("selectionchange", () => { if (hasUnsavedChanges) scheduleCleanCheck(); });
   // Nowy dokument = nowa historia.
   const origIngest = window.ingestFile;
   window.ingestFile = async function ingestFileUndo(...args) {
