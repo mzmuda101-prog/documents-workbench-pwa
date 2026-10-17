@@ -12,7 +12,7 @@ function exportBaseName() {
 }
 
 function exportListLevel(p) {
-  const m = /docx-num-\d+-(\d+)/.exec(p.className || "");
+  const m = /docx-num-[\w-]+?-(\d+)(?:\s|$)/.exec(p.className || "");
   return m ? Number(m[1]) : -1;
 }
 
@@ -34,17 +34,21 @@ function buildExportModel() {
     if (!text) return;
     if (item.type === "heading") { model.push({ kind: "heading", level: item.level || 2, text }); return; }
     const lvl = exportListLevel(item.el);
-    model.push(lvl >= 0 ? { kind: "li", level: lvl, text } : { kind: "para", text });
+    // numer listy jak w Wordzie („1.”, „a)”, „II.”) — list-numbering.js; punktor = null
+    const label = lvl >= 0 && typeof dwbListNum !== "undefined" ? dwbListNum.labelOf(item.el) : null;
+    model.push(lvl >= 0 ? { kind: "li", level: lvl, text, label: label && label.trim() ? label.trim() : null } : { kind: "para", text });
   });
   return model;
 }
 
 function exportToTxt(model) {
-  return model.map((b) => {
+  const line = (b) => {
     if (b.kind === "table") return b.rows.map((r) => r.join("\t")).join("\n");
-    if (b.kind === "li") return `${"  ".repeat(b.level)}• ${b.text}`;
+    if (b.kind === "li") return `${"  ".repeat(b.level)}${b.label || "•"} ${b.text}`; // jak „Zwykły tekst” z Worda: prawdziwe numery
     return b.text;
-  }).join("\n\n").replace(/\n\n(?=(?: *• ))/g, "\n") + "\n";
+  };
+  // punkty jednej listy jeden pod drugim, reszta bloków oddzielona pustą linią
+  return model.map((b, i) => (i ? (b.kind === "li" && model[i - 1].kind === "li" ? "\n" : "\n\n") : "") + line(b)).join("") + "\n";
 }
 
 function mdEscape(s) {
@@ -56,7 +60,9 @@ function exportToMarkdown(model) {
   model.forEach((b, i) => {
     if (b.kind === "heading") out.push(`${"#".repeat(Math.min(6, b.level))} ${mdEscape(b.text)}`);
     else if (b.kind === "li") {
-      const item = `${"  ".repeat(b.level)}- ${mdEscape(b.text)}`;
+      // „1.” / „1)” — lista numerowana Markdownu; inne numery (a), II.) zostają przy tekście
+      const numbered = b.label && /^\d+[.)]$/.test(b.label);
+      const item = `${"  ".repeat(b.level)}${numbered ? b.label : "-"} ${b.label && !numbered ? `${mdEscape(b.label)} ` : ""}${mdEscape(b.text)}`;
       const prev = model[i - 1];
       if (prev?.kind === "li" && out.length) out[out.length - 1] += `\n${item}`;
       else out.push(item);
@@ -81,7 +87,9 @@ function exportToHtmlBody(model) {
     if (b.kind === "heading") out.push(`<h${Math.min(6, b.level)}>${escHtmlEx(b.text)}</h${Math.min(6, b.level)}>`);
     else if (b.kind === "li") {
       if (!inList) { out.push("<ul>"); inList = true; }
-      out.push(`<li style="margin-left:${b.level * 1.2}em">${escHtmlEx(b.text)}</li>`);
+      out.push(b.label
+        ? `<li style="margin-left:${b.level * 1.2}em;list-style:none">${escHtmlEx(b.label)} ${escHtmlEx(b.text)}</li>`
+        : `<li style="margin-left:${b.level * 1.2}em">${escHtmlEx(b.text)}</li>`);
     } else if (b.kind === "table") {
       out.push("<table>", ...b.rows.map((r, i) => `<tr>${r.map((c) => `<${i ? "td" : "th"}>${escHtmlEx(c)}</${i ? "td" : "th"}>`).join("")}</tr>`), "</table>");
     } else out.push(`<p>${escHtmlEx(b.text)}</p>`);

@@ -98,8 +98,9 @@ async function run() {
   await caretEnd(page, 5);
   await page.keyboard.press("Enter"); await page.keyboard.type("Krok drugi");
   await page.waitForTimeout(400);
-  const nums = await page.evaluate(() => collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).slice(5, 7).map((q) => getComputedStyle(q, "::before").content));
-  check("lista numerowana: znaczniki z licznikiem (1., 2.)", nums.every((c) => /counter\(/.test(c)), JSON.stringify(nums));
+  // numer liczony jak w Wordzie (list-numbering.js) — też dla punktu dopisanego Enterem
+  const nums = await page.evaluate(() => collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).slice(5, 7).map((q) => dwbListNum.labelOf(q)));
+  check("lista numerowana: numery 1., 2. (też po Enter)", nums.join("|") === "1.|2.", JSON.stringify(nums));
   await caretAt(page, 6, 0);
   await page.keyboard.press("Backspace");
   await idle(page);

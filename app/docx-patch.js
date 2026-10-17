@@ -858,6 +858,19 @@ function repairSettingsOrder(xml) {
   return at < 0 ? xml : rest.slice(0, at) + lang[0] + rest.slice(at);
 }
 
+// Tekst w:t / w:delText BEZ xml:space="preserve": Word pomija spacje na brzegach, a tabulator i
+// nową linię w środku pokazuje jako spację (Word 16.114, tools/word-oracle/probe-space.js:
+// „<w:t>Red bold</w:t><w:t> italic</w:t>” = „Red bolditalic”). Podgląd i model aplikacji brały
+// textContent dosłownie — ze spacją, której w Wordzie nie ma (inne słowa, łamanie wierszy).
+// Ujednolicamy przy otwarciu: te same znaki, które pokazuje Word (twarda spacja zostaje).
+function repairUnpreservedSpaces(xml) {
+  return xml.replace(/<w:(t|delText)((?:\s[^>]*)?)>([^<]*)<\/w:\1>/g, (m, tag, attrs, text) => {
+    if (/xml:space\s*=\s*["']preserve["']/.test(attrs)) return m;
+    const fixed = text.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, "").replace(/[\t\r\n]/g, " ");
+    return fixed === text ? m : `<w:${tag}${attrs}>${fixed}</w:${tag}>`;
+  });
+}
+
 async function repairDocxFontNames(bytes) {
   if (!window.JSZip || !bytes) return bytes;
   try {
@@ -868,6 +881,7 @@ async function repairDocxFontNames(bytes) {
       const part = await zip.file(f).async("string");
       let fixed = part.charCodeAt(0) === 0xfeff ? part.slice(1) : part;
       if (/^word\/(document|header\d*|footer\d*|footnotes|endnotes|comments|styles)\.xml$/.test(f)) fixed = repairFontNames(fixed);
+      if (/^word\/(document|header\d*|footer\d*|footnotes|endnotes|comments)\.xml$/.test(f)) fixed = repairUnpreservedSpaces(fixed);
       if (f === "word/settings.xml") fixed = repairSettingsOrder(fixed);
       if (fixed !== part) { zip.file(f, fixed); changed = true; }
     }

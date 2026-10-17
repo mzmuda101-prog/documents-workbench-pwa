@@ -715,6 +715,10 @@ html.is-mobile .dwb-page-margin-guide { display: none; }
   box-sizing: border-box;
 }
 
+/* Numer listy policzony jak w Wordzie (app/list-numbering.js) zamiast licznika CSS docx-preview */
+.docx-preview-host p[data-dwb-num]::before { content: attr(data-dwb-num) !important; }
+.docx-preview-host p[data-dwb-num] { list-style-type: none !important; } /* pusty w:lvlText: docx-preview dawał znacznik listy „1.” */
+
 /* Wyrównanie strony w pionie (sectPr w:vAlign — łatka nr 8 docx-preview), strony w Widoku desktopowym */
 .doc-canvas:not(.doc-reflow-mode) section.docx[data-dwb-v-align="center"] > article { margin-top: auto; margin-bottom: auto; }
 .doc-canvas:not(.doc-reflow-mode) section.docx[data-dwb-v-align="bottom"] > article { margin-top: auto; margin-bottom: 0; }

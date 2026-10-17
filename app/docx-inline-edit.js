@@ -2161,8 +2161,10 @@ function toggleVertAlign(kind) {
 
 // „Wyczyść formatowanie” (gumka w Wordzie): tekst w zaznaczeniu traci format znaków (pogrubienie,
 // kolor, wyróżnienie, krój, rozmiar, indeks) — zostaje sam styl akapitu. Linki zostają linkami.
-// Bez zaznaczenia — cały akapit z kursorem. Akapity w całości objęte (albo z kursorem) wracają
-// do stylu „Normalny”, jak w Wordzie (nagłówek → zwykły tekst).
+// Bez zaznaczenia — cały akapit z kursorem. Jak w Wordzie 16.114 (sprawdzone 2026-10-17): KAŻDY
+// akapit dotknięty zaznaczeniem — także tylko w części, np. nagłówek zaznaczony od połowy —
+// wraca do stylu „Normalny” i traci bezpośrednie formatowanie akapitu (wyrównanie, wcięcia,
+// odstępy, numerację listy). Dawniej tylko akapity zaznaczone w całości i tylko styl.
 function clearTextFormatting() {
   if (readOnlyMode) return false;
   const p0 = restoreDocCaret();
@@ -2176,11 +2178,6 @@ function clearTextFormatting() {
     range.selectNodeContents(p);
   }
   const paras = collectPreviewParagraphElements(host).filter((p) => range.intersectsNode(p) && p.classList.contains("docx-editable-p"));
-  const whole = paras.filter((p) => {
-    const r = document.createRange();
-    r.selectNodeContents(p);
-    return range.compareBoundaryPoints(Range.START_TO_START, r) <= 0 && range.compareBoundaryPoints(Range.END_TO_END, r) >= 0;
-  });
   const pieces = selectedTextPieces(range);
   pieces.forEach((n) => {
     const top = isolatePiece(n);
@@ -2190,31 +2187,85 @@ function clearTextFormatting() {
   selectPieces(pieces);
   onInlineParagraphInput();
   syncFormatIndicators();
-  const styled = whole.filter((p) => typeof composeStyleKeyOf === "function" && composeStyleKeyOf(p) !== "normal").map((p) => resolveParaIndex(p)).filter((i) => i >= 0);
-  if (styled.length && typeof applyDocumentEdit === "function") {
-    const caretP = docCaretParagraph(document.activeElement) || whole[0];
-    pendingInlineCursor = { paraIndex: resolveParaIndex(caretP), offset: getCaretOffset(caretP) };
-    applyDocumentEdit({ op: "paraFormat", indices: styled, style: "normal" });
+  const touched = paras.filter((p) => !p.dataset.noteKey).map((p) => resolveParaIndex(p)).filter((i) => i >= 0);
+  if (touched.length && typeof applyDocumentEdit === "function") {
+    const caretP = docCaretParagraph(document.activeElement) || paras[0];
+    const cursor = { paraIndex: resolveParaIndex(caretP), offset: getCaretOffset(caretP) };
+    // tylko akapity, w których jest co czyścić (styl / cechy akapitu) — inaczej przebudowa podglądu
+    // bez potrzeby (zaznaczenie zostaje na tekście, jak w Wordzie)
+    paragraphsWithDirectFormat(touched).then((need) => {
+      if (!need.length) return;
+      pendingInlineCursor = cursor;
+      applyDocumentEdit({ op: "paraFormat", indices: need, style: "normal", clearDirect: true });
+    });
   }
   return true;
 }
 
+// indeksy akapitów z bezpośrednim formatowaniem akapitu (w:pPr poza końcem sekcji i śledzeniem zmian)
+async function paragraphsWithDirectFormat(indices) {
+  try {
+    await inlineStructuralChain;
+    const doc = await getDocumentXmlDom(originalFileBytes);
+    const paragraphs = collectParagraphElements(doc.documentElement, "all");
+    const keep = new Set(["sectPr", "pPrChange"]);
+    const revMark = new Set(["ins", "del", "moveFrom", "moveTo", "rPrChange"]);
+    return indices.filter((i) => {
+      const pPr = Array.from(paragraphs[i]?.childNodes || []).find((c) => c.localName === "pPr");
+      return !!pPr && Array.from(pPr.children).some((c) => !keep.has(c.localName) && !(c.localName === "rPr" && Array.from(c.children).every((r) => revMark.has(r.localName))));
+    });
+  } catch (_) {
+    return indices;
+  }
+}
+
 // Zmiana wielkości liter zaznaczenia (Aa w Wordzie). Bez zaznaczenia — słowo przy kursorze.
 // Format zostaje (zmienia się tylko tekst w tych samych fragmentach).
+// Reguły z Worda 16.114 (tools/word-oracle/run-case.js, 140 przypadków, 2026-10-17):
+//   • „Jak w zdaniu” / „Jak Nazwy Własne” NIE ruszają słów pisanych samymi wielkimi (USA, ŁÓDŹ,
+//     A, 3D, DON'T), a „Jak w zdaniu” także słów z wielkiej litery (Kowalski; „iPhone” → „iphone”)
+//     — chyba że całe zaznaczenie jest wielkimi literami (wtedy wszystko),
+//   • początek słowa liczy się z tekstem PRZED zaznaczeniem: zaznaczenie od środka słowa nie
+//     robi wielkiej litery w środku („białO”), granica formatowania (red|**bold**) też nie,
+//   • słowo = litery, cyfry i apostrof („O'neil”, „3d”); łącznik dzieli („Biało-Czerwony”).
 const CASE_MODES = ["sentence", "lower", "upper", "title", "toggle"];
-function caseTransform(mode, text, startsSentence) {
+const CASE_WORD_CH = /[\p{L}\p{N}'’]/u;
+// before/after = tekst akapitu obok zaznaczenia (kontekst słów i zdań); zwraca tablicę wyjść znaków
+function caseTransformChars(mode, chars, before, after, keepCaps, sentenceStart) {
   const loc = currentLang === "en" ? "en-US" : "pl-PL";
-  if (mode === "lower") return text.toLocaleLowerCase(loc);
-  if (mode === "upper") return text.toLocaleUpperCase(loc);
-  if (mode === "toggle") return [...text].map((c) => (c === c.toLocaleUpperCase(loc) ? c.toLocaleLowerCase(loc) : c.toLocaleUpperCase(loc))).join("");
-  if (mode === "title") return text.toLocaleLowerCase(loc).replace(/(^|[^\p{L}\p{N}'’])(\p{L})/gu, (m, pre, ch) => pre + ch.toLocaleUpperCase(loc));
-  // jak w zdaniu: wielka litera na początku zdania, reszta małymi
-  let atStart = startsSentence;
-  return [...text.toLocaleLowerCase(loc)].map((c) => {
-    if (/\p{L}/u.test(c)) { const out = atStart ? c.toLocaleUpperCase(loc) : c; atStart = false; return out; }
-    if (/[.!?]/.test(c)) atStart = true;
-    return c;
-  }).join("");
+  const lo = (c) => c.toLocaleLowerCase(loc);
+  const up = (c) => c.toLocaleUpperCase(loc);
+  if (mode === "lower") return chars.map(lo);
+  if (mode === "upper") return chars.map(up);
+  if (mode === "toggle") return chars.map((c) => (c === up(c) ? lo(c) : up(c)));
+  const full = [...before, ...chars, ...after];
+  const off = [...before].length;
+  // słowa bez małych liter (skrótowce) zostają, gdy w zaznaczeniu są małe litery
+  const caps = new Array(full.length).fill(false);
+  if (keepCaps) {
+    for (let i = 0; i < full.length;) {
+      if (!CASE_WORD_CH.test(full[i])) { i++; continue; }
+      let j = i;
+      while (j < full.length && CASE_WORD_CH.test(full[j])) j++;
+      const w = full.slice(i, j).join("");
+      // skrótowiec (USA) — zostaje; w „Jak w zdaniu” także słowo z wielkiej litery (Kowalski)
+      if ((/\p{Lu}/u.test(w) && !/\p{Ll}/u.test(w)) || (mode === "sentence" && /^[^\p{L}]*\p{Lu}[^\p{Lu}]*$/u.test(w))) caps.fill(true, i, j);
+      i = j;
+    }
+  }
+  let atStart = sentenceStart;
+  return chars.map((c, k) => {
+    const g = off + k;
+    const letter = /\p{L}/u.test(c);
+    let out = caps[g] ? c : lo(c);
+    if (mode === "title") {
+      if (letter && !caps[g] && (g === 0 || !CASE_WORD_CH.test(full[g - 1]))) out = up(c);
+    } else if (letter) {
+      if (atStart && !caps[g]) out = up(c);
+      atStart = false;
+    } else if (/[.!?]/.test(c)) atStart = true;
+    return out;
+  });
 }
 function changeTextCase(mode) {
   if (readOnlyMode || !CASE_MODES.includes(mode)) return false;
@@ -2234,20 +2285,33 @@ function changeTextCase(mode) {
   }
   const pieces = selectedTextPieces(range);
   if (!pieces.length) return false;
-  // początek zdania: tekst akapitu przed pierwszym kawałkiem kończy się kropką albo jest pusty
-  const p = pieces[0].parentElement.closest(".docx-editable-p");
-  const pre = document.createRange();
-  pre.selectNodeContents(p);
-  pre.setEnd(pieces[0], 0);
-  const textBefore = pre.toString().replace(/\uFEFF/g, "").trimEnd();
-  let startsSentence = !textBefore || /[.!?]$/.test(textBefore);
-  let lastP = p;
+  // akapity po kolei: zaznaczony tekst + tekst akapitu przed i za nim (kontekst słów i zdań)
+  const groups = [];
   pieces.forEach((n) => {
-    const np = n.parentElement.closest(".docx-editable-p");
-    if (np !== lastP) { startsSentence = true; lastP = np; } // nowy akapit = nowe zdanie
-    const next = caseTransform(mode, n.data, startsSentence);
-    if (mode === "sentence") startsSentence = /[.!?]\s*$/.test(n.data);
-    if (next !== n.data) n.data = next;
+    const p = n.parentElement.closest(".docx-editable-p");
+    if (groups[groups.length - 1]?.p !== p) groups.push({ p, pieces: [] });
+    groups[groups.length - 1].pieces.push(n);
+  });
+  const textAround = (p, first, last) => {
+    const pre = document.createRange();
+    pre.selectNodeContents(p);
+    pre.setEnd(first, 0);
+    const post = document.createRange();
+    post.selectNodeContents(p);
+    post.setStart(last, last.length);
+    return [pre.toString().replace(/\uFEFF/g, ""), post.toString().replace(/\uFEFF/g, "")];
+  };
+  // całe zaznaczenie wielkimi literami → zmieniamy wszystko (Word), inaczej skrótowce zostają
+  const keepCaps = /\p{Ll}/u.test(pieces.map((n) => n.data).join(""));
+  groups.forEach((g) => {
+    const [before, after] = textAround(g.p, g.pieces[0], g.pieces[g.pieces.length - 1]);
+    const tagged = [];
+    g.pieces.forEach((n, i) => [...n.data].forEach((c) => tagged.push([c, i])));
+    const trimmed = before.trimEnd();
+    const out = caseTransformChars(mode, tagged.map(([c]) => c), before, after, keepCaps, !trimmed || /[.!?]$/.test(trimmed));
+    const texts = g.pieces.map(() => "");
+    out.forEach((c, k) => { texts[tagged[k][1]] += c; });
+    g.pieces.forEach((n, i) => { if (texts[i] !== n.data) n.data = texts[i]; });
   });
   selectPieces(pieces);
   onInlineParagraphInput();

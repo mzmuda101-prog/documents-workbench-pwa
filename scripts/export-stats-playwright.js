@@ -45,6 +45,12 @@ async function run() {
     { kind: "li", level: 0, text: "raz" }, { kind: "li", level: 1, text: "dwa" },
   ]));
   check("MD: tabela z nagłówkiem, | escapowane, lista zagnieżdżona", model.includes("| A | B\\|c |") && model.includes("| --- | --- |") && model.includes("- raz\n  - dwa"), model);
+  // numery list jak w Wordzie („Zwykły tekst”): 1., a) — nie „•”
+  const numbered = await page.evaluate(() => {
+    const m = [{ kind: "li", level: 0, text: "raz", label: "1." }, { kind: "li", level: 1, text: "pod", label: "a)" }, { kind: "li", level: 0, text: "kropka", label: null }];
+    return { txt: exportToTxt(m), md: exportToMarkdown(m), html: exportToHtmlBody(m) };
+  });
+  check("eksport: prawdziwe numery list (TXT „1. raz”, MD „1. raz” i „- a) pod”)", numbered.txt.includes("1. raz\n  a) pod\n• kropka") && numbered.md.includes("1. raz\n  - a) pod\n- kropka") && numbered.html.includes(">1. raz<"), JSON.stringify(numbered));
   // Druk / PDF → najpierw Podgląd wydruku z kartkami (print-preview.js; szczegóły w test:layout)
   await page.click("#exPrintBtn");
   await page.waitForSelector(".pp-overlay .pp-sheet", { timeout: 20000 }).catch(() => {});

@@ -357,6 +357,20 @@ async function applyParaFormatInZip(zip, xml, edit) {
   targets.forEach((p) => {
     const layout = layoutDocs ? composeParaLayout(p, layoutDocs.stylesDoc, layoutDocs.numberingDoc) : null;
     const pPr = composeEnsurePPr(p);
+    // „Wyczyść całe formatowanie” (Word 16.114): akapit traci WSZYSTKIE bezpośrednie cechy —
+    // wyrównanie, wcięcia, odstępy, numerację listy, obramowanie… Zostają: koniec sekcji,
+    // śledzone zmiany akapitu (pPrChange) i oznaczenia wstawienia/usunięcia znaku akapitu.
+    if (edit.clearDirect) {
+      Array.from(pPr.childNodes).forEach((c) => {
+        if (c.nodeType !== 1) return;
+        if (c.localName === "sectPr" || c.localName === "pPrChange") return;
+        if (c.localName === "rPr") {
+          Array.from(c.childNodes).forEach((r) => { if (r.nodeType === 1 && !["ins", "del", "moveFrom", "moveTo", "rPrChange"].includes(r.localName)) c.removeChild(r); });
+          if (c.firstElementChild) return;
+        }
+        pPr.removeChild(c);
+      });
+    }
     if (edit.spacing || edit.ind || Number.isFinite(edit.indentDelta)) composeApplyLayout(p, pPr, edit, layout);
     if (edit.style) {
       composeSetPPrChild(pPr, "pStyle", styleId ? { val: styleId } : null);

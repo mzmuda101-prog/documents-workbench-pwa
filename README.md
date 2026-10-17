@@ -148,6 +148,14 @@ Siostrzana aplikacja [Sheet Workbench PWA](../sheet-workbench-pwa/README.md).
 
 - **Przewodnik po aplikacji** (przycisk „Przykład” / „Wypróbuj”): dokument-samouczek, w którym każda
   sekcja pokazuje jedną funkcję z gotowym materiałem do wypróbowania (`node scripts/gen-guide-docx.mjs`)
+- **Sprawdzone z prawdziwym Wordem** (`tools/word-oracle`, Word 16.114 przez AppleScript — narzędzie
+  lokalne, nie trafia do aplikacji): numery list liczone regułami Worda (`app/list-numbering.js`:
+  „A.i” w listach wielopoziomowych, litery po „z” = aa, bb, słownie/porządkowo, numeracja prawnicza,
+  lvlRestart, pominięte poziomy), statystyka wyrazów jak w oknie „Statystyka wyrazów” (myślniki dzielą
+  słowa, numery list się liczą, ukryty tekst nie), „Zmień wielkość liter” (skrótowce USA/3D zostają),
+  gumka czyści formatowanie każdego akapitu dotkniętego zaznaczeniem, spacje na brzegu `w:t` bez
+  `xml:space="preserve"` pomijane jak w Wordzie. `npm run word:oracle:lists` / `word:oracle:stats` /
+  `word:oracle:case` (wymaga Worda), testy bez Worda: `test:listnum`, `test:wordstats`, `test:case`
 - **Poruszanie się jak w Wordzie** w trybie Edycja: strzałki między akapitami, Delete na końcu akapitu
   dołącza następny, Ctrl+Home/End (⌘↑/⌘↓), klik obok tekstu stawia kursor; znacznik bieżącego akapitu
   stoi przed tekstem (nie zasłania pierwszych znaków)

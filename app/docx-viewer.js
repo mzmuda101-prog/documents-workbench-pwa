@@ -85,6 +85,7 @@ async function renderDocxPreview(bytes, container, opts = {}) {
   addTrailingBreakLines(wrapper); // Shift+Enter na końcu akapitu = jeszcze jedna linijka (Word)
   await loadFallbackDocFont(wrapper); // plik bez kroju: zamiennik wczytany przed pomiarami
   fixDocxBulletRendering(wrapper);
+  if (typeof dwbListNum !== "undefined") await dwbListNum.apply(wrapper, bytes); // numery list jak w Wordzie
   fixPageAnchoredDrawings(wrapper);
   applyWordLineMetrics(wrapper); // odstępy między wierszami jak w Wordzie (też granice stron)
   if (!mobileReflow) {

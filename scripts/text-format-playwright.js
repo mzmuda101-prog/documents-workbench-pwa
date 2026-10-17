@@ -180,6 +180,45 @@ async function run() {
   saved = await savedRuns(page, "Tytuł rozdziału");
   check("gumka bez zaznaczenia w nagłówku → styl Normalny", !!hadStyle && !saved.style, JSON.stringify({ hadStyle, after: saved }));
 
+  // Word 16.114: zaznaczenie od połowy nagłówka do połowy wyśrodkowanego, wciętego akapitu →
+  // OBA akapity „Normalny”, bez wyrównania i wcięcia (gumka czyści formatowanie akapitów dotkniętych zaznaczeniem)
+  await caretEnd(page, "Tytuł rozdziału");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Drugi rozdział");
+  await page.selectOption("#fmtParaStyle", "h1");
+  await idle(page);
+  await caretEnd(page, "Drugi rozdział");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Akapit środkowy z wcięciem");
+  await idle(page);
+  await page.evaluate(async () => {
+    const ps = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"));
+    const i = ps.findIndex((x) => x.textContent.startsWith("Akapit środkowy"));
+    await applyDocumentEdit({ op: "paraFormat", indices: [i], align: "center", ind: { left: 720 } });
+  });
+  await idle(page);
+  const pXml = (needle) => page.evaluate(async (needle) => {
+    const z = await JSZip.loadAsync(await buildDocumentForSave());
+    const xml = await z.file("word/document.xml").async("string");
+    return (xml.match(/<w:p[ >].*?<\/w:p>/gs) || []).find((p) => p.replace(/<[^>]+>/g, "").includes(needle)) || "";
+  }, needle);
+  const before = [await pXml("Drugi rozdział"), await pXml("Akapit środkowy")];
+  await page.evaluate(() => {
+    const ps = [...document.querySelectorAll(".docx-editable-p")];
+    const a = ps.find((x) => x.textContent.startsWith("Drugi rozdział"));
+    const b = ps.find((x) => x.textContent.startsWith("Akapit środkowy"));
+    const r = formDomRange(a, 6, a.textContent.length);
+    const r2 = formDomRange(b, 0, 6);
+    r.setEnd(r2.endContainer, r2.endOffset);
+    a.closest(".docx-edit-root")?.focus?.({ preventScroll: true });
+    getSelection().removeAllRanges(); getSelection().addRange(r);
+  });
+  await page.click("#fmtClearBtn");
+  await idle(page);
+  const after = [await pXml("Drugi rozdział"), await pXml("Akapit środkowy")];
+  check("gumka (jak Word): nagłówek zaznaczony w części → Normalny", /<w:pStyle /.test(before[0]) && !/<w:pStyle /.test(after[0]), after[0]);
+  check("gumka (jak Word): akapit zaznaczony w części traci wyrównanie i wcięcie", /<w:jc /.test(before[1]) && /<w:ind /.test(before[1]) && !/<w:jc |<w:ind /.test(after[1]), JSON.stringify({ before: before[1], after: after[1] }));
+
   // ── 5. Aa — wielkość liter ──────────────────────────────────────────────────
   await caretEnd(page, "Tytuł rozdziału");
   await page.keyboard.press("Enter");
@@ -207,7 +246,8 @@ async function run() {
   const paraText = () => page.evaluate(() => [...document.querySelectorAll(".docx-editable-p")].find((x) => /ma (kota|psa)/i.test(x.textContent))?.textContent);
   await selectText(page, "ala MA kota", "ala MA kota. ala ma psa");
   await pickCase("caseSentence");
-  check("Aa: Jak w zdaniu", await paraText() === "Ala ma kota. Ala ma psa", await paraText());
+  // Word 16.114: słowo z samych wielkich liter („MA”) w „Jak w zdaniu” zostaje (change-case-playwright.js)
+  check("Aa: Jak w zdaniu (skrótowiec „MA” zostaje, jak w Wordzie)", await paraText() === "Ala MA kota. Ala ma psa", await paraText());
   await pickCase("caseUpper");
   check("Aa: WIELKIE (zaznaczenie zostaje)", await paraText() === "ALA MA KOTA. ALA MA PSA", await paraText());
   await pickCase("caseTitle");

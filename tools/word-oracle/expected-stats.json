@@ -1,0 +1,104 @@
+{
+ "proste": {
+  "words": 6,
+  "chars": 19,
+  "charsWithSpaces": 23,
+  "paragraphs": 2
+ },
+ "myslniki": {
+  "words": 13,
+  "chars": 44,
+  "charsWithSpaces": 55,
+  "paragraphs": 2
+ },
+ "liczby": {
+  "words": 9,
+  "chars": 34,
+  "charsWithSpaces": 42,
+  "paragraphs": 1
+ },
+ "nbsp": {
+  "words": 6,
+  "chars": 14,
+  "charsWithSpaces": 18,
+  "paragraphs": 2
+ },
+ "interpunkcja-sama": {
+  "words": 22,
+  "chars": 33,
+  "charsWithSpaces": 54,
+  "paragraphs": 2
+ },
+ "nawiasy-cudzyslowy": {
+  "words": 6,
+  "chars": 43,
+  "charsWithSpaces": 48,
+  "paragraphs": 1
+ },
+ "ukosniki": {
+  "words": 4,
+  "chars": 56,
+  "charsWithSpaces": 59,
+  "paragraphs": 1
+ },
+ "emoji": {
+  "words": 6,
+  "chars": 16,
+  "charsWithSpaces": 20,
+  "paragraphs": 2
+ },
+ "puste-akapity": {
+  "words": 2,
+  "chars": 8,
+  "charsWithSpaces": 10,
+  "paragraphs": 2
+ },
+ "tabulatory": {
+  "words": 3,
+  "chars": 3,
+  "charsWithSpaces": 5,
+  "paragraphs": 1
+ },
+ "lamanie-wiersza": {
+  "words": 2,
+  "chars": 6,
+  "charsWithSpaces": 7,
+  "paragraphs": 1
+ },
+ "tabela": {
+  "words": 10,
+  "chars": 27,
+  "charsWithSpaces": 32,
+  "paragraphs": 5
+ },
+ "lista-numerowana": {
+  "words": 5,
+  "chars": 22,
+  "charsWithSpaces": 25,
+  "paragraphs": 2
+ },
+ "ukryty-tekst": {
+  "words": 1,
+  "chars": 5,
+  "charsWithSpaces": 6,
+  "paragraphs": 1
+ },
+ "skreslony-sledzony": {
+  "words": 2,
+  "chars": 13,
+  "charsWithSpaces": 15,
+  "paragraphs": 1
+ },
+ "spacje-bez-preserve": {
+  "words": 8,
+  "chars": 39,
+  "charsWithSpaces": 45,
+  "paragraphs": 3
+ },
+ "dlugi": {
+  "words": 330,
+  "chars": 1821,
+  "charsWithSpaces": 2151,
+  "paragraphs": 30
+ }
+}

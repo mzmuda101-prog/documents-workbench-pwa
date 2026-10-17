@@ -35,6 +35,9 @@ const dwbNotes = (() => {
     return s;
   }
   function formatNum(n, fmt) {
+    // te same formaty co numery list (list-numbering.js: słownie, ①, *†‡§ … jak w Wordzie)
+    const shared = typeof dwbListNum !== "undefined" && fmt && fmt !== "decimal" ? dwbListNum.formatValue(n, fmt) : null;
+    if (shared != null && shared.trim()) return shared;
     switch (fmt) {
       case "lowerRoman": return roman(n);
       case "upperRoman": return roman(n).toUpperCase();

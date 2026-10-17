@@ -60,7 +60,9 @@ function stListRow(text, count, onClick) {
 function computeDocumentStats() {
   const a = analyzeDocumentDom(docCanvasEl);
   const text = a.outline.filter((o) => o.type !== "table").map((o) => o.el.textContent || "").join("\n");
-  const totals = stTextStats(text);
+  // liczby jak w „Statystyce wyrazów” Worda (analysis.js) — z tabelami i numerami list
+  const w = a.counts || documentWordStats(docCanvasEl);
+  const totals = { words: w.words, chars: w.charsWithSpaces, charsNoSpaces: w.chars, sentences: stSentences(text).length };
   const freq = new Map();
   stWords(text.toLowerCase()).forEach((w) => { if (w.length >= 4) freq.set(w, (freq.get(w) || 0) + 1); });
   const top = [...freq.entries()].filter(([, n]) => n > 1).sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0], "pl")).slice(0, 8);
@@ -117,8 +119,8 @@ function syncSelectionStats() {
   const sel = window.getSelection?.();
   const inDoc = sel && !sel.isCollapsed && sel.rangeCount && docCanvasEl?.contains(sel.anchorNode);
   if (!inDoc) { stSelEl.textContent = t("statsSelectionHint"); return; }
-  const s = stTextStats(sel.toString());
-  stSelEl.textContent = t("statsSelection", { words: s.words, chars: s.chars, min: stFmtMinutes(s.words) });
+  const s = wordTextStats(sel.toString().split("\n")); // jak Word: zaznaczenie liczone tymi samymi zasadami
+  stSelEl.textContent = t("statsSelection", { words: s.words, chars: s.charsWithSpaces, min: stFmtMinutes(s.words) });
 }
 
 stRefreshBtn?.addEventListener("click", renderDocumentStats);

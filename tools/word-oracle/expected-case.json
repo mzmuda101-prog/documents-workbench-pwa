@@ -1,0 +1,1746 @@
+[
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "sentence",
+  "from": 0,
+  "to": null,
+  "word": "Ala MA kota. Kot ma alę! Czy? Tak... Np. To jest test"
+ },
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "sentence",
+  "from": 4,
+  "to": 12,
+  "word": "ala MA kota. kot ma alę! czy? tak... np. to jest test"
+ },
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "sentence",
+  "from": 8,
+  "to": 20,
+  "word": "ala MA kota. Kot ma alę! czy? tak... np. to jest test"
+ },
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "sentence",
+  "from": 0,
+  "to": 5,
+  "word": "Ala MA kota. kot ma alę! czy? tak... np. to jest test"
+ },
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "sentence",
+  "from": 10,
+  "to": 30,
+  "word": "ala MA kota. Kot ma alę! Czy? tak... np. to jest test"
+ },
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "lower",
+  "from": 0,
+  "to": null,
+  "word": "ala ma kota. kot ma alę! czy? tak... np. to jest test"
+ },
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "lower",
+  "from": 4,
+  "to": 12,
+  "word": "ala ma kota. kot ma alę! czy? tak... np. to jest test"
+ },
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "lower",
+  "from": 8,
+  "to": 20,
+  "word": "ala MA kota. kot ma alę! czy? tak... np. to jest test"
+ },
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "lower",
+  "from": 0,
+  "to": 5,
+  "word": "ala mA kota. kot ma alę! czy? tak... np. to jest test"
+ },
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "lower",
+  "from": 10,
+  "to": 30,
+  "word": "ala MA kota. kot ma alę! czy? tak... np. to jest test"
+ },
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "upper",
+  "from": 0,
+  "to": null,
+  "word": "ALA MA KOTA. KOT MA ALĘ! CZY? TAK... NP. TO JEST TEST"
+ },
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "upper",
+  "from": 4,
+  "to": 12,
+  "word": "ala MA KOTA. kot ma alę! czy? tak... np. to jest test"
+ },
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "upper",
+  "from": 8,
+  "to": 20,
+  "word": "ala MA kOTA. KOT MA alę! czy? tak... np. to jest test"
+ },
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "upper",
+  "from": 0,
+  "to": 5,
+  "word": "ALA MA kota. kot ma alę! czy? tak... np. to jest test"
+ },
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "upper",
+  "from": 10,
+  "to": 30,
+  "word": "ala MA kotA. KOT MA ALĘ! CZY? tak... np. to jest test"
+ },
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "title",
+  "from": 0,
+  "to": null,
+  "word": "Ala MA Kota. Kot Ma Alę! Czy? Tak... Np. To Jest Test"
+ },
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "title",
+  "from": 4,
+  "to": 12,
+  "word": "ala MA Kota. kot ma alę! czy? tak... np. to jest test"
+ },
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "title",
+  "from": 8,
+  "to": 20,
+  "word": "ala MA kota. Kot Ma alę! czy? tak... np. to jest test"
+ },
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "title",
+  "from": 0,
+  "to": 5,
+  "word": "Ala MA kota. kot ma alę! czy? tak... np. to jest test"
+ },
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "title",
+  "from": 10,
+  "to": 30,
+  "word": "ala MA kota. Kot Ma Alę! Czy? tak... np. to jest test"
+ },
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "toggle",
+  "from": 0,
+  "to": null,
+  "word": "ALA ma KOTA. KOT MA ALĘ! CZY? TAK... NP. TO JEST TEST"
+ },
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "toggle",
+  "from": 4,
+  "to": 12,
+  "word": "ala ma KOTA. kot ma alę! czy? tak... np. to jest test"
+ },
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "toggle",
+  "from": 8,
+  "to": 20,
+  "word": "ala MA kOTA. KOT MA alę! czy? tak... np. to jest test"
+ },
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "toggle",
+  "from": 0,
+  "to": 5,
+  "word": "ALA mA kota. kot ma alę! czy? tak... np. to jest test"
+ },
+ {
+  "text": "ala MA kota. kot ma alę! czy? tak... np. to jest test",
+  "runs": false,
+  "mode": "toggle",
+  "from": 10,
+  "to": 30,
+  "word": "ala MA kotA. KOT MA ALĘ! CZY? tak... np. to jest test"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "sentence",
+  "from": 0,
+  "to": null,
+  "word": "Biało-czerwony o'neil e-mail iphone mcdonald's 3d ąę ŁÓDŹ żółw"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "sentence",
+  "from": 4,
+  "to": 12,
+  "word": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "sentence",
+  "from": 8,
+  "to": 20,
+  "word": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "sentence",
+  "from": 0,
+  "to": 5,
+  "word": "Biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "sentence",
+  "from": 10,
+  "to": 30,
+  "word": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "lower",
+  "from": 0,
+  "to": null,
+  "word": "biało-czerwony o'neil e-mail iphone mcdonald's 3d ąę łódź żółw"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "lower",
+  "from": 4,
+  "to": 12,
+  "word": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "lower",
+  "from": 8,
+  "to": 20,
+  "word": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "lower",
+  "from": 0,
+  "to": 5,
+  "word": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "lower",
+  "from": 10,
+  "to": 30,
+  "word": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "upper",
+  "from": 0,
+  "to": null,
+  "word": "BIAŁO-CZERWONY O'NEIL E-MAIL IPHONE MCDONALD'S 3D ĄĘ ŁÓDŹ ŻÓŁW"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "upper",
+  "from": 4,
+  "to": 12,
+  "word": "białO-CZERWOny o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "upper",
+  "from": 8,
+  "to": 20,
+  "word": "biało-czERWONY O'NEIl e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "upper",
+  "from": 0,
+  "to": 5,
+  "word": "BIAŁO-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "upper",
+  "from": 10,
+  "to": 30,
+  "word": "biało-czerWONY O'NEIL E-MAIL IPhone mcdonald's 3d ąę ŁÓDŹ żółw"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "title",
+  "from": 0,
+  "to": null,
+  "word": "Biało-Czerwony O'neil E-Mail Iphone Mcdonald's 3d Ąę ŁÓDŹ Żółw"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "title",
+  "from": 4,
+  "to": 12,
+  "word": "biało-Czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "title",
+  "from": 8,
+  "to": 20,
+  "word": "biało-czerwony O'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "title",
+  "from": 0,
+  "to": 5,
+  "word": "Biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "title",
+  "from": 10,
+  "to": 30,
+  "word": "biało-czerwony O'neil E-Mail IPhone mcdonald's 3d ąę ŁÓDŹ żółw"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "toggle",
+  "from": 0,
+  "to": null,
+  "word": "BIAŁO-CZERWONY O'NEIL E-MAIL IpHONE MCDONALD'S 3D ĄĘ łódź ŻÓŁW"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "toggle",
+  "from": 4,
+  "to": 12,
+  "word": "białO-CZERWOny o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "toggle",
+  "from": 8,
+  "to": 20,
+  "word": "biało-czERWONY O'NEIl e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "toggle",
+  "from": 0,
+  "to": 5,
+  "word": "BIAŁO-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw"
+ },
+ {
+  "text": "biało-czerwony o'neil e-mail iPhone mcdonald's 3d ąę ŁÓDŹ żółw",
+  "runs": false,
+  "mode": "toggle",
+  "from": 10,
+  "to": 30,
+  "word": "biało-czerWONY O'NEIL E-MAIL IPhone mcdonald's 3d ąę ŁÓDŹ żółw"
+ },
+ {
+  "text": "ALA MA KOTA. KOT MA ALĘ",
+  "runs": false,
+  "mode": "sentence",
+  "from": 0,
+  "to": null,
+  "word": "Ala ma kota. Kot ma alę"
+ },
+ {
+  "text": "ALA MA KOTA. KOT MA ALĘ",
+  "runs": false,
+  "mode": "sentence",
+  "from": 4,
+  "to": 12,
+  "word": "ALA ma kota. KOT MA ALĘ"
+ },
+ {
+  "text": "ALA MA KOTA. KOT MA ALĘ",
+  "runs": false,
+  "mode": "sentence",
+  "from": 8,
+  "to": 20,
+  "word": "ALA MA Kota. Kot ma ALĘ"
+ },
+ {
+  "text": "ALA MA KOTA. KOT MA ALĘ",
+  "runs": false,
+  "mode": "sentence",
+  "from": 0,
+  "to": 5,
+  "word": "Ala mA KOTA. KOT MA ALĘ"
+ },
+ {
+  "text": "ALA MA KOTA. KOT MA ALĘ",
+  "runs": false,
+  "mode": "lower",
+  "from": 0,
+  "to": null,
+  "word": "ala ma kota. kot ma alę"
+ },
+ {
+  "text": "ALA MA KOTA. KOT MA ALĘ",
+  "runs": false,
+  "mode": "lower",
+  "from": 4,
+  "to": 12,
+  "word": "ALA ma kota. KOT MA ALĘ"
+ },
+ {
+  "text": "ALA MA KOTA. KOT MA ALĘ",
+  "runs": false,
+  "mode": "lower",
+  "from": 8,
+  "to": 20,
+  "word": "ALA MA Kota. kot ma ALĘ"
+ },
+ {
+  "text": "ALA MA KOTA. KOT MA ALĘ",
+  "runs": false,
+  "mode": "lower",
+  "from": 0,
+  "to": 5,
+  "word": "ala mA KOTA. KOT MA ALĘ"
+ },
+ {
+  "text": "ALA MA KOTA. KOT MA ALĘ",
+  "runs": false,
+  "mode": "upper",
+  "from": 0,
+  "to": null,
+  "word": "ALA MA KOTA. KOT MA ALĘ"
+ },
+ {
+  "text": "ALA MA KOTA. KOT MA ALĘ",
+  "runs": false,
+  "mode": "upper",
+  "from": 4,
+  "to": 12,
+  "word": "ALA MA KOTA. KOT MA ALĘ"
+ },
+ {
+  "text": "ALA MA KOTA. KOT MA ALĘ",
+  "runs": false,
+  "mode": "upper",
+  "from": 8,
+  "to": 20,
+  "word": "ALA MA KOTA. KOT MA ALĘ"
+ },
+ {
+  "text": "ALA MA KOTA. KOT MA ALĘ",
+  "runs": false,
+  "mode": "upper",
+  "from": 0,
+  "to": 5,
+  "word": "ALA MA KOTA. KOT MA ALĘ"
+ },
+ {
+  "text": "ALA MA KOTA. KOT MA ALĘ",
+  "runs": false,
+  "mode": "title",
+  "from": 0,
+  "to": null,
+  "word": "Ala Ma Kota. Kot Ma Alę"
+ },
+ {
+  "text": "ALA MA KOTA. KOT MA ALĘ",
+  "runs": false,
+  "mode": "title",
+  "from": 4,
+  "to": 12,
+  "word": "ALA Ma Kota. KOT MA ALĘ"
+ },
+ {
+  "text": "ALA MA KOTA. KOT MA ALĘ",
+  "runs": false,
+  "mode": "title",
+  "from": 8,
+  "to": 20,
+  "word": "ALA MA Kota. Kot Ma ALĘ"
+ },
+ {
+  "text": "ALA MA KOTA. KOT MA ALĘ",
+  "runs": false,
+  "mode": "title",
+  "from": 0,
+  "to": 5,
+  "word": "Ala MA KOTA. KOT MA ALĘ"
+ },
+ {
+  "text": "ALA MA KOTA. KOT MA ALĘ",
+  "runs": false,
+  "mode": "toggle",
+  "from": 0,
+  "to": null,
+  "word": "ala ma kota. kot ma alę"
+ },
+ {
+  "text": "ALA MA KOTA. KOT MA ALĘ",
+  "runs": false,
+  "mode": "toggle",
+  "from": 4,
+  "to": 12,
+  "word": "ALA ma kota. KOT MA ALĘ"
+ },
+ {
+  "text": "ALA MA KOTA. KOT MA ALĘ",
+  "runs": false,
+  "mode": "toggle",
+  "from": 8,
+  "to": 20,
+  "word": "ALA MA Kota. kot ma ALĘ"
+ },
+ {
+  "text": "ALA MA KOTA. KOT MA ALĘ",
+  "runs": false,
+  "mode": "toggle",
+  "from": 0,
+  "to": 5,
+  "word": "ala mA KOTA. KOT MA ALĘ"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "sentence",
+  "from": 0,
+  "to": null,
+  "word": "„Cytat. Drugi” (nawias. Tu) - myślnik. 1. Punkt"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "sentence",
+  "from": 4,
+  "to": 12,
+  "word": "„cytat. Drugi” (nawias. tu) - myślnik. 1. punkt"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "sentence",
+  "from": 8,
+  "to": 20,
+  "word": "„cytat. Drugi” (nawias. tu) - myślnik. 1. punkt"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "sentence",
+  "from": 0,
+  "to": 5,
+  "word": "„Cytat. drugi” (nawias. tu) - myślnik. 1. punkt"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "sentence",
+  "from": 10,
+  "to": 30,
+  "word": "„cytat. drugi” (nawias. Tu) - myślnik. 1. punkt"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "lower",
+  "from": 0,
+  "to": null,
+  "word": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "lower",
+  "from": 4,
+  "to": 12,
+  "word": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "lower",
+  "from": 8,
+  "to": 20,
+  "word": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "lower",
+  "from": 0,
+  "to": 5,
+  "word": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "lower",
+  "from": 10,
+  "to": 30,
+  "word": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "upper",
+  "from": 0,
+  "to": null,
+  "word": "„CYTAT. DRUGI” (NAWIAS. TU) - MYŚLNIK. 1. PUNKT"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "upper",
+  "from": 4,
+  "to": 12,
+  "word": "„cytAT. DRUGi” (nawias. tu) - myślnik. 1. punkt"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "upper",
+  "from": 8,
+  "to": 20,
+  "word": "„cytat. DRUGI” (NAWIas. tu) - myślnik. 1. punkt"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "upper",
+  "from": 0,
+  "to": 5,
+  "word": "„CYTAt. drugi” (nawias. tu) - myślnik. 1. punkt"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "upper",
+  "from": 10,
+  "to": 30,
+  "word": "„cytat. drUGI” (NAWIAS. TU) - myślnik. 1. punkt"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "title",
+  "from": 0,
+  "to": null,
+  "word": "„Cytat. Drugi” (Nawias. Tu) - Myślnik. 1. Punkt"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "title",
+  "from": 4,
+  "to": 12,
+  "word": "„cytat. Drugi” (nawias. tu) - myślnik. 1. punkt"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "title",
+  "from": 8,
+  "to": 20,
+  "word": "„cytat. Drugi” (Nawias. tu) - myślnik. 1. punkt"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "title",
+  "from": 0,
+  "to": 5,
+  "word": "„Cytat. drugi” (nawias. tu) - myślnik. 1. punkt"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "title",
+  "from": 10,
+  "to": 30,
+  "word": "„cytat. drugi” (Nawias. Tu) - myślnik. 1. punkt"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "toggle",
+  "from": 0,
+  "to": null,
+  "word": "„CYTAT. DRUGI” (NAWIAS. TU) - MYŚLNIK. 1. PUNKT"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "toggle",
+  "from": 4,
+  "to": 12,
+  "word": "„cytAT. DRUGi” (nawias. tu) - myślnik. 1. punkt"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "toggle",
+  "from": 8,
+  "to": 20,
+  "word": "„cytat. DRUGI” (NAWIas. tu) - myślnik. 1. punkt"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "toggle",
+  "from": 0,
+  "to": 5,
+  "word": "„CYTAt. drugi” (nawias. tu) - myślnik. 1. punkt"
+ },
+ {
+  "text": "„cytat. drugi” (nawias. tu) - myślnik. 1. punkt",
+  "runs": false,
+  "mode": "toggle",
+  "from": 10,
+  "to": 30,
+  "word": "„cytat. drUGI” (NAWIAS. TU) - myślnik. 1. punkt"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "sentence",
+  "from": 0,
+  "to": null,
+  "word": "Dr. Smith i prof. Kowalski w USA. Mr. X"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "sentence",
+  "from": 4,
+  "to": 12,
+  "word": "Dr. Smith i prof. Kowalski w USA. mr. x"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "sentence",
+  "from": 8,
+  "to": 20,
+  "word": "Dr. Smith i prof. Kowalski w USA. mr. x"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "sentence",
+  "from": 0,
+  "to": 5,
+  "word": "Dr. Smith i prof. Kowalski w USA. mr. x"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "sentence",
+  "from": 10,
+  "to": 30,
+  "word": "Dr. Smith i prof. Kowalski w USA. mr. x"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "lower",
+  "from": 0,
+  "to": null,
+  "word": "dr. smith i prof. kowalski w usa. mr. x"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "lower",
+  "from": 4,
+  "to": 12,
+  "word": "Dr. smith i prof. Kowalski w USA. mr. x"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "lower",
+  "from": 8,
+  "to": 20,
+  "word": "Dr. Smith i prof. kowalski w USA. mr. x"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "lower",
+  "from": 0,
+  "to": 5,
+  "word": "dr. smith i prof. Kowalski w USA. mr. x"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "lower",
+  "from": 10,
+  "to": 30,
+  "word": "Dr. Smith i prof. kowalski w uSA. mr. x"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "upper",
+  "from": 0,
+  "to": null,
+  "word": "DR. SMITH I PROF. KOWALSKI W USA. MR. X"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "upper",
+  "from": 4,
+  "to": 12,
+  "word": "Dr. SMITH I prof. Kowalski w USA. mr. x"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "upper",
+  "from": 8,
+  "to": 20,
+  "word": "Dr. SmitH I PROF. KOwalski w USA. mr. x"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "upper",
+  "from": 0,
+  "to": 5,
+  "word": "DR. Smith i prof. Kowalski w USA. mr. x"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "upper",
+  "from": 10,
+  "to": 30,
+  "word": "Dr. Smith I PROF. KOWALSKI W USA. mr. x"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "title",
+  "from": 0,
+  "to": null,
+  "word": "Dr. Smith I Prof. Kowalski W USA. Mr. X"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "title",
+  "from": 4,
+  "to": 12,
+  "word": "Dr. Smith I prof. Kowalski w USA. mr. x"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "title",
+  "from": 8,
+  "to": 20,
+  "word": "Dr. Smith I Prof. Kowalski w USA. mr. x"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "title",
+  "from": 0,
+  "to": 5,
+  "word": "Dr. Smith i prof. Kowalski w USA. mr. x"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "title",
+  "from": 10,
+  "to": 30,
+  "word": "Dr. Smith I Prof. Kowalski W USA. mr. x"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "toggle",
+  "from": 0,
+  "to": null,
+  "word": "dR. sMITH I PROF. kOWALSKI W usa. MR. X"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "toggle",
+  "from": 4,
+  "to": 12,
+  "word": "Dr. sMITH I prof. Kowalski w USA. mr. x"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "toggle",
+  "from": 8,
+  "to": 20,
+  "word": "Dr. SmitH I PROF. kOwalski w USA. mr. x"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "toggle",
+  "from": 0,
+  "to": 5,
+  "word": "dR. smith i prof. Kowalski w USA. mr. x"
+ },
+ {
+  "text": "Dr. Smith i prof. Kowalski w USA. mr. x",
+  "runs": false,
+  "mode": "toggle",
+  "from": 10,
+  "to": 30,
+  "word": "Dr. Smith I PROF. kOWALSKI W uSA. mr. x"
+ },
+ {
+  "text": "tekst\tpo tabulatorze. i dalej",
+  "runs": false,
+  "mode": "sentence",
+  "from": 0,
+  "to": null,
+  "word": "Tekst\tpo tabulatorze. I dalej"
+ },
+ {
+  "text": "tekst\tpo tabulatorze. i dalej",
+  "runs": false,
+  "mode": "sentence",
+  "from": 4,
+  "to": 12,
+  "word": "tekst\tpo tabulatorze. i dalej"
+ },
+ {
+  "text": "tekst\tpo tabulatorze. i dalej",
+  "runs": false,
+  "mode": "sentence",
+  "from": 8,
+  "to": 20,
+  "word": "tekst\tpo tabulatorze. i dalej"
+ },
+ {
+  "text": "tekst\tpo tabulatorze. i dalej",
+  "runs": false,
+  "mode": "sentence",
+  "from": 0,
+  "to": 5,
+  "word": "Tekst\tpo tabulatorze. i dalej"
+ },
+ {
+  "text": "tekst\tpo tabulatorze. i dalej",
+  "runs": false,
+  "mode": "lower",
+  "from": 0,
+  "to": null,
+  "word": "tekst\tpo tabulatorze. i dalej"
+ },
+ {
+  "text": "tekst\tpo tabulatorze. i dalej",
+  "runs": false,
+  "mode": "lower",
+  "from": 4,
+  "to": 12,
+  "word": "tekst\tpo tabulatorze. i dalej"
+ },
+ {
+  "text": "tekst\tpo tabulatorze. i dalej",
+  "runs": false,
+  "mode": "lower",
+  "from": 8,
+  "to": 20,
+  "word": "tekst\tpo tabulatorze. i dalej"
+ },
+ {
+  "text": "tekst\tpo tabulatorze. i dalej",
+  "runs": false,
+  "mode": "lower",
+  "from": 0,
+  "to": 5,
+  "word": "tekst\tpo tabulatorze. i dalej"
+ },
+ {
+  "text": "tekst\tpo tabulatorze. i dalej",
+  "runs": false,
+  "mode": "upper",
+  "from": 0,
+  "to": null,
+  "word": "TEKST\tPO TABULATORZE. I DALEJ"
+ },
+ {
+  "text": "tekst\tpo tabulatorze. i dalej",
+  "runs": false,
+  "mode": "upper",
+  "from": 4,
+  "to": 12,
+  "word": "teksT\tPO TABulatorze. i dalej"
+ },
+ {
+  "text": "tekst\tpo tabulatorze. i dalej",
+  "runs": false,
+  "mode": "upper",
+  "from": 8,
+  "to": 20,
+  "word": "tekst\tpo TABULATORZE. i dalej"
+ },
+ {
+  "text": "tekst\tpo tabulatorze. i dalej",
+  "runs": false,
+  "mode": "upper",
+  "from": 0,
+  "to": 5,
+  "word": "TEKST\tpo tabulatorze. i dalej"
+ },
+ {
+  "text": "tekst\tpo tabulatorze. i dalej",
+  "runs": false,
+  "mode": "title",
+  "from": 0,
+  "to": null,
+  "word": "Tekst\tPo Tabulatorze. I Dalej"
+ },
+ {
+  "text": "tekst\tpo tabulatorze. i dalej",
+  "runs": false,
+  "mode": "title",
+  "from": 4,
+  "to": 12,
+  "word": "tekst\tPo Tabulatorze. i dalej"
+ },
+ {
+  "text": "tekst\tpo tabulatorze. i dalej",
+  "runs": false,
+  "mode": "title",
+  "from": 8,
+  "to": 20,
+  "word": "tekst\tpo Tabulatorze. i dalej"
+ },
+ {
+  "text": "tekst\tpo tabulatorze. i dalej",
+  "runs": false,
+  "mode": "title",
+  "from": 0,
+  "to": 5,
+  "word": "Tekst\tpo tabulatorze. i dalej"
+ },
+ {
+  "text": "tekst\tpo tabulatorze. i dalej",
+  "runs": false,
+  "mode": "toggle",
+  "from": 0,
+  "to": null,
+  "word": "TEKST\tPO TABULATORZE. I DALEJ"
+ },
+ {
+  "text": "tekst\tpo tabulatorze. i dalej",
+  "runs": false,
+  "mode": "toggle",
+  "from": 4,
+  "to": 12,
+  "word": "teksT\tPO TABulatorze. i dalej"
+ },
+ {
+  "text": "tekst\tpo tabulatorze. i dalej",
+  "runs": false,
+  "mode": "toggle",
+  "from": 8,
+  "to": 20,
+  "word": "tekst\tpo TABULATORZE. i dalej"
+ },
+ {
+  "text": "tekst\tpo tabulatorze. i dalej",
+  "runs": false,
+  "mode": "toggle",
+  "from": 0,
+  "to": 5,
+  "word": "TEKST\tpo tabulatorze. i dalej"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "sentence",
+  "from": 0,
+  "to": null,
+  "word": "To JEST A test 3D ABC123 DON'T zażółć X. Y I"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "sentence",
+  "from": 4,
+  "to": 12,
+  "word": "to JEST A test 3D ABC123 DON'T zażółć X. y I"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "sentence",
+  "from": 8,
+  "to": 20,
+  "word": "to JEST A test 3D ABC123 DON'T zażółć X. y I"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "sentence",
+  "from": 0,
+  "to": 5,
+  "word": "To JEST A test 3D ABC123 DON'T zażółć X. y I"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "sentence",
+  "from": 10,
+  "to": 30,
+  "word": "to JEST A test 3D ABC123 DON'T zażółć X. y I"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "lower",
+  "from": 0,
+  "to": null,
+  "word": "to jest a test 3d abc123 don't zażółć x. y i"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "lower",
+  "from": 4,
+  "to": 12,
+  "word": "to Jest a test 3D ABC123 DON'T zażółć X. y I"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "lower",
+  "from": 8,
+  "to": 20,
+  "word": "to JEST a test 3d abC123 DON'T zażółć X. y I"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "lower",
+  "from": 0,
+  "to": 5,
+  "word": "to jeST A test 3D ABC123 DON'T zażółć X. y I"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "lower",
+  "from": 10,
+  "to": 30,
+  "word": "to JEST A test 3d abc123 don't zażółć X. y I"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "upper",
+  "from": 0,
+  "to": null,
+  "word": "TO JEST A TEST 3D ABC123 DON'T ZAŻÓŁĆ X. Y I"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "upper",
+  "from": 4,
+  "to": 12,
+  "word": "to JEST A TEst 3D ABC123 DON'T zażółć X. y I"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "upper",
+  "from": 8,
+  "to": 20,
+  "word": "to JEST A TEST 3D ABC123 DON'T zażółć X. y I"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "upper",
+  "from": 0,
+  "to": 5,
+  "word": "TO JEST A test 3D ABC123 DON'T zażółć X. y I"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "upper",
+  "from": 10,
+  "to": 30,
+  "word": "to JEST A TEST 3D ABC123 DON'T zażółć X. y I"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "title",
+  "from": 0,
+  "to": null,
+  "word": "To JEST A Test 3D ABC123 DON'T Zażółć X. Y I"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "title",
+  "from": 4,
+  "to": 12,
+  "word": "to JEST A Test 3D ABC123 DON'T zażółć X. y I"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "title",
+  "from": 8,
+  "to": 20,
+  "word": "to JEST A Test 3D ABC123 DON'T zażółć X. y I"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "title",
+  "from": 0,
+  "to": 5,
+  "word": "To JEST A test 3D ABC123 DON'T zażółć X. y I"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "title",
+  "from": 10,
+  "to": 30,
+  "word": "to JEST A Test 3D ABC123 DON'T zażółć X. y I"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "toggle",
+  "from": 0,
+  "to": null,
+  "word": "TO jest a TEST 3d abc123 don't ZAŻÓŁĆ x. Y i"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "toggle",
+  "from": 4,
+  "to": 12,
+  "word": "to Jest a TEst 3D ABC123 DON'T zażółć X. y I"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "toggle",
+  "from": 8,
+  "to": 20,
+  "word": "to JEST a TEST 3d abC123 DON'T zażółć X. y I"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "toggle",
+  "from": 0,
+  "to": 5,
+  "word": "TO jeST A test 3D ABC123 DON'T zażółć X. y I"
+ },
+ {
+  "text": "to JEST A test 3D ABC123 DON'T zażółć X. y I",
+  "runs": false,
+  "mode": "toggle",
+  "from": 10,
+  "to": 30,
+  "word": "to JEST A TEST 3d abc123 don't zażółć X. y I"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "sentence",
+  "from": 0,
+  "to": null,
+  "word": "Abc Abc abc ABC-def ABC-DEF ŻÓŁW. Ąą"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "sentence",
+  "from": 4,
+  "to": 12,
+  "word": "aBC Abc abc ABC-def ABC-DEF ŻÓŁW. ąą"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "sentence",
+  "from": 8,
+  "to": 20,
+  "word": "aBC Abc abc ABC-def ABC-DEF ŻÓŁW. ąą"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "sentence",
+  "from": 0,
+  "to": 5,
+  "word": "Abc Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "sentence",
+  "from": 10,
+  "to": 30,
+  "word": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "lower",
+  "from": 0,
+  "to": null,
+  "word": "abc abc abc abc-def abc-def żółw. ąą"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "lower",
+  "from": 4,
+  "to": 12,
+  "word": "aBC abc abc ABC-def ABC-DEF ŻÓŁW. ąą"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "lower",
+  "from": 8,
+  "to": 20,
+  "word": "aBC Abc abc abc-def ABC-DEF ŻÓŁW. ąą"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "lower",
+  "from": 0,
+  "to": 5,
+  "word": "abc abc ABc ABC-def ABC-DEF ŻÓŁW. ąą"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "lower",
+  "from": 10,
+  "to": 30,
+  "word": "aBC Abc ABc abc-def abc-def żóŁW. ąą"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "upper",
+  "from": 0,
+  "to": null,
+  "word": "ABC ABC ABC ABC-DEF ABC-DEF ŻÓŁW. ĄĄ"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "upper",
+  "from": 4,
+  "to": 12,
+  "word": "aBC ABC ABC ABC-def ABC-DEF ŻÓŁW. ąą"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "upper",
+  "from": 8,
+  "to": 20,
+  "word": "aBC Abc ABC ABC-DEF ABC-DEF ŻÓŁW. ąą"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "upper",
+  "from": 0,
+  "to": 5,
+  "word": "ABC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "upper",
+  "from": 10,
+  "to": 30,
+  "word": "aBC Abc ABC ABC-DEF ABC-DEF ŻÓŁW. ąą"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "title",
+  "from": 0,
+  "to": null,
+  "word": "Abc Abc Abc ABC-Def ABC-DEF ŻÓŁW. Ąą"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "title",
+  "from": 4,
+  "to": 12,
+  "word": "aBC Abc Abc ABC-def ABC-DEF ŻÓŁW. ąą"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "title",
+  "from": 8,
+  "to": 20,
+  "word": "aBC Abc Abc ABC-Def ABC-DEF ŻÓŁW. ąą"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "title",
+  "from": 0,
+  "to": 5,
+  "word": "Abc Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "title",
+  "from": 10,
+  "to": 30,
+  "word": "aBC Abc ABc ABC-Def ABC-DEF ŻÓŁW. ąą"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "toggle",
+  "from": 0,
+  "to": null,
+  "word": "Abc aBC abC abc-DEF abc-def żółw. ĄĄ"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "toggle",
+  "from": 4,
+  "to": 12,
+  "word": "aBC aBC abC ABC-def ABC-DEF ŻÓŁW. ąą"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "toggle",
+  "from": 8,
+  "to": 20,
+  "word": "aBC Abc abC abc-DEF ABC-DEF ŻÓŁW. ąą"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "toggle",
+  "from": 0,
+  "to": 5,
+  "word": "Abc abc ABc ABC-def ABC-DEF ŻÓŁW. ąą"
+ },
+ {
+  "text": "aBC Abc ABc ABC-def ABC-DEF ŻÓŁW. ąą",
+  "runs": false,
+  "mode": "toggle",
+  "from": 10,
+  "to": 30,
+  "word": "aBC Abc ABC abc-DEF abc-def żóŁW. ąą"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "sentence",
+  "from": 0,
+  "to": null,
+  "word": "PIERWSZE zdanie. Drugie ZDANIE"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "sentence",
+  "from": 4,
+  "to": 12,
+  "word": "PIERWSZE zdanie. drugie ZDANIE"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "sentence",
+  "from": 8,
+  "to": 20,
+  "word": "PIERWSZE zdanie. Drugie ZDANIE"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "sentence",
+  "from": 0,
+  "to": 5,
+  "word": "PierwSZE zdanie. drugie ZDANIE"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "sentence",
+  "from": 10,
+  "to": 30,
+  "word": "PIERWSZE zdanie. Drugie ZDANIE"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "lower",
+  "from": 0,
+  "to": null,
+  "word": "pierwsze zdanie. drugie zdanie"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "lower",
+  "from": 4,
+  "to": 12,
+  "word": "PIERwsze zdanie. drugie ZDANIE"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "lower",
+  "from": 8,
+  "to": 20,
+  "word": "PIERWSZE zdanie. drugie ZDANIE"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "lower",
+  "from": 0,
+  "to": 5,
+  "word": "pierwSZE zdanie. drugie ZDANIE"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "lower",
+  "from": 10,
+  "to": 30,
+  "word": "PIERWSZE zdanie. drugie zdanie"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "upper",
+  "from": 0,
+  "to": null,
+  "word": "PIERWSZE ZDANIE. DRUGIE ZDANIE"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "upper",
+  "from": 4,
+  "to": 12,
+  "word": "PIERWSZE ZDAnie. drugie ZDANIE"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "upper",
+  "from": 8,
+  "to": 20,
+  "word": "PIERWSZE ZDANIE. DRUgie ZDANIE"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "upper",
+  "from": 0,
+  "to": 5,
+  "word": "PIERWSZE zdanie. drugie ZDANIE"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "upper",
+  "from": 10,
+  "to": 30,
+  "word": "PIERWSZE zDANIE. DRUGIE ZDANIE"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "title",
+  "from": 0,
+  "to": null,
+  "word": "PIERWSZE Zdanie. Drugie ZDANIE"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "title",
+  "from": 4,
+  "to": 12,
+  "word": "PIERWSZE Zdanie. drugie ZDANIE"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "title",
+  "from": 8,
+  "to": 20,
+  "word": "PIERWSZE Zdanie. Drugie ZDANIE"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "title",
+  "from": 0,
+  "to": 5,
+  "word": "PierwSZE zdanie. drugie ZDANIE"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "title",
+  "from": 10,
+  "to": 30,
+  "word": "PIERWSZE zdanie. Drugie ZDANIE"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "toggle",
+  "from": 0,
+  "to": null,
+  "word": "pierwsze ZDANIE. DRUGIE zdanie"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "toggle",
+  "from": 4,
+  "to": 12,
+  "word": "PIERwsze ZDAnie. drugie ZDANIE"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "toggle",
+  "from": 8,
+  "to": 20,
+  "word": "PIERWSZE ZDANIE. DRUgie ZDANIE"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "toggle",
+  "from": 0,
+  "to": 5,
+  "word": "pierwSZE zdanie. drugie ZDANIE"
+ },
+ {
+  "text": "PIERWSZE zdanie. drugie ZDANIE",
+  "runs": false,
+  "mode": "toggle",
+  "from": 10,
+  "to": 30,
+  "word": "PIERWSZE zDANIE. DRUGIE zdanie"
+ },
+ {
+  "text": "redbold text",
+  "runs": true,
+  "mode": "title",
+  "from": 0,
+  "to": null,
+  "word": "Redbold Text"
+ },
+ {
+  "text": "redbold text",
+  "runs": true,
+  "mode": "sentence",
+  "from": 0,
+  "to": null,
+  "word": "Redbold text"
+ },
+ {
+  "text": "redbold text",
+  "runs": true,
+  "mode": "upper",
+  "from": 0,
+  "to": null,
+  "word": "REDBOLD TEXT"
+ }
+]

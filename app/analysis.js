@@ -189,15 +189,86 @@ function buildDocumentOutline(content, headings) {
   return outline;
 }
 
+// ── Statystyka wyrazów jak w Wordzie ──────────────────────────────────────────
+// Sprawdzone z Word 16.114 (tools/word-oracle/run-stats.js, 2026-10-17). Dawniej pasek stanu
+// liczył słowa z textContent całego artykułu (akapity i komórki tabel sklejone: „kota.Kot” =
+// jedno słowo), a panel Statystyki tylko „wyrazy z liter” (bez „3,5”, „1/2”, „—” osobno…),
+// znaki z UTF-16 (emoji = 2) i z dopisanym „\n” między akapitami. Word:
+//   • słowo = ciąg między odstępami (spacja, tabulator, łamanie wiersza, twarda spacja, spacja
+//     ideograficzna); „—”, „–”, „•” (też punktor Symbol U+F0B7) dzielą, ale same słowem nie są; reszta interpunkcji
+//     stojąca osobno (np. „,” albo „...”) — jest słowem; cienka spacja (U+2009) nie dzieli,
+//   • numer listy („1.”, „a)”) to tekst akapitu: słowo i znaki (+ tabulator po nim),
+//   • ukryty tekst (w:vanish) się nie liczy, znaki zerowej szerokości też nie,
+//   • znak = punkt kodowy (emoji = 1), „ze spacjami” bez znaków końca akapitu,
+//   • akapity = tylko z jakimś znakiem innym niż odstęp (puste i same spacje — nie).
+const WORD_SPLIT_RE = /[ \t\n\r\f\u0001\u000b\u00a0\u3000\u2013\u2014\u2022\uf0a8\uf0b7]+/; // F0B7/F0A8 = punktory z kroju Symbol
+const WORD_SPACE_RE = /[ \t\n\r\u000b\u00a0\u3000]/g;
+const WORD_ZERO_WIDTH_RE = /[\u200b-\u200d\u2060\ufeff]/g;
+
+// tekst akapitu podglądu tak, jak widzi go Word: numer listy, łamania, tabulatory; bez ukrytego
+function wordParagraphText(p) {
+  let out = "";
+  // numer listy z suffiksem (tabulator / spacja) albo punktor — list-numbering.js
+  const marker = p.getAttribute("data-dwb-num") ?? p.getAttribute("data-dwb-bullet");
+  if (marker != null) out += marker.replace(/\u00a0$/, " ");
+  const walk = (node) => {
+    for (let n = node.firstChild; n; n = n.nextSibling) {
+      if (n.nodeType === 3) out += n.data;
+      else if (n.nodeType === 1) {
+        if (n.tagName === "BR") { if (!n.dataset.dwbPh) out += "\n"; continue; }
+        if (n.dataset?.dwbNote) { out += "\u0001"; continue; } // znak przypisu: 1 znak, dzieli słowa
+        if (n.style?.display === "none" || n.hidden) continue; // ukryty tekst (w:vanish)
+        if (n.classList.contains("docx-tab")) { out += "\t"; continue; }
+        walk(n);
+      }
+    }
+  };
+  walk(p);
+  return out.replace(WORD_ZERO_WIDTH_RE, "");
+}
+
+function wordTextStats(texts) {
+  let words = 0;
+  let chars = 0;
+  let charsWithSpaces = 0;
+  let paragraphs = 0;
+  texts.forEach((raw) => {
+    // \f = podział strony/kolumny (dzieli słowa, nie jest znakiem), \u0001 = znak przypisu
+    const text = String(raw || "").replace(WORD_ZERO_WIDTH_RE, "");
+    const breaks = (text.match(/\f/g) || []).length;
+    const all = [...text].length - breaks;
+    const spaces = (text.match(WORD_SPACE_RE) || []).length;
+    charsWithSpaces += all;
+    chars += all - spaces;
+    if (all > spaces) paragraphs++;
+    words += text.split(WORD_SPLIT_RE).filter(Boolean).length;
+  });
+  return { words, chars, charsWithSpaces, paragraphs };
+}
+
+// cały dokument: akapity treści (z komórkami tabel), bez nagłówków/stopek i przypisów
+// (akapit przecięty podziałem strony = dwa <p> w podglądzie, druga połówka z data-dwb-cont — jeden akapit)
+function documentWordStats(root) {
+  const host = root?.querySelector?.(".docx-preview-host") || root;
+  const texts = [];
+  Array.from(host?.querySelectorAll("section.docx > article p") || []).forEach((p) => {
+    if (p.closest(".dwb-notes, header, footer")) return;
+    if (p.dataset.dwbCont && texts.length) texts[texts.length - 1] += `\f${wordParagraphText(p)}`;
+    else texts.push(wordParagraphText(p));
+  });
+  return wordTextStats(texts);
+}
+
 function analyzeDocumentDom(root) {
   const content = getDocContentRoot(root);
   const allParas = docBodyParagraphs(root);
   const articles = content?.querySelectorAll?.("section.docx > article");
   const text = articles?.length ? Array.from(articles).map((a) => a.textContent || "").join("\n") : content?.textContent || "";
-  const words = text.trim() ? text.trim().split(/\s+/).filter(Boolean).length : 0;
+  const counts = documentWordStats(root); // jak „Statystyka wyrazów” Worda
+  const words = counts.words;
   const headings = collectDomHeadings(content, allParas);
   const outline = buildDocumentOutline(content, headings);
-  const paragraphs = allParas.length;
+  const paragraphs = counts.paragraphs; // jak Word: tylko akapity z treścią (puste się nie liczą)
   const tables = (articles?.length ? Array.from(articles).reduce((n, a) => n + a.querySelectorAll("table").length, 0) : content?.querySelectorAll("table")?.length) || 0;
-  return { words, chars: text.length, headings, paragraphs, tables, text, outline };
+  return { words, chars: counts.charsWithSpaces, counts, headings, paragraphs, tables, text, outline };
 }
