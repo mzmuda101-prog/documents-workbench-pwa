@@ -1,0 +1,68 @@
+{
+ "wielkosc-liter-wyl": [
+  "Pies i pies oraz PIES, piesy."
+ ],
+ "wielkosc-liter-wl": [
+  "Kot i pies oraz KOT, piesy."
+ ],
+ "mieszana-wielkosc": [
+  "pies Pies pies"
+ ],
+ "zamiana-z-wielka": [
+  "Ewa Ewa EWA"
+ ],
+ "szukane-z-wielkiej": [
+  "ewa Ewa EWA"
+ ],
+ "dwa-slowa": [
+  "Cześć, CZEŚĆ i cześć."
+ ],
+ "jedna-litera": [
+  "ORAZ tak oraz nie, ORAZ."
+ ],
+ "cale-wyrazy": [
+  "pies kotek pies-ek pies_ek pies's 2kot kot2 (pies) „pies” pies."
+ ],
+ "cale-wyrazy-ze-spacja": [
+  "Xa, X."
+ ],
+ "polskie-litery": [
+  "Miasto miasto MIASTO łodzi"
+ ],
+ "polskie-cale-wyrazy": [
+  "jeż żółwik pół-jeż JEŻ Jeż."
+ ],
+ "polskie-wielkosc-wl": [
+  "Ćma motyl ĆMA"
+ ],
+ "cudzyslowy-drukarskie": [
+  "X X X"
+ ],
+ "apostrof-drukarski": [
+  "do do"
+ ],
+ "twarda-spacja": [
+  "dużo i dużo"
+ ],
+ "miekki-dywiz": [
+  "ko­t i pies"
+ ],
+ "usuwanie": [
+  "abc"
+ ],
+ "format-poczatku": [
+  "Ala lubi psa i psa."
+ ],
+ "format-w-srodku": [
+  "AlX{b} kota."
+ ],
+ "format-calego": [
+  "Tekst pies{i} tu."
+ ],
+ "format-przez-trzy": [
+  "aXY{b}f{u}"
+ ],
+ "dluzsza-zamiana-wielka": [
+  "PIES BUREK."
+ ]
+}

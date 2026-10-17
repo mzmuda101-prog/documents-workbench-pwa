@@ -1,0 +1,57 @@
+[
+ {
+  "style": "normal",
+  "ppr": [],
+  "runs": "Zwykły akapit."
+ },
+ {
+  "style": "normal",
+  "ppr": [],
+  "runs": "Cytat stylem Quote."
+ },
+ {
+  "style": "normal",
+  "ppr": [],
+  "runs": "Cytat intensywny."
+ },
+ {
+  "style": "normal",
+  "ppr": [],
+  "runs": "Ramka wprost z tłem, styl Normalny z listy."
+ },
+ {
+  "style": "normal",
+  "ppr": [],
+  "runs": "Pasek z lewej wprost, gumka przy kursorze."
+ },
+ {
+  "style": "quote",
+  "ppr": [],
+  "runs": "Cały pochylony kolorowy cytat od AI, pogrubione{b} na końcu."
+ },
+ {
+  "style": "normal",
+  "ppr": [],
+  "runs": "Tekst blokowy na Normalny."
+ },
+ {
+  "style": "normal",
+  "ppr": [],
+  "runs": "Wyśrodkowany i wcięty wprost."
+ },
+ {
+  "style": "normal",
+  "ppr": [],
+  "runs": "Tło wprost bez ramki."
+ },
+ {
+  "style": "normal",
+  "ppr": [],
+  "runs": "Punkt listy na Normalny."
+ },
+ {
+  "style": "normal",
+  "ppr": [],
+  "runs": "Koniec."
+ }
+]

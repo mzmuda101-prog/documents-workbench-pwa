@@ -50,4 +50,53 @@ async function listLabels(page, selector = ".docx-preview-host article p") {
   return texts.map(([id, text]) => ({ label: (out.get(id)?.label || "").replace(/[\s\u00a0\u2003]+$/, ""), text }));
 }
 
-module.exports = { openApp, loadBytes, listLabels };
+// numery przypisów w podglądzie: odnośnik „R01:<numer>”, przypis „<numer> N01” (jak noteLabels w word.js)
+async function noteLabels(page) {
+  return page.evaluate(() => {
+    const host = document.querySelector(".docx-preview-host");
+    const out = { refs: {}, notes: {} };
+    const clean = (s) => s.replace(/[\uFEFF\u200B]/g, "").replace(/[\s\u00a0]+/g, " ").trim();
+    host.querySelectorAll("p").forEach((p) => {
+      const t = clean(p.textContent);
+      const ol = p.closest("ol.dwb-notes");
+      let m;
+      if (!ol && (m = /^([RE]\d\d):(.*)$/.exec(t))) out.refs[m[1]] = m[2].trim();
+      if (ol && (m = /^(.+?)\s*([NM]\d\d)$/.exec(t))) out.notes[m[2]] = m[1];
+      else if (ol && (m = /^([NM]\d\d)$/.exec(t))) out.notes[m[1]] = `(lista:${p.closest("li")?.value})`;
+    });
+    return out;
+  });
+}
+
+// cytaty/ramki: kursor w akapicie → co pokazuje lista stylów; potem styl z listy albo gumka; po
+// wszystkim akapity zapisanego pliku (normalizeParas z cases-quote.js)
+async function savedParts(page) {
+  return page.evaluate(async () => {
+    const z = await JSZip.loadAsync(await buildDocumentForSave());
+    return { doc: await z.file("word/document.xml").async("string"), styles: await z.file("word/styles.xml").async("string") };
+  });
+}
+async function quoteOps(page, ops) {
+  const { normalizeParas } = require("./cases-quote");
+  await page.evaluate(() => { if (readOnlyMode) appFrame.setReadOnly(false); });
+  const idle = () => page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && !inlineLocksPending, null, { timeout: 20000 }).then(() => page.waitForTimeout(350));
+  await idle();
+  const labels = [];
+  for (const o of ops) {
+    await page.evaluate((i) => {
+      const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[i];
+      p.focus();
+      placeCaret(p, 3);
+      document.dispatchEvent(new Event("selectionchange"));
+    }, o.para);
+    await page.waitForTimeout(250);
+    labels.push(await page.evaluate(() => document.getElementById("fmtParaStyle").selectedOptions[0]?.textContent));
+    if (o.op === "style") await page.selectOption("#fmtParaStyle", o.style);
+    else await page.evaluate(() => clearTextFormatting());
+    await idle();
+  }
+  const x = await savedParts(page);
+  return { labels, paras: await page.evaluate(normalizeParas, x) };
+}
+
+module.exports = { openApp, loadBytes, listLabels, noteLabels, quoteOps, savedParts };

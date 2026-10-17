@@ -95,8 +95,10 @@ const composeUi = (() => {
   // ── operacje ──────────────────────────────────────────────────────────────
   async function applyStyle(key) {
     const p = caretParagraph();
-    if (!p || key.startsWith("custom:")) { syncState(); return; } // ten sam styl pliku — bez zmian
-    await runFileEdit({ op: "paraFormat", indices: selectedParagraphIndices(p), style: key }, caretState(p));
+    if (!p || key.startsWith("plus:")) { syncState(); return; } // „Normalny + ramka” — to tylko stan
+    // jak w Wordzie: nadanie stylu (także tego samego) zdejmuje bezpośrednie formatowanie akapitu —
+    // tak wychodzi się z ramki/tła dodanych wprost (lista pokazuje wtedy „Normalny + ramka”)
+    await runFileEdit({ op: "paraFormat", indices: selectedParagraphIndices(p), style: key, resetDirect: true }, caretState(p));
   }
 
   async function applyAlign(key) {
@@ -3025,6 +3027,16 @@ const composeUi = (() => {
     return "left";
   }
 
+  // obramowanie / cieniowanie nadane wprost w akapicie (docx-preview: styl w atrybucie <p>; ze
+  // stylu akapitu idzie przez klasę) — białe tło („Normal (Web)”) to nie ramka
+  function directFrameOf(p) {
+    const st = p.style;
+    if (["Top", "Right", "Bottom", "Left"].some((s) => st[`border${s}Style`] && st[`border${s}Style`] !== "none" && st[`border${s}Style`] !== "hidden")) return "border";
+    const m = String(st.backgroundColor || "").match(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?/);
+    if (m && (m[4] === undefined || parseFloat(m[4]) > 0.05) && Math.min(+m[1], +m[2], +m[3]) < 246) return "shading";
+    return null;
+  }
+
   let linkCardMuted = null; // link po Ctrl/⌘+kliku — bez karty, aż kursor go opuści
   function syncState() {
     const p = activeParagraph();
@@ -3037,9 +3049,22 @@ const composeUi = (() => {
       if (key.startsWith("custom:")) {
         if (!cur) { cur = document.createElement("option"); cur.dataset.cur = "1"; styleSel.appendChild(cur); }
         cur.value = key;
-        cur.textContent = key.slice(7);
+        cur.textContent = typeof composeStyleDisplayName === "function" ? composeStyleDisplayName(key.slice(7)) : key.slice(7);
       } else cur?.remove();
-      styleSel.value = key;
+      // ramka / tło nadane wprost (np. cytat z generatora AI): Word pokazuje „Normalny + Ramka”.
+      // Osobna pozycja „<styl> + ramka” — wtedy wybranie samego stylu jest zmianą i zdejmuje ramkę.
+      let plus = styleSel.querySelector("option[data-plus]");
+      const frame = target ? directFrameOf(target) : null;
+      if (frame) {
+        if (!plus) { plus = document.createElement("option"); plus.dataset.plus = "1"; styleSel.appendChild(plus); }
+        const base = Array.from(styleSel.options).find((o) => o.value === key && o !== plus);
+        plus.value = `plus:${key}`;
+        plus.textContent = `${base?.textContent || key} + ${t(frame === "border" ? "styleDirectBorder" : "styleDirectShading")}`;
+        styleSel.value = plus.value;
+      } else {
+        plus?.remove();
+        styleSel.value = key;
+      }
     }
     if (alignBtn) alignBtn.innerHTML = alignSvg(currentAlign());
     listBtn?.classList.toggle("is-on", !!target && isListParagraph(target) && !pop);

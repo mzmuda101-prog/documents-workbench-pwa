@@ -295,17 +295,37 @@ async function extractParagraphTextsFromDocx(bytes) {
 //
 // edit: { find, replace, regex, matchCase, wholeWord }. matchCase domyślnie TAK (jak dawniej —
 // snippety, pola, Narzędzia edycji); panel Znajdź i zamień podaje go jawnie.
+//
+// edit.wordLike (panel Znajdź i zamień) — jak „Znajdź i zamień” w Wordzie 16.114 (sprawdzone
+// wyrocznią tools/word-oracle/run-find.js), bez trybu wyrażeń: prosty cudzysłów/apostrof znajduje
+// też drukarskie („ ” “ / ’ ‘), spacja — też twardą spację; „całe wyrazy”: granicą jest wszystko
+// poza literą i cyfrą (także „_”), a gdy szukany tekst ma znak inny niż litera/cyfra (spacja,
+// myślnik, apostrof), Word tę opcję pomija; bez „Uwzględnij wielkość liter” zamiana przejmuje
+// wielkość liter znalezionego tekstu (wordReplaceCase).
 function buildFindRegex(edit) {
   if (!edit?.find) return null;
   const matchCase = edit.matchCase !== false;
+  const wordLike = !!edit.wordLike && !edit.regex;
   let src = edit.regex ? edit.find : edit.find.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (wordLike) src = src.replace(/["„”“]/g, '["„”“]').replace(/['’‘]/g, "['’‘]").replace(/[ \u00a0]/g, "[ \\u00a0]");
   let flags = matchCase ? "g" : "gi";
-  if (edit.unicode && !edit.wholeWord) flags += "u";
-  if (edit.wholeWord) {
-    src = `(?<![\\p{L}\\p{N}_])(?:${src})(?![\\p{L}\\p{N}_])`;
+  const wholeWord = edit.wholeWord && !(wordLike && /[^\p{L}\p{N}]/u.test(edit.find));
+  if (edit.unicode && !wholeWord) flags += "u";
+  if (wholeWord) {
+    src = wordLike ? `(?<![\\p{L}\\p{N}])(?:${src})(?![\\p{L}\\p{N}])` : `(?<![\\p{L}\\p{N}_])(?:${src})(?![\\p{L}\\p{N}_])`;
     flags += "u"; // \p{…} wymaga u; bez „całych słów” u nie włączamy (psuje część zwykłych wzorców)
   }
   try { return new RegExp(src, flags); } catch (_) { return null; }
+}
+
+// Word bez „Uwzględnij wielkość liter”: znalezione WIELKIMI → zamiana wielkimi („I” też),
+// z wielkiej litery → zamiana z wielkiej, inaczej zamiana tak, jak wpisana.
+function wordReplaceCase(found, repl) {
+  const letters = String(found).replace(/[^\p{L}]/gu, "");
+  if (!letters || !repl) return repl;
+  if (letters === letters.toUpperCase() && letters !== letters.toLowerCase()) return repl.toUpperCase();
+  if (letters[0] !== letters[0].toLowerCase()) return repl.replace(/\p{L}/u, (c) => c.toUpperCase());
+  return repl;
 }
 
 // Wszystkie trafienia w tekście: [{ start, end, m }] (m = wynik exec — grupy dla $1).
@@ -361,7 +381,9 @@ function replaceInParagraphXml(p, re, edit, pick) {
   for (let k = matches.length - 1; k >= 0; k--) { // od końca: wcześniejsze przesunięcia się nie zmieniają
     if (!pick(k)) continue;
     const { start, end, m } = matches[k];
-    spliceTextNodes(texts, starts, start, end, sanitizeXmlText(expandReplacement(edit.replace, m, !!edit.regex && !edit.literalReplace)));
+    let repl = expandReplacement(edit.replace, m, !!edit.regex && !edit.literalReplace);
+    if (edit.wordLike && !edit.regex && edit.matchCase === false) repl = wordReplaceCase(m[0], repl);
+    spliceTextNodes(texts, starts, start, end, sanitizeXmlText(repl));
     count++;
   }
   if (!count) return 0;

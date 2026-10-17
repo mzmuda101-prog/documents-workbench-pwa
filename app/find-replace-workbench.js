@@ -29,13 +29,15 @@ const frHighlightApi = typeof CSS !== "undefined" && CSS.highlights && typeof Hi
 function buildFrEdit() {
   return {
     op: "replace",
-    find: (searchQueryEl?.value || "").trim(),
+    // same spacje zostają (Word: „  ” → „ ” sprząta podwójne spacje); inaczej bez spacji na brzegach
+    find: (searchQueryEl?.value || "").trim() || (searchQueryEl?.value || ""),
     replace: frReplaceEl?.value ?? "",
     regex: !!frRegexEl?.checked,
     matchCase: !!frMatchCaseEl?.checked,
     wholeWord: !!frWholeWordEl?.checked,
     scope: searchScopeEl?.value === "headings" ? "headings" : "all",
     otherParts: !!frOtherPartsEl?.checked,
+    wordLike: true, // reguły szukania Worda (cudzysłowy, twarda spacja, całe wyrazy, wielkość liter zamiany)
   };
 }
 

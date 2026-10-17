@@ -1,7 +1,8 @@
 // doc-notes.js — przypisy dolne i końcowe w podglądzie.
 //
-//   - numer jak w Wordzie: ciągły przez cały dokument (docx-preview liczył od 1 na każdej stronie
-//     podglądu — łatka nr 5 w scripts/vendor-libs.mjs), format z ustawień pliku (1, i, a, *…),
+//   - numer jak w Wordzie: docx-preview liczył od 1 na każdej stronie podglądu (łatka nr 5
+//     w scripts/vendor-libs.mjs), tu numer, format (1, i, a, *…), początek i restart (sekcja,
+//     strona) z ustawień sekcji odnośnika — reguły Worda niżej przy sectNoteProps,
 //   - dymek z treścią przypisu po najechaniu na odnośnik (na dotyku: przytrzymanie palca),
 //   - skok do przypisu: klik w odnośnik (Czytanie) / dwuklik albo Ctrl/⌘+klik (Edycja) + „↩ Wróć”;
 //     klik w numer przypisu na dole strony wraca do odnośnika,
@@ -36,7 +37,8 @@ const dwbNotes = (() => {
   }
   function formatNum(n, fmt) {
     // te same formaty co numery list (list-numbering.js: słownie, ①, *†‡§ … jak w Wordzie)
-    const shared = typeof dwbListNum !== "undefined" && fmt && fmt !== "decimal" ? dwbListNum.formatValue(n, fmt) : null;
+    // słownie / porządkowe Word pisze w przypisach po angielsku („One”, „6th”) także w polskim pliku
+    const shared = typeof dwbListNum !== "undefined" && fmt && fmt !== "decimal" ? dwbListNum.formatValue(n, fmt, "en-US") : null;
     if (shared != null && shared.trim()) return shared;
     switch (fmt) {
       case "lowerRoman": return roman(n);
@@ -47,23 +49,54 @@ const dwbNotes = (() => {
       default: return String(n);
     }
   }
-  // Word: przypisy dolne domyślnie 1, 2, 3…, końcowe i, ii, iii… (chyba że plik mówi inaczej)
-  function numProps(kind) {
-    const pr = parts?.settings?.getElementsByTagNameNS(W_NS, `${kind}Pr`)[0];
-    const fmtEl = pr ? wKids(pr, "numFmt")[0] : null;
-    const startEl = pr ? wKids(pr, "numStart")[0] : null;
-    const fmt = fmtEl ? getWVal(fmtEl) : null;
-    const start = startEl ? parseInt(getWVal(startEl), 10) : 1;
-    return { fmt: fmt || (kind === "endnote" ? "lowerRoman" : "decimal"), start: start > 0 ? start : 1 };
+  // Numeracja jak w Wordzie 16 (sprawdzone wyrocznią tools/word-oracle/run-notes.js): liczy się
+  // TYLKO <w:footnotePr>/<w:endnotePr> w sectPr sekcji, w której stoi odnośnik — ten sam element
+  // w settings.xml Word pomija (numFmt, numStart, numRestart); sekcja bez własnych ustawień NIE
+  // dziedziczy po poprzedniej (domyślnie dolne 1, 2, 3…, końcowe i, ii, iii…). Numer = numStart
+  // sekcji + liczba wcześniejszych przypisów w zakresie: cały dokument (continuous), sekcja
+  // (eachSect) albo strona (eachPage — u nas kartka podglądu, czyli strona z jawnym podziałem).
+  function sectNoteProps(sect, kind) {
+    const pr = sect ? wKids(sect, `${kind}Pr`)[0] : null;
+    const val = (name) => { const el = pr ? wKids(pr, name)[0] : null; return el ? getWVal(el) : null; };
+    const start = parseInt(val("numStart"), 10);
+    const restart = val("numRestart");
+    return {
+      fmt: val("numFmt") || (kind === "endnote" ? "lowerRoman" : "decimal"),
+      start: start >= 0 && restart !== "eachPage" ? start : 1, // przy „co stronę” Word pomija numStart
+      restart: restart === "eachSect" || (restart === "eachPage" && kind === "footnote") ? restart : "continuous",
+    };
   }
-
+  // odnośnik („footnote:3”) → numer sekcji; sekcje = sectPr w pPr po kolei + sectPr na końcu body
+  function refSections(doc) {
+    const body = doc?.getElementsByTagNameNS(W_NS, "body")[0];
+    const sects = [];
+    const refSect = new Map();
+    if (!body) return { sects, refSect };
+    const walk = (node) => {
+      for (const n of node.childNodes) {
+        if (n.nodeType !== 1) continue;
+        if (n.namespaceURI === W_NS && (n.localName === "footnoteReference" || n.localName === "endnoteReference")) {
+          const key = `${n.localName === "footnoteReference" ? "footnote" : "endnote"}:${n.getAttributeNS(W_NS, "id")}`;
+          if (!refSect.has(key)) refSect.set(key, sects.length);
+          continue;
+        }
+        if (n.namespaceURI === W_NS && n.localName === "sectPr") {
+          if (n.parentNode.localName === "pPr" || n.parentNode === body) sects.push(n);
+          continue;
+        }
+        walk(n);
+      }
+    };
+    walk(body);
+    return { sects, refSect };
+  }
   async function readParts(bytes) {
     const zip = await loadDocxZipCached(bytes);
     const read = async (path) => {
       const f = zip.file(path);
       return f ? new DOMParser().parseFromString(await f.async("string"), "application/xml") : null;
     };
-    return { footnote: await read(NOTE_PART.footnote), endnote: await read(NOTE_PART.endnote), settings: await read("word/settings.xml") };
+    return { footnote: await read(NOTE_PART.footnote), endnote: await read(NOTE_PART.endnote), document: await read("word/document.xml") };
   }
 
   function noteXml(kind, id) {
@@ -87,14 +120,30 @@ const dwbNotes = (() => {
     const sups = host ? Array.from(host.querySelectorAll("sup[data-dwb-note]")) : [];
     if (!sups.length && !host?.querySelector("ol.dwb-notes")) return;
     parts = await readParts(bytes);
-    const fmt = { footnote: numProps("footnote"), endnote: numProps("endnote") };
+    const { sects, refSect } = refSections(parts.document);
+    const props = { footnote: [], endnote: [] };
+    const propsOf = (kind, si) => props[kind][si] || (props[kind][si] = sectNoteProps(sects[si], kind));
+    const pages = Array.from(host.querySelectorAll("section.docx"));
+    const count = { footnote: { all: 0, sect: new Map(), page: new Map() }, endnote: { all: 0, sect: new Map(), page: new Map() } };
     sups.forEach((sup) => {
       const key = sup.dataset.dwbNote;
-      const f = fmt[key.split(":")[0]] || fmt.footnote;
-      const label = formatNum(f.start - 1 + (Number(sup.dataset.dwbNoteNum) || 1), f.fmt);
+      if (labels.has(key)) { sup.textContent = labels.get(key); return; } // ten sam przypis drugi raz
+      const kind = key.split(":")[0] === "endnote" ? "endnote" : "footnote";
+      const si = refSect.has(key) ? refSect.get(key) : Math.max(0, sects.length - 1);
+      const f = propsOf(kind, si);
+      const pg = pages.indexOf(sup.closest("section.docx"));
+      const c = count[kind];
+      const before = f.restart === "eachSect" ? (c.sect.get(si) || 0) : f.restart === "eachPage" ? (c.page.get(pg) || 0) : c.all;
+      c.all += 1;
+      c.sect.set(si, (c.sect.get(si) || 0) + 1);
+      c.page.set(pg, (c.page.get(pg) || 0) + 1);
+      const n = f.start + before;
+      const label = formatNum(n, f.fmt);
       sup.textContent = label;
-      if (!labels.has(key)) { labels.set(key, label); nums.set(key, { n: f.start - 1 + (Number(sup.dataset.dwbNoteNum) || 1), fmt: f.fmt }); }
+      labels.set(key, label);
+      nums.set(key, { n, fmt: f.fmt });
     });
+    parts.document = null; // duży DOM treści niepotrzebny po policzeniu numerów
     labels.forEach((_, key) => {
       const [kind, id] = key.split(":");
       const el = noteXml(kind, id);

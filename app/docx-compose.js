@@ -137,6 +137,13 @@ function composeStylesIndex(stylesDoc) {
   return out;
 }
 
+// Style wbudowane Worda mają w pliku angielskie w:name („Intense Quote”), a polski Word pokazuje
+// je po polsku — nazwy z Worda 16.114 (tools/word-oracle/probe-style-names.js).
+const COMPOSE_BUILTIN_STYLE_PL = { "quote": "Cytat", "intense quote": "Cytat intensywny", "block text": "Tekst blokowy", "body text": "Tekst podstawowy", "body text 2": "Tekst podstawowy 2", "body text 3": "Tekst podstawowy 3", "body text indent": "Tekst podstawowy wcięty", "body text indent 2": "Tekst podstawowy wcięty 2", "body text indent 3": "Tekst podstawowy wcięty 3", "body text first indent": "Tekst podstawowy z wcięciem", "body text first indent 2": "Tekst podstawowy z wcięciem 2", "no spacing": "Bez odstępów", "caption": "Legenda", "footnote text": "Tekst przypisu dolnego", "endnote text": "Tekst przypisu końcowego", "header": "Nagłówek", "footer": "Stopka", "normal (web)": "Normalny (Web)", "plain text": "Zwykły tekst", "signature": "Podpis", "salutation": "Zwrot grzecznościowy", "closing": "Zwrot pożegnalny", "date": "Data", "list": "Lista", "list 2": "Lista 2", "list bullet": "Lista punktowana", "list bullet 2": "Lista punktowana 2", "list number": "Lista numerowana", "list number 2": "Lista numerowana 2", "list continue": "Lista - kontynuacja", "list continue 2": "Lista - kontynuacja 2", "heading 4": "Nagłówek 4", "heading 5": "Nagłówek 5", "heading 6": "Nagłówek 6", "heading 7": "Nagłówek 7", "heading 8": "Nagłówek 8", "heading 9": "Nagłówek 9", "title": "Tytuł", "subtitle": "Podtytuł", "balloon text": "Tekst dymka", "annotation text": "Tekst komentarza", "annotation subject": "Temat komentarza", "envelope address": "Adres na kopercie", "envelope return": "Adres zwrotny na kopercie", "html preformatted": "HTML - wstępnie sformatowany", "html address": "HTML - adres", "index 1": "Indeks 1", "index heading": "Nagłówek indeksu", "table of figures": "Spis ilustracji", "table of authorities": "Wykaz źródeł", "toa heading": "Nagłówek wykazu źródeł", "macro": "Tekst makra", "message header": "Nagłówek wiadomości", "note heading": "Nagłówek notatki", "e-mail signature": "Podpis e-mail", "normal indent": "Wcięcie normalne", "bibliography": "Bibliografia", "toc heading": "Nagłówek spisu treści", "document map": "Mapa dokumentu", "revision": "Poprawka" };
+function composeStyleDisplayName(name) {
+  return (typeof currentLang === "undefined" || currentLang === "pl") && COMPOSE_BUILTIN_STYLE_PL[String(name).trim().toLowerCase()] || name;
+}
+
 // Mapa klasa CSS akapitu (docx-preview) → klucz stylu — stan listy „Styl” na pasku.
 async function readComposeStyleClasses(bytes) {
   const map = new Map();
@@ -344,6 +351,47 @@ function composeApplyLayout(p, pPr, edit, layout) {
   }
 }
 
+// Nadanie stylu z listy (Word 16.114, sprawdzone wyrocznią tools/word-oracle/probe-style-apply.js
+// i probe-style-runs.js): akapit traci CAŁE bezpośrednie formatowanie akapitu (ramka, cieniowanie,
+// wcięcia, wyrównanie, odstępy, numeracja…) oraz te cechy znaków, które obejmują ponad połowę
+// tekstu akapitu (pogrubienie, kolor, krój, rozmiar…). Zostają: język, wyróżnienie, cieniowanie
+// znaków i styl znakowy — oraz cechy na mniejszej części tekstu.
+const COMPOSE_STYLE_RESET_RPR = new Set(["b", "bCs", "i", "iCs", "u", "color", "sz", "szCs", "rFonts", "caps", "smallCaps", "strike", "dstrike", "spacing", "w", "position", "kern", "emboss", "imprint", "outline", "shadow"]);
+function composeDropMajorityRunProps(p) {
+  const runs = Array.from(p.getElementsByTagNameNS(W_NS, "r")).filter((r) => composeClosestPara(r) === p);
+  const len = (r) => Array.from(r.childNodes).reduce((n, c) => n + (c.nodeType === 1 && c.localName === "t" ? c.textContent.length : c.nodeType === 1 && (c.localName === "tab" || c.localName === "sym") ? 1 : 0), 0);
+  const total = runs.reduce((n, r) => n + len(r), 0);
+  if (!total) return;
+  const cover = new Map(); // "nazwa|xml" → liczba znaków
+  runs.forEach((r) => {
+    const rPr = composeDirectChild(r, "rPr");
+    if (!rPr) return;
+    Array.from(rPr.childNodes).forEach((c) => {
+      if (c.nodeType !== 1 || !COMPOSE_STYLE_RESET_RPR.has(c.localName)) return;
+      const k = `${c.localName}|${composeSerialize(c)}`;
+      cover.set(k, (cover.get(k) || 0) + len(r));
+    });
+  });
+  const drop = new Set([...cover].filter(([, n]) => n * 2 > total).map(([k]) => k));
+  if (!drop.size) return;
+  runs.forEach((r) => {
+    const rPr = composeDirectChild(r, "rPr");
+    if (!rPr) return;
+    Array.from(rPr.childNodes).forEach((c) => { if (c.nodeType === 1 && drop.has(`${c.localName}|${composeSerialize(c)}`)) rPr.removeChild(c); });
+    if (!rPr.firstElementChild) r.removeChild(rPr);
+  });
+}
+function composeClosestPara(n) {
+  for (let x = n.parentNode; x; x = x.parentNode) if (x.nodeType === 1 && x.namespaceURI === W_NS && x.localName === "p") return x;
+  return null;
+}
+
+// styl pliku po nazwie („custom:Wskazówka” z listy stylów)
+async function composeCustomStyleId(zip, name, cache) {
+  if (!cache.stylesXml) cache.stylesXml = await composeEnsureStylesPart(zip);
+  return composeStylesIndex(composeParse(cache.stylesXml)).byName.get(String(name).trim().toLowerCase()) || null;
+}
+
 async function applyParaFormatInZip(zip, xml, edit) {
   const doc = composeParse(xml);
   const paragraphs = collectParagraphElements(doc.documentElement, "all");
@@ -351,7 +399,10 @@ async function applyParaFormatInZip(zip, xml, edit) {
   if (!targets.length) return { xml, count: 0 };
   const cache = new Map();
   let styleId;
-  if (edit.style) styleId = await composeEnsureStyle(zip, edit.style, cache);
+  if (edit.style?.startsWith?.("custom:")) {
+    styleId = await composeCustomStyleId(zip, edit.style.slice(7), cache);
+    if (!styleId) return { xml, count: 0 };
+  } else if (edit.style) styleId = await composeEnsureStyle(zip, edit.style, cache);
   const layoutDocs = Number.isFinite(edit.indentDelta) ? await composeLayoutDocs(zip) : null;
   let count = 0;
   targets.forEach((p) => {
@@ -360,7 +411,8 @@ async function applyParaFormatInZip(zip, xml, edit) {
     // „Wyczyść całe formatowanie” (Word 16.114): akapit traci WSZYSTKIE bezpośrednie cechy —
     // wyrównanie, wcięcia, odstępy, numerację listy, obramowanie… Zostają: koniec sekcji,
     // śledzone zmiany akapitu (pPrChange) i oznaczenia wstawienia/usunięcia znaku akapitu.
-    if (edit.clearDirect) {
+    if (edit.resetDirect) composeDropMajorityRunProps(p);
+    if (edit.clearDirect || edit.resetDirect) {
       Array.from(pPr.childNodes).forEach((c) => {
         if (c.nodeType !== 1) return;
         if (c.localName === "sectPr" || c.localName === "pPrChange") return;
@@ -1811,8 +1863,10 @@ function composeTableMerge(doc, tbl, rect) {
   }
   if (rowsCells.length === 1 && rowsCells[0].length === 1) return false; // jedna komórka — nic do scalania
   const top = rowsCells[0][0];
-  // treść w kolejności czytania (wiersz po wierszu, od lewej) — puste akapity odpadają
-  const content = rowsCells.flat().flatMap((c) => composeCellBlocks(c)).filter((n) => !composeBlockEmpty(n));
+  // treść w kolejności czytania (wiersz po wierszu, od lewej). Jak Word 16.114 (wyrocznia
+  // tools/word-oracle/run-tables.js): pusta komórka nic nie wnosi, a niepusta — całą treść, razem
+  // z pustymi akapitami między tekstem.
+  const content = rowsCells.flat().map((c) => composeCellBlocks(c)).filter((bl) => bl.some((n) => !composeBlockEmpty(n))).flat();
   const keepFirst = composeCellBlocks(top).find((n) => n.localName === "p");
   const width = composeGridWidths(tbl).slice(c0, c1 + 1).reduce((x, y) => x + y, 0);
   rowsCells.forEach((cells, i) => {
@@ -1826,7 +1880,30 @@ function composeTableMerge(doc, tbl, rect) {
   if (content.length) content.forEach((n) => top.appendChild(n));
   else top.appendChild(keepFirst || composeEl(doc, "p"));
   composeSetVMerge(doc, top, r1 > r0 ? "restart" : null);
+  composeCollapseGrid(tbl);
   return true;
+}
+// Word po scaleniu usuwa z siatki granice kolumn, na których nie zaczyna się już żadna komórka
+// (scalenie dwóch kolumn na całej wysokości tabeli = jedna kolumna siatki, bez gridSpan).
+// Wiersze z gridBefore/gridAfter — bez zmian (granice liczone inaczej).
+function composeCollapseGrid(tbl) {
+  const gridEl = composeDirectChild(tbl, "tblGrid");
+  const rows = composeRows(tbl);
+  if (!gridEl || rows.some((r) => { const pr = composeDirectChild(r, "trPr"); return pr && (composeDirectChild(pr, "gridBefore") || composeDirectChild(pr, "gridAfter")); })) return;
+  const cols = Array.from(gridEl.childNodes).filter((n) => n.nodeType === 1 && n.localName === "gridCol");
+  const used = new Set();
+  rows.forEach((r) => composeCells(r).forEach((c) => used.add(composeGridStart(c))));
+  const doc = tbl.ownerDocument;
+  for (let k = cols.length - 1; k >= 1; k--) {
+    if (used.has(k)) continue;
+    const w = (parseInt(cols[k - 1].getAttributeNS(W_NS, "w"), 10) || 0) + (parseInt(cols[k].getAttributeNS(W_NS, "w"), 10) || 0);
+    cols[k - 1].setAttributeNS(W_NS, "w:w", String(w));
+    gridEl.removeChild(cols[k]);
+    rows.forEach((r) => composeCells(r).forEach((c) => {
+      const st = composeGridStart(c);
+      if (st < k && st + composeSpan(c) - 1 >= k) composeSetSpan(doc, c, composeSpan(c) - 1);
+    }));
+  }
 }
 // Podziel: komórka scalona → rozdziel scalenie (każda kolumna/wiersz znów osobno); zwykła
 // komórka → dwie kolumny (siatka dostaje kolumnę, sąsiednie wiersze — szerszą komórkę).

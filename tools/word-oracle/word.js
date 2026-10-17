@@ -85,3 +85,38 @@ function changeCase(bytes, ops) {
   return withDocument(bytes, body).split(SEP).slice(0, ops.length).map((s) => s.replace(/[\r\u0007]+$/, ""));
 }
 module.exports.changeCase = changeCase;
+
+// PDF z Worda (to, co Word naprawdę rysuje: numery przypisów, podział stron) → tekst stron (pdftotext)
+function pdfPages(bytes) {
+  const pdf = path.join(DIR, "_out.pdf");
+  try { fs.unlinkSync(pdf); } catch (_) { /* nic */ }
+  withDocument(bytes, `save as it file name "${esc(pdf)}" file format format PDF`);
+  return execFileSync("pdftotext", ["-layout", "-enc", "UTF-8", pdf, "-"], { encoding: "utf8" }).split("\f").filter((s, i, a) => i < a.length - 1 || s.trim());
+}
+module.exports.pdfPages = pdfPages;
+
+// numery przypisów z PDF: odnośnik „R01:<numer>”, treść przypisu „<numer> N01” (końcowe: E01 / M01)
+function noteLabels(bytes) {
+  const out = { refs: {}, notes: {}, page: {} };
+  pdfPages(bytes).forEach((txt, pi) => txt.split("\n").forEach((line) => {
+    let m;
+    if ((m = /^\s*([RE]\d\d):(.*?)\s*$/.exec(line))) { out.refs[m[1]] = m[2]; out.page[m[1]] = pi + 1; }
+    if ((m = /^\s*(.+?)\s+([NM]\d\d)\s*$/.exec(line))) out.notes[m[2]] = m[1];
+  }));
+  return out;
+}
+module.exports.noteLabels = noteLabels;
+
+// po operacjach w Wordzie zapisz jako .docx i oddaj części XML ({ "word/document.xml": "…", … })
+function saveDocx(bytes, body, partsWanted = ["word/document.xml"]) {
+  const out = path.join(DIR, "_out.docx");
+  try { fs.unlinkSync(out); } catch (_) { /* nic */ }
+  const res = withDocument(bytes, `${body}
+    save as it file name "${esc(out)}" file format format document`);
+  const parts = {};
+  for (const p of partsWanted) {
+    try { parts[p] = execFileSync("unzip", ["-p", out, p], { encoding: "utf8", maxBuffer: 64 << 20 }); } catch (_) { parts[p] = null; }
+  }
+  return { res, parts };
+}
+module.exports.saveDocx = saveDocx;
