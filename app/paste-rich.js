@@ -363,6 +363,16 @@ const dwbPaste = (() => {
       last = node;
     });
     const range = sel.getRangeAt(0);
+    // inteligentne wklejanie (Word, docx-inline-edit.js smartPasteEdges): słowo przy słowie dostaje
+    // spację w formacie miejsca wklejenia (zwykły węzeł tekstu), bez podwójnej spacji na brzegu
+    if (typeof smartPasteEdges === "function" && !runs.some((r) => r.break)) {
+      const [left, right] = textAroundCaret(p, range);
+      const text = runs.map((r) => r.text || "").join("");
+      const sm = smartPasteEdges(left, right, text);
+      if (sm.cutStart || sm.cutEnd) trimEdge(frag, sm.cutStart, sm.cutEnd);
+      if (sm.lead) frag.prepend(document.createTextNode(" "));
+      if (sm.trail) { last = document.createTextNode(" "); frag.append(last); }
+    }
     range.deleteContents();
     range.insertNode(frag);
     if (last) {
@@ -372,6 +382,15 @@ const dwbPaste = (() => {
       sel.addRange(range);
     }
     return true;
+  }
+
+  // Zdjęcie n znaków z początku i m z końca tekstu fragmentu (spacje na brzegu wklejki).
+  function trimEdge(frag, n, m) {
+    const nodes = [];
+    const w = document.createTreeWalker(frag, NodeFilter.SHOW_TEXT);
+    for (let t = w.nextNode(); t; t = w.nextNode()) nodes.push(t);
+    for (const t of nodes) { if (!n) break; const k = Math.min(n, t.length); t.deleteData(0, k); n -= k; }
+    for (const t of nodes.reverse()) { if (!m) break; const k = Math.min(m, t.length); t.deleteData(t.length - k, k); m -= k; }
   }
 
   // opts.keepPara — zwykły tekst w kilku wierszach: nowe akapity z formatem akapitu z kursorem

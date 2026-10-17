@@ -146,10 +146,27 @@ const composeUi = (() => {
     return true;
   }
 
-  function endListAt(p) {
+  // keepIndent (Backspace): akapit zostaje wcięty na pozycji tekstu punktu, jak w Wordzie;
+  // Enter w pustym punkcie — od razu do marginesu (też jak w Wordzie)
+  function endListAt(p, opts = {}) {
     const index = resolveParaIndex(p);
     if (index < 0) return false;
-    holdTypingWhile(() => runFileEdit({ op: "list", indices: [index], kind: "none" }, { paraIndex: index, offset: 0 }), index);
+    holdTypingWhile(() => runFileEdit({ op: "list", indices: [index], kind: "none", keepIndent: !!opts.keepIndent, toMargin: !opts.keepIndent }, { paraIndex: index, offset: 0 }), index);
+    return true;
+  }
+
+  // Backspace na początku akapitu z lewym wcięciem — wcięcie do zera, akapit zostaje (Word:
+  // „Tabulatory i Backspace ustawiają lewe wcięcie”, sprawdzone 2026-10-17: jedno i podwójne
+  // wcięcie → od razu margines). Dopiero następny Backspace skleja z poprzednim akapitem.
+  // Akapit z wysunięciem (bibliografia, numeracja ręczna) — bez zmian, skleja jak dawniej.
+  function hasLeftIndent(p) {
+    const cs = getComputedStyle(p);
+    return (parseFloat(cs.marginLeft) || 0) + (parseFloat(cs.paddingLeft) || 0) > 1 && (parseFloat(cs.textIndent) || 0) >= -0.5;
+  }
+  function clearIndentAt(p) {
+    const index = resolveParaIndex(p);
+    if (index < 0 || isListParagraph(p) || !hasLeftIndent(p)) return false;
+    holdTypingWhile(() => runFileEdit({ op: "paraFormat", indices: [index], ind: { left: 0, hanging: 0 } }, { paraIndex: index, offset: 0 }), index);
     return true;
   }
 
@@ -3447,5 +3464,5 @@ const composeUi = (() => {
     document.getElementById(id)?.addEventListener("click", openNewDialog);
   });
 
-  return { openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
+  return { openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, clearIndentAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
 })();

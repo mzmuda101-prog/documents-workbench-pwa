@@ -907,6 +907,13 @@ function onDocPaste(e) {
     dwbPaste.apply(p, blocks, { keepPara: true }).catch((err) => log(`Wklejanie: ${err.message || err}`, "error"));
     return;
   }
+  if (lines.length === 1 && lines[0]) {
+    // inteligentne wklejanie (Word): słowo przy słowie dostaje spację, bez podwójnej spacji
+    const sel = window.getSelection();
+    const [left, right] = sel?.rangeCount ? textAroundCaret(p, sel.getRangeAt(0)) : ["", ""];
+    const sm = smartPasteEdges(left, right, lines[0]);
+    lines[0] = sm.lead + sm.text + sm.trail;
+  }
   asUndoStep("undoOpPaste", () => {
     lines.forEach((line, i) => {
       if (i) document.execCommand("insertLineBreak");
@@ -967,12 +974,15 @@ function insertInternalCommentFragment(html, opts = {}) {
         }
         return best;
       };
-      if (opts.sb && SMART_WORD.test(left) && SMART_WORD.test(pasted.charAt(0))) {
+      // Word: schowek to „całe słowa” tylko z granicą słowa po OBU stronach („Ala” skopiowane
+      // z „Alakota” wkleja się bez spacji)
+      const smart = smartCutPasteOn("copy") && opts.sb && opts.eb;
+      if (smart && opts.sb && (SMART_WORD.test(left) || SMART_CLOSE.test(left)) && SMART_WORD.test(pasted.charAt(0))) {
         const t = near(-1);
         if (t && t === r.startContainer) { t.insertData(r.startOffset, " "); r.setStart(t, r.startOffset + 1); r.collapse(true); }
         else if (t) t.appendData(" ");
       }
-      if (opts.eb && SMART_WORD.test(right) && SMART_WORD.test(pasted.slice(-1))) {
+      if (smart && opts.eb && SMART_WORD.test(right) && SMART_WORD.test(pasted.slice(-1))) {
         const t = near(1);
         if (t && t === r.startContainer) t.insertData(r.startOffset, " ");
         else if (t) t.insertData(0, " ");
@@ -1026,6 +1036,120 @@ function textAroundCaret(p, r) {
   b.selectNodeContents(p);
   b.setStart(r.endContainer, r.endOffset);
   return [a.toString().replace(/\uFEFF/g, "").slice(-1), b.toString().replace(/\uFEFF/g, "").charAt(0)];
+}
+
+// ── inteligentne wycinanie i wklejanie (Word: Preferencje → Edycja → „Use smart cut and paste”) ──
+// Reguły zaobserwowane w Wordzie 16 (2026-10-17, AppleScript + prawdziwa mysz/klawiatura):
+//  • Wytnij / Usuń zaznaczone CAŁE słowo (zaczyna się i kończy literą/cyfrą, jest w nim litera —
+//    samo „5” Word zostawia): „Ala ma kota.” − „ma” → „Ala kota.” (spacja z dwóch zostaje jedna),
+//    „Ala ma kota.” − „kota” → „Ala ma.” (bez spacji przed . , ; : ! ? ) itp.), na początku akapitu
+//    znika spacja za słowem; na końcu akapitu spacja przed słowem ZOSTAJE (tak robi Word).
+//  • Wklej całe słowa (zwykły tekst z innego programu albo całe słowa skopiowane tutaj): spacja
+//    przed, gdy przed kursorem litera/cyfra albo . , ; : ! ? ) ; spacja za, gdy za kursorem
+//    litera/cyfra; spacja na brzegu wklejki przy spacji w tekście — bez podwójnej.
+//  • Dwuklik zaznacza słowo razem ze spacją za nim („ma ”; przed kropką samo „kota”).
+// Wyłącznik: Narzędzia edycji → „Inteligentne wycinanie i wklejanie” (localStorage).
+const SMART_CUT_KEY = "dwb-smart-cut-v1";
+const SMART_SPACE = /[ \u00A0]/;
+const SMART_CLOSE = /[.,;:!?)\]}…»”]/; // znak, przed którym nie zostaje spacja / po którym wklejka dostaje spację
+// part: "copy" — spacja przy wklejaniu z własnego schowka (było przed wyłącznikiem, testy na niej
+// stoją); reszta pod automatem testowym (navigator.webdriver) domyślnie WYŁ., jak autokorekta —
+// pozostałe testy wycinają i wklejają dosłowny tekst. test smart-paste włącza ją przez localStorage.
+function smartCutPasteOn(part) {
+  try {
+    const v = localStorage.getItem(SMART_CUT_KEY);
+    if (v != null) return v === "1";
+  } catch (_) { /* bez pamięci — domyślnie */ }
+  return part === "copy" || !navigator.webdriver;
+}
+
+// wyłącznik w Narzędziach edycji (index.html #smartCutPaste)
+document.addEventListener("DOMContentLoaded", () => {
+  const box = document.getElementById("smartCutPaste");
+  if (!box) return;
+  box.checked = smartCutPasteOn("cut");
+  box.addEventListener("change", () => {
+    try { localStorage.setItem(SMART_CUT_KEY, box.checked ? "1" : "0"); } catch (_) { /* bez pamięci */ }
+  });
+});
+
+// Najbliższy widoczny znak przed (dir < 0) / za (dir > 0) miejscem w akapicie: { node, offset, ch }.
+// Pomocniki kursora (U+FEFF) pomijane; tekst wysp (odnośnik przypisu, pole) = „obiekt”, nie spacja.
+function smartCharNear(p, node, offset, dir) {
+  const at = document.createRange();
+  try { at.setStart(node, offset); } catch (_) { return null; }
+  at.collapse(true);
+  const w = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+  let best = null;
+  for (let n = w.nextNode(); n; n = w.nextNode()) {
+    const island = !!n.parentElement?.closest('[contenteditable="false"]');
+    let from = 0;
+    let to = n.length;
+    if (n === node) { if (dir < 0) to = offset; else from = offset; }
+    else {
+      const pos = at.comparePoint(n, 0); // -1: węzeł zaczyna się przed miejscem, 0/1: w nim / za nim
+      if (dir < 0 && pos >= 0) break;
+      if (dir > 0 && pos < 0) continue;
+    }
+    if (dir < 0) {
+      for (let i = to - 1; i >= from; i--) if (n.data[i] !== "\uFEFF") { best = { node: n, offset: i, ch: island ? "\uFFFC" : n.data[i] }; break; }
+    } else {
+      for (let i = from; i < to; i++) if (n.data[i] !== "\uFEFF") return { node: n, offset: i, ch: island ? "\uFFFC" : n.data[i] };
+    }
+  }
+  return dir < 0 ? best : null;
+}
+
+// Zakres do usunięcia przy Wytnij / Delete zaznaczonego słowa — zaznaczenie poszerzone o jedną
+// spację (Word) albo null, gdy nic do poprawienia.
+function smartCutRange(range) {
+  if (!range || range.collapsed || readOnlyMode || !smartCutPasteOn("cut")) return null;
+  const startEl = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
+  const p = startEl?.closest?.(".docx-editable-p");
+  if (!p || !p.contains(range.endContainer)) return null;
+  const text = range.toString().replace(/\uFEFF/g, "");
+  if (!SMART_WORD.test(text.charAt(0)) || !SMART_WORD.test(text.slice(-1)) || !/\p{L}/u.test(text)) return null;
+  const before = smartCharNear(p, range.startContainer, range.startOffset, -1);
+  const after = smartCharNear(p, range.endContainer, range.endOffset, 1);
+  if ((before && SMART_WORD.test(before.ch)) || (after && SMART_WORD.test(after.ch))) return null; // kawałek słowa
+  const wider = range.cloneRange();
+  if (after && SMART_SPACE.test(after.ch) && (!before || SMART_SPACE.test(before.ch))) wider.setEnd(after.node, after.offset + 1);
+  else if (before && SMART_SPACE.test(before.ch) && after && SMART_CLOSE.test(after.ch)) wider.setStart(before.node, before.offset);
+  else return null;
+  return wider;
+}
+
+// Wklejany jeden wiersz przy słowach: { text, lead, trail, cutStart, cutEnd } — lead/trail = spacja
+// do dołożenia (w formacie MIEJSCA wklejenia); cutStart/cutEnd = spacje zdjęte z brzegu wklejki,
+// które dałyby podwójną spację. left/right — znak tuż przed i tuż za miejscem (textAroundCaret).
+function smartPasteEdges(left, right, text) {
+  const out = { text, lead: "", trail: "", cutStart: 0, cutEnd: 0 };
+  if (!text || /\n/.test(text) || !smartCutPasteOn("paste")) return out;
+  let s = text;
+  if (left && SMART_SPACE.test(left)) { const t = s.replace(/^[ \u00A0]+/, ""); out.cutStart = s.length - t.length; s = t; }
+  if (right && SMART_SPACE.test(right)) { const t = s.replace(/[ \u00A0]+$/, ""); out.cutEnd = s.length - t.length; s = t; }
+  if (!s) return { text, lead: "", trail: "", cutStart: 0, cutEnd: 0 };
+  out.text = s;
+  if (left && (SMART_WORD.test(left) || SMART_CLOSE.test(left)) && SMART_WORD.test(s.charAt(0))) out.lead = " ";
+  if (right && SMART_WORD.test(right) && SMART_WORD.test(s.slice(-1))) out.trail = " ";
+  return out;
+}
+
+// Dwuklik w słowo: zaznaczenie obejmuje też spacje za nim (Word „When selecting, automatically
+// select entire word”) — wtedy Wytnij/Delete zabiera słowo ze spacją, bez podwójnej spacji.
+function onSmartWordDblClick(e) {
+  if (readOnlyMode || e.detail !== 2 || !smartCutPasteOn("select")) return;
+  const sel = window.getSelection();
+  if (!sel?.rangeCount || sel.isCollapsed) return;
+  const r = sel.getRangeAt(0);
+  const p = docCaretParagraph(r.startContainer.nodeType === 1 ? r.startContainer : r.startContainer.parentElement);
+  if (!p || !p.contains(r.endContainer)) return;
+  const text = r.toString().replace(/\uFEFF/g, "");
+  if (!text || /\s/.test(text) || !/\p{L}|\p{N}/u.test(text)) return; // Chrome w Windows sam dokleja spację
+  let end = null;
+  for (let c = smartCharNear(p, r.endContainer, r.endOffset, 1); c && SMART_SPACE.test(c.ch); c = smartCharNear(p, c.node, c.offset + 1, 1)) end = c;
+  if (!end) return;
+  sel.setBaseAndExtent(r.startContainer, r.startOffset, end.node, end.offset + 1);
 }
 
 async function refreshAfterObjectPaste() {
@@ -1090,10 +1214,12 @@ function pasteClipParagraphs(p, clip) {
     const textRun = (runs, fromEnd) => (fromEnd ? [...runs].reverse() : runs).find((r) => !r.island && !r.break && r.text);
     const pastedText = plain(paras.flatMap((q) => q.runs));
     const beforeRun = textRun(beforeRuns, true);
-    if (clip.sb && beforeRun && SMART_WORD.test(plain(beforeRuns).slice(-1)) && SMART_WORD.test(pastedText.charAt(0))) beforeRun.text += " ";
+    const smart = smartCutPasteOn("copy") && clip.sb && clip.eb; // całe słowa — granica po obu stronach
+    const leftCh = plain(beforeRuns).slice(-1);
+    if (smart && clip.sb && beforeRun && (SMART_WORD.test(leftCh) || SMART_CLOSE.test(leftCh)) && SMART_WORD.test(pastedText.charAt(0))) beforeRun.text += " ";
     const tail = paras[paras.length - 1];
     const afterRun = textRun(afterRuns, false);
-    if (!tail.mark && clip.eb && afterRun && SMART_WORD.test(plain(afterRuns).charAt(0)) && SMART_WORD.test(plain(tail.runs).slice(-1))) afterRun.text = ` ${afterRun.text}`;
+    if (smart && !tail.mark && clip.eb && afterRun && SMART_WORD.test(plain(afterRuns).charAt(0)) && SMART_WORD.test(plain(tail.runs).slice(-1))) afterRun.text = ` ${afterRun.text}`;
     const added = paras.filter((q) => q.mark).length;
     const last = paras[paras.length - 1];
     pendingInlineCursor = { paraIndex: index + added, offset: last.mark ? 0 : previewRunsToPlainText(last.runs).length };
@@ -1447,13 +1573,18 @@ async function handleInlineBackspace(p, paraIndex, e) {
   // Backspace na początku punktu listy najpierw zdejmuje numerację (jak w Wordzie); kolejny skleja
   if (isListParagraph(p) && sel?.isCollapsed && !e.fromDelete && typeof composeUi !== "undefined") {
     e.preventDefault();
-    composeUi.endListAt(p);
+    composeUi.endListAt(p, { keepIndent: true });
     return;
   }
   // pusty akapit „wyróżniony” (ramka, cytat) — najpierw zwykły tekst, kolejny Backspace skleja
   if (sel?.isCollapsed && !e.fromDelete && !previewRunsToPlainText(extractRunsFromPreviewParagraph(p)) && typeof composeUi !== "undefined" && composeUi.isBoxParagraph?.(p)) {
     e.preventDefault();
     composeUi.plainStyleAt(p);
+    return;
+  }
+  // wcięty akapit — najpierw wcięcie do zera (jak w Wordzie), kolejny Backspace skleja
+  if (sel?.isCollapsed && !e.fromDelete && typeof composeUi !== "undefined" && composeUi.clearIndentAt?.(p)) {
+    e.preventDefault();
     return;
   }
   if (paraIndex <= 0) return;
@@ -2223,6 +2354,7 @@ function bindInlineEditKeyboard() {
   inlineKeyboardBound = true;
   docCanvasEl.addEventListener("keydown", onDocCanvasKeydown);
   docCanvasEl.addEventListener("paste", onDocPaste);
+  docCanvasEl.addEventListener("dblclick", onSmartWordDblClick);
   // input/beforeinput przychodzą do POLA edycji (pojemnik dokumentu albo akapit przypisu) — delegacja
   docCanvasEl.addEventListener("input", (e) => { if (docCaretParagraph(e.target) || e.target?.classList?.contains("docx-edit-root")) onInlineParagraphInput(); });
   docCanvasEl.addEventListener("beforeinput", onParagraphBeforeInput);

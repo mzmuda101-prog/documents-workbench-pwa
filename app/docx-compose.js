@@ -934,9 +934,25 @@ async function applyListInZip(zip, xml, edit) {
   if (edit.toggle && kind !== "none" && targets.every((p) => composeParagraphListKind(p, idx) === kind)) kind = "none";
   if (kind === "none") {
     let n = 0;
+    // keepIndent (Backspace na początku punktu): jak w Wordzie numer znika, a akapit zostaje
+    // wcięty tam, gdzie zaczynał się tekst punktu — dopiero kolejny Backspace zdejmuje wcięcie
+    // toMargin (Enter w pustym punkcie): od razu do lewego marginesu — też wcięcie stylu
+    // „Akapit z listą” (Word tak robi; dawniej akapit zostawał wcięty o 1,27 cm)
+    const needLayout = edit.keepIndent || edit.toMargin;
+    const stylesDoc = needLayout && zip.file("word/styles.xml") ? composeParse(await zip.file("word/styles.xml").async("string")) : null;
     targets.forEach((p) => {
       const pPr = composeDirectChild(p, "pPr");
-      if (pPr && composeDirectChild(pPr, "numPr")) { composeSetPPrChild(pPr, "numPr", null); n++; }
+      const layout = needLayout ? composeParaLayout(p, stylesDoc, numDoc) : null;
+      if (pPr && composeDirectChild(pPr, "numPr")) {
+        composeSetPPrChild(pPr, "numPr", null);
+        n++;
+        if (edit.keepIndent) composeApplyLayout(p, pPr, { ind: { left: Math.max(0, layout.left || 0), hanging: 0 } }, null);
+        else if (edit.toMargin) {
+          // wcięcie, które zostałoby bez numeracji (styl, bezpośrednie w:ind)
+          const rest = composeParaLayout(p, stylesDoc, numDoc);
+          if ((rest.left || 0) > 0 || (rest.hanging || 0) > 0 || (rest.firstLine || 0) > 0) composeApplyLayout(p, pPr, { ind: { left: 0, hanging: 0 } }, null);
+        }
+      }
       // styl „Akapit z listą” bez listy to tylko wcięcie — zostaje (jak w Wordzie)
     });
     return { xml: n ? composeSerialize(doc) : xml, count: n, kind };

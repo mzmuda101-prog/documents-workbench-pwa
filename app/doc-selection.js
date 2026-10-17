@@ -307,7 +307,16 @@ const dwbSel = (() => {
     if (!range) return false;
     if (!range.collapsed) {
       const info = analyze(range, { forInsert: INSERTS.has(type) });
-      if (!info?.rawCross) return false; // w jednym akapicie — przeglądarka (i docx-inline-edit.js)
+      if (!info?.rawCross) {
+        // Backspace/Delete na zaznaczonym słowie: inteligentne wycinanie (Word) — bez podwójnej
+        // spacji i bez spacji przed kropką (docx-inline-edit.js smartCutRange)
+        const wider = /^delete(Content|Word|SoftLine|HardLine)/.test(type) && typeof smartCutRange === "function" ? smartCutRange(range) : null;
+        const wi = wider && analyze(wider);
+        if (!wi || wi.rawCross) return false; // w jednym akapicie — przeglądarka (i docx-inline-edit.js)
+        e.preventDefault();
+        asUndoStep("undoOpTyping", () => deleteSpan(wi));
+        return true;
+      }
       e.preventDefault();
       if (type === "insertFromDrop") return true; // przeciąganie kilku akapitów — nie (dragstart też blokuje)
       if (type === "insertParagraph" || type === "insertLineBreak") {
@@ -396,8 +405,12 @@ const dwbSel = (() => {
     }
     // przypis wycięty razem z odnośnikiem czeka na wklejenie (doc-notes.js pruneOrphanNotesInZip)
     noteIdsIn(box).forEach((key) => dwbClipNotes.add(key));
+    // inteligentne wycinanie (Word): całe słowo znika razem z jedną spacją obok (smartCutRange);
+    // do schowka idzie samo zaznaczenie
+    const smartRange = typeof smartCutRange === "function" ? smartCutRange(cutRange) : null;
+    const delInfo = (smartRange && analyze(smartRange)) || cutInfo;
     asUndoStep("undoOpCut", () => {
-      const p = deleteSpan(cutInfo);
+      const p = deleteSpan(delInfo);
       if (!p || !kept.length) return p;
       const at = selRange();
       if (!at) return p;
