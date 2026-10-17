@@ -579,6 +579,7 @@ function onParagraphBeforeInput(e) {
     e.preventDefault();
     insertTextAtCaret(ch);
     onInlineParagraphInput();
+    announceTypedChar(p, ch);
     return;
   }
   const inherited = getInheritedRunStyleAtCaret(p);
@@ -589,6 +590,14 @@ function onParagraphBeforeInput(e) {
   insertStyledTextAtCaret(ch, style, p, { turnOff: typing });
   if (activeTypingStyle) typingStyleAt = caretPoint(); // kursor poszedł za wpisaną literą — format dalej obowiązuje
   onInlineParagraphInput();
+  announceTypedChar(p, ch);
+}
+
+// Znak wstawiony przez nas (preventDefault w beforeinput) — przeglądarka nie wyśle „input”.
+// Dawniej pisanie w tekście z formatem (krój/rozmiar z pliku — większość dokumentów) omijało
+// słuchaczy „input”: autolink, autokorekta (autocorrect.js), licznik zmian, szkic.
+function announceTypedChar(p, ch) {
+  p.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: ch }));
 }
 
 // ── format „dla dalszego pisania” ────────────────────────────────────────────
@@ -1618,6 +1627,73 @@ function mirrorBaseline(index, removeCount, ...runsList) {
 
 function waitInlineStructuralIdle() {
   return inlineStructuralChain;
+}
+
+// ── klawisze w trakcie przerysowania ─────────────────────────────────────────
+// Część zmian z klawiatury idzie przez plik i przerysowanie dokumentu (Enter w pustym punkcie
+// listy / w pustej ramce, autoformatowanie „1. ” → lista w autocorrect.js). Dawniej litery
+// i Enter wciśnięte w tym czasie trafiały do starego widoku i znikały (szybkie „Enter Enter * …”,
+// „* punkt” → „pu”; przy dużym pliku przerysowanie trwa sekundy). Teraz są trzymane i po
+// przerysowaniu dopisane zwykłą drogą pisania (format miejsca, autokorekta, Enter, Backspace).
+let heldTyping = null; // null = nie trzymamy; inaczej znaki oraz "\n" / "\b" / "\t"
+const HELD_KEYS = { Enter: "\n", Backspace: "\b", Tab: "\t" };
+// w dokumencie albo na <body> — WebKit na czas przerysowania zdejmuje fokus z tekstu
+const heldTypingTarget = (t) => t === document.body || !!docCanvasEl?.contains(t);
+window.addEventListener("keydown", (e) => {
+  if (!heldTyping || e.isComposing || e.ctrlKey || e.metaKey || e.altKey || !heldTypingTarget(e.target)) return;
+  const k = e.key.length === 1 ? e.key : HELD_KEYS[e.key];
+  if (!k || (e.key === "Tab" && e.shiftKey)) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  heldTyping.push(k);
+}, true);
+window.addEventListener("beforeinput", (e) => {
+  if (!heldTyping || e.isComposing || !heldTypingTarget(e.target)) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  if (e.inputType === "insertText" && e.data) heldTyping.push(...Array.from(e.data));
+}, true);
+function typingHeld() { return !!heldTyping; }
+function waitDocReady(maxMs = 5000) {
+  return new Promise((resolve) => {
+    const t0 = performance.now();
+    const tick = () => {
+      const ready = !inlineLocksPending && document.getElementById("loadingOverlay")?.classList.contains("hidden") !== false;
+      if (ready || performance.now() - t0 > maxMs) resolve(); else requestAnimationFrame(tick);
+    };
+    tick();
+  });
+}
+function replayHeldTyping(keys) {
+  keys.forEach((k) => {
+    const target = document.activeElement || document.body;
+    if (k === "\n" || k === "\b" || k === "\t") {
+      const key = k === "\n" ? "Enter" : k === "\b" ? "Backspace" : "Tab";
+      const ev = new KeyboardEvent("keydown", { key, code: key, bubbles: true, cancelable: true });
+      if (target.dispatchEvent(ev) && key === "Backspace") document.execCommand("delete", false);
+    } else {
+      document.execCommand("insertText", false, k);
+    }
+  });
+}
+// fn — operacja z przerysowaniem; paraIndex — akapit, w którym ma stać kursor przed dopisaniem
+async function holdTypingWhile(fn, paraIndex) {
+  if (heldTyping) return fn(); // już trzymamy (zagnieżdżone) — klawisze dopisze zewnętrzne wywołanie
+  heldTyping = [];
+  try {
+    const r = await fn();
+    await waitDocReady();
+    return r;
+  } finally {
+    const keys = heldTyping;
+    heldTyping = null;
+    if (keys.length) {
+      // WebKit stawia kursor po przerysowaniu o chwilę później — bez tego pierwsza litera ginęła
+      const at = docCaretParagraph(document.activeElement);
+      if (paraIndex >= 0 && (!at || resolveParaIndex(at) !== paraIndex)) focusParagraphAtOffset(paraIndex, 0);
+      replayHeldTyping(keys);
+    }
+  }
 }
 
 function applyInlineStructuralEdit(edit) {

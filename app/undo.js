@@ -93,8 +93,9 @@ const dwbUndo = (() => {
     };
   }
 
+  let grouped = 0; // trwa group(): operacje w środku nie dokładają własnych kroków
   function push(label) {
-    if (applying || !originalFileBytes) return null;
+    if (applying || grouped || !originalFileBytes) return null;
     const entry = { state: captureState(), label };
     undoStack.push(entry);
     if (savedPos >= undoStack.length) savedPos = -1; // zapisany stan był na porzuconej gałęzi (po Cofnij)
@@ -126,6 +127,15 @@ const dwbUndo = (() => {
     push(label);
     opInProgress = true;
     try { return fn(); } finally { opInProgress = false; endBurst(); }
+  }
+
+  // Kilka zmian (też asynchronicznych, z przerysowaniem) jako JEDEN krok — np. autoformatowanie
+  // „1. ” → lista (autocorrect.js): skasowanie znacznika + zmiana w pliku, a Cofnij wraca do „1. ”.
+  async function group(label, fn) {
+    endBurst();
+    push(label);
+    grouped += 1;
+    try { return await fn(); } finally { grouped -= 1; endBurst(); }
   }
 
   function typing() {
@@ -312,5 +322,5 @@ const dwbUndo = (() => {
   }, true);
 
   sync();
-  return { record, undo: () => step("undo"), redo: () => step("redo"), clear, changesSinceSave, sync, canUndo: () => undoStack.length > 0, canRedo: () => redoStack.length > 0, _debug: () => ({ undo: undoStack.map((e) => e.label), redo: redoStack.map((e) => e.label), savedPos }) };
+  return { record, group, undo: () => step("undo"), redo: () => step("redo"), clear, changesSinceSave, sync, canUndo: () => undoStack.length > 0, canRedo: () => redoStack.length > 0, _debug: () => ({ undo: undoStack.map((e) => e.label), redo: redoStack.map((e) => e.label), savedPos }) };
 })();

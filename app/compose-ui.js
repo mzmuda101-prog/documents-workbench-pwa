@@ -141,14 +141,15 @@ const composeUi = (() => {
   function plainStyleAt(p) {
     const index = resolveParaIndex(p);
     if (index < 0 || !isBoxParagraph(p)) return false;
-    runFileEdit({ op: "paraFormat", indices: [index], style: "normal" }, { paraIndex: index, offset: 0 });
+    // klawisze wciśnięte w trakcie przerysowania nie giną (holdTypingWhile, docx-inline-edit.js)
+    holdTypingWhile(() => runFileEdit({ op: "paraFormat", indices: [index], style: "normal" }, { paraIndex: index, offset: 0 }), index);
     return true;
   }
 
   function endListAt(p) {
     const index = resolveParaIndex(p);
     if (index < 0) return false;
-    runFileEdit({ op: "list", indices: [index], kind: "none" }, { paraIndex: index, offset: 0 });
+    holdTypingWhile(() => runFileEdit({ op: "list", indices: [index], kind: "none" }, { paraIndex: index, offset: 0 }), index);
     return true;
   }
 

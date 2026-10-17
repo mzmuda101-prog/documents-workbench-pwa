@@ -494,6 +494,12 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
 .field.checkbox { flex-direction: row; align-items: center; gap: 8px; color: var(--muted-strong); font-weight: 500; }
 /* opcja na końcu panelu narzędzia — oddzielona od jednorazowej akcji nad nią */
 .field.checkbox.panel-option { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+/* Autokorekta (autocorrect.js): wyłącznik główny + opcje pod nim, wcięte */
+.autocorrect-opts { border: 0; border-top: 1px solid var(--border-subtle); margin: 4px 0 0; padding: 12px 0 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.autocorrect-opts legend { float: left; width: 100%; padding: 0; margin: 0 0 2px; font-size: 12px; font-weight: 600; color: var(--muted-strong); }
+.autocorrect-opts .field.checkbox + .field.checkbox { padding-left: 22px; }
+.autocorrect-opts .field.checkbox.is-disabled { opacity: .5; }
+.autocorrect-opts .hint { margin: 2px 0 0; }
 .field input[type="range"] { padding: 0; accent-color: var(--accent); }
 .zoom-value { font-size: 11px; color: var(--muted); font-weight: 600; text-align: right; }
 
