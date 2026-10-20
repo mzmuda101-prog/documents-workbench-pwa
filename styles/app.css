@@ -955,6 +955,10 @@ html.is-mobile .dwb-page-margin-guide { display: none; }
   padding: 0;
   min-height: 0;
 }
+/* Safari 18 na iPadzie: CSS zoom nie powiększa liter (cssZoomScalesText w mobile-doc-zoom.js) —
+   tam Widok mobilny skaluje płótno transformem; szerokość płótna = ekran / zoom, więc tekst
+   dalej zawija się do szerokości ekranu (syncPageScaleBox). */
+html.dwb-zoom-transform .doc-canvas.doc-reflow-mode { zoom: 1; transform: scale(var(--doc-zoom, 1)); transform-origin: 0 0; }
 html.is-mobile .doc-zoom-shell { width: 100%; min-height: 0; }
 .doc-canvas.doc-reflow-mode .docx-preview-host {
   width: 100% !important; max-width: none !important; margin: 0 !important;
@@ -982,8 +986,8 @@ html.is-mobile .doc-zoom-shell { width: 100%; min-height: 0; }
 /* iPad (Safari w trybie „komputerowym”): przy CSS zoom z text-size-adjust 100%/auto dzieli
    wielkość liter przez zoom — przy 300% litery zostawały jak przy 100%, rosły tylko odstępy
    (sprawdzone sondą na symulatorze iPada: działa tylko `none`). iPhone: bez zmian.
-   Klasa html.dwb-reflow-text (syncViewportClass), NIE :has() — Safari < 15.4 nie zna :has,
-   odrzucał całą regułę i na starszym iPadzie wracał błąd „rosną tylko odstępy”. */
+   Klasa html.dwb-reflow-text (syncViewportClass), NIE :has() — Safari < 15.4 odrzuca całą
+   regułę z nieznanym :has. Safari 18 na iPadzie nie pomaga nic — tam transform (niżej). */
 html.dwb-reflow-text, .doc-canvas.doc-reflow-mode {
   -webkit-text-size-adjust: none; text-size-adjust: none;
 }

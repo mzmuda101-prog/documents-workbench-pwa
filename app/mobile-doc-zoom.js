@@ -133,7 +133,34 @@ function syncViewportClass() {
   docCanvasEl?.classList.toggle("doc-reflow-mode", shouldUseMobileReflow());
   // text-size-adjust: none na <html> (app.css) — klasą, bo starszy Safari nie zna :has()
   rootEl.classList.toggle("dwb-reflow-text", !!docCanvasEl && shouldUseMobileReflow());
+  rootEl.classList.toggle("dwb-zoom-transform", !!docCanvasEl && shouldUseMobileReflow() && !cssZoomScalesText());
   syncPageScaleBox();
+}
+
+// Safari 18 na iPadzie (tryb komputerowy, sprawdzone sondą na iPadzie 8. gen., iPadOS 18.7):
+// CSS zoom NIE powiększa liter przy żadnym text-size-adjust — rosną tylko odstępy i ramki.
+// iOS 26+ i inne przeglądarki są w porządku (z text-size-adjust: none). Sprawdzamy raz, na
+// żywo: tekst pod zoom 2 ma urosnąć tak jak pasek obok. Gdy nie rośnie, Widok mobilny skaluje
+// płótno transformem (jak Widok desktopowy), a tekst zawija się do szerokości ekranu / zoom.
+let _cssZoomScalesText = null;
+function cssZoomScalesText() {
+  if (window.DWB_FORCE_ZOOM_TRANSFORM) return false; // testy: udają Safari 18 na iPadzie
+  if (_cssZoomScalesText !== null) return _cssZoomScalesText;
+  const box = (zoom) => {
+    const el = document.createElement("div");
+    el.style.cssText = `position:absolute;left:-9999px;top:0;visibility:hidden;zoom:${zoom};font:16px sans-serif;white-space:nowrap`;
+    el.innerHTML = '<span>Ala ma kota 123</span><div style="width:60px;height:4px"></div>';
+    document.body.appendChild(el);
+    return el;
+  };
+  const a = box(1), b = box(2);
+  const tw = (el) => el.firstChild.getBoundingClientRect().width;
+  const bw = (el) => el.lastChild.getBoundingClientRect().width;
+  const textRatio = tw(b) / (tw(a) || 1), barRatio = bw(b) / (bw(a) || 1);
+  a.remove(); b.remove();
+  // getBoundingClientRect z zoom różni się między wersjami (×2 albo ×1) — liczy się stosunek
+  _cssZoomScalesText = !(textRatio > 0) || textRatio / (barRatio || 1) > 0.75;
+  return _cssZoomScalesText;
 }
 
 function getZoomLimits() {
@@ -162,7 +189,8 @@ function applyZoomForLayout() {
     applyZoom();
     const host = docCanvasEl?.querySelector(".docx-preview-host");
     if (host) applyMobileReflowLayout(host);
-    if (docZoomShellEl) docZoomShellEl.style.height = "";
+    if (rootEl.classList.contains("dwb-zoom-transform")) syncPageScaleBox();
+    else if (docZoomShellEl) docZoomShellEl.style.height = "";
     return;
   }
   if (pageFitMode !== "manual" && docCanvasEl?.querySelector(".docx-preview-host section.docx")) {
@@ -381,6 +409,7 @@ function ensureMobileReflowObserver() {
         reflowRaf = 0;
         const host = docCanvasEl?.querySelector(".docx-preview-host");
         if (host && shouldUseMobileReflow()) applyMobileReflowLayout(host);
+        syncPageScaleBox(); // Widok mobilny z transformem: szerokość płótna = ekran / zoom
       });
       return;
     }
@@ -433,7 +462,9 @@ function syncPageScaleBox() {
   const canvas = docCanvasEl;
   if (!shell || !canvas || !docViewportEl) return;
   const host = canvas.querySelector(".docx-preview-host");
-  if (shouldUseMobileReflow() || !host || canvas.classList.contains("hidden")) {
+  // Widok mobilny ze skalowaniem transformem (cssZoomScalesText): płótno o szerokości ekranu / zoom
+  const reflowT = shouldUseMobileReflow() && rootEl.classList.contains("dwb-zoom-transform");
+  if ((shouldUseMobileReflow() && !reflowT) || !host || canvas.classList.contains("hidden")) {
     if (shell.classList.contains("is-page-scaled")) {
       shell.classList.remove("is-page-scaled");
       shell.style.width = "";
@@ -448,7 +479,7 @@ function syncPageScaleBox() {
   let pageW = 0;
   host.querySelectorAll(".docx-wrapper > section.docx").forEach((sec) => { pageW = Math.max(pageW, sec.offsetWidth); });
   const vpW = docViewportEl.clientWidth;
-  const w = Math.max(pageW + padX, Math.floor(vpW / z));
+  const w = reflowT ? Math.floor(vpW / z) : Math.max(pageW + padX, Math.floor(vpW / z));
   if (canvas.style.width !== `${w}px`) canvas.style.width = `${w}px`;
   shell.classList.add("is-page-scaled");
   shell.style.width = `${Math.floor(w * z)}px`;

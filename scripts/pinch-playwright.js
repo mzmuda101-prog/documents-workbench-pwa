@@ -2,6 +2,8 @@
 //
 //   node scripts/pinch-playwright.js                (Chromium, telefon z dotykiem)
 //   ENGINE=webkit node scripts/pinch-playwright.js  (WebKit)
+//   ZOOM_TRANSFORM=1 …                              (udaje Safari 18 na iPadzie: CSS zoom nie
+//                                                    powiększa liter → Widok mobilny na transformie)
 //
 // Gest jest syntetyczny (zdarzenia touch* z ręcznie ustawionym `touches`) — działa
 // w obu silnikach; prawdziwe palce sprawdza się na symulatorze/telefonie.
@@ -10,6 +12,8 @@ const pw = require("playwright");
 const { APP_URL } = require("./docx-test-helpers");
 
 const ENGINE = process.env.ENGINE === "webkit" ? "webkit" : "chromium";
+const FORCE_T = process.env.ZOOM_TRANSFORM === "1";
+const TAG = `${ENGINE}${FORCE_T ? " + transform" : ""}`;
 const results = [];
 const check = (name, ok, detail) => results.push({ name, ok: !!ok, detail });
 
@@ -38,6 +42,10 @@ const state = (page) => page.evaluate(() => ({
   reflow: document.getElementById("docCanvas").classList.contains("doc-reflow-mode"),
   sw: document.getElementById("docViewport").scrollWidth - document.getElementById("docViewport").clientWidth,
   transform: document.getElementById("docZoomShell").style.transform,
+  zt: document.documentElement.classList.contains("dwb-zoom-transform"),
+  // obszar przewijania = płótno po skalowaniu (w trybie transform liczone przez syncPageScaleBox)
+  fullH: (() => { const vp = document.getElementById("docViewport"), c = document.getElementById("docCanvas").getBoundingClientRect();
+    return { sh: vp.scrollHeight, top: c.top - vp.getBoundingClientRect().top + vp.scrollTop, h: Math.round(c.height) }; })(),
   // to, co widać: wysokość linii tekstu na ekranie (nie tylko zmienna CSS)
   lineH: (() => { const p = [...document.querySelectorAll(".docx-preview-host p")].find((e) => e.textContent.trim().length > 40); const r = document.createRange(); r.selectNodeContents(p); return r.getClientRects()[0]?.height || 0; })(),
 }));
@@ -51,6 +59,7 @@ async function run() {
     ...(ENGINE === "chromium" ? { isMobile: true } : {}),
   });
   await context.addInitScript(() => sessionStorage.setItem("introPlayed", "true"));
+  if (FORCE_T) await context.addInitScript(() => { window.DWB_FORCE_ZOOM_TRANSFORM = true; });
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
@@ -62,6 +71,8 @@ async function run() {
 
   const s0 = await state(page);
   check("start: tryb Dopasuj (reflow), 100%", s0.mode === "fit" && s0.reflow && s0.zoom === 1, JSON.stringify(s0));
+  check(FORCE_T ? "Widok mobilny skaluje transformem (CSS zoom nie powiększa liter)" : "Widok mobilny na CSS zoom (silnik powiększa litery)",
+    s0.zt === FORCE_T, JSON.stringify(s0));
   check("touch-action: pan-x pan-y na dokumencie (przeglądarka nie przybliża sama)",
     await page.evaluate(() => getComputedStyle(document.getElementById("docViewport")).touchAction === "pan-x pan-y"));
 
@@ -90,6 +101,8 @@ async function run() {
   check("zostaje w trybie Dopasuj (tekst zawija się)", s1.mode === "fit" && s1.reflow);
   check("tekst NA EKRANIE jest ~2× większy (nie tylko zmienna)", s1.lineH > s0.lineH * 1.7, `${s0.lineH} → ${s1.lineH}`);
   check("bez poziomego przewijania po przybliżeniu", s1.sw <= 1, String(s1.sw));
+  const fh = s1.fullH; // obszar przewijania kończy się tuż pod tekstem — ani obcięty, ani z pustką
+  check("da się przewinąć do końca powiększonego tekstu", fh.sh >= fh.top + fh.h - 2 && fh.sh <= fh.top + fh.h + 200, JSON.stringify(fh));
   check("pasek pokazuje procent zamiast „Dopasuj”", /^\d+%$/.test(s1.now), s1.now);
   check("po geście transform tymczasowy zdjęty", s1.transform === "");
 
@@ -232,8 +245,8 @@ async function run() {
     console.log(`${r.ok ? "✅" : "❌"} ${r.name}${!r.ok && r.detail ? `  (${r.detail})` : ""}`);
     if (!r.ok) failed += 1;
   }
-  if (failed) { console.error(`\n[${ENGINE}] ${failed} z ${results.length} nie przeszło`); process.exit(1); }
-  console.log(`\n✅ pinch-zoom [${ENGINE}]: ${results.length}/${results.length}`);
+  if (failed) { console.error(`\n[${TAG}] ${failed} z ${results.length} nie przeszło`); process.exit(1); }
+  console.log(`\n✅ pinch-zoom [${TAG}]: ${results.length}/${results.length}`);
 }
 
 run().catch((e) => { console.error(e); process.exit(1); });
