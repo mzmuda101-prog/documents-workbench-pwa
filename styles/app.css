@@ -981,8 +981,10 @@ html.is-mobile .doc-zoom-shell { width: 100%; min-height: 0; }
 
 /* iPad (Safari w trybie „komputerowym”): przy CSS zoom z text-size-adjust 100%/auto dzieli
    wielkość liter przez zoom — przy 300% litery zostawały jak przy 100%, rosły tylko odstępy
-   (sprawdzone sondą na symulatorze iPada: działa tylko `none`). iPhone: bez zmian. */
-html:has(.doc-canvas.doc-reflow-mode), .doc-canvas.doc-reflow-mode {
+   (sprawdzone sondą na symulatorze iPada: działa tylko `none`). iPhone: bez zmian.
+   Klasa html.dwb-reflow-text (syncViewportClass), NIE :has() — Safari < 15.4 nie zna :has,
+   odrzucał całą regułę i na starszym iPadzie wracał błąd „rosną tylko odstępy”. */
+html.dwb-reflow-text, .doc-canvas.doc-reflow-mode {
   -webkit-text-size-adjust: none; text-size-adjust: none;
 }
 /* Widok mobilny na szerszym ekranie (iPad w pionie, komputer): kartka na CAŁĄ szerokość

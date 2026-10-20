@@ -189,6 +189,24 @@ async function run() {
   await page.waitForTimeout(300);
   const p0 = await state(page);
   check("tablet w pionie: Widok mobilny (tekst zawija się)", p0.mode === "fit" && p0.reflow, JSON.stringify(p0));
+  // Starszy Safari (iPadOS < 15.4) nie zna :has() i odrzuca CAŁĄ regułę z :has w selektorze —
+  // text-size-adjust: none na <html> musi trafiać selektorem bez :has, inaczej przy zoomie
+  // rosną tylko odstępy, a litery zostają (iPad w trybie komputerowym dzieli je przez zoom).
+  // Surowy tekst app.css, nie CSSOM: przeglądarki bez text-size-adjust (desktopowy WebKit)
+  // gubią tę deklarację z cssRules. Regułę z :has(...) liczymy tak, jak zrobi to stary Safari.
+  const tsa = await page.evaluate(async () => {
+    const html = document.documentElement;
+    const href = [...document.querySelectorAll('link[rel="stylesheet"]')].map((l) => l.href).find((h) => /app\.css/.test(h));
+    const css = (await (await fetch(href)).text()).replace(/\/\*[\s\S]*?\*\//g, "");
+    const sels = [];
+    for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      if (!/(^|[;\s])text-size-adjust:\s*none/.test(m[2])) continue;
+      sels.push(...m[1].split(",").map((x) => x.trim()).filter((x) => x && !x.includes(":has(")));
+    }
+    // (bez getComputedStyle: desktopowy Chromium zawsze zgłasza 100%, WebKit nie zna cechy)
+    return { cls: html.classList.contains("dwb-reflow-text"), noHas: sels.some((x) => { try { return html.matches(x); } catch (_) { return false; } }) };
+  });
+  check("Widok mobilny: text-size-adjust none na <html> bez :has (starszy Safari)", tsa.cls && tsa.noHas, JSON.stringify(tsa));
   await pinch(page, 100, 140, 410, 500);
   const p1 = await state(page);
   check("tablet w pionie: pinch powiększa tekst, bez poziomego przewijania", p1.reflow && p1.lineH > p0.lineH * 1.25 && p1.sw <= 1, JSON.stringify({ p0: p0.lineH, p1: p1.lineH, sw: p1.sw }));
@@ -200,6 +218,7 @@ async function run() {
   await page.waitForFunction(() => !document.getElementById("docCanvas").classList.contains("doc-reflow-mode"));
   await page.waitForTimeout(300);
   const t0 = await state(page);
+  check("Widok desktopowy: <html> bez klasy dwb-reflow-text", await page.evaluate(() => !document.documentElement.classList.contains("dwb-reflow-text")));
   await pinch(page, 100, 160, 590, 500);
   const t1 = await state(page);
   check("tablet w poziomie: Widok desktopowy, pinch zmienia zoom stron", t1.mode === "manual" && !t1.reflow && t1.zoom > t0.zoom * 1.4, JSON.stringify({ t0: t0.zoom, t1: t1.zoom, mode: t1.mode }));

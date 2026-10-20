@@ -131,6 +131,8 @@ function maybeShowAutoViewTip(layout) {
 function syncViewportClass() {
   rootEl.classList.toggle("is-mobile", isMobileViewport());
   docCanvasEl?.classList.toggle("doc-reflow-mode", shouldUseMobileReflow());
+  // text-size-adjust: none na <html> (app.css) — klasą, bo starszy Safari nie zna :has()
+  rootEl.classList.toggle("dwb-reflow-text", !!docCanvasEl && shouldUseMobileReflow());
   syncPageScaleBox();
 }
 
