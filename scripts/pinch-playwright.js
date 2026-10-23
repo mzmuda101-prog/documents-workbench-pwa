@@ -2,8 +2,9 @@
 //
 //   node scripts/pinch-playwright.js                (Chromium, telefon z dotykiem)
 //   ENGINE=webkit node scripts/pinch-playwright.js  (WebKit)
-//   ZOOM_TRANSFORM=1 …                              (udaje Safari 18 na iPadzie: CSS zoom nie
-//                                                    powiększa liter → Widok mobilny na transformie)
+//   ZOOM_BUG=1 …                                    (naśladuje Safari 18 na iPadzie: tekst z własnym
+//                                                    font-size pod zoom dostaje font / zoom → aplikacja
+//                                                    ma to WYKRYĆ i przejść na transform)
 //
 // Gest jest syntetyczny (zdarzenia touch* z ręcznie ustawionym `touches`) — działa
 // w obu silnikach; prawdziwe palce sprawdza się na symulatorze/telefonie.
@@ -12,8 +13,8 @@ const pw = require("playwright");
 const { APP_URL } = require("./docx-test-helpers");
 
 const ENGINE = process.env.ENGINE === "webkit" ? "webkit" : "chromium";
-const FORCE_T = process.env.ZOOM_TRANSFORM === "1";
-const TAG = `${ENGINE}${FORCE_T ? " + transform" : ""}`;
+const FORCE_T = process.env.ZOOM_BUG === "1";
+const TAG = `${ENGINE}${FORCE_T ? " + błąd zoomu Safari 18" : ""}`;
 const results = [];
 const check = (name, ok, detail) => results.push({ name, ok: !!ok, detail });
 
@@ -59,7 +60,19 @@ async function run() {
     ...(ENGINE === "chromium" ? { isMobile: true } : {}),
   });
   await context.addInitScript(() => sessionStorage.setItem("introPlayed", "true"));
-  if (FORCE_T) await context.addInitScript(() => { window.DWB_FORCE_ZOOM_TRANSFORM = true; });
+  // Błąd Safari 18 (sprawdzony na symulatorze iPadOS 18.6): akapit z własnym rozmiarem w bloku
+  // z zoom: 2 dostaje połowę rozmiaru. Naśladujemy go w CSS — tylko na próbce z inline zoom,
+  // bo płótno ma zoom przez zmienną. Wcześniejsza próbka (czcionka po samym bloku) nie widziała
+  // błędu i obejście z 20261021-02 nie włączało się na iPadzie.
+  if (FORCE_T) await context.addInitScript(() => {
+    const st = document.createElement("style");
+    st.textContent = '[style*="zoom: 2"] p[style*="font"] { font-size: 8px !important; }';
+    // WebKit puszcza skrypt startowy, zanim powstanie <html>
+    if (document.documentElement) document.documentElement.appendChild(st);
+    else new MutationObserver((_, mo) => {
+      if (document.documentElement) { mo.disconnect(); document.documentElement.appendChild(st); }
+    }).observe(document, { childList: true });
+  });
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));

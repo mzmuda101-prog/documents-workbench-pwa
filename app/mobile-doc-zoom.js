@@ -142,19 +142,21 @@ function syncViewportClass() {
 // iOS 26+ i inne przeglądarki są w porządku (z text-size-adjust: none). Sprawdzamy raz, na
 // żywo: tekst pod zoom 2 ma urosnąć tak jak pasek obok. Gdy nie rośnie, Widok mobilny skaluje
 // płótno transformem (jak Widok desktopowy), a tekst zawija się do szerokości ekranu / zoom.
+// Błąd dotyczy tylko tekstu z WŁASNYM font-size wewnątrz bloku z zoom (Safari dzieli go przez
+// zoom: 16 px → 8 px) — czcionka odziedziczona po samym bloku rośnie normalnie. Tekst z Worda
+// zawsze ma własne rozmiary, więc próbka też musi je mieć (inaczej nie widzi błędu: 20261021-02).
 let _cssZoomScalesText = null;
 function cssZoomScalesText() {
-  if (window.DWB_FORCE_ZOOM_TRANSFORM) return false; // testy: udają Safari 18 na iPadzie
   if (_cssZoomScalesText !== null) return _cssZoomScalesText;
   const box = (zoom) => {
     const el = document.createElement("div");
-    el.style.cssText = `position:absolute;left:-9999px;top:0;visibility:hidden;zoom:${zoom};font:16px sans-serif;white-space:nowrap`;
-    el.innerHTML = '<span>Ala ma kota 123</span><div style="width:60px;height:4px"></div>';
+    el.style.cssText = `position:absolute;left:-9999px;top:0;visibility:hidden;zoom:${zoom};white-space:nowrap`;
+    el.innerHTML = '<p style="margin:0;font:16px sans-serif"><span>Ala ma kota 123</span></p><div style="width:60px;height:4px"></div>';
     document.body.appendChild(el);
     return el;
   };
   const a = box(1), b = box(2);
-  const tw = (el) => el.firstChild.getBoundingClientRect().width;
+  const tw = (el) => el.querySelector("span").getBoundingClientRect().width;
   const bw = (el) => el.lastChild.getBoundingClientRect().width;
   const textRatio = tw(b) / (tw(a) || 1), barRatio = bw(b) / (bw(a) || 1);
   a.remove(); b.remove();
