@@ -57,18 +57,20 @@ const GRAMMAR_RULES = [
     fixAll(text) { return text.replace(/ {2,}/g, " "); },
   },
   {
+    // „słowo ,” → „słowo,”. Bez „!” i „.” przyklejonych do NASTĘPNEGO wyrazu: to nie koniec zdania,
+    // tylko skrót snippetu („np. !dzis”), rozszerzenie („plik .docx”) — dawniej sklejało „np.!dzis”.
     id: "space-before-punct",
     langs: ["pl", "en"],
     scan(text) {
       const hits = [];
-      const re = /\s+([,.;:!?])/g;
+      const re = /\s+([,;:?]|[.!](?![\p{L}\d]))/gu;
       let m;
       while ((m = re.exec(text)) !== null) {
         hits.push({ start: m.index, end: m.index + m[0].length, before: m[0], after: m[1] });
       }
       return hits;
     },
-    fixAll(text) { return text.replace(/\s+([,.;:!?])/g, "$1"); },
+    fixAll(text) { return text.replace(/\s+([,;:?]|[.!](?![\p{L}\d]))/gu, "$1"); },
   },
   {
     // „koniec.nowe”, „tak,jak” — brak spacji po znaku. Oba sąsiednie wyrazy z co najmniej 2 liter:

@@ -2966,6 +2966,7 @@ section.docx.dwb-gapped { min-height: var(--dwb-sec-min) !important; }
 .rw-diff { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--field, var(--surface)); border: 1px solid var(--border); white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; max-height: 45vh; overflow: auto; }
 .rw-diff ins { text-decoration: none; background: color-mix(in srgb, var(--success) 22%, transparent); border-radius: 3px; }
 .rw-diff del { color: #b42318; text-decoration: line-through; }
+[data-theme="dark"] .rw-diff del { color: #ff8a7a; } /* ciemnoczerwony ginął na ciemnym tle */
 .lai-box > .ai-badge, .fx-write-out > .ai-badge, .compare-describe-ai > .ai-badge { justify-self: start; }
 
 /* Zapytaj dokument — osobny panel: zdanie z dokumentu + (opcjonalnie) odpowiedź asystenta */
@@ -2980,6 +2981,23 @@ section.docx.dwb-gapped { min-height: var(--dwb-sec-min) !important; }
 .semantic-advanced > summary { cursor: pointer; font-size: 0.85rem; color: var(--muted-strong, var(--muted)); }
 .semantic-advanced[open] { display: grid; gap: 8px; }
 .rw-needs-ai { color: var(--accent); }
+/* zakres: zaznaczenie / cały dokument; lista zmian przy kilku akapitach */
+.rw-scope { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: var(--field, var(--surface)); border: 1px solid var(--border); }
+.rw-scope-opt {
+  flex: 1 1 0; min-width: 0; min-height: 36px; padding: 6px 10px; border: 0; border-radius: 9px; background: none; color: var(--muted-strong, var(--muted));
+  font: inherit; font-size: 0.86rem; font-weight: 600; line-height: 1.2; cursor: pointer; overflow-wrap: anywhere;
+}
+.rw-scope-opt[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(8, 14, 28, 0.14); }
+.rw-scope-opt:disabled { opacity: 0.45; cursor: not-allowed; }
+.rw-scope-opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.rw-modes .lai-btn:disabled, .rw-own :disabled { opacity: 0.45; }
+.rw-summary { margin: 0; font-weight: 600; font-size: 0.92rem; }
+.rw-list { display: grid; gap: 8px; max-height: min(50dvh, 460px); overflow: auto; overscroll-behavior: contain; padding-right: 2px; }
+.rw-item { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--border); border-radius: 12px; }
+.rw-item .rw-diff { max-height: none; padding: 8px 10px; font-size: 0.92rem; }
+.rw-item.is-off .rw-diff { opacity: 0.5; }
+.rw-pick { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; font-size: 0.85rem; font-weight: 600; cursor: pointer; justify-self: start; }
+.rw-pick input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
 
 /* ── przejście „zdjęcie starego → nowy widok” (core.js withViewTransition) ──
    Przenikanie dwóch zdjęć ekranu — sama opacity na kompozytorze, strona się w tym czasie

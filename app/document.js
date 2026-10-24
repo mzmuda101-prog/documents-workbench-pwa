@@ -328,7 +328,7 @@ async function applyDocumentEdit(edit, xmlOpts = {}) {
     if (n) setDirtyState(true);
     return n;
   }
-  // „✦ Przepisz” (doc-rewrite.js): nowy tekst akapitu jako poprawka (w:ins / w:del) — zmiana
+  // „✦ Przepisz” (doc-rewrite.js): nowy tekst akapitu (albo kilku) jako poprawka (w:ins / w:del) — zmiana
   // i poprawka w jednym kroku Cofnij. Przy włączonym śledzeniu zmiana idzie zwykłą drogą
   // (track-changes.js sam zrobi z niej poprawkę przy zapisie / „Pokaż poprawki”).
   if (normalized.op === "rewriteTracked") {
@@ -337,7 +337,8 @@ async function applyDocumentEdit(edit, xmlOpts = {}) {
       pendingDocEdits = [];
     }
     const before = originalFileBytes;
-    const batch = { op: "paragraphBatch", items: [{ index: normalized.index, text: normalized.text }] };
+    const items = normalized.items || [{ index: normalized.index, text: normalized.text }]; // kilka akapitów naraz
+    const batch = { op: "paragraphBatch", items };
     const { bytes: after, changeCount: n } = await buildPatchedDocx(before, [batch]);
     if (!n) return 0;
     const tracking = typeof dwbTrack !== "undefined" && dwbTrack.isOn();
