@@ -3010,3 +3010,33 @@ section.docx.dwb-gapped { min-height: var(--dwb-sec-min) !important; }
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
 }
+
+/* =========================================================================
+   AUDYT WYGLĄDU 2026-10-24 (punkty 8 i 9 zaakceptowane przez Mateusza)
+   ========================================================================= */
+
+/* 8. Nagłówek w jednej linii na szerokim ekranie — jak w Sheet Workbench (51 px zamiast
+   65 px): nazwa pliku i „2425 słów | 122 akapitów” obok siebie. Przed wczytaniem pliku
+   zostaje podpis aplikacji w drugiej linii (tak samo jak w Sheet). */
+@media (min-width: 769px) {
+  .hero { padding: 7px 14px; margin-bottom: 10px; }
+  .hero-logo svg { width: 30px; height: 30px; }
+  .hero.has-file .hero-info { flex-direction: row; align-items: center; gap: 12px; }
+  .hero.has-file .hero-title { font-size: 15px; flex: 0 1 auto; }
+  .hero-right .hero-save, .hero-right .app-menu-btn { height: 34px; }
+}
+
+/* 9. Telefon, schowany pasek: tekst dokumentu wjeżdżał pod uchwyt nagłówka i pod pigułkę
+   sekcji ostrą krawędzią (np. pół linijki „Data rozpoczęcia” przy pigułce). Miękkie
+   wygaszenie u góry — bez rozmycia (backdrop-filter nad przewijanym tekstem dławi iOS)
+   i bez zabierania miejsca: to tylko nakładka, tekst dalej sięga do krawędzi. */
+body.tb-float .doc-panel::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 30px; z-index: 26;
+  pointer-events: none; opacity: 0;
+  background: linear-gradient(180deg, #fff 0%, #fff 25%, rgba(255, 255, 255, 0) 100%);
+}
+body.tb-float.tb-tucked .doc-panel::before { opacity: 1; }
+@media (prefers-reduced-motion: no-preference) {
+  body.tb-float .doc-panel::before { transition: opacity 200ms ease; }
+}
+@media print { .doc-panel::before { display: none !important; } }
