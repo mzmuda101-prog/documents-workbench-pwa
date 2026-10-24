@@ -1523,6 +1523,9 @@ body.drag-active .doc-panel { outline: 2px dashed var(--accent); outline-offset:
     border: 0; padding: 0; background: var(--surface); cursor: pointer;
   }
   body.hero-collapsed .hero-grip { height: calc(16px + var(--safe-top)); padding-top: var(--safe-top); }
+  /* pas pod paskiem stanu daje wtedy sam uchwyt (cały do stuknięcia) — .app dokładał drugi
+     taki sam odstęp i nad dokumentem wisiał pusty pas (iPhone PWA, 2026-10-24) */
+  :root:not(.focus-mode) body.has-document.hero-collapsed .app { padding-top: 0; }
   .hero-grip-bar { width: 40px; height: 4px; border-radius: 4px; background: var(--border); transition: width var(--t), background var(--t); }
   body.hero-collapsed .hero-grip-bar { width: 52px; background: color-mix(in srgb, var(--accent) 55%, var(--border)); }
   /* „Pociągnij, żeby rozwinąć”: pasek rośnie razem z pociągnięciem (--pull 0…1 z app-frame.js) */
