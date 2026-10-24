@@ -1,6 +1,6 @@
 // Core runtime: DOM refs, shared state, and base UI helpers.
 
-const APP_BUILD_VERSION = "20261024-01";
+const APP_BUILD_VERSION = "20261024-03";
 
 const IS_LOW_POWER = (() => {
   try {
@@ -141,6 +141,45 @@ function hideEmptyState() {
   emptyStateEl.classList.add("hidden");
   docCanvasEl.classList.remove("hidden");
 }
+
+// ── przejście „zdjęcie starego → nowy widok” (View Transitions API) ───────────
+// Przy ciężkiej przebudowie (np. Widok mobilny ⇄ desktopowy) przeglądarka trzyma na ekranie
+// zdjęcie starego widoku, w tym czasie raz układa nowy, a potem tylko przenika obrazy
+// (opacity na kompozytorze — bez przeliczania strony w każdej klatce). Zamiast mignięcia
+// nakładki „Renderowanie…” i skoku jest płynne przejście.
+// update może zwrócić Promise; czekamy najwyżej maxWait ms — przy bardzo dużym pliku
+// lepiej pokazać nakładkę z postępem niż zamrożony obraz bez znaku życia.
+let activeViewTransition = null;
+function withViewTransition(update, { maxWait = 700 } = {}) {
+  if (typeof document.startViewTransition !== "function" || activeViewTransition
+    || matchMedia("(prefers-reduced-motion: reduce)").matches || document.visibilityState !== "visible") {
+    return Promise.resolve(update());
+  }
+  let job;
+  const vt = document.startViewTransition(() => {
+    job = Promise.resolve(update());
+    return Promise.race([job.catch(() => {}), new Promise((r) => setTimeout(r, maxWait))]);
+  });
+  activeViewTransition = vt;
+  rootEl.classList.add("dwb-vt");
+  // skipTransition() odrzuca ready/finished — bez catch to „unhandled rejection”
+  vt.ready.catch(() => {});
+  const done = () => {
+    if (activeViewTransition !== vt) return;
+    activeViewTransition = null;
+    rootEl.classList.remove("dwb-vt");
+  };
+  vt.finished.catch(() => {}).finally(done);
+  // Bezpiecznik (lekcja z Sheet): iOS potrafi uśpić PWA w trakcie przejścia — zamrożona
+  // nakładka ::view-transition łapała wtedy dotyk aż do ubicia aplikacji.
+  setTimeout(() => { if (activeViewTransition === vt) { try { vt.skipTransition(); } catch (_) {} done(); } }, maxWait + 1200);
+  return (vt.updateCallbackDone || vt.finished).catch(() => {}).then(() => job);
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden" && activeViewTransition) {
+    try { activeViewTransition.skipTransition(); } catch (_) {}
+  }
+});
 
 function isSidebarOpen() {
   return rootEl.classList.contains("sidebar-open");

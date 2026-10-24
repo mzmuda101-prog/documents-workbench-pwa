@@ -245,6 +245,7 @@ function rerenderKeepingEdits(opts = {}) {
     const vp = docViewportEl;
     const ratio = vp && vp.scrollHeight > vp.clientHeight ? vp.scrollTop / (vp.scrollHeight - vp.clientHeight) : 0;
     const anchor = opts.anchor !== undefined ? opts.anchor : ratio ? captureDocScrollAnchor() : null;
+    if (opts.quiet) quietRenderOnce = true; // nakładka tylko przy długim renderze
     await renderCurrentDocument();
     if (!vp || (!ratio && !anchor)) return;
     // to samo miejsce w dokumencie: ten sam akapit u góry (Widok mobilny ⇄ desktopowy

@@ -2980,3 +2980,15 @@ section.docx.dwb-gapped { min-height: var(--dwb-sec-min) !important; }
 .semantic-advanced > summary { cursor: pointer; font-size: 0.85rem; color: var(--muted-strong, var(--muted)); }
 .semantic-advanced[open] { display: grid; gap: 8px; }
 .rw-needs-ai { color: var(--accent); }
+
+/* ── przejście „zdjęcie starego → nowy widok” (core.js withViewTransition) ──
+   Przenikanie dwóch zdjęć ekranu — sama opacity na kompozytorze, strona się w tym czasie
+   nie przelicza. Używane przy ciężkiej przebudowie (Widok mobilny ⇄ desktopowy). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 260ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+}

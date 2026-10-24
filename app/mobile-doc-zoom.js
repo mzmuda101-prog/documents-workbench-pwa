@@ -90,7 +90,10 @@ function setViewLayoutPref(pref) {
   if (value === "auto") delete prefs[viewContext()];
   else prefs[viewContext()] = value;
   try { localStorage.setItem(VIEW_LAYOUT_KEY, JSON.stringify(prefs)); } catch (_) {}
-  return applyViewLayout();
+  // przebudowa podglądu za zdjęciem starego widoku (core.js withViewTransition) — bez mignięcia
+  // nakładki i skoku; obrót / zmiana okna idą bez tego (zmienia się sam ekran)
+  const rebuilds = !!originalFileBytes && appliedLayout !== null && appliedLayout !== getViewLayout();
+  return rebuilds ? withViewTransition(() => applyViewLayout({ quiet: true })) : applyViewLayout();
 }
 
 // Ułóż podgląd w bieżącym widoku. Zwraca Promise (przebudowa podglądu trwa chwilę).
@@ -109,7 +112,7 @@ function applyViewLayout(opts = {}) {
     appliedLayout = layout;
     // nie gub tekstu wpisanego w podglądzie; wróć do akapitu sprzed zmiany układu
     // (po przywróceniu zapisz miejsce od razu — przewinięcie tuż po obrocie jest pomijane)
-    return rerenderKeepingEdits({ anchor: scrollAnchorBeforeChange }).then(() => { lastScrollAnchor = captureScrollAnchorNow(); });
+    return rerenderKeepingEdits({ anchor: scrollAnchorBeforeChange, quiet: opts.quiet }).then(() => { lastScrollAnchor = captureScrollAnchorNow(); });
   }
   appliedLayout = layout;
   // obrót / inna szerokość okna: przeglądarka już przełożyła tekst — wracamy do akapitu

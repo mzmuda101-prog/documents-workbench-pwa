@@ -122,7 +122,20 @@ async function run() {
   await page.waitForTimeout(150);
   const before = await topPara(page);
 
+  // przebudowa za zdjęciem starego widoku (withViewTransition): przejście ruszyło, nakładka
+  // „Renderowanie…” (rozmycie na cały ekran) nie mignęła, po wszystkim nic nie wisi
+  await page.evaluate(() => {
+    window.__vtSeen = false; window.__overlaySeen = false;
+    window.__vtObs = new MutationObserver(() => {
+      if (document.documentElement.classList.contains("dwb-vt")) window.__vtSeen = true;
+      if (!document.getElementById("loadingOverlay")?.classList.contains("hidden")) window.__overlaySeen = true;
+    });
+    __vtObs.observe(document.documentElement, { attributes: true, subtree: true, attributeFilter: ["class"] });
+  });
   await pickInPopover(page, "desktop");
+  await page.waitForTimeout(400);
+  const vt = await page.evaluate(() => { __vtObs.disconnect(); return { seen: __vtSeen, overlay: __overlaySeen, left: document.documentElement.classList.contains("dwb-vt") }; });
+  check("zmiana widoku: płynne przejście, bez mignięcia nakładki „Renderowanie…”", vt.seen && !vt.overlay && !vt.left, JSON.stringify(vt));
   const d0 = await look(page);
   check("telefon → Widok desktopowy: strony jak na wydruku, cała kartka na szerokość (zoom < 100%)",
     d0.layout === "desktop" && !d0.reflow && d0.zoom < 0.6 && d0.secW > 0 && d0.secW <= d0.vpW && d0.overflowX <= 1, JSON.stringify(d0));
