@@ -54,6 +54,13 @@ function fixDocxBulletRendering(host) {
     const levelMatch = p.className.match(/docx-num-\d+-(\d+)/);
     const level = levelMatch ? parseInt(levelMatch[1], 10) : 0;
     p.classList.add("docx-bullet-fixed", `docx-bullet-l${level % 3}`);
+    // punktor na POCZĄTKU wysunięcia (lewe wcięcie − wysunięcie), jak w Wordzie — znacznik listy
+    // przeglądarki (::marker) stał tuż przed tekstem, ~11 px za daleko w prawo (stopka podania:
+    // Word 18 px od marginesu, u nas 29 px)
+    if (hang > 0.5) {
+      p.classList.add("dwb-bullet-hang");
+      p.style.setProperty("--dwb-hang", `${hang}px`);
+    }
     fixed++;
   });
   return fixed;
@@ -319,7 +326,9 @@ function watchParagraphLayout(wrapper) {
   // w następnej klatce, nie w trakcie operacji edycji (natychmiast psuło kotwiczenie widoku przy
   // Enter/Backspace w pustym punkcie listy — test page-gaps-edit)
   let pending = false;
-  const mo = new MutationObserver(() => {
+  const touched = new Set(); // akapity z pisaniem — spacje na końcu liczone tylko dla nich
+  const mo = new MutationObserver((list) => {
+    for (const m of list) { const p = (m.target.nodeType === 1 ? m.target : m.target.parentElement)?.closest?.("p"); if (p) touched.add(p); }
     if (pending) return;
     pending = true;
     requestAnimationFrame(() => {
@@ -327,9 +336,11 @@ function watchParagraphLayout(wrapper) {
       if (!wrapper.isConnected) { mo.disconnect(); return; }
       applyContextualSpacing(wrapper);
       fixEmptyParagraphHeights(wrapper);
+      touched.forEach((p) => { if (p.isConnected) { zeroWhitespaceRun(p); hangTrailingSpace(p); } });
+      touched.clear();
     });
   });
-  mo.observe(wrapper, { childList: true, subtree: true });
+  mo.observe(wrapper, { childList: true, subtree: true, characterData: true });
 }
 
 // Linie poziome tabeli dokładane do wysokości wiersza — jak w Wordzie. W Wordzie wiersz
@@ -432,6 +443,30 @@ function applyMergedCellFirstLine(host) {
 // — kilka obrazów po jednej stronie też stoi na swoich miejscach; ujemny margin-top = obraz
 // wystający nad akapit zabiera miejsce tylko tam, gdzie zachodzi na tekst. Liczenie stron pomija
 // obraz (.dwb-anchor-abs) i rezerwacje. Strona akapitu w długiej sekcji: z jego położenia.
+// Kotwica w nagłówku/stopce: pion zostaje z docx-preview (względem akapitu), ale poziom liczymy
+// od kolumny/marginesu/strony jak Word — docx-preview przesuwał od wcięcia akapitu (logo w
+// nagłówku podania: o lewe wcięcie 5,5 pt za daleko w prawo; przy „do lewej marginesu” też).
+function alignHeaderAnchorX(el, d) {
+  if (d.w !== "wrapNone" && !/^wrap(Square|Tight|Through|TopAndBottom)$/.test(d.w)) return;
+  const sec = el.closest("section.docx");
+  if (!sec) return;
+  const scale = sec.getBoundingClientRect().height / sec.offsetHeight || 1;
+  const cs = getComputedStyle(sec);
+  const padL = parseFloat(cs.paddingLeft) || 0, padR = parseFloat(cs.paddingRight) || 0;
+  const pageW = sec.offsetWidth;
+  const img = el.querySelector("img, svg");
+  const w = cssLengthPx(el.style.width) || cssLengthPx(img?.style.width) || (img ? img.getBoundingClientRect().width / scale : 0);
+  const hF = d.hr === "page" ? [0, pageW] : d.hr === "leftMargin" ? [0, padL] : d.hr === "rightMargin" ? [pageW - padR, pageW] : [padL, pageW - padR];
+  let x = hF[0] + (cssLengthPx(d.ho) ?? 0);
+  if (d.ha === "right" || d.ha === "outside") x = hF[1] - w;
+  else if (d.ha === "center") x = (hF[0] + hF[1] - w) / 2;
+  else if (d.ha === "left" || d.ha === "inside") x = hF[0];
+  const now = cssLengthPx(el.style.left) ?? 0;
+  const left = (el.getBoundingClientRect().left - sec.getBoundingClientRect().left) / scale;
+  const next = Math.round((now + x - left) * 100) / 100;
+  if (Math.abs(next - now) > 0.2) el.style.left = `${next}px`;
+}
+
 function positionAnchoredDrawings(host) {
   if (!host) return 0;
   const byPara = new Map();
@@ -440,7 +475,8 @@ function positionAnchoredDrawings(host) {
     try { d = JSON.parse(el.dataset.dwbAnchor); } catch (_) { return; }
     const wrapText = /^wrap(Square|Tight|Through)$/.test(d.w);
     if (!wrapText && !(d.w === "wrapNone" && !(d.hr === "page" && d.vr === "page"))) return; // reszta jak dotąd
-    if (el.closest("td, header, footer")) return; // w komórce / nagłówku: układ docx-preview
+    if (el.closest("header, footer") && !el.closest("td")) { alignHeaderAnchorX(el, d); return; }
+    if (el.closest("td, header, footer")) return; // w komórce: układ docx-preview
     const p = el.closest("p");
     if (!p || !el.closest("section.docx")) return;
     if (!byPara.has(p)) byPara.set(p, []);
@@ -548,6 +584,104 @@ function addTrailingBreakLine(p) {
   return true;
 }
 
+// Spacje na końcu akapitu wyrównanego do prawej / do środka „wiszą” za marginesem — jak w Wordzie
+// (PDF z Worda, podanie do dziekana: „Dziekan  ”, „Dziekanat ”, „PODANIE ” równo z marginesem).
+// Przeglądarka (white-space: pre-wrap) wiesza tylko spacje w środkowych linijkach, a w OSTATNIEJ
+// liczy je do wyrównania: tekst stał 3–9 px w lewo (do środka o połowę). Szerokość spacji z
+// ostatniej linijki → --dwb-trail, a puste ::after z ujemnym marginesem skraca linijkę o tyle (app.css).
+// Bez zmian w DOM-ie przebiegów (zapis ich nie widzi).
+const TRAIL_WS = /[ \u2002\u2003\u2009]+$/; // spacje zwykłe/drukarskie; twarda (U+00A0) w Wordzie nie wisi
+function hangTrailingSpaces(host) {
+  if (!host) return 0;
+  let n = 0;
+  host.querySelectorAll("section.docx p").forEach((p) => { if (hangTrailingSpace(p)) n++; });
+  return n;
+}
+
+function hangTrailingSpace(p) {
+  if (p.style.getPropertyValue("--dwb-trail")) p.style.removeProperty("--dwb-trail");
+  const al = p.style.textAlign || getComputedStyle(p).textAlign;
+  const trail = p.textContent.match(TRAIL_WS);
+  if (!trail || !/^(right|end|center)$/.test(al)) return false;
+  // Miara z WYNIKU, nie z szerokości spacji: WebKit część spacji końcowych sam wiesza (prostokąt
+  // spacji bywa ucięty), Chromium żadnej — liczy się, gdzie naprawdę kończy się ostatnia litera.
+  const tw = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+  let lastNode = null, lastIdx = -1;
+  for (let t; (t = tw.nextNode());) {
+    if (t.parentElement.closest("[contenteditable=false]")) continue;
+    for (let i = t.data.length - 1; i >= 0; i--) if (/\S/.test(t.data[i]) && t.data[i] !== "\u00a0") { lastNode = t; lastIdx = i; break; }
+  }
+  if (!lastNode) return false;
+  const range = document.createRange();
+  range.setStart(lastNode, lastIdx);
+  range.setEnd(lastNode, lastIdx + 1);
+  const end = [...range.getClientRects()].pop();
+  if (!end) return false;
+  const cs = getComputedStyle(p);
+  const box = p.getBoundingClientRect();
+  const scale = p.offsetWidth ? box.width / p.offsetWidth : 1;
+  const right = box.right - (parseFloat(cs.paddingRight) + parseFloat(cs.borderRightWidth)) * scale;
+  let w = (right - end.right) / scale;
+  if (al === "center") {
+    // do środka: przesunięcie o połowę — luka z prawej minus luka z lewej ostatniej linijki
+    range.selectNodeContents(p);
+    const line = [...range.getClientRects()].filter((r) => r.width && Math.abs(r.bottom - end.bottom) < 2);
+    const lineLeft = Math.min(...line.map((r) => r.left));
+    const oneLine = [...range.getClientRects()].every((r) => !r.width || Math.abs(r.bottom - end.bottom) < 2);
+    const left = box.left + (parseFloat(cs.paddingLeft) + parseFloat(cs.borderLeftWidth) + (oneLine ? parseFloat(cs.textIndent) || 0 : 0)) * scale;
+    w = ((right - end.right) - (lineLeft - left)) / scale;
+  }
+  // nie więcej niż te spacje mogą zająć (tekst odsunięty od krawędzi z innego powodu zostaje)
+  const cap = trail[0].length * parseFloat(cs.fontSize) * 0.7 + 1;
+  w = Math.min(w, cap * 2);
+  if (!(w > 0.5)) return false;
+  p.style.setProperty("--dwb-trail", `${Math.round(w * 100) / 100}px`);
+  return true;
+}
+
+// Przebieg bez znaków (same spacje, tabulatory albo pusty) nie buduje wysokości linijki — w Wordzie
+// liczą się tylko fragmenty z tekstem (wyrocznia: tabulator / spacja / pusty przebieg Calibri 28 pt
+// obok tekstu Arial 8 pt — linijka dalej 12,33 px; u nas 36–55 px). Podanie do dziekana: tabulator
+// w kroju akapitu (Calibri 11) przed podpisem 8 pt i spacja 10 pt w nagłówku podnosiły linijki.
+// Akapit z samych spacji też (jego linijkę daje znak akapitu — applyWordLineMetrics: wsOnly).
+function zeroWhitespaceRuns(host) {
+  if (!host) return 0;
+  let n = 0;
+  host.querySelectorAll("section.docx p").forEach((p) => { n += zeroWhitespaceRun(p); });
+  return n;
+}
+
+function zeroWhitespaceRun(p) {
+  // z tekstem — linijkę budują fragmenty z literami; z samych spacji — znak akapitu (applyWordLineMetrics)
+  const hasText = p.textContent.length > 0;
+  let n = 0;
+  p.querySelectorAll("span").forEach((sp) => {
+    // rysunek pływający (kotwica, positionAnchoredDrawings) nie należy do linijki — przebieg z samym
+    // logo w nagłówku też jej nie podnosi (Word); obiekt w tekście (inline) już tak
+    const anchorOnly = sp.querySelector("[data-dwb-anchor]") && ![...sp.querySelectorAll(EMPTY_P_CONTENT)].some((el) => !el.closest("[data-dwb-anchor]"));
+    const ws = hasText && !/\S/.test(sp.textContent) && !sp.matches("[contenteditable=false]") && (anchorOnly || !sp.querySelector(EMPTY_P_CONTENT));
+    if (ws !== sp.classList.contains("dwb-ws-run")) sp.classList.toggle("dwb-ws-run", ws);
+    // niewidoczny (bez podkreślenia, tła, kropek tabulatora): pudełko przypięte do góry linijki —
+    // zerowe pudełko na linii bazowej stoi w połowie wysokości swoich liter i duży krój dalej
+    // podnosił linijkę o kilka px; widoczny zostaje na linii bazowej (podkreślnik formularza)
+    // Tylko krój WIĘKSZY niż tekst akapitu — mniejszy i tak nie podnosi linijki, a przypięta spacja
+    // na łamaniu wiersza zostawiała kursor ↓ w poprzedniej linijce (test caret, punkt listy).
+    // Tabulator też — jego pudełko stoi wtedy od góry linijki w rozmiarze tekstu akapitu (app.css),
+    // więc dalej da się w nie kliknąć (kursor przed/za tabulatorem w Edycji, test tab-caret).
+    let hide = false;
+    const cs = ws && !anchorOnly ? getComputedStyle(sp) : null;
+    if (cs && parseFloat(cs.fontSize) > (parseFloat(p.style.fontSize) || parseFloat(getComputedStyle(p).fontSize)) + 0.5) {
+      hide = cs.textDecorationLine === "none" && /^(transparent|rgba\(0, 0, 0, 0\))$/.test(cs.backgroundColor) && !sp.matches(".tab-dot, .tab-line") && !sp.querySelector(".tab-dot, .tab-line");
+    }
+    if (hide !== sp.classList.contains("dwb-ws-hide")) sp.classList.toggle("dwb-ws-hide", hide);
+    if (ws) n++;
+  });
+  // rozłożony tabulator (inline-block, app.css) mierzy pudełko w rozmiarze AKAPITU, nie swoim
+  if (n) p.style.setProperty("--dwb-fs", getComputedStyle(p).fontSize);
+  else if (p.style.getPropertyValue("--dwb-fs")) p.style.removeProperty("--dwb-fs");
+  return n;
+}
+
 // Coś, co daje akapitowi linijkę mimo braku tekstu (obraz, wyspa, przerwa wiersza, pole).
 const EMPTY_P_CONTENT = "img, svg, canvas, video, object, iframe, br, input, select, textarea, [contenteditable=false]";
 
@@ -597,6 +731,12 @@ function keepMarkerFont(p) {
 // („Zapotrzebowanie”: Table Grid = Calibri, Normalny = Arial — Word pokazuje Arial, my Calibri).
 // Reguły tekstu stylów tabel i ustawień domyślnych dostają najniższą ważność (:where) — kolejność
 // w arkuszu (domyślne → style) zostaje, więc styl tabeli dalej wygrywa z domyślnymi.
+// To samo dla odstępów/interlinii AKAPITU: „table.docx_X p” (0,1,2) wygrywał ze stylem akapitu
+// „p.docx_normalny” / „.docx p, p.docx_normalny” (0,1,1) — w „Programie konserwacji” Normalny ma
+// interlinię 250, Word ją bierze w komórkach, my brali pojedynczą ze stylu tabeli (wiersze niższe).
+// Same ustawienia domyślne („.docx p” jako JEDYNY selektor reguły) → :where(.docx p) (0,0,0), styl
+// tabeli → :where(table.docx_X) p (0,0,1): domyślne < tabela < styl akapitu, jak w Wordzie (podanie:
+// Normalny bez odstępów — w komórkach pojedyncza interlinia stylu tabeli, nie 1,08 z domyślnych).
 // Wołać PO applyRunDefaultsToParagraphs (szuka „.docx span”).
 function lowerTableStylePrecedence(host) {
   if (!host) return 0;
@@ -613,6 +753,10 @@ function lowerTableStylePrecedence(host) {
         if (m) { changed = true; return `:where(${m[1]}) span`; }
         m = /^(table\.[\w-]+(?:[ >][^,]*)?) span$/.exec(sel); // styl tabeli (też warunkowy: pierwszy wiersz…)
         if (m && !/:where\(/.test(m[1])) { changed = true; return `:where(${m[1]}) span`; }
+        m = /^(table\.[\w-]+(?:[ >][^,]*)?) p$/.exec(sel); // akapit w stylu tabeli
+        if (m && !/:where\(/.test(m[1])) { changed = true; return `:where(${m[1]}) p`; }
+        m = /^(\.[\w-]+) p$/.exec(sel); // ustawienia domyślne akapitu — tylko reguła z tym jednym selektorem
+        if (m && parts.length === 1) { changed = true; return `:where(${m[1]} p)`; }
         return sel;
       });
       if (changed) { try { rule.selectorText = out.join(", "); n++; } catch (_) { /* nieobsługiwany selektor */ } }
@@ -672,11 +816,18 @@ function applyWordLineMetrics(host) {
     // interlinia × współczynnik kroju, gdzie rozmiar = fragmentu, jeśli akapit jakiś ma (np. z
     // kształtem, którego podgląd nie rysuje — linie do wypełnienia w „umowie najmu”), a bez
     // fragmentów = ZNAKU KOŃCA akapitu (w:pPr/w:rPr/w:sz, łatka 12).
-    const empty = !p.textContent.length && !p.querySelector(EMPTY_P_CONTENT);
-    const emptyRun = empty ? p.querySelector("span[style*='font-size']") : null;
+    // Akapit z samych spacji/tabulatorów = pusty: linijka w rozmiarze ZNAKU akapitu, nie spacji
+    // (wyrocznia: spacja 12 pt + znak 5 pt → 7,67 px; spacje 28 pt + znak 8 pt → 12 px; u nas
+    // 18 i 43 px). Prodziekan: pusty wiersz-odstęp przed „Bardzo proszę…” o 5 px za wysoki.
+    const wsOnly = p.textContent.length > 0 && !/\S/.test(p.textContent) && !p.querySelector(EMPTY_P_CONTENT);
+    const empty = wsOnly || (!p.textContent.length && !p.querySelector(EMPTY_P_CONTENT));
+    const emptyRun = empty && !wsOnly ? p.querySelector("span[style*='font-size']") : null;
     if (empty && !emptyRun && p.dataset.dwbMarkSize) p.style.fontSize = p.dataset.dwbMarkSize;
     if (empty && !emptyRun && p.dataset.dwbMarkFont) p.style.fontFamily = withGenericFontFallback(`"${p.dataset.dwbMarkFont}"`) || `"${p.dataset.dwbMarkFont}"`;
-    const key = `${p.className}|${p.style.lineHeight}`;
+    // + klasa tabeli: styl tabeli ma własną interlinię („table.docx_tablegrid p { line-height: 1 }”) —
+    // akapit bez klasy w komórce dostawał z pamięci mnożnik zwykłego akapitu (1,08 z docDefaults;
+    // podanie do dziekana: każda linijka w tabeli o 1–1,5 px za wysoka)
+    const key = `${p.className}|${p.style.lineHeight}|${p.closest("table")?.className || ""}`;
     let m = multiplierCache.get(key);
     if (m === undefined) {
       const prevFs = p.style.fontSize;

@@ -294,7 +294,11 @@ const dwbPrint = (() => {
     overlay.querySelector(".pp-print").textContent = t("ppPrint");
     overlay.querySelector(".pp-margins").textContent = t("ppMargins");
     const host = overlay.querySelector(".pp-host");
-    styles.forEach((s) => host.insertBefore(s, host.firstChild));
+    // w tej samej kolejności co w źródle: wstawianie każdego na początek odwracało arkusze i domyślne
+    // „.docx p { margin: 0 }” wygrywało z wcięciem listy (ta sama specyficzność) — punktory stopki
+    // w podglądzie i druku stały na marginesie (podanie do dziekana)
+    const first = host.firstChild;
+    styles.forEach((s) => host.insertBefore(s, first));
     const pages = overlay.querySelector(".pp-pages");
     result.sheets.forEach((s) => pages.appendChild(s.sheet));
     if (result.risky.length) {

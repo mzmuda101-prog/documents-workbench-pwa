@@ -130,6 +130,29 @@ function maybeShowAutoViewTip(layout) {
   toast(t("viewAutoTip", { view: t(layout === "mobile" ? "viewLayoutMobile" : "viewLayoutDesktop") }));
 }
 
+// ── Widok mobilny: nagłówek/stopka i linie kropek (panel Widok) ─────────────
+// Domyślnie jak Word na iPhonie (Widok mobilny): bez nagłówka i stopki, linie kropek łamane.
+// Przełączniki zostawiają do porównania dawny wygląd aplikacji (klasy na <html>, app.css).
+const REFLOW_HF_KEY = "dwb-reflow-hf-v1";
+const REFLOW_FILL_KEY = "dwb-reflow-fill-v1";
+function reflowPref(key) {
+  try { return localStorage.getItem(key) === "1"; } catch (_) { return false; }
+}
+function syncReflowOptions() {
+  rootEl.classList.toggle("dwb-reflow-show-hf", reflowPref(REFLOW_HF_KEY));
+  rootEl.classList.toggle("dwb-reflow-fill-one", reflowPref(REFLOW_FILL_KEY));
+}
+[["reflowShowHeaderFooter", REFLOW_HF_KEY], ["reflowFillOneLine", REFLOW_FILL_KEY]].forEach(([id, key]) => {
+  const box = document.getElementById(id);
+  if (!box) return;
+  box.checked = reflowPref(key);
+  box.addEventListener("change", () => {
+    try { localStorage.setItem(key, box.checked ? "1" : "0"); } catch (_) { /* tryb prywatny: tylko do odświeżenia */ }
+    syncReflowOptions();
+  });
+});
+syncReflowOptions();
+
 // ── zoom w obu widokach ─────────────────────────────────────────────────────
 function syncViewportClass() {
   rootEl.classList.toggle("is-mobile", isMobileViewport());
@@ -279,6 +302,13 @@ function applyMobileReflowLayout(host) {
   host.querySelectorAll("img").forEach((img) => {
     img.style.maxWidth = "100%";
     img.style.height = "auto";
+  });
+  // Linia do wypełnienia (akapit z samych kropek / podkreślników — formularze, podania): Word na
+  // iPhonie łamie ją na pełną linię i krótki ogonek. Z opcją „Linie kropek w jednej linijce”
+  // (panel Widok) — jedna linijka na szerokość ekranu, przycięta (app.css; tylko Czytanie).
+  host.querySelectorAll("p").forEach((p) => {
+    const t = p.textContent;
+    p.classList.toggle("dwb-fill-line", t.length >= 12 && /^[\s.…_\-–·]+$/.test(t) && /[.…_]{8}/.test(t));
   });
 
   host.querySelectorAll("p, div, span, td").forEach((el) => {

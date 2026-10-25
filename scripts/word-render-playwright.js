@@ -16,6 +16,11 @@
 // (6) Tabele: linia pozioma doliczana do wysokości wiersza (17 pt + 0,5 pt), pierwszy wiersz
 //     scalenia w pionie ≥ pierwsza linijka (reguła zmierzona w Wordzie), wiersz nagłówka
 //     (w:tblHeader) powtarzany na następnej stronie podglądu wydruku.
+// (7) Reguły zmierzone wyrocznią Worda 2026-10-25 (podania do dziekana): przebieg z samych spacji/
+//     tabulatorów nie podnosi linijki (Calibri 28 pt obok Arial 8 pt — 12,33 px), akapit z samych
+//     spacji = pusty (spacja 12 pt + znak 5 pt → 7,67 px), spacje na końcu akapitu do prawej wiszą,
+//     interlinia w komórce: domyślne < styl tabeli < styl akapitu, stopka dosunięta do dołu
+//     (w:footer od krawędzi), wcięcie stylu akapitu w stopce zostaje w podglądzie wydruku.
 // ENGINE=webkit (Safari/iPad).
 
 const pw = require("playwright");
@@ -84,6 +89,41 @@ async function fixtureTables() {
   const pair = (i) => `<w:tr><w:trPr><w:trHeight w:val="70" w:hRule="atLeast"/></w:trPr>${cell(`Scalona ${i}`, '<w:vMerge w:val="restart"/>', '<w:spacing w:before="70" w:after="0" w:line="188" w:lineRule="exact"/><w:rPr><w:sz w:val="16"/></w:rPr>')}</w:tr><w:tr><w:trPr><w:trHeight w:val="199" w:hRule="atLeast"/></w:trPr>${cell("", "<w:vMerge/>", '<w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/>')}</w:tr>`;
   const merged = `<w:tbl><w:tblPr><w:tblW w:w="4000" w:type="dxa"/>${mar}</w:tblPr><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid>${pair(1)}${pair(2)}</w:tbl>`;
   z.file("word/document.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${NS}><w:body>${merged}${P("Między tabelami")}${big}${P("Koniec")}${SECT()}</w:body></w:document>`);
+  return z.generateAsync({ type: "nodebuffer" });
+}
+
+// Trzeci dokument: reguły z wyroczni Worda (7). Strona A4, margines dolny 2 cm, stopka 0,5 cm od krawędzi.
+async function fixtureRules() {
+  const z = new JSZip();
+  z.file("[Content_Types].xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>');
+  z.file("_rels/.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+  z.file("word/_rels/document.xml.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdS" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rIdF" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>');
+  z.file("word/styles.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles ${NS}>
+    <w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="259" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>
+    <w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>
+    <w:style w:type="paragraph" w:styleId="Podwojna"><w:name w:val="Podwojna"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:line="480" w:lineRule="auto"/></w:pPr></w:style>
+    <w:style w:type="paragraph" w:styleId="Wciety"><w:name w:val="Wciety"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:after="0"/><w:ind w:left="720"/></w:pPr></w:style>
+    <w:style w:type="table" w:styleId="TS"><w:name w:val="TS"/><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:tblPr><w:tblCellMar><w:left w:w="0" w:type="dxa"/><w:right w:w="0" w:type="dxa"/></w:tblCellMar></w:tblPr></w:style>
+  </w:styles>`);
+  const A8 = '<w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="16"/>';
+  const C28 = '<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="56"/>';
+  const sp = '<w:spacing w:after="0" w:line="240" w:lineRule="auto"/>';
+  const R = (rPr, inner) => `<w:r><w:rPr>${rPr}</w:rPr>${inner}</w:r>`;
+  const cellTbl = (pPr, k) => `<w:tbl><w:tblPr><w:tblStyle w:val="TS"/><w:tblW w:w="5000" w:type="dxa"/></w:tblPr><w:tblGrid><w:gridCol w:w="5000"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w="5000" w:type="dxa"/></w:tcPr><w:p>${pPr ? `<w:pPr>${pPr}</w:pPr>` : ""}${R('<w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="20"/>', `${t(k + "a")}<w:br/>${t(k + "b")}`)}</w:p></w:tc></w:tr></w:tbl>`;
+  const body = [
+    `<w:p><w:pPr>${sp}</w:pPr>${R(A8, t("Wzorzec 1"))}</w:p>`,
+    `<w:p><w:pPr>${sp}</w:pPr>${R(C28, "<w:tab/>")}${R(A8, t("Po tabulatorze 28 pt"))}</w:p>`,
+    `<w:p><w:pPr>${sp}</w:pPr>${R(C28, t(" "))}${R(A8, t("Po spacji 28 pt"))}</w:p>`,
+    `<w:p><w:pPr>${sp}</w:pPr>${R(A8, t("Wzorzec 2"))}</w:p>`,
+    `<w:p><w:pPr>${sp}<w:rPr><w:sz w:val="10"/></w:rPr></w:pPr>${R('<w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="24"/>', t(" "))}</w:p>`,
+    `<w:p><w:pPr>${sp}</w:pPr>${R(A8, t("Wzorzec 3"))}</w:p>`,
+    `<w:p><w:pPr>${sp}<w:jc w:val="right"/></w:pPr>${R('<w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="24"/>', t("Do prawej   "))}</w:p>`,
+    cellTbl("", "T"), cellTbl('<w:pStyle w:val="Podwojna"/>', "S"),
+    `<w:p><w:pPr>${sp}</w:pPr>${R(A8, t("Koniec"))}</w:p>`,
+  ].join("");
+  z.file("word/footer1.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ${NS}><w:p><w:pPr><w:pStyle w:val="Wciety"/></w:pPr>${R(A8, t("Stopka wcięta"))}</w:p></w:ftr>`);
+  const sect = '<w:sectPr><w:footerReference xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" w:type="default" r:id="rIdF"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="567" w:footer="283" w:gutter="0"/></w:sectPr>';
+  z.file("word/document.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${NS} xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body}${sect}</w:body></w:document>`);
   return z.generateAsync({ type: "nodebuffer" });
 }
 
@@ -188,6 +228,49 @@ async function run() {
     return { head: h?.textContent || "", headBottom: h ? Math.round(h.getBoundingClientRect().bottom) : null, firstTop: rows[0] ? Math.round(rows[0].getBoundingClientRect().top) : null, first: rows[0]?.textContent };
   });
   check("podgląd wydruku: nagłówek tabeli powtórzony na stronie 2, wiersze pod nim", rep2.head === "Nagłówek tabeli" && rep2.firstTop >= rep2.headBottom - 1 && /^Wiersz \d+$/.test(rep2.first || ""), JSON.stringify(rep2));
+
+  // ── reguły z wyroczni Worda (trzeci dokument) ──
+  await page.evaluate(() => { if (window.dwbPrint?.isOpen()) dwbPrint.close(); if (typeof setDirtyState === "function") setDirtyState(false); });
+  const file3 = path.join(os.tmpdir(), `dwb-word-render-r-${process.pid}.docx`);
+  fs.writeFileSync(file3, await fixtureRules());
+  await page.setInputFiles("#fileInput", file3);
+  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && [...document.querySelectorAll(".docx-preview-host p")].some((p) => p.textContent === "Koniec"), null, { timeout: 20000 });
+  fs.rmSync(file3, { force: true });
+  await page.waitForTimeout(600);
+  const ru = await page.evaluate(() => {
+    const host = document.querySelector(".docx-preview-host");
+    const texts = []; const tw = document.createTreeWalker(host.querySelector("section.docx article"), NodeFilter.SHOW_TEXT); for (let n; (n = tw.nextNode());) texts.push(n);
+    const top = (txt) => { const n = texts.find((x) => x.data === txt); if (!n) return NaN; const r = document.createRange(); r.selectNodeContents(n); return r.getBoundingClientRect().top; };
+    const right = [...host.querySelectorAll("section.docx article p")].find((p) => p.textContent.startsWith("Do prawej"));
+    const rr = document.createRange(); rr.setStart(right.querySelector("span").firstChild, 0); rr.setEnd(right.querySelector("span").firstChild, 9);
+    const pr = right.getBoundingClientRect(), pcs = getComputedStyle(right);
+    return {
+      tab: top("Po tabulatorze 28 pt") - top("Wzorzec 1"), space: top("Po spacji 28 pt") - top("Po tabulatorze 28 pt"), next: top("Wzorzec 2") - top("Po spacji 28 pt"),
+      wsOnly: top("Wzorzec 3") - top("Wzorzec 2") - 12.25,
+      trail: (pr.right - parseFloat(pcs.paddingRight)) - rr.getBoundingClientRect().right,
+      table: top("Tb") - top("Ta"), style: top("Sb") - top("Sa"),
+    };
+  });
+  check("przebieg z samego tabulatora/spacji 28 pt nie podnosi linijki 8 pt (Word 12,33 px)", [ru.tab, ru.space, ru.next].every((v) => Math.abs(v - 12.3) < 0.7), JSON.stringify(ru));
+  check("akapit z samych spacji = pusty: linijka znaku akapitu 5 pt (Word 7,67 px)", Math.abs(ru.wsOnly - 7.67) < 0.7, JSON.stringify(ru));
+  check("spacje na końcu akapitu do prawej wiszą za marginesem (tekst przy prawej krawędzi)", Math.abs(ru.trail) < 1, JSON.stringify(ru));
+  check("komórka: styl tabeli wygrywa z domyślnymi (pojedyncza, Word 15,33 px)", Math.abs(ru.table - 15.33) < 0.7, JSON.stringify(ru));
+  check("komórka: styl akapitu wygrywa ze stylem tabeli (podwójna, Word 30,7 px)", Math.abs(ru.style - 30.7) < 1, JSON.stringify(ru));
+  await page.evaluate(() => dwbPrint.open());
+  await page.waitForSelector(".pp-sheet", { timeout: 20000 });
+  await page.waitForTimeout(500);
+  const ft = await page.evaluate(() => {
+    const sheet = document.querySelector(".pp-sheet");
+    const S = sheet.getBoundingClientRect();
+    const zoom = S.width / sheet.offsetWidth || 1;
+    const p = [...sheet.querySelectorAll(".pp-hf p")].find((x) => x.textContent === "Stopka wcięta");
+    const r = document.createRange(); r.selectNodeContents(p.querySelector("span").firstChild);
+    const b = r.getBoundingClientRect();
+    return { bottom: (b.bottom - S.top) / zoom, pageH: S.height / zoom, left: (b.left - S.left) / zoom, ml: parseFloat(getComputedStyle(p).marginLeft) };
+  });
+  // dół stopki ≈ strona − 0,5 cm (283 tw = 18,9 px); margines dolny 2 cm = 75,6 px
+  check("stopka dosunięta do dołu (dół tekstu ~0,5 cm od krawędzi, nie pod marginesem 2 cm)", ft.bottom > ft.pageH - 30 && ft.bottom <= ft.pageH - 15, JSON.stringify(ft));
+  check("podgląd wydruku: wcięcie stylu akapitu w stopce zostaje (36 pt = 48 px)", Math.abs(ft.ml - 48) < 0.6 && Math.abs(ft.left - (75.6 + 48)) < 2, JSON.stringify(ft));
 
   await browser.close();
   const real = errors.filter((e) => !/ResizeObserver/.test(e));

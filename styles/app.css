@@ -701,6 +701,11 @@ html.is-mobile .dwb-page-margin-guide { display: none; }
 .docx-preview-host p.docx-bullet-fixed.docx-bullet-l0 { list-style-type: disc !important; }
 .docx-preview-host p.docx-bullet-fixed.docx-bullet-l1 { list-style-type: circle !important; }
 .docx-preview-host p.docx-bullet-fixed.docx-bullet-l2 { list-style-type: square !important; }
+/* punktor na początku wysunięcia (fixDocxBulletRendering → dwb-bullet-hang), nie tuż przed tekstem */
+.docx-preview-host p.docx-bullet-fixed.dwb-bullet-hang { list-style-type: none !important; position: relative; }
+.docx-preview-host p.docx-bullet-fixed.dwb-bullet-hang::before { content: "\2022" !important; display: inline !important; position: absolute; left: calc(-1 * var(--dwb-hang)); white-space: pre; font-family: Arial, Helvetica, sans-serif !important; }
+.docx-preview-host p.docx-bullet-fixed.dwb-bullet-hang.docx-bullet-l1::before { content: "\25E6" !important; }
+.docx-preview-host p.docx-bullet-fixed.dwb-bullet-hang.docx-bullet-l2::before { content: "\25AA" !important; }
 
 /* Numbered / letter lists — ::before counter + negative text-indent misaligns text in edit mode */
 .docx-preview-host p.docx-list-numbered-fixed {
@@ -724,6 +729,18 @@ html.is-mobile .dwb-page-margin-guide { display: none; }
 .doc-canvas:not(.doc-reflow-mode) section.docx[data-dwb-v-align="bottom"] > article { margin-top: auto; margin-bottom: 0; }
 .doc-canvas:not(.doc-reflow-mode) section.docx[data-dwb-v-align]:not([style*="min-height"]) { min-height: 11in; } /* brak w:pgSz = Letter (jak Word) */
 .doc-canvas:not(.doc-reflow-mode) section.docx[data-dwb-v-align="both"] > article:not([style*="column-count"]) { flex: 1 0 auto; display: flex; flex-direction: column; justify-content: space-between; }
+/* Stopka jak w Wordzie: jej DÓŁ stoi na odległości stopki od krawędzi kartki (w:footer), treść
+   rośnie w górę. docx-preview daje stopce min-height = margines dolny − odległość, ale treść
+   przyklejał do góry tego pola — krótka stopka stała tuż pod tekstem (podanie: ~70 px za wysoko). */
+.docx-preview-host section.docx > footer { display: flex; flex-direction: column; justify-content: flex-end; }
+/* Puste znaczniki (zakładka „_GoBack”, początek/koniec komentarza/zakładki) nie budują linijki: pusty
+   inline w kroju z „.docx span” (Calibri 11 pt) podnosił akapit 8 pt z 13 do 18 px — Word ich nie liczy */
+.docx-preview-host section.docx p span.cm-mark:empty, .docx-preview-host section.docx p span[id]:empty:not([style]) { font-size: 0; line-height: 0; }
+/* Przebieg z samych spacji/tabulatorów nie podnosi linijki (docx-render-fixes.js → zeroWhitespaceRuns) */
+.docx-preview-host section.docx span.dwb-ws-run { line-height: 0 !important; }
+.docx-preview-host section.docx span.dwb-ws-hide { vertical-align: top !important; }
+/* Spacje na końcu akapitu do prawej/środka wiszą za marginesem (docx-render-fixes.js → hangTrailingSpaces) */
+.doc-canvas:not(.show-formatting-marks) .docx-preview-host p[style*="--dwb-trail"]::after { content: ""; margin-inline-start: calc(-1 * var(--dwb-trail)); }
 
 /* Menu tabeli: wyrównanie w komórce (siatka 3×3 jak w Wordzie) */
 .compose-cellalign-scope, .compose-shade-scope { margin: 2px 8px 6px; }
@@ -960,6 +977,10 @@ html.is-mobile .dwb-page-margin-guide { display: none; }
    dalej zawija się do szerokości ekranu (syncPageScaleBox). */
 html.dwb-zoom-transform .doc-canvas.doc-reflow-mode { zoom: 1; transform: scale(var(--doc-zoom, 1)); transform-origin: 0 0; }
 html.is-mobile .doc-zoom-shell { width: 100%; min-height: 0; }
+/* Widok mobilny (reflow): tekst ma się zawijać do ekranu, więc obszar nie rośnie do min-content
+   treści. WebKit liczy minimalną szerokość linii kropek „……” (pre-wrap) mimo overflow-wrap:
+   anywhere — podanie: kanwa 677 px przy ekranie 390, strona przewijała się w bok (iPhone). */
+html.dwb-reflow-text .doc-zoom-shell { min-width: 0; }
 .doc-canvas.doc-reflow-mode .docx-preview-host {
   width: 100% !important; max-width: none !important; margin: 0 !important;
   border-radius: 0; border: 0; box-shadow: none;
@@ -973,15 +994,36 @@ html.is-mobile .doc-zoom-shell { width: 100%; min-height: 0; }
 .doc-canvas.doc-reflow-mode .docx p,
 .doc-canvas.doc-reflow-mode .docx li {
   max-width: 100%;
+  /* samo „anywhere” — dawne „word-break: break-word” WebKit (iPhone) zamienia na overflow-wrap:
+     break-word, które NIE zmniejsza minimalnej szerokości: linie kropek „……” z formularzy
+     rozpychały kanwę do 677 px przy ekranie 390 (strona przewijała się w bok) */
   overflow-wrap: anywhere;
-  word-break: break-word;
 }
+/* przebiegi też: docx-preview daje „.docx span { overflow-wrap: break-word }”, które wygrywa z dziedziczeniem */
+.doc-canvas.doc-reflow-mode .docx p span, .doc-canvas.doc-reflow-mode .docx li span { overflow-wrap: anywhere; }
 .doc-canvas.doc-reflow-mode .docx table {
   display: block; max-width: 100%; overflow-x: auto;
 }
 .doc-canvas.doc-reflow-mode .docx img {
   max-width: 100% !important; height: auto !important;
 }
+/* Rysunek pływający bez oblewania (logo w nagłówku za tekstem): docx-preview daje kotwicy 0×0, a
+   max-width: 100% liczone od zera chowało obraz całkiem. Na wąskim ekranie i tak nachodziłby na
+   tekst — w Widoku mobilnym stoi w biegu tekstu jako blok, nad swoim akapitem. */
+.doc-canvas.doc-reflow-mode .docx [data-dwb-anchor*='"w":"wrapNone"'] {
+  position: static !important; width: auto !important; height: auto !important; margin: 2px 0 6px !important;
+}
+.doc-canvas.doc-reflow-mode .docx [data-dwb-anchor*='"w":"wrapNone"'] img { position: static !important; display: block; }
+/* linia kropek do wypełnienia: jedna linijka na szerokość ekranu — opcja w panelu Widok
+   (applyMobileReflowLayout + syncReflowOptions); domyślnie łamana jak w Wordzie na iPhonie */
+html.dwb-reflow-fill-one .doc-canvas.doc-reflow-mode.read-only .docx p.dwb-fill-line { white-space: nowrap; overflow: hidden; }
+html.dwb-reflow-fill-one .doc-canvas.doc-reflow-mode.read-only .docx p.dwb-fill-line span { white-space: pre; overflow-wrap: normal; }
+/* Widok mobilny (Czytanie) bez nagłówka i stopki — jak Word na iPhonie; opcja w panelu Widok */
+html:not(.dwb-reflow-show-hf) .doc-canvas.doc-reflow-mode.read-only .docx-preview-host section.docx > header,
+html:not(.dwb-reflow-show-hf) .doc-canvas.doc-reflow-mode.read-only .docx-preview-host section.docx > footer { display: none; }
+/* stopka w Widoku mobilnym (gdy pokazana; też w Edycji): pod tekstem, bez pola marginesu kartki */
+.doc-canvas.doc-reflow-mode .docx-preview-host section.docx > footer { margin: 12px 0 0 !important; min-height: 0 !important; justify-content: flex-start; }
+html:not(.dwb-reflow-show-hf) .doc-canvas.doc-reflow-mode .docx-preview-host section.docx > footer { display: none; }
 
 /* iPad (Safari w trybie „komputerowym”): przy CSS zoom z text-size-adjust 100%/auto dzieli
    wielkość liter przez zoom — przy 300% litery zostawały jak przy 100%, rosły tylko odstępy
@@ -2182,6 +2224,9 @@ p.dwb-exact span { line-height: 0; }
    pras”: 25 px zamiast 20 px na pozycję, strona więcej). Niskie pudełko od −0,2 em do 0,7 em
    mieści się w linijce przy każdej interlinii; kropki wypełnienia dalej na linii bazowej. */
 section.docx .docx-tab-laid { line-height: normal; height: 0.9em; vertical-align: -0.2em; }
+/* tabulator bez tekstu w przebiegu (zeroWhitespaceRuns): pudełko w rozmiarze tekstu akapitu, nie swoim */
+section.docx p[style*="--dwb-fs"] .docx-tab-laid.dwb-ws-run { height: calc(0.9 * var(--dwb-fs)); vertical-align: calc(-0.2 * var(--dwb-fs)); }
+section.docx p[style*="--dwb-fs"] .dwb-ws-hide .docx-tab-laid, section.docx p[style*="--dwb-fs"] .docx-tab-laid.dwb-ws-hide { vertical-align: top; }
 /* Tabulator to zagnieżdżony <span>, a docx-preview ma regułę „.docx span” z domyślną czcionką
    dokumentu (np. 10 pt) — wygrywała z dziedziczeniem po tekście: przy podpisie 6 pt tabulator
    miał 10 pt (i min-height 10 pt) i podnosił linijkę o 3 pt (dolny rząd kart z PDF zjeżdżał). */

@@ -73,7 +73,7 @@ async function renderDocxPreview(bytes, container, opts = {}) {
     ignoreFonts: false,
     breakPages: !mobileReflow,
     renderHeaders: true,
-    renderFooters: !mobileReflow,
+    renderFooters: true, // Widok mobilny: schowana CSS-em, opcja w panelu Widok (syncReflowOptions)
     renderFootnotes: true,
     renderEndnotes: true,
   });
@@ -88,6 +88,8 @@ async function renderDocxPreview(bytes, container, opts = {}) {
   if (typeof dwbListNum !== "undefined") await dwbListNum.apply(wrapper, bytes); // numery list jak w Wordzie
   fixPageAnchoredDrawings(wrapper);
   applyWordLineMetrics(wrapper); // odstępy między wierszami jak w Wordzie (też granice stron)
+  zeroWhitespaceRuns(wrapper); // spacje/tabulatory bez tekstu nie podnoszą linijki (Word)
+  hangTrailingSpaces(wrapper); // spacje na końcu akapitu do prawej/środka za marginesem (Word)
   if (!mobileReflow) {
     applyMergedCellFirstLine(wrapper); // scalenie w pionie: 1. wiersz ≥ pierwsza linijka (Word)
     addTableBorderHeights(wrapper); // linie tabeli ponad wysokość wiersza (Word)
@@ -98,7 +100,7 @@ async function renderDocxPreview(bytes, container, opts = {}) {
     // Czcionki osadzone w pliku (np. z PDF) docx-preview wczytuje z opóźnieniem — po ich
     // dojściu szerokości tekstu się zmieniają: liczymy tabulatory jeszcze raz.
     if (document.fonts) {
-      const again = () => { if (wrapper.isConnected) layoutTabStops(wrapper); };
+      const again = () => { if (wrapper.isConnected) { layoutTabStops(wrapper); hangTrailingSpaces(wrapper); } };
       document.fonts.ready.then(again).catch(() => {});
       let t = 0;
       const onDone = () => { clearTimeout(t); t = setTimeout(again, 60); };
