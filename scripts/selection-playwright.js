@@ -183,6 +183,20 @@ async function run() {
   await idle();
   check("zaznaczenie z tekstu do części tabeli: nic nie znika (komunikat)", JSON.stringify(await texts()) === JSON.stringify(orig) && await page.evaluate(() => [...document.querySelectorAll(".toast")].some((x) => /część tabeli/.test(x.textContent))));
 
+  // ── wklejenie na zaznaczenie z komórki do tekstu za tabelą: też odmowa (chaos, ziarno 23) ──
+  // dawniej wklejanie szło dalej mimo odmowy: przeglądarka sklejała akapit spod tabeli z komórką,
+  // plik miał o akapit więcej, a zakładka z przeniesionego akapitu dublowała się
+  await page.evaluate(() => document.querySelectorAll(".toast").forEach((x) => x.remove()));
+  await select(await idx("B2 komórka"), 3, await idx("Epsilon po tabeli"), 2);
+  await page.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.setData("text/plain", "   ");
+    docEditRoot().dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+  });
+  await idle();
+  check("wklejenie na zaznaczenie z komórki do tekstu za tabelą: nic się nie zmienia (komunikat)", JSON.stringify(await texts()) === JSON.stringify(orig) && await page.evaluate(() => [...document.querySelectorAll(".toast")].some((x) => /część tabeli/.test(x.textContent))), JSON.stringify((await texts()).slice(6, 12)));
+  await consistent("wklejenie na zaznaczenie z komórki do tekstu za tabelą");
+
   // ── Enter w miejsce zaznaczenia ──
   await select(iAlfa, 4, iBeta, 4);
   await page.keyboard.press("Enter");

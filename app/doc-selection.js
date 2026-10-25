@@ -108,6 +108,20 @@ const dwbSel = (() => {
     sel.addRange(r);
   }
 
+  // Dlaczego zaznaczenia kilku akapitów nie da się usunąć (klucz komunikatu) albo null.
+  function spanRefusal(info) {
+    const { a, b, ia, ib, start } = info;
+    if (ia === ib) return null;
+    if ((a.dataset.box || "") !== (b.dataset.box || "")) {
+      const ta = a.closest("td, th")?.closest("table");
+      const tb = b.closest("td, th")?.closest("table");
+      return ta && tb && (ta === tb || ta.contains(tb) || tb.contains(ta)) ? null : "selPartialTable";
+    }
+    const lock = a.dataset.lock || b.dataset.lock;
+    if (lock && !(atParaStart(a, start.node, start.offset) && !b.dataset.lock)) return lock;
+    return null;
+  }
+
   // Usunięcie zaznaczonego; zwraca akapit z kursorem albo null (odmowa — z wyjaśnieniem).
   function deleteSpan(info) {
     const { a, b, ia, ib, start, end } = info;
@@ -120,17 +134,11 @@ const dwbSel = (() => {
       onInlineParagraphInput();
       return a;
     }
+    const why = spanRefusal(info);
+    if (why) { toast(t(why), "info"); return null; }
     // komórki jednej tabeli: tekst znika, tabela zostaje (Word: Delete na zaznaczonych komórkach)
-    const ta = a.closest("td, th")?.closest("table");
-    const tb = b.closest("td, th")?.closest("table");
-    if ((a.dataset.box || "") !== (b.dataset.box || "")) {
-      const sameTable = ta && tb && (ta === tb || ta.contains(tb) || tb.contains(ta));
-      if (!sameTable) { toast(t("selPartialTable"), "info"); return null; }
-      return clearCells(info);
-    }
-    const lock = a.dataset.lock || b.dataset.lock;
+    if ((a.dataset.box || "") !== (b.dataset.box || "")) return clearCells(info);
     const wholeFirst = atParaStart(a, start.node, start.offset);
-    if (lock && !(wholeFirst && !b.dataset.lock)) { toast(t(lock), "info"); return null; }
     const crossSection = a.closest("section") !== b.closest("section");
 
     if (wholeFirst) {
@@ -372,6 +380,9 @@ const dwbSel = (() => {
     const range = selRange();
     const info = range && !range.collapsed ? analyze(range, { forInsert: true }) : null;
     if (!info?.rawCross) return true;
+    // odmowa przed zapisem kroku Cofnij — inaczej w historii zostawał pusty krok
+    const why = spanRefusal(info);
+    if (why) { toast(t(why), "info"); return false; }
     return !!asUndoStep("undoOpTyping", () => deleteSpan(info));
   }
 

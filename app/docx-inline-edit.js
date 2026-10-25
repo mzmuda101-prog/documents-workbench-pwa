@@ -867,8 +867,14 @@ function asUndoStep(label, fn) {
 // Całość = jeden krok cofania.
 function onDocPaste(e) {
   if (readOnlyMode) return;
-  // wklejenie w miejsce zaznaczenia kilku akapitów: najpierw usuwamy zaznaczenie (doc-selection.js)
-  if (typeof dwbSel !== "undefined") dwbSel.collapseForInsert();
+  // wklejenie w miejsce zaznaczenia kilku akapitów: najpierw usuwamy zaznaczenie (doc-selection.js).
+  // Odmowa (część tabeli i tekst obok niej — komunikat selPartialTable) = nic nie wklejamy, jak przy
+  // pisaniu. Dawniej wklejanie szło dalej na nietkniętym zaznaczeniu: przeglądarka sklejała akapit spod
+  // tabeli z komórką, plik tego nie umiał — o akapit więcej i zdublowana zakładka (chaos, ziarno 23).
+  if (typeof dwbSel !== "undefined" && dwbSel.collapseForInsert() === false) {
+    e.preventDefault();
+    return;
+  }
   const p = docCaretParagraph(e.target);
   if (!p) return;
   // nasz schowek (Kopiuj/Wytnij w tym dokumencie): formatowanie źródła, jak w Wordzie
