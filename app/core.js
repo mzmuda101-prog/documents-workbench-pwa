@@ -1,6 +1,27 @@
 // Core runtime: DOM refs, shared state, and base UI helpers.
 
-const APP_BUILD_VERSION = "20261024-05";
+// Pamięć przeglądarki zablokowana (Safari „Blokuj wszystkie pliki cookie”, część trybów
+// prywatnych): samo sięgnięcie po localStorage rzuca SecurityError, a odczyt ustawień
+// (język, motyw…) na starcie modułów wywracał cały interfejs. Wtedy podstawiamy pamięć
+// tylko na czas sesji (ustawienia nie przetrwają zamknięcia, ale aplikacja działa).
+(() => {
+  let ok = false;
+  try { window.localStorage.getItem("__wb_probe__"); ok = true; } catch (_) {}
+  if (!ok) {
+    const mem = new Map();
+    const shim = {
+      getItem: (k) => (mem.has(String(k)) ? mem.get(String(k)) : null),
+      setItem: (k, v) => { mem.set(String(k), String(v)); },
+      removeItem: (k) => { mem.delete(String(k)); },
+      clear: () => mem.clear(),
+      key: (i) => Array.from(mem.keys())[i] ?? null,
+      get length() { return mem.size; },
+    };
+    try { Object.defineProperty(window, "localStorage", { value: shim, configurable: true }); } catch (_) {}
+  }
+})();
+
+const APP_BUILD_VERSION = "20261025-01";
 
 const IS_LOW_POWER = (() => {
   try {

@@ -73,7 +73,12 @@ const INLINE_LOCK_TAGS = [
   ["ins", "lockTracked"], ["del", "lockTracked"], ["moveFrom", "lockTracked"], ["moveTo", "lockTracked"], ["rPrChange", "lockTracked"],
   ["drawing", "lockObject"], ["pict", "lockObject"], ["object", "lockObject"],
   ["fldChar", "lockField"], ["fldSimple", "lockField"],
+  // model akapitu zna tylko w:t / w:br / w:tab — zapis kasował twardy/miękki dywiz („e‑mail” → „email”)
+  ["noBreakHyphen", "lockSpecialChar"], ["softHyphen", "lockSpecialChar"], ["ptab", "lockSpecialChar"],
 ];
+// Równanie (m:oMath) — inna przestrzeń nazw: podgląd czyta je jako zwykły tekst, więc akapit
+// zawsze wyglądał na zmieniony, a zapis przesuwał równanie na początek i dublował jego treść.
+const MATH_NS = "http://schemas.openxmlformats.org/officeDocument/2006/math";
 // Linki (w:hyperlink) z samym tekstem są edytowalne — model akapitu je zachowuje
 // (docx-run-styles.js). Fragment tekstu GŁĘBIEJ niż akapit/link (np. w smartTag, customXml,
 // kontrolce) zapis akapitu by zgubił — taki akapit zostaje tylko do odczytu.
@@ -354,7 +359,8 @@ async function markLockedParagraphs(bytes) {
     // rysunki: wyspy, gdy się da (paragraphObjectLock) — wtedy blokują tylko inne powody
     const objLock = paragraphObjectLock(xp);
     const hit = INLINE_LOCK_TAGS.find(([tag, why]) => (why !== "lockObject" || objLock) && xp.getElementsByTagNameNS(W_NS, tag).length);
-    let lock = formParagraphLock(xp) || hit?.[1] || paragraphSymbolLock(xp) || paragraphPageBreakLock(xp) || paragraphNestedRunLock(xp) || paragraphCommentLock(xp); // pole formularza Worda: docx-forms.js
+    const mathLock = xp.getElementsByTagNameNS(MATH_NS, "oMath").length || xp.getElementsByTagNameNS(MATH_NS, "oMathPara").length ? "lockObject" : null;
+    let lock = formParagraphLock(xp) || hit?.[1] || mathLock || paragraphSymbolLock(xp) || paragraphPageBreakLock(xp) || paragraphNestedRunLock(xp) || paragraphCommentLock(xp); // pole formularza Worda: docx-forms.js
     stampLinkTips(xp, el);
     if (!lock && !stampParagraphLinks(xp, el)) lock = "lockLink";
     if (!lock) {

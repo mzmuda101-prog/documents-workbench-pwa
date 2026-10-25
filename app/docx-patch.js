@@ -155,6 +155,22 @@ function getParagraphListLevel(pEl) {
   return Number.isFinite(level) ? level : 0;
 }
 
+// Podział sekcji (w:sectPr) siedzi w znaczniku OSTATNIEGO akapitu sekcji. Usunięcie tego
+// akapitu przy sklejaniu kasowało cały podział: orientacja pozioma, marginesy, nagłówki
+// spływały do następnej sekcji. Przenosimy go do akapitu, który zostaje (jak Word).
+function carrySectPr(fromP, toP) {
+  const pPr = Array.from(fromP.childNodes).find((c) => c.namespaceURI === W_NS && c.localName === "pPr");
+  const sect = pPr && Array.from(pPr.childNodes).find((c) => c.namespaceURI === W_NS && c.localName === "sectPr");
+  if (!sect) return;
+  const doc = toP.ownerDocument;
+  let toPr = Array.from(toP.childNodes).find((c) => c.namespaceURI === W_NS && c.localName === "pPr");
+  if (!toPr) { toPr = doc.createElementNS(W_NS, "w:pPr"); toP.insertBefore(toPr, toP.firstChild); }
+  Array.from(toPr.childNodes).filter((c) => c.namespaceURI === W_NS && c.localName === "sectPr").forEach((c) => toPr.removeChild(c));
+  // sectPr stoi za resztą właściwości akapitu, przed pPrChange (kolejność ze schematu)
+  const change = Array.from(toPr.childNodes).find((c) => c.namespaceURI === W_NS && c.localName === "pPrChange");
+  toPr.insertBefore(sect, change || null);
+}
+
 function mergeParagraphInXml(xml, index, mergedRuns) {
   if (index <= 0) return { xml, count: 0 };
   const parser = new DOMParser();
@@ -166,6 +182,7 @@ function mergeParagraphInXml(xml, index, mergedRuns) {
   const joinAt = getParagraphText(prev).length;
   if (mergedRuns?.length) applyRunsToParagraphXml(prev, mergedRuns);
   else setParagraphText(prev, getParagraphText(prev) + getParagraphText(curr));
+  carrySectPr(curr, prev);
   curr.parentNode.removeChild(curr);
   return { xml: new XMLSerializer().serializeToString(doc), count: 1, joinAt };
 }
@@ -184,6 +201,8 @@ function deleteParagraphRangeInXml(xml, edit) {
   const drop = [];
   for (let n = edit.keep === "last" ? first : first.nextSibling; n && n !== last; n = n.nextSibling) drop.push(n);
   if (edit.keep !== "last") drop.push(last);
+  // znacznik ostatniego akapitu zostaje (jak w Wordzie) — z nim podział sekcji
+  if (edit.keep !== "last") carrySectPr(last, keep);
   drop.forEach((n) => n.parentNode.removeChild(n));
   applyRunsToParagraphXml(keep, edit.mergedRuns || []);
   return { xml: new XMLSerializer().serializeToString(doc), count: 1 };
@@ -315,7 +334,13 @@ function buildFindRegex(edit) {
     src = wordLike ? `(?<![\\p{L}\\p{N}])(?:${src})(?![\\p{L}\\p{N}])` : `(?<![\\p{L}\\p{N}_])(?:${src})(?![\\p{L}\\p{N}_])`;
     flags += "u"; // \p{…} wymaga u; bez „całych słów” u nie włączamy (psuje część zwykłych wzorców)
   }
-  try { return new RegExp(src, flags); } catch (_) { return null; }
+  try { return new RegExp(src, flags); } catch (_) {
+    // Wyrażenie poprawne bez flagi u (np. „\-”, „\:”) z „Całymi słowami” nie kompilowało się
+    // z wymuszonym u — szukanie po cichu dawało 0 trafień. Granice słów wtedy bez \p{…}.
+    if (!(wholeWord && edit.regex)) return null;
+    const W = "0-9A-Za-z_\\u00C0-\\u024F\\u0370-\\u03FF\\u0400-\\u04FF";
+    try { return new RegExp(`(?<![${W}])(?:${edit.find})(?![${W}])`, matchCase ? "g" : "gi"); } catch (__) { return null; }
+  }
 }
 
 // Word bez „Uwzględnij wielkość liter”: znalezione WIELKIMI → zamiana wielkimi („I” też),
@@ -349,6 +374,8 @@ function expandReplacement(repl, m, regex) {
     if (g === "$") return "$";
     if (g === "&") return m[0];
     const v = m[Number(g)];
+    // jak String.replace: „$10” przy jednej grupie = grupa 1 i znak „0”
+    if (v === undefined && g.length === 2 && m[Number(g[0])] !== undefined && g[0] !== "0") return m[Number(g[0])] + g[1];
     return v === undefined ? all : v;
   });
 }
@@ -366,6 +393,33 @@ function paragraphSearchText(p) {
   return paragraphTextNodes(p).map((t) => t.textContent || "").join("");
 }
 
+// Miejsca (przesunięcia w paragraphSearchText) z łamaniem wiersza / tabulatorem. Tekst do
+// szukania to same w:t, więc „bc” trafiało w „ab⏎cd”, a Zamień sklejało wiersze (aX⏎d).
+// Word takiego trafienia nie daje — odrzucamy dopasowania przechodzące przez te miejsca.
+function paragraphBreakOffsets(p) {
+  const out = [];
+  let pos = 0;
+  const walk = (node) => {
+    for (const n of Array.from(node.childNodes)) {
+      if (n.nodeType !== 1) continue;
+      if (n.namespaceURI === W_NS && n.localName === "p" && n !== p) continue; // akapit w polu tekstowym
+      if (n.namespaceURI === W_NS && n.localName === "t") { pos += (n.textContent || "").length; continue; }
+      if (n.namespaceURI === W_NS && (n.localName === "br" || n.localName === "cr" || n.localName === "tab") && n.parentNode?.localName === "r") { out.push(pos); continue; }
+      walk(n);
+    }
+  };
+  walk(p);
+  return out;
+}
+
+function findParagraphMatches(p, re, text = paragraphSearchText(p)) {
+  const matches = findAllMatches(text, re);
+  if (!matches.length) return matches;
+  const breaks = paragraphBreakOffsets(p);
+  if (!breaks.length) return matches;
+  return matches.filter(({ start, end }) => !breaks.some((b) => b > start && b < end));
+}
+
 // Zamienia wybrane trafienia w akapicie. pick(k) — czy zamienić k-te trafienie w akapicie.
 // Tekst zastępczy trafia do fragmentu, w którym zaczyna się trafienie (bierze jego format —
 // jak w Wordzie); z kolejnych fragmentów znika zamieniona część.
@@ -376,7 +430,7 @@ function replaceInParagraphXml(p, re, edit, pick) {
   const starts = [];
   let acc = 0;
   texts.forEach((s) => { starts.push(acc); acc += s.length; });
-  const matches = findAllMatches(texts.join(""), re);
+  const matches = findParagraphMatches(p, re, texts.join(""));
   let count = 0;
   for (let k = matches.length - 1; k >= 0; k--) { // od końca: wcześniejsze przesunięcia się nie zmieniają
     if (!pick(k)) continue;
@@ -541,8 +595,9 @@ function scanFindMatchesInDoc(doc, edit, scope, textOverride) {
   const out = [];
   paras.forEach((p, paraIndex) => {
     if (inScope && !inScope.has(paraIndex)) return;
-    const text = textOverride?.has(paraIndex) ? textOverride.get(paraIndex) : paragraphSearchText(p);
-    findAllMatches(text, re).forEach(({ start, end }, occurrence) => {
+    const overridden = textOverride?.has(paraIndex);
+    const text = overridden ? textOverride.get(paraIndex) : paragraphSearchText(p);
+    (overridden ? findAllMatches(text, re) : findParagraphMatches(p, re, text)).forEach(({ start, end }, occurrence) => {
       out.push({ paraIndex, occurrence, start, end, text: text.slice(start, end), context: text });
     });
   });
@@ -592,7 +647,7 @@ function replaceInDocParagraphs(doc, re, edit, scope, opts = {}) {
     if (target) { count += replaceInParagraphXml(p, re, edit, (k) => k === target.occurrence); break; }
     if (max === Infinity && !skip) { count += replaceInParagraphXml(p, re, edit, () => true); continue; }
     // dawne API: pomiń `skip` pierwszych, zamień do `max` — liczone w kolejności dokumentu
-    const n = findAllMatches(paragraphSearchText(p), re).length;
+    const n = findParagraphMatches(p, re).length;
     const chosen = new Set();
     for (let k = 0; k < n && done < max; k++) {
       if (skip > 0) { skip--; continue; }
@@ -627,7 +682,7 @@ async function countInOtherParts(bytes, edit) {
   let total = 0;
   for (const name of Object.keys(zip.files).filter((n) => /^word\/(header\d*|footer\d*|footnotes|endnotes)\.xml$/.test(n))) {
     const doc = new DOMParser().parseFromString(await zip.file(name).async("string"), "application/xml");
-    Array.from(doc.getElementsByTagNameNS(W_NS, "p")).forEach((p) => { total += findAllMatches(paragraphSearchText(p), re).length; });
+    Array.from(doc.getElementsByTagNameNS(W_NS, "p")).forEach((p) => { total += findParagraphMatches(p, re).length; });
   }
   return total;
 }

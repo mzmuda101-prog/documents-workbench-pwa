@@ -35,10 +35,14 @@
   // ------------------------------------------------------------------ okno postępu
   let dlg = null;
   function ensureDialog() {
+    // teksty okna wstawiane raz, przy budowie — po zmianie języka (zamknięte okno) budujemy od nowa
+    const lang = typeof currentLang === "string" ? currentLang : "pl";
+    if (dlg && dlg.dataset.lang !== lang && !dlg.open) { dlg.remove(); dlg = null; }
     if (dlg) return dlg;
     const d = document.createElement("dialog");
     d.className = "pdfconv-dialog";
     d.id = "pdfConvDialog";
+    d.dataset.lang = lang;
     d.setAttribute("aria-labelledby", "pdfConvTitle");
     d.innerHTML = `
       <div class="pdfconv-inner">
@@ -82,7 +86,11 @@
     if (text != null) d.querySelector("#pdfConvPhase").textContent = text;
   }
 
+  // Anulowanie przy pytaniu o hasło zostawiało stary listener „submit” — przy następnym
+  // PDF-ie czyścił pole przed nowym i wysyłał "" („Hasło niepoprawne” mimo dobrego hasła).
+  let dropPendingPassword = null;
   function askPassword(wrong) {
+    dropPendingPassword?.();
     const d = ensureDialog();
     const form = d.querySelector("#pdfConvPass");
     const input = d.querySelector("#pdfConvPassInput");
@@ -95,9 +103,11 @@
         e.preventDefault();
         form.removeEventListener("submit", onSubmit);
         form.classList.add("hidden");
+        dropPendingPassword = null;
         resolve(input.value);
         input.value = "";
       };
+      dropPendingPassword = () => { form.removeEventListener("submit", onSubmit); dropPendingPassword = null; };
       form.addEventListener("submit", onSubmit);
     });
   }
@@ -693,6 +703,10 @@
       if (typeof log === "function") log("PDF → DOCX: " + msg, "error");
       return false;
     } finally {
+      // błąd konwersji (uszkodzony PDF, wyjątek w convertPdf) też zwalnia worker pdf.js i dokument —
+      // dawniej tylko sukces i Anuluj, a każda nieudana próba zostawiała je w pamięci (iPhone)
+      try { loadingTask?.destroy(); } catch (_) {}
+      dropPendingPassword?.();
       cancelBtn.removeEventListener("click", onCancel);
       busy = false;
       currentSignal = null;

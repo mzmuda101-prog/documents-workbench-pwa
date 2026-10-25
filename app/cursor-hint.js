@@ -589,9 +589,30 @@ window.MateuszCursorHint = (() => {
     const bindTargets = () => controller.setupCursorHint(document.querySelectorAll(selector));
     bindTargets(); // podepnij elementy istniejące przy starcie
     if ("MutationObserver" in window) {
-      // Obserwuj zmiany w DOM — np. dynamicznie dodawane przyciski w panelach
-      const observer = new MutationObserver(bindTargets);
-      observer.observe(document.body, { childList: true, subtree: true });
+      // Obserwuj zmiany w DOM — np. dynamicznie dodawane przyciski w panelach. Tylko DODANE
+      // węzły (i elementy, które dostały data-hint), zbiorczo raz na klatkę: dawniej każda zmiana
+      // (litera w dokumencie, przewinięcie wirtualnej tabeli) przeszukiwała całą stronę.
+      const pending = new Set();
+      let raf = 0;
+      const flush = () => {
+        raf = 0;
+        const found = [];
+        pending.forEach((n) => {
+          if (!n.isConnected) return;
+          if (n.matches(selector)) found.push(n);
+          n.querySelectorAll(selector).forEach((el) => found.push(el));
+        });
+        pending.clear();
+        if (found.length) controller.setupCursorHint(found);
+      };
+      const observer = new MutationObserver((muts) => {
+        for (const m of muts) {
+          if (m.type === "attributes") pending.add(m.target);
+          else m.addedNodes.forEach((n) => { if (n.nodeType === 1) pending.add(n); });
+        }
+        if (pending.size && !raf) raf = requestAnimationFrame(flush);
+      });
+      observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-hint", "data-hint-pl", "data-hint-en"] });
     }
     return controller;
   }

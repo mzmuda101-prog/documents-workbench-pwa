@@ -554,7 +554,11 @@ function runFromOriginal(doc, run, originals) {
     for (const [k, tags] of Object.entries(TOGGLE_TAGS)) {
       const want = k === "color" ? parseCssColorToWordHex(run.color) || null : k === "highlight" ? normHighlight(run.highlight) : k === "vertAlign" ? normVertAlign(run.vertAlign) : run[k];
       const had = k === "color" ? parseCssColorToWordHex(near.style.color) || null : k === "highlight" ? normHighlight(near.style.highlight) : k === "vertAlign" ? normVertAlign(near.style.vertAlign) : near.style[k];
-      if ((k === "color" || k === "highlight" || k === "vertAlign") ? (want || "") === (had || "") : !!want === !!had) continue;
+      // pogrubienie/kursywa trójstanowo jak w runsStyleEqual: jawne „wyłączone” (false) ≠ nieustawione —
+      // inaczej Ctrl+B w pogrubionym nagłówku zostawiało w pliku rPr bez w:b w:val="0" i Word pogrubiał dalej
+      const eq = (k === "color" || k === "highlight" || k === "vertAlign") ? (want || "") === (had || "")
+        : (k === "bold" || k === "italic") ? tri(want) === tri(had) : !!want === !!had;
+      if (eq) continue;
       Array.from(rPr.childNodes).filter((c) => tags.includes(c.localName)).forEach((c) => rPr.removeChild(c));
       if (freshPr) Array.from(freshPr.childNodes).filter((c) => tags.includes(c.localName)).forEach((c) => rPr.appendChild(c.cloneNode(true)));
     }

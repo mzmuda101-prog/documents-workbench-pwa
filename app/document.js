@@ -219,7 +219,8 @@ async function renderCurrentDocument() {
     documentStructure = analyzeDocumentDom(docCanvasEl);
     renderStructurePanel(documentStructure);
     if (typeof semanticDocumentRendered === "function") semanticDocumentRendered();
-    if (searchQueryEl?.value.trim()) runDocumentSearch();
+    // find-replace-workbench.js jest leniwy — bez niego wyjątek zatrzymałby włączenie edycji poniżej
+    if (searchQueryEl?.value.trim() && typeof runDocumentSearch === "function") runDocumentSearch();
     setupInlineEditingAfterRender();
     if (typeof restoreFormatMarks === "function") restoreFormatMarks();
     if (typeof syncMobileDocZoomAfterRender === "function") syncMobileDocZoomAfterRender();

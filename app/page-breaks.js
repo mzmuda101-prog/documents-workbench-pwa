@@ -623,7 +623,7 @@ const dwbPageBreaks = (() => {
     // doszedł później, zmiana wyrównania — przelicza granice, bez wyliczania, które funkcje to robią.
     // Własne odstępy nie są obserwowane; „nic się nie zmieniło” kończy liczenie bez dotykania DOM.
     const sizes = new WeakMap(); // blok → ostatnia wysokość (pierwszy pomiar to nie zmiana)
-    const watched = new WeakSet();
+    const watched = new Set(); // obserwowane bloki — odpięte od DOM zwalniamy (unobserve) w watchBlocks
     const blockRO = new ResizeObserver((entries) => {
       let changed = false;
       for (const e of entries) {
@@ -634,6 +634,9 @@ const dwbPageBreaks = (() => {
       if (changed) schedule(150);
     });
     const watchBlocks = () => {
+      // ResizeObserver trzyma obserwowane elementy mocno: bez unobserve każde przerysowanie
+      // (Cofnij, wklejenie obiektu, usunięcie przez sekcje) zostawiało w pamięci całe stare drzewo
+      watched.forEach((b) => { if (!b.isConnected) { blockRO.unobserve(b); watched.delete(b); } });
       docCanvasEl.querySelectorAll(".docx-preview-host section.docx > article > *").forEach((b) => {
         if (!watched.has(b) && !ours(b)) { watched.add(b); blockRO.observe(b); }
       });

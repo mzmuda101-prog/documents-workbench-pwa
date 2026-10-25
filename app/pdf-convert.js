@@ -589,7 +589,12 @@
       const text = joinGlyphs(g0);
       const center = (x0 + x1) / 2;
       const align = Math.abs(center - W / 2) < 12 ? "center" : x1 > W - m.mr - 8 && x0 > W / 2 ? "right" : "left";
-      const font = g0[0].font.family;
+      // jak esc(clean()) w pdf-docx.js: nazwa kroju z PDF-a i tekst stopki mogą mieć „"”, „&”,
+      // znaki sterujące albo samotne surogaty — bez tego header1/footer1.xml był niepoprawny
+      const xmlSafe = (v) => String(v ?? "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g, "")
+        .replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, "")
+        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+      const font = xmlSafe(g0[0].font.family);
       const color = g0[0].color && g0[0].color !== "000000" ? g0[0].color : null;
       const rPr = `<w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:cs="${font}"/>${color ? `<w:color w:val="${color.toUpperCase()}"/>` : ""}<w:sz w:val="${Math.round(size * 2)}"/><w:szCs w:val="${Math.round(size * 2)}"/></w:rPr>`;
       let runs = "";
@@ -600,7 +605,7 @@
           const field = +part === pageNo ? "PAGE" : "NUMPAGES";
           runs += `<w:r>${rPr}<w:fldChar w:fldCharType="begin"/></w:r><w:r>${rPr}<w:instrText xml:space="preserve"> ${field} </w:instrText></w:r><w:r>${rPr}<w:fldChar w:fldCharType="separate"/></w:r><w:r>${rPr}<w:t>${part}</w:t></w:r><w:r>${rPr}<w:fldChar w:fldCharType="end"/></w:r>`;
         } else {
-          runs += `<w:r>${rPr}<w:t xml:space="preserve">${part.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</w:t></w:r>`;
+          runs += `<w:r>${rPr}<w:t xml:space="preserve">${xmlSafe(part)}</w:t></w:r>`;
         }
       }
       const L1 = size * 1.17;

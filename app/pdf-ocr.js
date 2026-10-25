@@ -37,6 +37,7 @@
   const pool = []; // { w, busy, ready }
   const waiters = [];
   let poolSize = 1;
+  let poolGen = 0; // terminate() podbija — wątki tworzone w trakcie są wtedy od razu zamykane
 
   async function createOne() {
     const v = typeof lazyAssetVersion === "function" ? lazyAssetVersion() : "1";
@@ -72,12 +73,19 @@
       if (pool.length < poolSize) {
         const slot = { w: null, busy: true, ready: false };
         pool.push(slot);
+        const gen = poolGen;
         try {
           slot.w = await createOne();
         } catch (e) {
-          pool.splice(pool.indexOf(slot), 1);
+          if (pool.includes(slot)) pool.splice(pool.indexOf(slot), 1);
           waiters.splice(0).forEach((r) => r());
           throw e;
+        }
+        // terminate() w trakcie wczytywania silnika (Anuluj przy „Wczytywanie OCR…”) zabrał slot
+        // z puli — świeży wątek nie miałby kto zamknąć (WASM + dane języka zostawały w pamięci)
+        if (gen !== poolGen) {
+          try { await slot.w.terminate(); } catch (_) { /* już zamknięty */ }
+          throw new (window.DWPdf?.CancelledError || Error)("cancelled");
         }
         slot.ready = true;
         return slot;
@@ -110,6 +118,7 @@
   }
 
   async function terminate() {
+    poolGen++;
     const all = pool.splice(0);
     waiters.splice(0).forEach((r) => r());
     progressCb = null;

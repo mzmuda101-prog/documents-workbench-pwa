@@ -905,9 +905,19 @@ const appFrame = (() => {
     document.body.classList.remove("drag-active");
     if (e.defaultPrevented || !hasFiles(e)) return; // pole w panelu obsłużyło już upuszczenie
     e.preventDefault();
-    const file = e.dataTransfer.files?.[0];
+    const files = Array.from(e.dataTransfer.files || []);
+    const file = files[0];
     if (!file) return;
     const handle = droppedFileHandle(e); // synchronicznie, zanim zdarzenie się skończy
+    // Karty dokumentów (open-docs.js): bieżący dokument zostaje w swojej karcie, więc bez
+    // pytania „odrzucić zmiany?”; upuszczone kilka plików — każdy w swojej karcie (jak w polu panelu)
+    if (typeof openDocumentFiles === "function") {
+      (async () => {
+        const h = files.length === 1 ? await handle : null;
+        openDocumentFiles(files.map((f, i) => ({ file: f, handle: i === 0 && h?.kind === "file" ? h : undefined })));
+      })();
+      return;
+    }
     if (hasUnsavedChanges && !window.confirm(t("closeDocWarn"))) return;
     ingestDroppedFile(file, handle);
   });

@@ -370,10 +370,12 @@ const composeUi = (() => {
       const items = Array.from(el.querySelectorAll("button"));
       const i = items.indexOf(document.activeElement);
       if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closePop(true); }
-      else if (e.target.closest("input, select, textarea")) { /* pole formularza — strzałki dla pola */ }
+      // pole formularza (też edytor komentarza .cf-rich) — strzałki przesuwają kursor w polu
+      else if (e.target.closest("input, select, textarea, [contenteditable]")) { /* pole formularza — strzałki dla pola */ }
       else if (e.key === "ArrowDown" || e.key === "ArrowRight") { e.preventDefault(); items[(i + 1) % items.length]?.focus(); }
       else if (e.key === "ArrowUp" || e.key === "ArrowLeft") { e.preventDefault(); items[(i - 1 + items.length) % items.length]?.focus(); }
-      else if (e.key === "Tab") closePop();
+      // w okienku z polami Tab chodzi między polami — zamknięcie gubiłoby wpisany tekst
+      else if (e.key === "Tab" && !el.querySelector("input, select, textarea, [contenteditable]")) closePop();
     });
     document.body.appendChild(el);
     pop = { el, anchor };
@@ -1908,17 +1910,23 @@ const composeUi = (() => {
   async function prepareImage(file) {
     const type = (file.type || "").toLowerCase();
     let bitmap;
+    let url = null; // zapasowa droga (np. HEIC w Safari) — adres zwalniany zaraz po odczycie,
+    // a ImageBitmap zamykany: inaczej każdy wstawiony obraz trzymał w pamięci cały plik
     try { bitmap = await createImageBitmap(file); } catch (_) {
-      bitmap = await new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = reject;
-        img.src = URL.createObjectURL(file);
-      });
+      url = URL.createObjectURL(file);
+      try {
+        bitmap = await new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = url;
+        });
+      } finally { URL.revokeObjectURL(url); }
     }
     const w0 = bitmap.width; const h0 = bitmap.height;
     const keep = { "image/png": "png", "image/jpeg": "jpeg", "image/jpg": "jpeg", "image/gif": "gif" }[type];
     if (keep && file.size <= IMG_KEEP_BYTES && Math.max(w0, h0) <= IMG_MAX_PX) {
+      bitmap.close?.();
       return { bytes: new Uint8Array(await file.arrayBuffer()), ext: keep === "jpeg" ? "jpeg" : keep, mime: keep === "gif" ? "image/gif" : `image/${keep}`, width: w0, height: h0 };
     }
     const k = Math.min(1, IMG_MAX_PX / Math.max(w0, h0));
@@ -1926,6 +1934,7 @@ const composeUi = (() => {
     const canvas = document.createElement("canvas");
     canvas.width = w; canvas.height = h;
     canvas.getContext("2d").drawImage(bitmap, 0, 0, w, h);
+    bitmap.close?.();
     const png = type === "image/png" || type === "image/gif" || type === "image/webp" || type === "image/svg+xml";
     const mime = png ? "image/png" : "image/jpeg";
     const blob = await new Promise((resolve) => canvas.toBlob(resolve, mime, 0.86));

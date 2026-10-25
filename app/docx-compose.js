@@ -508,8 +508,10 @@ function applyHruleInXml(xml, edit) {
 }
 
 // ── nowy dokument ────────────────────────────────────────────────────────────
+// sanitizeXmlText: znaki sterujące (np. \x0B, który Office wkłada do schowka zamiast łamania
+// wiersza) robią z części niepoprawny XML — Word nie otwiera pliku
 function composeXmlText(s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return sanitizeXmlText(String(s)).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 // Akapit z prostego opisu: { text, style, align, bold, size, pageBreak }.

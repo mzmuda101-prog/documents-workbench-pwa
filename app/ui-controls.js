@@ -205,10 +205,22 @@ async function saveDocumentAs() {
     toast(t("noFileToSave"), "warning");
     return;
   }
-  const bytes = await buildDocumentForSave();
-  const disk = typeof dwbTrack !== "undefined" ? await dwbTrack.bytesForDisk(bytes) : bytes; // z poprawkami przy śledzeniu
   const base = (currentFileName || "document.docx").replace(/\.docx$/i, "");
   const suggested = `${base}_edited.docx`;
+  // Budowa pliku PO oknie wyboru: na dużym dokumencie trwa sekundy, a showSaveFilePicker
+  // wymaga świeżego gestu użytkownika — inaczej SecurityError i ciche przejście na prompt().
+  let bytes, disk;
+  const build = async () => {
+    try {
+      bytes = await buildDocumentForSave();
+      disk = typeof dwbTrack !== "undefined" ? await dwbTrack.bytesForDisk(bytes) : bytes; // z poprawkami przy śledzeniu
+      return true;
+    } catch (e) {
+      log(String(e?.message || e), "error");
+      toast(t("saveFailed"), "error");
+      return false;
+    }
+  };
 
   if (window.showSaveFilePicker) {
     try {
@@ -219,6 +231,7 @@ async function saveDocumentAs() {
           accept: { "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"] },
         }],
       });
+      if (!(await build())) return;
       const writable = await handle.createWritable();
       await writable.write(disk);
       await writable.close();
@@ -231,8 +244,7 @@ async function saveDocumentAs() {
       await refreshInlineEditBaseline(originalFileBytes);
       setDirtyState(false);
       toast(t("saveDone"), "success");
-      document.dispatchEvent(new CustomEvent("dwb:saved"));
-    document.dispatchEvent(new CustomEvent("dwb:saved")); // strażnik spójności (self-check.js)
+      document.dispatchEvent(new CustomEvent("dwb:saved")); // strażnik spójności (self-check.js)
       if (typeof closeMobileSidebarIfOpen === "function") closeMobileSidebarIfOpen();
       return;
     } catch (e) {
@@ -240,6 +252,7 @@ async function saveDocumentAs() {
     }
   }
 
+  if (!bytes && !(await build())) return;
   const nameRaw = window.prompt(t("saveAsPrompt"), suggested);
   if (!nameRaw) return;
   const name = nameRaw.toLowerCase().endsWith(".docx") ? nameRaw : `${nameRaw}.docx`;
@@ -366,7 +379,10 @@ async function hardRefreshApp() {
     }
     if ("caches" in window) {
       const keys = await caches.keys();
-      await Promise.all(keys.filter((key) => key.startsWith("docs-wb-")).map((key) => caches.delete(key).catch(() => false)));
+      // tylko kod aplikacji: kroje dokumentów (pobrane, mają przetrwać aktualizacje — sw.js) i plik
+      // udostępniony do apki, jeszcze nieotwarty (launch-files.js), zostają
+      const keepCaches = new Set(["docs-wb-docfonts-1", "docs-wb-share"]);
+      await Promise.all(keys.filter((key) => key.startsWith("docs-wb-") && !keepCaches.has(key)).map((key) => caches.delete(key).catch(() => false)));
     }
   } catch {
     // cache/SW nie dały się posprzątać — i tak przeładuj, toast już poszedł

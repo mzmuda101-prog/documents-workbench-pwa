@@ -1,4 +1,4 @@
-const CACHE_VERSION = "20261024-05";
+const CACHE_VERSION = "20261025-01";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
@@ -156,7 +156,11 @@ function cacheNameForUrl(url) {
 // uśpiony — i tak trafią do cache przy pierwszym użyciu (handler fetch niżej).
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(APP_CACHE).then((cache) => cache.addAll(SHELL_ASSETS)).catch(() => {})
+    // Bez .catch: addAll jest „wszystko albo nic” — połknięty błąd (chwila bez sieci)
+    // instalował wersję z PUSTĄ powłoką, a activate kasował poprzedni cache, więc
+    // offline aplikacja już nie wstawała. Nieudana instalacja zostawia starą wersję
+    // i przeglądarka spróbuje ponownie przy następnym wejściu.
+    caches.open(APP_CACHE).then((cache) => cache.addAll(SHELL_ASSETS))
   );
 });
 

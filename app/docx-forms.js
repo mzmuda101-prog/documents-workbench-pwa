@@ -433,7 +433,7 @@ function fillSdtField(sdt, f, val) {
     return on ? "true" : "false";
   }
   if (f.kind === "dropdown" || f.kind === "combo") {
-    const s = String(val ?? "");
+    const s = sanitizeXmlText(String(val ?? "")); // wpis w polu kombi może przyjść ze schowka (\x0B z Office)
     const opt = f.options.find((o) => o.value === s) || f.options.find((o) => o.text === s);
     if (f.kind === "dropdown" && !opt) return null;
     const list = ffKid(sdtPr, f.kind === "dropdown" ? "dropDownList" : "comboBox");
