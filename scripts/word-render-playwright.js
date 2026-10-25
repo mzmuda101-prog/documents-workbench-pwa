@@ -20,7 +20,8 @@
 //     tabulatorów nie podnosi linijki (Calibri 28 pt obok Arial 8 pt — 12,33 px), akapit z samych
 //     spacji = pusty (spacja 12 pt + znak 5 pt → 7,67 px), spacje na końcu akapitu do prawej wiszą,
 //     interlinia w komórce: domyślne < styl tabeli < styl akapitu, stopka dosunięta do dołu
-//     (w:footer od krawędzi), wcięcie stylu akapitu w stopce zostaje w podglądzie wydruku.
+//     (w:footer od krawędzi), wcięcie stylu akapitu w stopce zostaje w podglądzie wydruku;
+//     symbol w kroju zastępczym Worda (✓ — Segoe UI Symbol) podnosi swoją linijkę.
 // ENGINE=webkit (Safari/iPad).
 
 const pw = require("playwright");
@@ -122,6 +123,8 @@ async function fixtureRules() {
     `<w:p><w:pPr>${sp}<w:rPr><w:sz w:val="10"/></w:rPr></w:pPr>${R('<w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="24"/>', t(" "))}</w:p>`,
     `<w:p><w:pPr>${sp}</w:pPr>${R(A8, t("Wzorzec 3"))}</w:p>`,
     `<w:p><w:pPr>${sp}<w:jc w:val="right"/></w:pPr>${R('<w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="24"/>', t("Do prawej   "))}</w:p>`,
+    // symbol w kroju zastępczym Worda (Segoe UI Symbol) podnosi linijkę, strzałka z Ariala nie
+    ...["Wzorzec 4", "Znak ✓ tutaj", "Wzorzec 5", "Strzałka → tutaj", "Wzorzec 6"].map((x) => `<w:p><w:pPr><w:spacing w:after="0" w:line="276" w:lineRule="auto"/></w:pPr>${R('<w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="22"/>', t(x))}</w:p>`),
     cellTbl("", "T"), cellTbl('<w:pStyle w:val="Podwojna"/>', "S"),
     `<w:p><w:pPr>${sp}</w:pPr>${R(A8, t("Koniec"))}</w:p>`,
   ].join("");
@@ -262,11 +265,15 @@ async function run() {
       wsOnly: top("Wzorzec 3") - top("Wzorzec 2") - 12.25,
       trail: (pr.right - parseFloat(pcs.paddingRight)) - rr.getBoundingClientRect().right,
       table: top("Tb") - top("Ta"), style: top("Sb") - top("Sa"),
+      sym: (top("Wzorzec 5") - top("Wzorzec 4")) - (top("Wzorzec 6") - top("Wzorzec 5")), arrow: top("Wzorzec 6") - top("Wzorzec 5"),
     };
   });
   check("przebieg z samego tabulatora/spacji 28 pt nie podnosi linijki 8 pt (Word 12,33 px)", [ru.tab, ru.space, ru.next].every((v) => Math.abs(v - 12.3) < 0.7), JSON.stringify(ru));
   check("akapit z samych spacji = pusty: linijka znaku akapitu 5 pt (Word 7,67 px)", Math.abs(ru.wsOnly - 7.67) < 0.7, JSON.stringify(ru));
   check("spacje na końcu akapitu do prawej wiszą za marginesem (tekst przy prawej krawędzi)", Math.abs(ru.trail) < 1, JSON.stringify(ru));
+  // wyrocznia: Arial 11 pt × 1,15 = 19,33 px na linijkę; ✓ (Segoe UI Symbol) +2,7 px, → bez zmian
+  check("symbol ✓ (krój zastępczy Worda) podnosi swoją linijkę o ~2,7 px", Math.abs(ru.sym - 2.69) < 0.6, JSON.stringify(ru));
+  check("strzałka → (jest w Arialu) nie podnosi linijki (2 × 19,33 px)", Math.abs(ru.arrow - 38.66) < 1, JSON.stringify(ru));
   check("komórka: styl tabeli wygrywa z domyślnymi (pojedyncza, Word 15,33 px)", Math.abs(ru.table - 15.33) < 0.7, JSON.stringify(ru));
   check("komórka: styl akapitu wygrywa ze stylem tabeli (podwójna, Word 30,7 px)", Math.abs(ru.style - 30.7) < 1, JSON.stringify(ru));
   await page.evaluate(() => dwbPrint.open());

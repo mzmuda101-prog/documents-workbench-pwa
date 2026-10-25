@@ -328,7 +328,12 @@ function watchParagraphLayout(wrapper) {
   let pending = false;
   const touched = new Set(); // akapity z pisaniem — spacje na końcu liczone tylko dla nich
   const mo = new MutationObserver((list) => {
-    for (const m of list) { const p = (m.target.nodeType === 1 ? m.target : m.target.parentElement)?.closest?.("p"); if (p) touched.add(p); }
+    const own = (n) => n.nodeType === 1 && n.matches?.(".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-break");
+    for (const m of list) {
+      // przerwy stron (page-breaks.js) to nie pisanie — inaczej przeliczenia granic i akapitów się nakręcały
+      if (m.type === "childList" && [...m.addedNodes, ...m.removedNodes].every(own)) continue;
+      const p = (m.target.nodeType === 1 ? m.target : m.target.parentElement)?.closest?.("p"); if (p) touched.add(p);
+    }
     if (pending) return;
     pending = true;
     requestAnimationFrame(() => {
@@ -336,7 +341,7 @@ function watchParagraphLayout(wrapper) {
       if (!wrapper.isConnected) { mo.disconnect(); return; }
       applyContextualSpacing(wrapper);
       fixEmptyParagraphHeights(wrapper);
-      touched.forEach((p) => { if (p.isConnected) { zeroWhitespaceRun(p); hangTrailingSpace(p); } });
+      touched.forEach((p) => { if (p.isConnected) { zeroWhitespaceRun(p); hangTrailingSpace(p); addFallbackSymbolLine(p); } });
       touched.clear();
     });
   });
@@ -629,10 +634,18 @@ function hangTrailingSpaces(host) {
 }
 
 function hangTrailingSpace(p) {
-  if (p.style.getPropertyValue("--dwb-trail")) p.style.removeProperty("--dwb-trail");
+  // Zapis TYLKO przy zmianie: przeliczanie granic stron słucha zmian stylu akapitów, a samo wstawia
+  // do nich przerwy — dawne „zdejmij i ustaw” przy każdej mutacji kręciło się z nim w kółko
+  // (przewodnik w Edycji: granice stron przeskakiwały, menu „Układ” zamykało się od przewijania).
+  const cur = parseFloat(p.style.getPropertyValue("--dwb-trail")) || 0;
+  const set = (w) => {
+    if (w > 0.5) { if (Math.abs(w - cur) > 0.3) p.style.setProperty("--dwb-trail", `${Math.round(w * 100) / 100}px`); return true; }
+    if (cur) p.style.removeProperty("--dwb-trail");
+    return false;
+  };
   const al = p.style.textAlign || getComputedStyle(p).textAlign;
   const trail = p.textContent.match(TRAIL_WS);
-  if (!trail || !/^(right|end|center)$/.test(al)) return false;
+  if (!trail || !/^(right|end|center)$/.test(al)) return set(0);
   // Miara z WYNIKU, nie z szerokości spacji: WebKit część spacji końcowych sam wiesza (prostokąt
   // spacji bywa ucięty), Chromium żadnej — liczy się, gdzie naprawdę kończy się ostatnia litera.
   const tw = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
@@ -641,12 +654,12 @@ function hangTrailingSpace(p) {
     if (t.parentElement.closest("[contenteditable=false]")) continue;
     for (let i = t.data.length - 1; i >= 0; i--) if (/\S/.test(t.data[i]) && t.data[i] !== "\u00a0") { lastNode = t; lastIdx = i; break; }
   }
-  if (!lastNode) return false;
+  if (!lastNode) return set(0);
   const range = document.createRange();
   range.setStart(lastNode, lastIdx);
   range.setEnd(lastNode, lastIdx + 1);
   const end = [...range.getClientRects()].pop();
-  if (!end) return false;
+  if (!end) return set(cur);
   const cs = getComputedStyle(p);
   const box = p.getBoundingClientRect();
   const scale = p.offsetWidth ? box.width / p.offsetWidth : 1;
@@ -661,12 +674,12 @@ function hangTrailingSpace(p) {
     const left = box.left + (parseFloat(cs.paddingLeft) + parseFloat(cs.borderLeftWidth) + (oneLine ? parseFloat(cs.textIndent) || 0 : 0)) * scale;
     w = ((right - end.right) - (lineLeft - left)) / scale;
   }
+  // pomiar z obecnym przesunięciem: bez niego luka byłaby większa dokładnie o nie (do prawej
+  // tekst stoi o cur w prawo, do środka o cur/2 — w obu wzorach wychodzi + cur)
+  w += cur;
   // nie więcej niż te spacje mogą zająć (tekst odsunięty od krawędzi z innego powodu zostaje)
   const cap = trail[0].length * parseFloat(cs.fontSize) * 0.7 + 1;
-  w = Math.min(w, cap * 2);
-  if (!(w > 0.5)) return false;
-  p.style.setProperty("--dwb-trail", `${Math.round(w * 100) / 100}px`);
-  return true;
+  return set(Math.min(w, cap * 2));
 }
 
 // Przebieg bez znaków (same spacje, tabulatory albo pusty) nie buduje wysokości linijki — w Wordzie
@@ -707,9 +720,79 @@ function zeroWhitespaceRun(p) {
     if (ws) n++;
   });
   // rozłożony tabulator (inline-block, app.css) mierzy pudełko w rozmiarze AKAPITU, nie swoim
-  if (n) p.style.setProperty("--dwb-fs", getComputedStyle(p).fontSize);
-  else if (p.style.getPropertyValue("--dwb-fs")) p.style.removeProperty("--dwb-fs");
+  const fs = n ? getComputedStyle(p).fontSize : "";
+  if (fs && p.style.getPropertyValue("--dwb-fs") !== fs) p.style.setProperty("--dwb-fs", fs);
+  else if (!fs && p.style.getPropertyValue("--dwb-fs")) p.style.removeProperty("--dwb-fs");
   return n;
+}
+
+// Symbol spoza kroju tekstu: Word rysuje go krojem zastępczym i linijka bierze JEGO wysokość
+// (wyrocznia 2026-10-25, Arial 11 pt, interlinia 1,15 = 19,33 px): ✓ ✗ ☐ ⛶ (Segoe UI Symbol) +2,7–3 px,
+// ＋ (pełna szerokość, MS Mincho) +2,3 px; strzałki ← → ↩ ↶, ⌘ (są w Arialu) i ⇄ ⋯ (Cambria Math) ~0.
+// Przeglądarka przy interlinii liczbowej metryk kroju zastępczego nie bierze — linijki z symbolami
+// były niższe („przewodnik”: −6 px na stronie). Dodatek liczymy na każdą linijkę z takim symbolem
+// (metryka kroju w em × rozmiar × mnożnik interlinii akapitu − wysokość linijki) i dokładamy akapitowi
+// jako dopełnienie od dołu: wysokość akapitu jak w Wordzie, bez zmian w DOM-ie tekstu. Dawniej
+// <span> z większą interlinią przy znaku — pudełko w środku linijki rozjeżdżało się z pomiarem
+// granic stron po literach i w Edycji granice przeskakiwały (test przewodnika, menu „Układ”).
+const FALLBACK_SYM = /[\u2600-\u27BF\u2B00-\u2BFF]|[\u3000-\u9FFF\uAC00-\uD7AF\uFF00-\uFFEF]|[\uD83C-\uD83E][\uDC00-\uDFFF]/g;
+const FALLBACK_CJK = /[\u3000-\u9FFF\uAC00-\uD7AF\uFF00-\uFFEF]/;
+const FALLBACK_EM = { seg: 1.315, cjk: 1.284 }; // Segoe UI Symbol, MS Mincho (wyrocznia)
+const OWN_SYMBOL_FONT = /symbol|segoe|wingdings|webdings|dingbat|emoji|mincho|gothic|simsun|mingliu|yahei|malgun|batang|gulim|meiryo|hiragino|pingfang|noto sans cjk|noto serif cjk/i;
+function addFallbackSymbolLines(host) {
+  if (!host) return 0;
+  let n = 0;
+  host.querySelectorAll("section.docx p").forEach((p) => { if (addFallbackSymbolLine(p)) n++; });
+  return n;
+}
+
+function addFallbackSymbolLine(p) {
+  const had = p.dataset.dwbSymPad != null;
+  const base = had ? parseFloat(p.dataset.dwbSymBase) || 0 : null;
+  let extra = 0;
+  FALLBACK_SYM.lastIndex = 0;
+  const ratio = parseFloat(p.style.lineHeight);
+  if (FALLBACK_SYM.test(p.textContent) && ratio > 0 && !/(pt|px)$/.test(p.style.lineHeight) && !p.classList.contains("dwb-exact")) { // „dokładnie”: Word nie podnosi
+    const pcs = getComputedStyle(p);
+    const m = ratio / wordLineFactor(pcs.fontFamily);
+    const lineH = parseFloat(pcs.lineHeight) || 0;
+    const scale = p.offsetHeight ? p.getBoundingClientRect().height / p.offsetHeight : 1;
+    const perLine = new Map(); // góra linijki (px, zaokr.) → największa wysokość linijki z symbolem
+    const range = document.createRange();
+    const tw = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+    for (let t; (t = tw.nextNode());) {
+      const el = t.parentElement;
+      if (el.closest("[contenteditable=false], .docx-tab, sup, sub, .dwb-page-gap, .dwb-page-gap-spacer")) continue;
+      const ecs = getComputedStyle(el);
+      if (OWN_SYMBOL_FONT.test(ecs.fontFamily.split(",")[0])) continue;
+      FALLBACK_SYM.lastIndex = 0;
+      for (let mt; (mt = FALLBACK_SYM.exec(t.data));) {
+        range.setStart(t, mt.index);
+        range.setEnd(t, mt.index + mt[0].length);
+        const r = range.getClientRects()[0];
+        if (!r) continue;
+        const h = parseFloat(ecs.fontSize) * FALLBACK_EM[FALLBACK_CJK.test(mt[0]) ? "cjk" : "seg"] * m;
+        const key = [...perLine.keys()].find((k) => Math.abs(k - r.top / scale) < 4) ?? r.top / scale;
+        perLine.set(key, Math.max(perLine.get(key) || 0, h));
+      }
+    }
+    perLine.forEach((h) => { extra += Math.max(0, h - lineH); });
+  }
+  // Dopełnienie przez zmienne + regułę w app.css, która działa poza Edycją: w Edycji ta dodatkowa
+  // wysokość wpychała podział stron w punkt graniczny i granice przeskakiwały (scroll zamykał okienka
+  // — testy guide/chaos). Czytanie, podgląd wydruku i druk — jak w Wordzie.
+  if (extra < 0.3) {
+    if (had) { p.style.removeProperty("--dwb-sym-pad"); p.style.removeProperty("--dwb-sym-b0"); delete p.dataset.dwbSymPad; delete p.dataset.dwbSymBase; }
+    return false;
+  }
+  if (!had || Math.abs(parseFloat(p.dataset.dwbSymPad) - extra) > 0.2) {
+    const b0 = had ? base : parseFloat(getComputedStyle(p).paddingBottom) || 0;
+    p.dataset.dwbSymBase = String(b0);
+    p.dataset.dwbSymPad = String(Math.round(extra * 100) / 100);
+    p.style.setProperty("--dwb-sym-b0", `${b0}px`);
+    p.style.setProperty("--dwb-sym-pad", `${Math.round(extra * 100) / 100}px`);
+  }
+  return true;
 }
 
 // Coś, co daje akapitowi linijkę mimo braku tekstu (obraz, wyspa, przerwa wiersza, pole).

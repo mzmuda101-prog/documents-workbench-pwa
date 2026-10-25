@@ -331,6 +331,13 @@ function applyMobileReflowLayout(host) {
       if (px < 0) p.style[side] = "0";
       else if (px > vpW * 0.15) p.style[side] = `${Math.round(vpW * 0.15)}px`;
     }
+    // Wysunięcie pierwszego wiersza (ujemne text-indent) zostawało po przycięciu wcięcia: akapit
+    // z wcięciem 200 pt i wysunięciem 150 pt (pliki z PDF — tytuł „Wskazówki dotyczące stoisk…”)
+    // zaczynał pierwszą linijkę za lewą krawędzią ekranu. Pierwsza linijka najwyżej od krawędzi.
+    const cs = getComputedStyle(p);
+    const ti = parseFloat(cs.textIndent) || 0;
+    const ml = parseFloat(cs.marginLeft) || 0;
+    if (ti < 0 && ml + ti < 0) p.style.textIndent = `${-ml}px`;
   });
   // Obrazy przypięte do strony (warstwa grafiki, tło skanu z PDF): w tekście zawiniętym do
   // ekranu nie mają już „swojego” miejsca. Na stronie z tekstem — tło/ozdobniki chowamy; na

@@ -89,6 +89,7 @@ async function renderDocxPreview(bytes, container, opts = {}) {
   fixPageAnchoredDrawings(wrapper);
   applyWordLineMetrics(wrapper); // odstępy między wierszami jak w Wordzie (też granice stron)
   zeroWhitespaceRuns(wrapper); // spacje/tabulatory bez tekstu nie podnoszą linijki (Word)
+  addFallbackSymbolLines(wrapper); // ✓ ✗ ＋ — linijka w wysokości kroju zastępczego Worda (po zerowaniu spacji)
   hangTrailingSpaces(wrapper); // spacje na końcu akapitu do prawej/środka za marginesem (Word)
   if (!mobileReflow) {
     applyMergedCellFirstLine(wrapper); // scalenie w pionie: 1. wiersz ≥ pierwsza linijka (Word)
