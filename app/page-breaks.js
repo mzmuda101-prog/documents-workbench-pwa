@@ -234,7 +234,15 @@ const dwbPageBreaks = (() => {
     return h > 0 ? { table, rows, top: (a.top - secTop) / scale, h } : null;
   }
 
-  function paginateSection(sec, { includeNotes = false, blockBreaks = false } = {}) {
+  // Histereza granic stron (Edycja). Linijka, której dół leży niemal na dolnej granicy strony, raz
+  // „mieściła się”, raz nie — przerwy stron mają ułamkowe wysokości i każde przeliczenie zmieniało
+  // pozycje o ~0,1 px. Sierota/wdowa przełączały wtedy „cały akapit dalej” ↔ „podział po linijce”
+  // w kółko (przewodnik: przewinięcie skakało i zamykało okienka — testy guide, chaos 101). W pasie
+  // ±STICKY px od granicy zostaje decyzja z poprzedniego przeliczenia (el → linijka → mieści się?);
+  // pisanie przesuwa treść o całe linijki, więc wychodzi poza pas. Podgląd wydruku — bez histerezy.
+  const STICKY = 1.5;
+  let lastFit = new WeakMap();
+  function paginateSection(sec, { includeNotes = false, blockBreaks = false, decided = null } = {}) {
     // sekcje ciągłe (Word: nowa sekcja na tej samej stronie) = kolejne <article> tej samej kartki
     const articles = [...sec.querySelectorAll(":scope > article")];
     const article = articles[0];
@@ -312,7 +320,17 @@ const dwbPageBreaks = (() => {
     let first = 0; // indeks pierwszej linijki bieżącej strony
     for (let k = 0; k < u.length; k++) {
       const extra = noteExtra(u[k]);
-      if (u[k].bottom <= limit - pageNoteH - extra + 0.5) {
+      const lim = limit - pageNoteH - extra + 0.5;
+      let fits = u[k].bottom <= lim;
+      // tylko decyzje w pasie granicznym: po wstawieniu granicy te same linijki są sprawdzane jeszcze
+      // raz wobec następnej strony — taki zapis nadpisałby decyzję graniczną
+      if (decided && Math.abs(u[k].bottom - lim) < STICKY) {
+        const prev = lastFit.get(u[k].el)?.get(u[k].i);
+        if (prev !== undefined) fits = prev;
+        if (!decided.has(u[k].el)) decided.set(u[k].el, new Map());
+        decided.get(u[k].el).set(u[k].i, fits);
+      }
+      if (fits) {
         if (extra || u[k].notes?.length) { for (const id of u[k].notes) pageNotes.add(id); pageNoteH += extra; }
         continue;
       }
@@ -387,10 +405,12 @@ const dwbPageBreaks = (() => {
     const editable = !!h.querySelector(".docx-edit-root");
     const gaps = gapsOn();
     const plan = [];
+    const decided = new WeakMap();
     h.querySelectorAll(".docx-wrapper > section.docx").forEach((sec) => {
-      const res = paginateSection(sec, { blockBreaks: gaps });
+      const res = paginateSection(sec, { blockBreaks: gaps, decided });
       if (res) plan.push(res);
     });
+    lastFit = decided;
     // co powinno stać w kartkach: odstępy (przed którym blokiem, jaka wysokość), pasy, kreski
     const want = [];
     plan.forEach((res, si) => {

@@ -778,9 +778,8 @@ function addFallbackSymbolLine(p) {
     }
     perLine.forEach((h) => { extra += Math.max(0, h - lineH); });
   }
-  // Dopełnienie przez zmienne + regułę w app.css, która działa poza Edycją: w Edycji ta dodatkowa
-  // wysokość wpychała podział stron w punkt graniczny i granice przeskakiwały (scroll zamykał okienka
-  // — testy guide/chaos). Czytanie, podgląd wydruku i druk — jak w Wordzie.
+  // Dopełnienie przez zmienne + regułę w app.css (nie wprost w padding — reguła zostaje w jednym miejscu;
+  // granice stron w punkcie granicznym trzyma histereza w page-breaks.js).
   if (extra < 0.3) {
     if (had) { p.style.removeProperty("--dwb-sym-pad"); p.style.removeProperty("--dwb-sym-b0"); delete p.dataset.dwbSymPad; delete p.dataset.dwbSymBase; }
     return false;

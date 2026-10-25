@@ -737,9 +737,9 @@ html.is-mobile .dwb-page-margin-guide { display: none; }
    inline w kroju z „.docx span” (Calibri 11 pt) podnosił akapit 8 pt z 13 do 18 px — Word ich nie liczy */
 .docx-preview-host section.docx p span.cm-mark:empty, .docx-preview-host section.docx p span[id]:empty:not([style]) { font-size: 0; line-height: 0; }
 /* Symbol w kroju zastępczym Worda (✓ ✗ ＋) podnosi swoją linijkę — dodatek akapitu od dołu
-   (docx-render-fixes.js → addFallbackSymbolLines). Poza Edycją: tam przesuwał podział stron w punkt
-   graniczny i granice przeskakiwały. Podgląd wydruku (.pp-canvas) i druk — z dodatkiem. */
-.doc-canvas:not(.edit-mode) .docx-preview-host section.docx p[data-dwb-sym-pad] { padding-bottom: calc(var(--dwb-sym-b0, 0px) + var(--dwb-sym-pad, 0px)); }
+   (docx-render-fixes.js → addFallbackSymbolLines). Też w Edycji: granice stron w punkcie granicznym
+   trzyma histereza w page-breaks.js (STICKY). */
+.docx-preview-host section.docx p[data-dwb-sym-pad] { padding-bottom: calc(var(--dwb-sym-b0, 0px) + var(--dwb-sym-pad, 0px)); }
 /* Przebieg z samych spacji/tabulatorów nie podnosi linijki (docx-render-fixes.js → zeroWhitespaceRuns) */
 .docx-preview-host section.docx span.dwb-ws-run { line-height: 0 !important; }
 .docx-preview-host section.docx span.dwb-ws-hide { vertical-align: top !important; }
