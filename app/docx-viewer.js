@@ -92,6 +92,7 @@ async function renderDocxPreview(bytes, container, opts = {}) {
   hangTrailingSpaces(wrapper); // spacje na końcu akapitu do prawej/środka za marginesem (Word)
   if (!mobileReflow) {
     applyMergedCellFirstLine(wrapper); // scalenie w pionie: 1. wiersz ≥ pierwsza linijka (Word)
+    addCellMarginsToRowMinimum(wrapper); // marginesy komórek ponad minimum wysokości wiersza (Word)
     addTableBorderHeights(wrapper); // linie tabeli ponad wysokość wiersza (Word)
     positionAnchoredDrawings(wrapper); // logotypy / zdjęcia z oblewaniem — miejsce jak w Wordzie (po układzie akapitów)
   }

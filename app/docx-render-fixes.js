@@ -367,6 +367,30 @@ function cssLengthPx(v) {
   const m = /^(-?[\d.]+)(pt|px)$/.exec(String(v || "").trim());
   return m ? parseFloat(m[1]) * (m[2] === "pt" ? PT_PX : 1) : null;
 }
+// Minimum wysokości wiersza (w:trHeight „co najmniej”) w Wordzie dotyczy TREŚCI — marginesy komórki
+// (w:tblCellMar / w:tcMar, góra i dół) dochodzą ponad nie (wyrocznia 2026-10-25: minimum 17 pt +
+// margines 200 tw = 36,7 px, minimum 1000 tw + 200 tw = 80,7 px). W CSS dopełnienie komórki mieści się
+// w wysokości wiersza — „Program konserwacji” (margines górny 28 tw): każdy wiersz 1,9 px za niski.
+// Wiersz „dokładnie” (hRule exact, łatka 19) bez zmian. Wołać PRZED addTableBorderHeights.
+function addCellMarginsToRowMinimum(host) {
+  if (!host) return 0;
+  let n = 0;
+  host.querySelectorAll("section.docx table tr").forEach((tr) => {
+    const h = cssLengthPx(tr.style.height);
+    if (!h || tr.dataset.dwbHrule === "exact" || tr.dataset.dwbMarH) return;
+    let pad = 0;
+    for (const td of tr.cells) {
+      const cs = getComputedStyle(td);
+      pad = Math.max(pad, (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0));
+    }
+    if (!(pad > 0.05)) return;
+    tr.style.height = `${Math.round((h + pad) * 100) / 100}px`;
+    tr.dataset.dwbMarH = String(Math.round(pad * 100) / 100); // przerysowanie nie dolicza drugi raz
+    n++;
+  });
+  return n;
+}
+
 function addTableBorderHeights(host) {
   if (!host) return 0;
   const rules = [];
@@ -393,15 +417,21 @@ function addTableBorderHeights(host) {
       const cells = [...tr.cells];
       if (!cells.length) return;
       let extra = Math.max(0, ...cells.map((td) => declared(td, "bottom")), ...(rows[i + 1] ? [...rows[i + 1].cells].map((td) => declared(td, "top")) : []));
-      if (i === 0) extra += Math.max(0, ...cells.map((td) => declared(td, "top")));
+      // górna linia tabeli NIE dochodzi do pierwszego wiersza (wyrocznia 2026-10-25: pierwszy wiersz
+      // z minimum 17 pt tej samej wysokości co kolejne, linia–linia)
       if (!(extra > 0.05)) return;
-      // treść: dopełnienie komórek po połowie u góry i u dołu; minimum wiersza: + linia
+      // Word dolicza linię do CAŁEGO wiersza; przeglądarka (border-collapse) tylko do komórek, które
+      // ją mają. Komórka z własną linią — bez dopełnienia (dawniej liczona drugi raz: wyrocznia
+      // 2026-10-25 Word 16,0 px, my 16,97; „Program konserwacji” +8 px na tabelę). Komórka bez linii
+      // po danej stronie (S-99: tekst pytania bez linii, kratki obok z liniami) — pół linii dopełnienia.
       cells.forEach((td) => {
         const cs = getComputedStyle(td);
-        td.style.paddingTop = `${(parseFloat(cs.paddingTop) || 0) + extra / 2}px`;
-        td.style.paddingBottom = `${(parseFloat(cs.paddingBottom) || 0) + extra / 2}px`;
+        const none = (side) => /^(none|hidden)$/.test(cs[`border${side}Style`]) || !parseFloat(cs[`border${side}Width`]);
+        if (none("Top")) td.style.paddingTop = `${(parseFloat(cs.paddingTop) || 0) + extra / 2}px`;
+        if (none("Bottom")) td.style.paddingBottom = `${(parseFloat(cs.paddingBottom) || 0) + extra / 2}px`;
       });
-      const h = cssLengthPx(tr.style.height);
+      // minimum wiersza (w:trHeight) + linia; wiersz „dokładnie” (data-dwb-hrule, łatka 19): linia mieści się w podanej wysokości (wyrocznia: 1000 tw = 66,7 px)
+      const h = tr.dataset.dwbHrule === "exact" ? 0 : cssLengthPx(tr.style.height);
       if (h) tr.style.height = `${Math.round((h + extra) * 100) / 100}px`;
       n++;
     });

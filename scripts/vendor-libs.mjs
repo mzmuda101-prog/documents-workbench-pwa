@@ -259,6 +259,27 @@ function patchBundle() {
   if (!src.includes("color: black; hyphens: auto;")) throw new Error("łatka dzielenia wyrazów: brak „hyphens: auto” w stylu domyślnym");
   src = src.replace("color: black; hyphens: auto;", 'color: black; hyphens: ${this.document?.settingsPart?.settings?.autoHyphenation?"auto":"manual"};');
   console.log("  ✅  łatka: dzielenie wyrazów tylko przy w:autoHyphenation (jak Word)");
+
+  // 18) Wyrównanie WIERSZA tabeli (w:trPr/w:jc) to położenie wiersza na stronie, jak w:tblPr/w:jc —
+  //     nie wyrównanie tekstu. docx-preview przepuszczał je do wspólnego parsera, który robił z niego
+  //     „text-align” na <tr>: tekst we wszystkich komórkach bez własnego w:jc stał na środku
+  //     („Program konserwacji”: Word — do lewej). Tabela i tak ma własne w:tblPr/w:jc.
+  const reRowJc = /(parseTableRowProperties\(\w+,\w+\)\{\w+\.cssStyle=this\.parseDefaultProperties\(\w+,\{\},null,\w+=>\{switch\(\w+\.localName\)\{)/;
+  if (!reRowJc.test(src)) throw new Error("łatka wyrównania wiersza: wzorzec parseTableRowProperties nie pasuje (nowa wersja docx-preview?)");
+  src = src.replace(reRowJc, (m0) => `${m0}case"jc":break;`);
+  console.log("  ✅  łatka: w:trPr/w:jc nie wyrównuje tekstu w komórkach");
+
+  // 19) Rodzaj wysokości wiersza (w:trHeight/@w:hRule): docx-preview czytał atrybut i go wyrzucał —
+  //     „dokładnie” i „co najmniej” dawały to samo height. Wiersz dostaje data-dwb-hrule;
+  //     addCellMarginsToRowMinimum (docx-render-fixes.js) dokłada marginesy komórek ponad minimum.
+  const reHRule = /parseTrHeight\((\w+),(\w+)\)\{(\w+)\.attr\(\1,"hRule"\),\2\.height=\3\.lengthAttr\(\1,"val"\)\}/;
+  if (!reHRule.test(src)) throw new Error("łatka hRule: wzorzec parseTrHeight nie pasuje (nowa wersja docx-preview?)");
+  src = src.replace(reHRule, (_, T, E, M) => `parseTrHeight(${T},${E}){${E}["--dwb-hrule"]=${M}.attr(${T},"hRule")||"atLeast",${E}.height=${M}.lengthAttr(${T},"val")}`);
+  // styl wiersza idzie przez el.style[k] — zmiennej CSS tak się nie ustawi; wiersz dostaje data-dwb-hrule
+  const reRowH = /(renderTableRow\((\w+)\)\{let (\w+)=this\.createElement\("tr"\);)/;
+  if (!reRowH.test(src)) throw new Error("łatka hRule: wzorzec renderTableRow nie pasuje");
+  src = src.replace(reRowH, (m0, _m, T, E) => `${m0}${T}.cssStyle?.["--dwb-hrule"]&&(${E}.dataset.dwbHrule=${T}.cssStyle["--dwb-hrule"],delete ${T}.cssStyle["--dwb-hrule"]);`);
+  console.log("  ✅  łatka: rodzaj wysokości wiersza (w:hRule) w data-dwb-hrule");
   fs.writeFileSync(OUT, src);
 }
 
