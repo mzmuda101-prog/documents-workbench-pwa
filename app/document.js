@@ -290,10 +290,15 @@ function restoreDocScrollAnchor(anchor) {
   return true;
 }
 
-async function buildDocumentForSave() {
+// Plik do zapisu = plik + zmiany z panelu + wpisany tekst. Pod wyłącznym dostępem do pliku
+// (withQuietFile): Enter/Backspace w trakcie nie przebudowuje pliku obok tej budowy.
+function buildDocumentForSave() {
+  return typeof withQuietFile === "function" ? withQuietFile(buildDocumentForSaveNow) : buildDocumentForSaveNow();
+}
+
+// tylko pod withQuietFile — zmiany zbierane synchronicznie na starcie (indeksy = plik)
+async function buildDocumentForSaveNow() {
   if (!originalFileBytes) return null;
-  // Enter/Backspace w podglądzie mogą jeszcze przebudowywać plik w tle
-  if (typeof waitInlineStructuralIdle === "function") await waitInlineStructuralIdle();
   const inlineEdits = collectInlineParagraphEdits();
   const edits = [...pendingDocEdits];
   if (inlineEdits.length) edits.push({ op: "paragraphBatch", items: inlineEdits });
@@ -312,9 +317,19 @@ async function buildDocumentForSave() {
   return bytes;
 }
 
+// Scalenie wpisanego tekstu i zmiana pliku pod wyłącznym dostępem (jedna przebudowa naraz —
+// dawniej Enter w trakcie budował na starym pliku obok); odrysowanie już poza nim.
 async function applyDocumentEdit(edit, xmlOpts = {}) {
   if (!originalFileBytes) return 0;
-  await mergeInlineEditsIntoBytes();
+  const res = typeof withQuietFile === "function" ? await withQuietFile(() => applyDocumentEditNow(edit, xmlOpts)) : await applyDocumentEditNow(edit, xmlOpts);
+  if (!res.reload) return res.n;
+  await reloadFromBytes(originalFileBytes);
+  if (res.n > 0) setDirtyState(true);
+  return res.n;
+}
+
+async function applyDocumentEditNow(edit, xmlOpts) {
+  if (typeof mergeInlineEditsIntoBytesNow === "function") await mergeInlineEditsIntoBytesNow();
   const normalized = edit.op ? edit : { ...edit, op: "replace" };
   // poprawki z różnicy „przed” → teraz (track-changes.js) — cały plik naraz, nie operacja na XML
   if (normalized.op === "redline") {
@@ -323,11 +338,8 @@ async function applyDocumentEdit(edit, xmlOpts = {}) {
       pendingDocEdits = [];
     }
     const { bytes, stats } = await dwbRedline(normalized.baseline, originalFileBytes, { author: normalized.author, trackOn: normalized.trackOn });
-    const n = stats.changed + stats.added + stats.removed;
     originalFileBytes = bytes;
-    await reloadFromBytes(bytes);
-    if (n) setDirtyState(true);
-    return n;
+    return { n: stats.changed + stats.added + stats.removed, reload: true };
   }
   // „✦ Przepisz” (doc-rewrite.js): nowy tekst akapitu (albo kilku) jako poprawka (w:ins / w:del) — zmiana
   // i poprawka w jednym kroku Cofnij. Przy włączonym śledzeniu zmiana idzie zwykłą drogą
@@ -341,12 +353,10 @@ async function applyDocumentEdit(edit, xmlOpts = {}) {
     const items = normalized.items || [{ index: normalized.index, text: normalized.text }]; // kilka akapitów naraz
     const batch = { op: "paragraphBatch", items };
     const { bytes: after, changeCount: n } = await buildPatchedDocx(before, [batch]);
-    if (!n) return 0;
+    if (!n) return { n: 0, reload: false };
     const tracking = typeof dwbTrack !== "undefined" && dwbTrack.isOn();
     originalFileBytes = tracking ? after : (await dwbRedline(before, after, { author: normalized.author })).bytes;
-    await reloadFromBytes(originalFileBytes);
-    setDirtyState(true);
-    return n;
+    return { n, reload: true };
   }
   recordPendingEdit(normalized);
   const { bytes, changeCount } = await buildPatchedDocx(originalFileBytes, pendingDocEdits, xmlOpts);
@@ -354,7 +364,5 @@ async function applyDocumentEdit(edit, xmlOpts = {}) {
   originalFileBytes = bytes;
   // Akceptuj/Odrzuć podczas śledzenia — to samo w pliku „przed” (bez nowych poprawek)
   if (normalized.op === "revisions" && typeof dwbTrack !== "undefined") await dwbTrack.mirrorRevisions(normalized);
-  await reloadFromBytes(bytes);
-  if (changeCount > 0) setDirtyState(true);
-  return changeCount;
+  return { n: changeCount, reload: true };
 }

@@ -1755,8 +1755,18 @@ function applyDomListLevel(edit) {
 // a zapisany plik różnił się od podglądu (34 akapity na ekranie, 33 w pliku).
 let inlineStructuralChain = Promise.resolve();
 let inlineStructuralPending = 0;
+// Każda zmiana podziału akapitów w podglądzie (mirrorBaseline) podbija licznik — scalanie i zapis
+// wiedzą wtedy, że baza z ich pliku byłaby już nieaktualna (podgląd ma akapit więcej / mniej).
+let inlineStructuralGen = 0;
+// Kształt operacji w kolejce (który zakres akapitów podglądu zastąpił który w pliku), dopóki
+// plik jej nie potwierdzi — po nieudanej operacji tym logiem cofamy indeksy podglądu do pliku.
+let structuralShapeNext = null;
+let structuralLog = [];
+let structuralBroken = false;
 
 function mirrorBaseline(index, removeCount, ...runsList) {
+  inlineStructuralGen++;
+  structuralShapeNext = { index, remove: removeCount, insert: runsList.length };
   if (!baselineParagraphRuns.length) return;
   baselineParagraphRuns.splice(index, removeCount, ...runsList);
   baselineParagraphTexts.splice(index, removeCount, ...runsList.map((r) => previewRunsToPlainText(r)));
@@ -1764,6 +1774,40 @@ function mirrorBaseline(index, removeCount, ...runsList) {
 
 function waitInlineStructuralIdle() {
   return inlineStructuralChain;
+}
+
+// Wyłączny dostęp do pliku dla scalania wpisanego tekstu, zapisu i operacji z panelu — ta sama
+// kolejka co Enter/Backspace. Dawniej budowały plik OBOK kolejki: Enter wciśnięty w trakcie
+// budował na starym pliku i wygrywał ten, kto skończył później (ginął podział albo tekst),
+// a baza akapitów rozjeżdżała się z podglądem. Czekamy, aż w kolejce nie ma NIC (także
+// dopisanego w trakcie czekania) — wtedy indeksy akapitów podglądu = indeksy w pliku, a fn
+// zbiera zmiany SYNCHRONICZNIE na starcie. Enter w trakcie fn: podział widać od razu,
+// a jego przebudowa pliku czeka na koniec fn (i liczy już na pliku z fn).
+// UWAGA: fn nie może czekać na mergeInlineEditsIntoBytes / buildDocumentForSave /
+// applyDocumentEdit (zakleszczenie) — do tego są wersje *Now.
+async function withQuietFile(fn) {
+  for (;;) {
+    const c = inlineStructuralChain;
+    await c;
+    if (!inlineStructuralPending && inlineStructuralChain === c) break;
+  }
+  let release;
+  inlineStructuralChain = new Promise((r) => { release = r; });
+  try {
+    return await fn();
+  } finally {
+    release();
+  }
+}
+
+// Baza akapitów z pliku — tylko gdy od `gen` podgląd nie zmienił podziału akapitów (Enter
+// w trakcie budowy). Inaczej zostaje lustro z mirrorBaseline, a odświeży ją kolejka po sobie.
+async function refreshBaselineIfUnmoved(bytes, gen) {
+  const [texts, runs] = await Promise.all([extractParagraphTextsFromDocx(bytes), extractParagraphRunsFromDocx(bytes)]);
+  if (gen !== inlineStructuralGen || inlineStructuralPending) return false;
+  baselineParagraphTexts = texts;
+  baselineParagraphRuns = runs;
+  return true;
 }
 
 // ── klawisze w trakcie przerysowania ─────────────────────────────────────────
@@ -1834,21 +1878,34 @@ async function holdTypingWhile(fn, paraIndex) {
 }
 
 function applyInlineStructuralEdit(edit) {
+  const shape = structuralShapeNext; // zmiana podziału akapitów (Enter, Backspace, usunięcie) albo null
+  structuralShapeNext = null;
   if (!originalFileBytes) return Promise.resolve(0);
+  if (shape) structuralLog.push(shape);
   inlineStructuralPending++;
   setDirtyState(true);
   // (nowy akapit przygotowuje handleInlineEnter; indeksy liczymy z kolejności w DOM)
   const job = inlineStructuralChain.then(async () => {
     try {
+      // po nieudanej operacji plik jest akapit „za” podglądem — indeksy kolejnych trafiłyby obok
+      if (structuralBroken) return 0;
       const { bytes, changeCount } = await buildPatchedDocx(originalFileBytes, [edit]);
       if (changeCount) originalFileBytes = bytes;
+      if (shape) {
+        if (changeCount) structuralLog.splice(structuralLog.indexOf(shape), 1);
+        else structuralBroken = true; // podział / scalenie nie trafiło do pliku
+      }
       return changeCount;
     } catch (err) {
       log(`Enter/Backspace: ${err.message || err}`, "error");
+      if (shape) structuralBroken = true;
       return 0;
     } finally {
       inlineStructuralPending--;
-      if (!inlineStructuralPending) {
+      if (!inlineStructuralPending && structuralBroken) {
+        await recoverStructuralDesync();
+      } else if (!inlineStructuralPending) {
+        structuralLog = [];
         // kolejka pusta — baza z pliku (kontrola spójności) i odświeżona struktura.
         // Przypisujemy tylko, gdy w trakcie odczytu nie padł kolejny Enter/Backspace —
         // inaczej nadpisalibyśmy lustro bazy sprzed tej operacji.
@@ -1867,6 +1924,49 @@ function applyInlineStructuralEdit(edit) {
   });
   inlineStructuralChain = job.then(() => {}, () => {});
   return job;
+}
+
+// Operacja na podziale akapitów nie trafiła do pliku (wyjątek, nie znaleziono akapitu): podgląd ma
+// inny podział niż plik. Dawniej zapis porównywał wtedy akapity po indeksach i wpisywał treść
+// w sąsiedni. Odrysowanie z pliku zgubiłoby wpisany, jeszcze niescalony tekst — więc najpierw
+// cofamy indeksy podglądu do pliku logiem operacji (od ostatniej): akapity spoza operacji
+// trafiają 1:1, części akapitu, którego podział się nie udał, skleja się z powrotem w jeden.
+// Ginie tylko sam podział/scalenie — reszta pisania zostaje. Potem rysujemy od nowa z pliku.
+async function recoverStructuralDesync() {
+  const shapes = structuralLog;
+  structuralLog = [];
+  structuralBroken = false;
+  inlineStructuralGen++;
+  const host = docCanvasEl?.querySelector(".docx-preview-host");
+  if (!host || !originalFileBytes) return;
+  const caretP = docCaretParagraph(document.activeElement);
+  const caretIndex = caretP ? resolveParaIndex(caretP) : -1;
+  await holdTypingWhile(async () => {
+    const fileRuns = await extractParagraphRunsFromDocx(originalFileBytes);
+    const groups = new Map(); // indeks w pliku → fragmenty z podglądu (w kolejności)
+    collectPreviewParagraphElements(host).forEach((p, j) => {
+      let k = j;
+      for (let i = shapes.length - 1; i >= 0 && k !== null; i--) {
+        const e = shapes[i];
+        if (k < e.index) continue;
+        if (k < e.index + e.insert) k = e.remove === 1 ? e.index : null; // scalenia nie rozdzielimy
+        else k = k - e.insert + e.remove;
+      }
+      if (k === null || k < 0 || k >= fileRuns.length || p.dataset.lock) return;
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(...extractRunsFromPreviewParagraph(p));
+    });
+    const items = [];
+    groups.forEach((runs, index) => { if (!runsEqual(runs, fileRuns[index])) items.push({ index, runs }); });
+    const notes = typeof dwbNotes !== "undefined" ? dwbNotes.collectEdits() : [];
+    if (items.length || notes.length) {
+      originalFileBytes = (await buildPatchedDocx(originalFileBytes, [{ op: "paragraphBatch", items: [...items, ...notes] }])).bytes;
+    }
+    log("Enter/Backspace: podział akapitów nie trafił do pliku — dokument odrysowany, wpisany tekst zachowany", "warning");
+    toast(t("structuralRecovered"), "warning");
+    await reloadFromBytes(originalFileBytes);
+    setDirtyState(true);
+  }, caretIndex);
 }
 
 function execInlineFormat(command) {
@@ -2533,8 +2633,13 @@ function setupInlineEditingAfterRender() {
     .then(() => { syncInlineEditMode(); refreshFontFamilyList(); });
 }
 
-async function mergeInlineEditsIntoBytes() {
-  await waitInlineStructuralIdle();
+function mergeInlineEditsIntoBytes() {
+  return withQuietFile(mergeInlineEditsIntoBytesNow);
+}
+
+// tylko pod withQuietFile (wyłączny dostęp do pliku)
+async function mergeInlineEditsIntoBytesNow() {
+  const gen = inlineStructuralGen;
   const inlineEdits = collectInlineParagraphEdits();
   // te akapity trafią do pliku — ich kopia „z renderu” przestaje być stanem pliku
   {
@@ -2544,7 +2649,7 @@ async function mergeInlineEditsIntoBytes() {
   if (!inlineEdits.length) return 0;
   const { bytes, changeCount } = await buildPatchedDocx(originalFileBytes, [{ op: "paragraphBatch", items: inlineEdits }]);
   originalFileBytes = bytes;
-  await refreshInlineEditBaseline(bytes);
+  await refreshBaselineIfUnmoved(bytes, gen);
   if (typeof dwbNotes !== "undefined") dwbNotes.rebase();
   if (changeCount > 0) setDirtyState(true);
   return changeCount;

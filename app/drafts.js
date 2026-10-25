@@ -77,8 +77,13 @@ const dwbDrafts = (() => {
   const delRec = (id) => tx("readwrite", (s, b) => { s.delete(id); b.delete(id); }).catch(() => {});
 
   // ── zapis szkicu ───────────────────────────────────────────────────────────
+  // Plik i lista zmian z TEJ SAMEJ chwili (withQuietFile): dawniej plik brany był przed czekaniem
+  // na kolejkę Enter/Backspace, a zmiany po — szkic odtworzony po awarii wpisywał tekst w złe akapity.
   async function collect() {
-    if (typeof waitInlineStructuralIdle === "function") await waitInlineStructuralIdle();
+    if (typeof withQuietFile === "function") return withQuietFile(async () => ({ bytes: originalFileBytes, data: collectNow() }));
+    return { bytes: originalFileBytes, data: collectNow() };
+  }
+  function collectNow() {
     return {
       inline: typeof collectInlineParagraphEdits === "function" ? collectInlineParagraphEdits() : [],
       pending: Array.isArray(pendingDocEdits) ? pendingDocEdits.map((e) => ({ ...e })) : [],
@@ -90,9 +95,9 @@ const dwbDrafts = (() => {
     clearTimeout(timer);
     timer = 0;
     if (!originalFileBytes || currentFileType !== "docx" || !hasUnsavedChanges) return;
-    const bytes = originalFileBytes;
     const id = sessionId;
-    const data = await collect();
+    const { bytes, data } = await collect();
+    if (!bytes) return;
     if (!stamp && fileHandle) {
       try { const f = await fileHandle.getFile(); stamp = { size: f.size, lastModified: f.lastModified }; } catch (_) { /* brak zgody — bez odcisku */ }
     }

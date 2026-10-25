@@ -180,15 +180,13 @@ async function saveDocument() {
   }
   setLoading(true, t("savingFile"));
   try {
-    const bytes = await buildDocumentForSave();
-    const writable = await handle.createWritable();
-    // śledzenie zmian: na dysk plik z poprawkami, w aplikacji zostaje czysty stan (dalej śledzimy)
-    await writable.write(typeof dwbTrack !== "undefined" ? await dwbTrack.bytesForDisk(bytes) : bytes);
-    await writable.close();
-    pendingDocEdits = [];
-    originalFileBytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-    await refreshInlineEditBaseline(originalFileBytes);
-    setDirtyState(false);
+    await withSavedFile(async (bytes) => {
+      const writable = await handle.createWritable();
+      // śledzenie zmian: na dysk plik z poprawkami, w aplikacji zostaje czysty stan (dalej śledzimy)
+      await writable.write(typeof dwbTrack !== "undefined" ? await dwbTrack.bytesForDisk(bytes) : bytes);
+      await writable.close();
+      return true;
+    });
     toast(t("saveDone"), "success");
     document.dispatchEvent(new CustomEvent("dwb:saved")); // strażnik spójności (self-check.js)
     if (typeof closeMobileSidebarIfOpen === "function") closeMobileSidebarIfOpen();
@@ -200,6 +198,29 @@ async function saveDocument() {
   }
 }
 
+// Zapis pod wyłącznym dostępem do pliku (withQuietFile): budowa → write(bytes) → stan po zapisie.
+// Enter/Backspace w trakcie widać od razu, a jego przebudowa czeka i liczy już na zapisanym pliku
+// (dawniej budowała obok na starym, a zapis nadpisywał jej wynik — podgląd i plik rozjeżdżały się).
+// „Zapisano” gasi „Zapisz” tylko, gdy od zbudowania pliku nic się nie zmieniło — tekst wpisany
+// w trakcie zapisu dalej czeka (dawniej znikało ostrzeżenie przy zamykaniu, a szkic był kasowany).
+// write zwraca false = nic nie zapisano (np. Anuluj w pytaniu o nazwę).
+async function withSavedFile(write) {
+  let ok = false;
+  await withQuietFile(async () => {
+    const gen = inlineStructuralGen;
+    const bytes = await buildDocumentForSaveNow();
+    if (!bytes || !(await write(bytes))) return;
+    ok = true;
+    pendingDocEdits = [];
+    originalFileBytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    await refreshBaselineIfUnmoved(originalFileBytes, gen);
+    if (typeof dwbNotes !== "undefined") dwbNotes.rebase();
+    const changedSince = gen !== inlineStructuralGen || collectInlineParagraphEdits().length > 0;
+    setDirtyState(changedSince);
+  });
+  return ok;
+}
+
 async function saveDocumentAs() {
   if (!originalFileBytes) {
     toast(t("noFileToSave"), "warning");
@@ -209,59 +230,71 @@ async function saveDocumentAs() {
   const suggested = `${base}_edited.docx`;
   // Budowa pliku PO oknie wyboru: na dużym dokumencie trwa sekundy, a showSaveFilePicker
   // wymaga świeżego gestu użytkownika — inaczej SecurityError i ciche przejście na prompt().
-  let bytes, disk;
-  const build = async () => {
-    try {
-      bytes = await buildDocumentForSave();
-      disk = typeof dwbTrack !== "undefined" ? await dwbTrack.bytesForDisk(bytes) : bytes; // z poprawkami przy śledzeniu
-      return true;
-    } catch (e) {
-      log(String(e?.message || e), "error");
-      toast(t("saveFailed"), "error");
-      return false;
-    }
+  const failed = (e) => {
+    log(String(e?.message || e), "error");
+    toast(t("saveFailed"), "error");
   };
+  const forDisk = (bytes) => (typeof dwbTrack !== "undefined" ? dwbTrack.bytesForDisk(bytes) : bytes); // z poprawkami przy śledzeniu
 
   if (window.showSaveFilePicker) {
+    let handle;
     try {
-      const handle = await window.showSaveFilePicker({
+      handle = await window.showSaveFilePicker({
         suggestedName: suggested,
         types: [{
           description: "Word Document",
           accept: { "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [".docx"] },
         }],
       });
-      if (!(await build())) return;
-      const writable = await handle.createWritable();
-      await writable.write(disk);
-      await writable.close();
-      fileHandle = handle;
-      overwriteConfirmedFor = handle; // sam wybrał ten plik w oknie zapisu — kolejne „Zapisz” bez pytania
-      currentFileName = handle.name || suggested;
-      setFileUi(currentFileName, bytes.byteLength);
-      originalFileBytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-      pendingDocEdits = [];
-      await refreshInlineEditBaseline(originalFileBytes);
-      setDirtyState(false);
-      toast(t("saveDone"), "success");
-      document.dispatchEvent(new CustomEvent("dwb:saved")); // strażnik spójności (self-check.js)
-      if (typeof closeMobileSidebarIfOpen === "function") closeMobileSidebarIfOpen();
-      return;
     } catch (e) {
       if (e && e.name === "AbortError") return;
+      handle = null; // brak gestu użytkownika itp. — niżej pobranie
+    }
+    if (handle) {
+      let size = 0;
+      try {
+        const ok = await withSavedFile(async (bytes) => {
+          const writable = await handle.createWritable();
+          await writable.write(await forDisk(bytes));
+          await writable.close();
+          size = bytes.byteLength;
+          return true;
+        });
+        if (!ok) return;
+      } catch (e) {
+        // zapis przez okno wyboru nie wyszedł (np. wadliwe File System Access) — ratunek: pobranie
+        log(String(e?.message || e), "error");
+        size = -1;
+      }
+      if (size >= 0) {
+        fileHandle = handle;
+        overwriteConfirmedFor = handle; // sam wybrał ten plik w oknie zapisu — kolejne „Zapisz” bez pytania
+        currentFileName = handle.name || suggested;
+        setFileUi(currentFileName, size);
+        toast(t("saveDone"), "success");
+        document.dispatchEvent(new CustomEvent("dwb:saved")); // strażnik spójności (self-check.js)
+        if (typeof closeMobileSidebarIfOpen === "function") closeMobileSidebarIfOpen();
+        return;
+      }
     }
   }
 
-  if (!bytes && !(await build())) return;
-  const nameRaw = window.prompt(t("saveAsPrompt"), suggested);
-  if (!nameRaw) return;
-  const name = nameRaw.toLowerCase().endsWith(".docx") ? nameRaw : `${nameRaw}.docx`;
-  await downloadBytes(disk, name);
-  originalFileBytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  let name = null;
+  try {
+    const ok = await withSavedFile(async (bytes) => {
+      const disk = await forDisk(bytes);
+      const nameRaw = window.prompt(t("saveAsPrompt"), suggested);
+      if (!nameRaw) return false;
+      name = nameRaw.toLowerCase().endsWith(".docx") ? nameRaw : `${nameRaw}.docx`;
+      await downloadBytes(disk, name);
+      return true;
+    });
+    if (!ok) return;
+  } catch (e) {
+    failed(e);
+    return;
+  }
   currentFileName = name;
-  pendingDocEdits = [];
-  await refreshInlineEditBaseline(originalFileBytes);
-  setDirtyState(false);
   // pobranie: przeglądarka (Safari/iPhone) jeszcze pyta „Pobrać?” — nie mówimy „zapisano”
   toast(t("saveDownloaded", { name }), "success");
   document.dispatchEvent(new CustomEvent("dwb:saved"));

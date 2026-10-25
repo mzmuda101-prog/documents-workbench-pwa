@@ -217,10 +217,14 @@ async function runFindReplaceScan() {
   // Tekst wpisany w podglądzie, a jeszcze nie w pliku: te akapity liczymy z podglądu.
   // (Scalanie z plikiem przed każdym szukaniem kosztowało ~1 s przy dużym dokumencie;
   // zamiana i tak scala najpierw — applyDocumentEdit — więc numeracja się zgadza.)
-  if (typeof waitInlineStructuralIdle === "function") await waitInlineStructuralIdle();
-  const pending = typeof collectInlineParagraphEdits === "function" ? collectInlineParagraphEdits() : [];
-  const override = new Map(pending.filter((e) => !e.note).map((e) => [e.index, previewRunsToPlainText(e.runs).replace(/\n/g, "")]));
-  const doc = await getDocumentXmlDom(originalFileBytes);
+  // plik i tekst z podglądu z tej samej chwili (Enter w kolejce przesunąłby numerację akapitów)
+  const read = async () => {
+    const pending = typeof collectInlineParagraphEdits === "function" ? collectInlineParagraphEdits() : [];
+    return { pending, bytes: originalFileBytes };
+  };
+  const snap = typeof withQuietFile === "function" ? await withQuietFile(read) : await read();
+  const override = new Map(snap.pending.filter((e) => !e.note).map((e) => [e.index, previewRunsToPlainText(e.runs).replace(/\n/g, "")]));
+  const doc = await getDocumentXmlDom(snap.bytes);
   const paras = docBodyParagraphs(docCanvasEl);
   frMatches = doc ? scanFindMatchesInDoc(doc, edit, edit.scope, override).map((m) => ({ ...m, el: paras[m.paraIndex] })) : [];
   frOtherCount = edit.scope === "all" ? await countInOtherParts(originalFileBytes, edit) : 0;
