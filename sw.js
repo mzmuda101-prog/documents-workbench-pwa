@@ -1,4 +1,4 @@
-const CACHE_VERSION = "20261025-07";
+const CACHE_VERSION = "20261027-02";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
@@ -98,6 +98,7 @@ const SHELL_ASSETS = [
   `./app/grammar-panel.js?v=${ASSET_V}`,
   `./app/a11y-check.js?v=${ASSET_V}`,
   `./app/placeholders-panel.js?v=${ASSET_V}`,
+  `./app/mail-merge.js?v=${ASSET_V}`,
   `./app/snippets-panel.js?v=${ASSET_V}`,
   `./app/find-replace-workbench.js?v=${ASSET_V}`,
   `./app/metadata-panel.js?v=${ASSET_V}`,

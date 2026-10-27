@@ -3089,3 +3089,15 @@ body.tb-float.tb-tucked .doc-panel::before { opacity: 1; }
   body.tb-float .doc-panel::before { transition: opacity 200ms ease; }
 }
 @media print { .doc-panel::before { display: none !important; } }
+
+/* Malarz formatów: kursor-pędzel nad tekstem, dopóki pędzel jest aktywny (docx-inline-edit.js) */
+body.dwb-painting .docx-preview-host,
+body.dwb-painting .docx-preview-host * {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='white' stroke='black' stroke-width='1.6' stroke-linejoin='round'%3E%3Crect x='4' y='3' width='14' height='6' rx='1.5'/%3E%3Cpath d='M18 6h2v5h-8v3' fill='none'/%3E%3Cpath d='M11 14h2v7h-2z'/%3E%3C/svg%3E") 12 22, copy;
+}
+
+/* Korespondencja seryjna (mail-merge.js): „Wiersz [ 1 ]” w jednej linii z przyciskiem podglądu */
+.mm-box .btn-row { align-items: center; }
+.mm-row-field { flex-direction: row; align-items: center; gap: 8px; margin: 0; flex: 0 0 auto; }
+.mm-row-field > span { margin: 0; }
+.mm-row-field input { width: 4.5em; }

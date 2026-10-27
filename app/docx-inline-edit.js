@@ -2314,6 +2314,175 @@ function clearTextFormatting() {
   return true;
 }
 
+// ── Malarz formatów (pędzel w Wordzie) ─────────────────────────────────────────────────────
+// Klik = format znaków z miejsca kursora (albo początku zaznaczenia) czeka na następne zaznaczenie;
+// dwuklik = pędzel zostaje na wiele zaznaczeń (Esc albo ponowny klik kończy). Klik w tekst bez
+// zaznaczenia maluje całe słowo. Ctrl/⌘+Shift+C / Ctrl/⌘+Shift+V — kopiuj / wklej format (Word).
+// Na dotyku: zaznacz cel uchwytami i stuknij pędzel jeszcze raz.
+// Przenosi to, co WIDAĆ (pogrubienie i kursywa także ze stylu nagłówka, krój, rozmiar, kolor,
+// podkreślenie, wyróżnienie, indeks). Cel najpierw traci własny format (jak gumka), potem dostaje
+// tylko cechy różne od jego akapitu — bez zbędnych „wyłączeń” w pliku. Format akapitu zostaje.
+let painterFormat = null; // { bold, italic, underline, strike, color, highlight, vertAlign, family, sizePt }
+let painterMode = 0;      // 0 = wyłączony, 1 = jeden raz, 2 = przyklejony (dwuklik)
+
+function firstDocTextNodeIn(range) {
+  if (!range) return null;
+  const p = (range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement)?.closest?.(".docx-editable-p");
+  if (range.collapsed) return p ? caretStyleSourceNode(p, range.startContainer, range.startOffset) : null;
+  const root = range.commonAncestorContainer.nodeType === 1 ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (!range.intersectsNode(n) || !/[^﻿\s]/.test(n.data) || !isDocTextNode(n) || !n.parentElement?.closest(".docx-editable-p")) continue;
+    if (n === range.startContainer && range.startOffset >= n.length) continue;
+    return n;
+  }
+  return null;
+}
+
+// Wygląd znaków węzła tekstu: B/I/rozmiar/krój z obliczonego stylu, reszta z łańcucha fragmentu.
+function painterLookOf(n) {
+  const el = n?.nodeType === 3 ? n.parentElement : n;
+  const p = el?.closest?.(".docx-editable-p");
+  if (!el || !p) return null;
+  const chain = {};
+  const els = [];
+  for (let a = el; a && a !== p; a = a.parentElement) els.push(a);
+  for (let i = els.length - 1; i >= 0; i--) accumulateElementStyle(els[i], chain);
+  const cs = getComputedStyle(el);
+  const fmt = textFormatOfElement(el) || {};
+  const va = n.nodeType === 3 ? vertAlignOfNode(n) : "baseline";
+  return {
+    bold: (parseInt(cs.fontWeight, 10) || 400) >= 600,
+    italic: cs.fontStyle === "italic",
+    underline: !!chain.underline,
+    strike: !!chain.strike,
+    color: chain.color || null,
+    highlight: chain.highlight || null,
+    vertAlign: va && va !== "baseline" ? va : null,
+    family: fmt.family || null,
+    sizePt: fmt.sizePt || null,
+  };
+}
+
+function copyFormatForPainter() {
+  const n = firstDocTextNodeIn(docSelectionRange());
+  const look = n ? painterLookOf(n) : null;
+  if (!look) { toast(t("painterNoSource"), "info"); return false; }
+  painterFormat = look;
+  return true;
+}
+
+function setPainterMode(mode) {
+  painterMode = mode;
+  document.body.classList.toggle("dwb-painting", mode > 0);
+  const b = document.getElementById("fmtPainterBtn");
+  b?.classList.toggle("is-on", mode > 0);
+  b?.setAttribute("aria-pressed", mode > 0 ? "true" : "false");
+}
+
+// Kursor w słowie bez zaznaczenia → zakres całego słowa (litery, cyfry, łącznik, apostrof).
+function wordRangeAtCaret(range) {
+  const c = range?.startContainer;
+  if (!c || c.nodeType !== 3) return null;
+  const isW = (ch) => /[\p{L}\p{N}'’-]/u.test(ch);
+  let a = range.startOffset, b = range.startOffset;
+  while (a > 0 && isW(c.data[a - 1])) a--;
+  while (b < c.length && isW(c.data[b])) b++;
+  if (a === b) return null;
+  const r = document.createRange();
+  r.setStart(c, a);
+  r.setEnd(c, b);
+  return r;
+}
+
+function paintFormat() {
+  if (readOnlyMode || !painterFormat) return false;
+  let range = docSelectionRange({ remembered: false });
+  if (!range) return false;
+  if (range.collapsed) range = wordRangeAtCaret(range);
+  if (!range) return false;
+  // osobny krok Cofnij — inaczej malowanie tuż po innej zmianie doklejało się do niej (krok „pisanie”)
+  return asUndoStep("undoOpFormat", () => paintFormatOn(range));
+}
+
+function paintFormatOn(range) {
+  const pieces = selectedTextPieces(range);
+  if (!pieces.length) return false;
+  pieces.forEach((n) => {
+    const top = isolatePiece(n);
+    if (top) top.replaceWith(n);
+  });
+  selectPieces(pieces);
+  const src = painterFormat;
+  const diff = (n) => {
+    const base = painterLookOf(n) || {};
+    const out = {};
+    if (src.bold !== base.bold) out.bold = src.bold;
+    if (src.italic !== base.italic) out.italic = src.italic;
+    if (src.underline) out.underline = true;
+    if (src.strike) out.strike = true;
+    if (src.color) out.color = src.color;
+    if (src.highlight) out.highlight = src.highlight;
+    if (src.vertAlign) out.vertAlign = src.vertAlign;
+    if (src.family && src.family !== base.family) out.fontFamily = src.family;
+    if (src.sizePt && src.sizePt !== base.sizePt) out.fontSize = `${src.sizePt}pt`;
+    return out;
+  };
+  const sel = window.getSelection();
+  const editableText = (n) => !!n.parentElement?.closest(".docx-editable-p") && isDocTextNode(n);
+  const out = applyRunPropsToRange(sel.getRangeAt(0), diff, editableText);
+  if (out) { sel.removeAllRanges(); sel.addRange(out); }
+  clearTypingStyle();
+  onInlineParagraphInput();
+  syncFormatIndicators();
+  return true;
+}
+
+function wireFormatPainter() {
+  const btn = document.getElementById("fmtPainterBtn");
+  let clickTimer = 0;
+  btn?.addEventListener("mousedown", (e) => e.preventDefault()); // zaznaczenie w tekście zostaje
+  btn?.addEventListener("click", (e) => {
+    if (readOnlyMode) return;
+    if (e.detail >= 2) { // dwuklik: pędzel przyklejony (pierwszy klik już skopiował format)
+      clearTimeout(clickTimer);
+      if (painterFormat) { setPainterMode(2); toast(t("painterSticky"), "info"); }
+      return;
+    }
+    if (painterMode) {
+      // dotyk: zaznaczony cel + ponowne stuknięcie pędzla = maluj
+      if (docSelectionIsRange() && paintFormat() && painterMode === 2) return;
+      setPainterMode(0);
+      return;
+    }
+    if (!copyFormatForPainter()) return;
+    setPainterMode(1);
+    clickTimer = setTimeout(() => { if (painterMode === 1) toast(t("painterArmed"), "info"); }, 280);
+  });
+  // mysz / palec puszczony w dokumencie = cel gotowy (zaznaczenie albo klik w słowo)
+  docCanvasEl?.addEventListener("pointerup", (e) => {
+    if (!painterMode || e.button > 0) return;
+    if (!docPreviewHost()?.contains(e.target)) return;
+    setTimeout(() => {
+      if (!painterMode || !paintFormat()) return;
+      if (painterMode === 1) setPainterMode(0);
+    }, 0);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (painterMode && e.key === "Escape") { setPainterMode(0); return; }
+    const mod = e.ctrlKey || e.metaKey;
+    if (!mod || !e.shiftKey || e.altKey || (e.code !== "KeyC" && e.code !== "KeyV") || readOnlyMode) return;
+    if (!docSelectionRange({ remembered: false })) return;
+    if (e.code === "KeyC") {
+      e.preventDefault();
+      if (copyFormatForPainter()) toast(t("painterCopied"), "success");
+    } else if (painterFormat) { // bez skopiowanego formatu Ctrl/⌘+Shift+V zostaje przeglądarce
+      e.preventDefault();
+      paintFormat();
+    }
+  });
+}
+
 // indeksy akapitów z bezpośrednim formatowaniem akapitu (w:pPr poza końcem sekcji i śledzeniem zmian)
 async function paragraphsWithDirectFormat(indices) {
   try {
@@ -2707,3 +2876,4 @@ function wireFormatToolbar() {
   document.addEventListener("selectionchange", () => { onTypingStyleSelectionChange(); scheduleFormatSync(); markCaretParagraph(); });
 }
 wireFormatToolbar();
+wireFormatPainter();

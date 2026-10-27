@@ -2,7 +2,7 @@
 const LAZY_FEATURE_SCRIPTS = {
   grammar: ["app/spell-check.js", "app/grammar-panel.js", "app/a11y-check.js"],
   metadata: ["app/metadata-panel.js"],
-  placeholders: ["app/placeholders-panel.js"],
+  placeholders: ["app/placeholders-panel.js", "app/mail-merge.js"],
   "snippets-panel": ["app/snippets-panel.js"],
   "find-replace": ["app/find-replace-workbench.js"],
   export: ["app/export-panel.js"],

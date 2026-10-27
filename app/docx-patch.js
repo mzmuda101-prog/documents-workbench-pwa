@@ -796,11 +796,11 @@ function applyParagraphTransformInXml(xml, edit, scope) {
   return { xml: new XMLSerializer().serializeToString(doc), count };
 }
 
-function applyPlaceholderFillInXml(xml, values, scope) {
+function applyPlaceholderFillInXml(xml, values, scope, opts = {}) {
   let current = xml;
   let count = 0;
   Object.entries(values || {}).forEach(([name, val]) => {
-    if (val == null || val === "") return;
+    if (val == null || (val === "" && !opts.allowEmpty)) return; // allowEmpty — korespondencja seryjna: pusta komórka = puste pole
     const safeName = String(name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const res = applyReplaceInXml(current, {
       op: "replace",
@@ -844,7 +844,7 @@ function applySnippetExpandInXml(xml, snippetMap, scope) {
 function applyEditToXml(xml, edit, opts = {}) {
   const scope = edit.scope || "all";
   if (edit.op === "paragraphBatch") return applyParagraphBatchInXml(xml, edit.items);
-  if (edit.op === "placeholderFill") return applyPlaceholderFillInXml(xml, edit.values, scope);
+  if (edit.op === "placeholderFill") return applyPlaceholderFillInXml(xml, edit.values, scope, { allowEmpty: !!edit.allowEmpty });
   if (edit.op === "snippetExpand") return applySnippetExpandInXml(xml, edit.snippets, scope);
   if (edit.op === "splitParagraph") return splitParagraphInXml(xml, edit.index, edit.before, edit.after, edit.beforeRuns, edit.afterRuns, edit.nextNormal);
   if (edit.op === "pageBreak") return applyPageBreakInXml(xml, edit); // docx-compose.js
