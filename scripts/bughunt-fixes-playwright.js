@@ -68,6 +68,30 @@ async function run() {
   check("start przy zablokowanym localStorage", booted && !errs2.length, `booted=${booted} ${errs2.join(" | ")}`);
   await ctx.close();
 
+  // 3) (chaos 2026-10-28) Esc w tekście wychodzi z pisania — WebKit dalej zmieniał zaznaczony tekst
+  // (Enter dzielił akapit tylko w podglądzie, nie w pliku); teraz klawisze nic nie robią, jak w Chromium
+  const p3 = await browser.newPage();
+  await p3.addInitScript(() => sessionStorage.setItem("introPlayed", "true"));
+  await p3.goto(APP_URL, { waitUntil: "load" });
+  await p3.evaluate(() => { document.getElementById("heroSplash")?.remove(); return composeUi.createNew("note"); });
+  await p3.waitForSelector(".docx-preview-host p", { timeout: 30000 });
+  await p3.waitForFunction(() => !inlineLocksPending && document.getElementById("loadingOverlay")?.classList.contains("hidden"));
+  await p3.waitForTimeout(400);
+  const escCase = async (key) => {
+    const pt = await p3.evaluate(() => { const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).find((q) => q.textContent.trim().length > 6); const r = p.getBoundingClientRect(); return { x: r.left + 3, y: r.top + r.height / 2 }; });
+    await p3.mouse.move(pt.x, pt.y); await p3.mouse.down(); await p3.mouse.move(pt.x + 50, pt.y, { steps: 3 }); await p3.mouse.up();
+    await p3.keyboard.press("Escape");
+    await p3.waitForTimeout(150);
+    const before = await p3.evaluate(() => collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).map((p) => p.textContent).join("¶"));
+    if (key === "type") await p3.keyboard.type("XY"); else await p3.keyboard.press(key);
+    await p3.waitForTimeout(500);
+    const after = await p3.evaluate(() => collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).map((p) => p.textContent).join("¶"));
+    const ck = (await p3.evaluate(() => dwbSelfCheck())).problems.filter((x) => x.level === "error").map((x) => x.msg);
+    check(`Esc, potem ${key}: dokument bez zmian, podgląd = plik`, before === after && !ck.length, `${ck.join(" | ")} ${before === after ? "" : "zmiana tekstu"}`);
+  };
+  for (const key of ["Enter", "Shift+Enter", "type"]) await escCase(key);
+  await p3.close();
+
   await browser.close();
   if (fails.length) { console.error(`❌ bughunt-fixes (${ENGINE}): ${fails.length} błąd(y)`); process.exit(1); }
   console.log(`✅ bughunt-fixes (${ENGINE}) OK`);

@@ -126,6 +126,20 @@ function mergeAdjacentRuns(runs) {
   return out;
 }
 
+// tekst opakowania pola (docx-forms.js) z <br> jako „\n" (bez znaczników zastępczych Shift+Enter)
+function ffWrapText(el) {
+  let out = "";
+  const walk = (n) => {
+    for (let c = n.firstChild; c; c = c.nextSibling) {
+      if (c.nodeType === 3) out += c.data;
+      else if (c.localName === "br") { if (!c.dataset?.dwbPh) out += "\n"; }
+      else if (c.nodeType === 1) walk(c);
+    }
+  };
+  walk(el);
+  return out;
+}
+
 function extractRunsFromPreviewParagraph(pEl) {
   if (!pEl) return [];
   const runs = [];
@@ -156,7 +170,9 @@ function extractRunsFromPreviewParagraph(pEl) {
     }
     // pole formularza w zdaniu (docx-forms.js): cała kontrolka z pliku, bez zmian
     if (node.dataset?.ff && docIslandXml.has(node.dataset.ff)) {
-      runs.push({ island: docIslandXml.get(node.dataset.ff), text: node.textContent || "" });
+      // <br> w polu wielowierszowym = „\n”, jak w pliku (ffText) — inaczej po przerysowaniu tekst
+      // podglądu ≠ plik (łamanie wiersza ginęło z odczytu)
+      runs.push({ island: docIslandXml.get(node.dataset.ff), text: node.querySelector("br") ? ffWrapText(node) : node.textContent || "" });
       return;
     }
     if (node.dataset?.cm && docIslandXml.has(node.dataset.cm)) { // znacznik komentarza (docx-inline-edit.js)
@@ -587,6 +603,8 @@ function applyRunsToParagraphXml(pEl, runs) {
     if (run.island) {
       hl = null;
       const frag = new DOMParser().parseFromString(run.island, "application/xml").documentElement;
+      // pole tekstowe zostało w akapicie (clearParagraphRuns) — jego kopia z wyspy podwoiłaby je
+      if (frag?.localName === "r" && frag.getElementsByTagNameNS(W_NS, "txbxContent").length) return;
       if (frag && frag.namespaceURI === W_NS && ["sdt", "r", "commentRangeStart", "commentRangeEnd", "bookmarkStart", "bookmarkEnd"].includes(frag.localName)) {
         const node = doc.importNode(frag, true);
         // deklaracja xmlns:w z zapisu wyspy — dokument ma ją w korzeniu (bez tego każdy znacznik

@@ -216,6 +216,24 @@ async function run() {
   await page.waitForTimeout(600);
   check("Backspace na zaznaczonych kropkach usuwa je", /^Miejscowość:PILECKIEGO 23⇥/.test(flat(await runsOf(0))), await runsOf(0));
 
+  // 7c. (chaos 2026-10-28) ◀ i od razu Enter — zmiana kropek czeka chwilę na kolejne kliknięcia;
+  // Enter w tym czasie dzielił akapit tylko w pliku (podgląd o akapit krótszy)
+  const paraCount = () => page.evaluate(async () => {
+    const z = await JSZip.loadAsync(await buildDocumentForSave());
+    const d = new DOMParser().parseFromString(await z.file("word/document.xml").async("string"), "application/xml");
+    return { file: collectParagraphElements(d.documentElement, "all").length, view: collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).length };
+  });
+  const pc0 = await paraCount();
+  r = await tabRect(page, 0, 1);
+  await page.mouse.click(r.x, r.y);
+  await page.waitForTimeout(250);
+  await page.click('.dwb-tabstop-card [data-d="-1"]');
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(1200);
+  await idle(page);
+  const pc1 = await paraCount();
+  check("◀ i od razu Enter: nowy akapit w pliku i w podglądzie", pc1.file === pc0.file + 1 && pc1.view === pc1.file, JSON.stringify({ pc0, pc1 }));
+
   // 8. Czytanie: klik w kropki nic nie pokazuje
   await page.evaluate(() => { readModeEl.checked = true; readModeEl.dispatchEvent(new Event("change")); });
   await page.waitForTimeout(300);

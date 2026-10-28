@@ -67,7 +67,12 @@ function getParagraphText(pEl) {
 }
 
 function clearParagraphRuns(pEl) {
-  Array.from(pEl.getElementsByTagNameNS(W_NS, "r")).forEach((r) => r.parentNode.removeChild(r));
+  // pola tekstowe zostają (podgląd rysuje je osobno — nie wracają z listy fragmentów); przebiegi
+  // w ich treści też. Dawniej format w akapicie kotwicy (B, malarz) usuwał pole z pliku (test chaos).
+  Array.from(pEl.getElementsByTagNameNS(W_NS, "r")).forEach((r) => {
+    if (!r.parentNode || isInsideTextbox(r, pEl) || r.getElementsByTagNameNS(W_NS, "txbxContent").length) return;
+    r.parentNode.removeChild(r);
+  });
   // puste opakowania linków (fragmenty już usunięte) — nowe linki tworzy applyRunsToParagraphXml
   Array.from(pEl.childNodes).forEach((n) => { if (n.localName === "hyperlink" && n.namespaceURI === W_NS) pEl.removeChild(n); });
 }
@@ -114,7 +119,10 @@ function splitParagraphInXml(xml, index, beforeText, afterText, beforeRuns, afte
   const paragraphs = collectParagraphElements(doc.documentElement, "all");
   const p = paragraphs[index];
   if (!p) return { xml, count: 0 };
-  if (beforeRuns?.length) applyRunsToParagraphXml(p, beforeRuns);
+  // pusta lista (Enter na początku akapitu) też przez fragmenty: setParagraphText zdejmuje tylko
+  // przebiegi — kontrolka z PDF („KLATKI:”) zostawała pusta w pierwszej części, a jej kopia szła do
+  // drugiej (pole dwa razy, numeracja pól przesunięta → cudze pola na innych kartach; test chaos)
+  if (Array.isArray(beforeRuns)) applyRunsToParagraphXml(p, beforeRuns);
   else setParagraphText(p, beforeText);
   // Nowy akapit = TYLKO właściwości akapitu (w:pPr) + treść „po kursorze”. Dawniej pełna kopia
   // starego bez fragmentów tekstu: zostawały w niej pusta kopia pola formularza (zdublowana
@@ -212,6 +220,11 @@ function deleteParagraphRangeInXml(xml, edit) {
   // znacznik ostatniego akapitu zostaje (jak w Wordzie) — z nim podział sekcji
   if (edit.keep !== "last") carrySectPr(last, keep);
   drop.forEach((n) => n.parentNode.removeChild(n));
+  if (edit.dropBoxes) { // pola tekstowe zakotwiczone w zachowanym akapicie (jego początek był w zaznaczeniu)
+    Array.from(keep.getElementsByTagNameNS(W_NS, "r")).forEach((r) => {
+      if (r.parentNode && !isInsideTextbox(r, keep) && r.getElementsByTagNameNS(W_NS, "txbxContent").length) r.parentNode.removeChild(r);
+    });
+  }
   applyRunsToParagraphXml(keep, edit.mergedRuns || []);
   return { xml: new XMLSerializer().serializeToString(doc), count: 1 };
 }

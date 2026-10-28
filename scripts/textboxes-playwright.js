@@ -117,6 +117,16 @@ async function run() {
   const anchorText = await page.evaluate(async () => { const z = await JSZip.loadAsync(await buildDocumentForSave()); const d = new DOMParser().parseFromString(await z.file("word/document.xml").async("string"), "application/xml"); return getParagraphText(collectParagraphElements(d.documentElement, "all")[0]); });
   check("pisanie w akapicie kotwicy: tekst w pliku, pole bez zmian (obie kopie)", /AkapitXYZ /.test(anchorText.replace(/\s+/g, (m) => m)) && saved.boxes.length === 1 && saved.boxes[0].text === "Pole z Worda\ndruga linia" && saved.boxes[0].vText === "Pole z Worda\ndruga linia", JSON.stringify({ anchorText, b: saved.boxes[0] }));
 
+  // 2b. (chaos 2026-10-28) pogrubienie w akapicie kotwicy — pole zostaje w pliku (dawniej przepisanie
+  // fragmentów akapitu usuwało przebieg z polem)
+  await page.evaluate(() => { const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[0]; const n = document.createTreeWalker(p, NodeFilter.SHOW_TEXT).nextNode(); p.closest(".docx-edit-root").focus(); const r = document.createRange(); r.setStart(n, 0); r.setEnd(n, 3); getSelection().removeAllRanges(); getSelection().addRange(r); });
+  await page.keyboard.press(`${mod}+b`);
+  await page.waitForTimeout(400);
+  saved = await savedBoxes(page);
+  check("pogrubienie w akapicie kotwicy: pole zostaje w pliku (obie kopie)", saved.boxes.length === 1 && saved.boxes[0].text === "Pole z Worda\ndruga linia" && saved.boxes[0].vText === "Pole z Worda\ndruga linia", JSON.stringify(saved.boxes));
+  await page.keyboard.press(`${mod}+z`);
+  await idle(page);
+
   // 3. edycja tekstu pola z Worda: dwuklik, nowy tekst, Esc → obie kopie, pogrubienie 1. linii zostaje
   let c = await boxCenter(page);
   await page.mouse.dblclick(c.x, c.y);
@@ -337,6 +347,17 @@ async function run() {
   await page.mouse.click(c.x, c.y);
   await page.waitForTimeout(200);
   check("w Czytaniu klik w pole nic nie zaznacza", await page.evaluate(() => !document.querySelector(".dwb-tb.is-selected") && !document.querySelector(".dwb-tb-card")));
+
+  // 12. (chaos 2026-10-28) Ctrl/⌘+A + litera: pola znikają z pliku i z podglądu (jak w Wordzie)
+  await page.evaluate(() => { readModeEl.checked = false; readModeEl.dispatchEvent(new Event("change")); });
+  await idle(page);
+  await page.evaluate(() => { const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[1]; placeCaret(p, 0); });
+  await page.keyboard.press(`${mod}+a`);
+  await page.keyboard.type("X");
+  await idle(page);
+  saved = await savedBoxes(page);
+  const leftView = await page.evaluate(() => document.querySelectorAll(".docx-preview-host .dwb-tb").length);
+  check("Ctrl/⌘+A + litera: pól nie ma ani w pliku, ani w podglądzie", saved.boxes.length === 0 && leftView === 0, JSON.stringify({ file: saved.boxes.length, view: leftView }));
 
   await browser.close();
   const real = errors.filter((e) => !/ResizeObserver/.test(e));

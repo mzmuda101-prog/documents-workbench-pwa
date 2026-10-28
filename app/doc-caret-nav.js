@@ -652,10 +652,15 @@
         dwbSel.removeBreakParagraph(all.indexOf(after), p, "before");
         return;
       }
-      if (!next || all.indexOf(next) !== all.indexOf(p) + 1 || typeof handleInlineBackspace !== "function") return;
+      // bezpośrednio następny akapit (też malutki pusty z PDF, który neighbour pomija) — sklejenie
+      // przez Edycję. Dawniej przy niezgodności Delete szedł do przeglądarki: ta sklejała akapity
+      // sama, podgląd miał akapit mniej niż plik (test chaos). Bez możliwości sklejenia — nic.
       e.preventDefault();
-      placeAt(next, 0);
-      handleInlineBackspace(next, all.indexOf(next), { preventDefault() {}, key: "Backspace", fromDelete: true });
+      const target = next && all.indexOf(next) === all.indexOf(p) + 1 ? next
+        : after?.classList.contains("docx-editable-p") && !after.dataset.lock && !after.dataset.dwbCont ? after : null;
+      if (!target || typeof handleInlineBackspace !== "function") return;
+      placeAt(target, 0);
+      handleInlineBackspace(target, all.indexOf(target), { preventDefault() {}, key: "Backspace", fromDelete: true });
     }
   }
 

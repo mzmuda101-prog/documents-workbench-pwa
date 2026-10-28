@@ -604,7 +604,10 @@ const composeUi = (() => {
       r.selectNodeContents(a);
       return { p, index, a, start: textOffset(p, r.startContainer, r.startOffset), end: textOffset(p, r.endContainer, r.endOffset), text: a.textContent || "", link: a.dataset.dwbLink || a.getAttribute("href") || "" };
     }
-    const range = window.getSelection().getRangeAt(0);
+    // fokus na polu formularza (Tab przez pola) — akapit jest, zaznaczenia w tekście nie ma
+    const sel = window.getSelection();
+    if (!sel?.rangeCount) return null;
+    const range = sel.getRangeAt(0);
     const start = textOffset(p, range.startContainer, range.startOffset);
     const end = p.contains(range.endContainer) ? textOffset(p, range.endContainer, range.endOffset) : previewRunsToPlainText(extractRunsFromPreviewParagraph(p)).length;
     return { p, index, a: null, start, end, text: p.contains(range.endContainer) ? range.toString() : "", link: "" };
@@ -1541,8 +1544,8 @@ const composeUi = (() => {
     if (p.dataset.lock) { toast(t(p.dataset.lock), "info"); return; }
     const index = resolveParaIndex(p);
     if (index < 0) return;
-    const r = window.getSelection().getRangeAt(0);
-    const offset = p.contains(r.endContainer) ? modelOffsetAt(p, r.endContainer, r.endOffset) : 0;
+    const r = window.getSelection()?.rangeCount ? window.getSelection().getRangeAt(0) : null; // fokus na polu formularza
+    const offset = r && p.contains(r.endContainer) ? modelOffsetAt(p, r.endContainer, r.endOffset) : 0;
     let id = 1;
     try {
       await mergeInlineEditsIntoBytes();
@@ -2032,8 +2035,7 @@ const composeUi = (() => {
   }
   async function replaceImageWith(img, file, mode = "fill") {
     if (!file || !/^image\//.test(file.type || "")) { toast(t("imageBadType"), "warning"); return; }
-    const tg = imageTarget(img);
-    if (!tg || tg.paraIndex < 0) { toast(t("imageReplaceFailed"), "warning"); return; }
+    if (!imageTarget(img) || imageTarget(img).paraIndex < 0) { toast(t("imageReplaceFailed"), "warning"); return; }
     const frame = img.offsetWidth && img.offsetHeight ? img.offsetWidth / img.offsetHeight : 0;
     let prepared;
     try { prepared = await fitImageToFrame(file, frame, mode); } catch (err) {
@@ -2041,6 +2043,11 @@ const composeUi = (() => {
       toast(t("imageBadType"), "warning");
       return;
     }
+    // miejsce obrazu PO dekodowaniu pliku (duże zdjęcie = chwila): Enter / przerysowanie w tym czasie
+    // przesuwało numer akapitu — zamiana trafiała w inny obraz albo w nic
+    if (typeof waitInlineStructuralIdle === "function") await waitInlineStructuralIdle();
+    const tg = img.isConnected ? imageTarget(img) : null;
+    if (!tg || tg.paraIndex < 0) { toast(t("imageReplaceFailed"), "warning"); return; }
     if (imgCard) imgCard.busy = true;
     const { aspect, ...data } = prepared;
     const n = await applyDocumentEdit({ op: "imageReplace", index: tg.paraIndex, nth: tg.nth, count: tg.count, ...data })

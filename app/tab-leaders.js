@@ -174,6 +174,9 @@ const dwbTabLeaders = (() => {
     s.prevStops = s.prevStops.map((v, i) => (i === s.stop.i ? [s.pos, v[1], v[2]] : v));
     if (index < 0) return;
     const tabIdx = [...s.p.querySelectorAll("span.docx-tab")].indexOf(s.sp);
+    // kursor zostaje, gdzie był (klik w kropki stawia go za nimi) — Enter / pisanie dalej działa
+    const cp = docCaretParagraph(document.activeElement);
+    if (cp && docCanvasEl.contains(cp) && typeof getCaretOffset === "function") pendingInlineCursor = { paraIndex: resolveParaIndex(cp), offset: getCaretOffset(cp) };
     const n = await applyDocumentEdit({ op: "tabStop", index, from, to, leader: s.stop.leader, align: s.stop.align })
       .catch((err) => { if (typeof log === "function") log(`Kropki: ${err.message || err}`, "error"); return 0; });
     if (!n) return;
@@ -290,7 +293,12 @@ const dwbTabLeaders = (() => {
     document.addEventListener("keydown", (e) => {
       if (!sel || drag) return;
       if (e.key === "Escape") { clear(); return; }
-      if (!e.ctrlKey && !e.metaKey && !e.altKey && !/^(Shift|Control|Meta|Alt)$/.test(e.key)) clear(); // pisanie / Backspace — dalej jak zwykły tekst
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && !/^(Shift|Control|Meta|Alt)$/.test(e.key)) {
+        clear(); // pisanie / Backspace — dalej jak zwykły tekst
+        // niezapisana zmiana z ◀ ▶ właśnie idzie do pliku (przerysowanie): ten klawisz po nim — Enter
+        // przed zapisem dzielił akapit tylko w pliku (test chaos: ◀ ×3 → Enter)
+        if (typeof holdKeyEvent === "function") holdKeyEvent(e);
+      }
     }, true);
     // Pisanie przed tabulatorem: koniec kropek stoi na pozycji tabulatora (jak w Wordzie), a nie
     // przesuwa się z tekstem — inaczej „Teren nr: 401” wyjeżdżał za kolumnę.
@@ -307,5 +315,14 @@ const dwbTabLeaders = (() => {
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
 
-  return { select, clear, relayout, isActive: () => !!sel };
+  // niezapisana zmiana z ◀ ▶ (zapis odroczony o chwilę) — od razu do pliku; Cofnij czeka na nią
+  // (dawniej zapis odpalał w środku cofania i kasował „Ponów”; test chaos)
+  let flushing = null;
+  function flush() {
+    if (!sel || sel.pos === sel.stop.pos) return flushing;
+    clearTimeout(commitTimer);
+    flushing = commit().finally(() => { flushing = null; });
+    return flushing;
+  }
+  return { select, clear, relayout, flush, isActive: () => !!sel };
 })();

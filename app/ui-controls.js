@@ -167,6 +167,8 @@ async function saveDocument() {
     toast(t("noFileToSave"), "warning");
     return;
   }
+  const tbText = typeof dwbTextbox !== "undefined" ? dwbTextbox.settle?.() : null; // pisanie w polu tekstowym — do pliku
+  if (tbText) await tbText.catch(() => {});
   // Uprawnienie PRZED budowaniem pliku: requestPermission wymaga świeżego kliknięcia,
   // a przy dużym dokumencie budowanie trwa — przeglądarka odrzuciłaby pytanie.
   const handle = await ensureWriteAccess();
@@ -226,6 +228,8 @@ async function saveDocumentAs() {
     toast(t("noFileToSave"), "warning");
     return;
   }
+  const tbText = typeof dwbTextbox !== "undefined" ? dwbTextbox.settle?.() : null; // pisanie w polu tekstowym — do pliku
+  if (tbText) await tbText.catch(() => {});
   const base = (currentFileName || "document.docx").replace(/\.docx$/i, "");
   const suggested = `${base}_edited.docx`;
   // Budowa pliku PO oknie wyboru: na dużym dokumencie trwa sekundy, a showSaveFilePicker

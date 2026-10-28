@@ -99,7 +99,9 @@ const dwbUndo = (() => {
   let grouped = 0; // trwa group(): operacje w środku nie dokładają własnych kroków
   function push(label) {
     if (applying || grouped || !originalFileBytes) return null;
-    const entry = { state: captureState(), label };
+    // redo: zapamiętany — operacja bez zmian (drop) oddaje go (chaos: zapis pustego pola po Cofnij
+    // kasował całe „Ponów”)
+    const entry = { state: captureState(), label, redo: redoStack, savedPos };
     undoStack.push(entry);
     if (savedPos >= undoStack.length) savedPos = -1; // zapisany stan był na porzuconej gałęzi (po Cofnij)
     redoStack = [];
@@ -116,7 +118,8 @@ const dwbUndo = (() => {
     const i = undoStack.lastIndexOf(entry);
     if (i < 0) return;
     undoStack.splice(i, 1);
-    if (savedPos > i) savedPos -= 1;
+    if (i === undoStack.length && entry.redo && !redoStack.length) { redoStack = entry.redo; savedPos = entry.savedPos; } // ostatni krok bez zmian — „Ponów” jak przed nim
+    else if (savedPos > i) savedPos -= 1;
     sync();
   }
 
@@ -179,6 +182,13 @@ const dwbUndo = (() => {
 
   async function step(direction) {
     if (busy) return busy;
+    // otwarte pisanie w polu tekstowym: najpierw jego tekst do pliku (własny krok) — jak w Wordzie
+    // Cofnij cofa najpierw to pisanie. Wcześniej zapis szedł po przerysowaniu (blur) do złego stanu.
+    // (też zapis już w toku — klik w ↶ kończy pisanie przez blur tuż przed tym wywołaniem)
+    const tbPending = typeof dwbTextbox !== "undefined" ? dwbTextbox.settle?.() : null;
+    if (tbPending) await tbPending.catch(() => {});
+    const tabPending = typeof dwbTabLeaders !== "undefined" ? dwbTabLeaders.flush?.() : null;
+    if (tabPending) await tabPending.catch(() => {});
     const from = direction === "undo" ? undoStack : redoStack;
     if (!originalFileBytes || !from.length) {
       toast(t(direction === "undo" ? "undoNothing" : "redoNothing"), "info");

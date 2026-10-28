@@ -292,7 +292,11 @@ function restoreDocScrollAnchor(anchor) {
 
 // Plik do zapisu = plik + zmiany z panelu + wpisany tekst. Pod wyłącznym dostępem do pliku
 // (withQuietFile): Enter/Backspace w trakcie nie przebudowuje pliku obok tej budowy.
-function buildDocumentForSave() {
+// Zapis tekstu pola tekstowego w toku (klik w Zapisz/Eksport kończy pisanie przez blur tuż przed
+// tym wywołaniem) — najpierw on, inaczej plik szedł bez ostatnio wpisanego tekstu pola.
+async function buildDocumentForSave() {
+  const tb = typeof dwbTextbox !== "undefined" ? dwbTextbox.pending?.() : null;
+  if (tb) await tb.catch(() => {});
   return typeof withQuietFile === "function" ? withQuietFile(buildDocumentForSaveNow) : buildDocumentForSaveNow();
 }
 
@@ -319,8 +323,14 @@ async function buildDocumentForSaveNow() {
 
 // Scalenie wpisanego tekstu i zmiana pliku pod wyłącznym dostępem (jedna przebudowa naraz —
 // dawniej Enter w trakcie budował na starym pliku obok); odrysowanie już poza nim.
-async function applyDocumentEdit(edit, xmlOpts = {}) {
-  if (!originalFileBytes) return 0;
+// Klawisze wciśnięte w trakcie zmiany pliku i przerysowania (np. Enter tuż po ◀ ▶ kropek, pisanie
+// zaraz po zmianie pola tekstowego) — trzymane i dopisane po przerysowaniu (holdTypingWhile).
+// Dawniej trafiały do starego widoku: akapit podzielony w pliku, a w podglądzie nie (test chaos).
+function applyDocumentEdit(edit, xmlOpts = {}) {
+  if (!originalFileBytes) return Promise.resolve(0);
+  return typeof holdTypingWhile === "function" ? holdTypingWhile(() => applyDocumentEditHeld(edit, xmlOpts), -1) : applyDocumentEditHeld(edit, xmlOpts);
+}
+async function applyDocumentEditHeld(edit, xmlOpts) {
   const res = typeof withQuietFile === "function" ? await withQuietFile(() => applyDocumentEditNow(edit, xmlOpts)) : await applyDocumentEditNow(edit, xmlOpts);
   if (!res.reload) return res.n;
   await reloadFromBytes(originalFileBytes);

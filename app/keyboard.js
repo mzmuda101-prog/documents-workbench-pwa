@@ -150,7 +150,8 @@
     // (beforeunload z dialogiem da się przeklikać). W apce taki Backspace nic nie robi.
     if (e.key === "Backspace" && !e.altKey && !mod) {
       const t = e.target?.nodeType === 1 ? e.target : a;
-      if (!t?.isContentEditable && !inFormField(t)) { e.preventDefault(); return; }
+      // lista (<select>, np. styl na pasku po Tab) nie ma tekstu do kasowania — też cofała historię
+      if (!t?.isContentEditable && (!inFormField(t) || t.tagName === "SELECT")) { e.preventDefault(); return; }
     }
     if (!originalFileBytes) return;
 
@@ -167,7 +168,15 @@
     if (e.key === "Escape") {
       if (document.querySelector(".app-menu:not([hidden])")) return; // menu ⋯ ma własne Esc
       if (typeof clearSemanticHighlights === "function" && clearSemanticHighlights()) { e.preventDefault(); return; }
-      if (a?.closest?.(".docx-editable-p, .docx-edit-root")) { e.preventDefault(); docViewportEl.focus({ preventScroll: true }); return; }
+      if (a?.closest?.(".docx-editable-p, .docx-edit-root")) {
+        e.preventDefault();
+        docViewportEl.focus({ preventScroll: true });
+        // WebKit: zaznaczenie zostawało w tekście i Enter / Shift+Enter / litery dalej zmieniały
+        // dokument (poza obsługą Edycji — akapit podzielony tylko w podglądzie, nie w pliku)
+        const s = window.getSelection();
+        if (s?.rangeCount && docCanvasEl.contains(s.anchorNode)) s.removeAllRanges();
+        return;
+      }
       if (dismissDocumentSelection()) { e.preventDefault(); return; }
       if (inFormField(a)) return; // pola: Esc należy do nich (np. czyszczenie szukajki ustawień)
       if (!rootEl.classList.contains("sidebar-docked") && isSidebarOpen()) { e.preventDefault(); setSidebarOpen(false); panelToggle?.focus(); return; }

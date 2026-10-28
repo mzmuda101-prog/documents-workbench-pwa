@@ -106,10 +106,12 @@ async function run() {
     counts: typeof docFormCounts !== "undefined" ? docFormCounts : null,
     shown: document.querySelectorAll(".docx-preview-host .ff-field").length,
     locks: collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).filter((p) => p.dataset.lock).map((p) => p.dataset.lock),
+    dirty: collectInlineParagraphEdits().map((e) => e.index), // podgląd = plik (puste pole za kropkami stawało przed nimi)
     oneLine: (() => { const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).find((q) => /Miasto/.test(q.textContent)); const lh = parseFloat(getComputedStyle(p).lineHeight) || 16; return p.getBoundingClientRect().height < lh * 1.8; })(),
   }));
   check("pola rozpoznane jako formularz (4, w tym 1 puste)", app.counts?.fields === 4 && app.counts?.empty === 1 && app.shown === 4, JSON.stringify(app));
   check("akapity z polami edytowalne (bez blokad)", !app.locks.length, JSON.stringify(app.locks));
+  check("po otwarciu podgląd = plik (żaden akapit „zmieniony”, puste pole za kropkami na swoim miejscu)", !app.dirty.length, JSON.stringify(app.dirty));
   check("wiersz „Miasto … Teren nr …” w jednej linijce (pole nie łamie wiersza)", app.oneLine);
 
   // 3. klik w pole → wpis → Tab → następne pole (puste „Teren nr”) → wpis → Enter
@@ -133,6 +135,88 @@ async function run() {
   check("wpisy w kontrolkach w pliku (Miasto, Teren nr)", saved[0] === "NIEPODLEGŁOŚCI 11" && saved[1] === "301", JSON.stringify(saved));
   const filled = path.join(TMP, "pola-wypelnione.docx");
   fs.writeFileSync(filled, Buffer.from(await page.evaluate(async () => Array.from(await buildDocumentForSave()))));
+
+  // 3b. (chaos 2026-10-28) pole wielowierszowe z łamaniem wiersza: opakowanie z całą treścią po
+  // przerysowaniu, Cofnij → Ponów bez podwojenia; link do akapitu z samą kontrolką = pełna zakładka
+  const bm = await page.evaluate(async (target) => {
+    await applyDocumentEdit({ op: "link", index: 0, start: 0, end: 0, targetIndex: target, text: "do klatek" });
+    await waitInlineStructuralIdle();
+    const z = await JSZip.loadAsync(await buildDocumentForSave());
+    const x = await z.file("word/document.xml").async("string");
+    return { s: (x.match(/<w:bookmarkStart\b/g) || []).length, e: (x.match(/<w:bookmarkEnd\b/g) || []).length };
+  }, await page.evaluate(() => formScan.fields.find((x) => x.display === "KLATKA 1").paraIndex));
+  check("link do akapitu z samą kontrolką: zakładka z początkiem i końcem", bm.s >= 1 && bm.s === bm.e, JSON.stringify(bm));
+  const ml = await page.evaluate(async () => {
+    const f = formScan.fields.find((x) => x.display === "KLATKA 1");
+    await fillFormFields({ [f.key]: "KLATKA 1\nKLATKA 2" });
+    await waitInlineStructuralIdle();
+    const fileText = async () => { const z = await JSZip.loadAsync(await buildDocumentForSave()); const d = new DOMParser().parseFromString(await z.file("word/document.xml").async("string"), "application/xml"); return collectParagraphElements(d.documentElement, "all")[f.paraIndex].textContent; };
+    const a = await fileText();
+    await dwbUndo.undo(); await dwbUndo.redo();
+    await new Promise((r) => setTimeout(r, 400));
+    const w = document.querySelector(`.docx-preview-host .ff-field[data-ff="${f.key}"]`);
+    const ck = (await dwbSelfCheck()).problems.filter((x) => x.level === "error").map((x) => `${x.code}: ${x.msg}`);
+    return { a, r: await fileText(), wrap: w?.textContent || "", glyph: !!w?.classList.contains("ff-glyph"), inline: collectInlineParagraphEdits().length, idx: f.paraIndex, ck };
+  });
+  check("pole wielowierszowe: po Cofnij → Ponów treść raz, opakowanie z oboma wierszami", ml.a === "KLATKA 1KLATKA 2" && ml.r === ml.a && ml.wrap === "KLATKA 1KLATKA 2" && !ml.glyph && !ml.inline && !ml.ck.length, JSON.stringify(ml));
+
+  // 3c. (chaos 2026-10-28) Enter przed akapitem z samą kontrolką i Enter na zaznaczeniu z polem:
+  // liczba kontrolek się zgadza, inne pola nietknięte, podgląd = plik
+  const sdtState = () => page.evaluate(async () => {
+    const z = await JSZip.loadAsync(await buildDocumentForSave());
+    const x = await z.file("word/document.xml").async("string");
+    const vals = [...x.matchAll(/<w:sdt>([\s\S]*?)<\/w:sdt>/g)].map((m) => [...m[1].matchAll(/<w:t[^>]*>([^<]*)/g)].map((q) => q[1]).join(""));
+    const ck = (await dwbSelfCheck()).problems.filter((q) => q.level === "error").map((q) => `${q.code}: ${q.msg}`);
+    return { vals, ck };
+  });
+  const s0 = await sdtState();
+  const kl = await page.evaluate(() => { const f = formScan.fields.find((x) => /^KLATKA/.test(x.display)); const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[f.paraIndex]; p.closest(".docx-edit-root").focus(); const r = document.createRange(); r.setStart(p, 0); r.collapse(true); getSelection().removeAllRanges(); getSelection().addRange(r); return f.paraIndex; });
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(700);
+  await page.waitForFunction(() => !inlineLocksPending, null, { timeout: 10000 });
+  const s1 = await sdtState();
+  check("Enter przed akapitem z kontrolką: kontrolki te same, podgląd = plik", JSON.stringify(s1.vals) === JSON.stringify(s0.vals) && !s1.ck.length, JSON.stringify({ kl, s0: s0.vals, s1 }));
+  await page.evaluate(() => { const f = formScan.fields.find((x) => x.display === "NIEPODLEGŁOŚCI 11"); const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[f.paraIndex]; const w = p.querySelector(`.ff-field[data-ff="${f.key}"]`); p.closest(".docx-edit-root").focus(); const r = document.createRange(); r.setStartBefore(w); r.setEndAfter(w.nextSibling || w); getSelection().removeAllRanges(); getSelection().addRange(r); });
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(700);
+  await page.waitForFunction(() => !inlineLocksPending, null, { timeout: 10000 });
+  const s2 = await sdtState();
+  check("zaznaczenie z polem + Enter: pole usunięte, pozostałe kontrolki nietknięte, podgląd = plik", JSON.stringify(s2.vals) === JSON.stringify(s1.vals.filter((v) => v !== "NIEPODLEGŁOŚCI 11")) && !s2.ck.length, JSON.stringify({ s1: s1.vals, s2 }));
+
+  // 3d. (chaos 2026-10-28, runda 4) Enter na części tekstu pola; Backspace za polem będącym całą
+  // treścią akapitu; Backspace na końcu wiersza z polem + Delete (zastępczy <br> przeglądarki)
+  const settle = async () => { await page.waitForTimeout(600); await page.waitForFunction(() => !inlineLocksPending, null, { timeout: 10000 }); };
+  const errsNow = () => page.evaluate(async () => (await dwbSelfCheck()).problems.filter((q) => q.level === "error").map((q) => `${q.code}: ${q.msg}`));
+  const caretIn = (find, at) => page.evaluate(([find, at]) => {
+    const f = formScan.fields.find((x) => new RegExp(find).test(x.display));
+    const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[f.paraIndex];
+    const w = p.querySelector(`.ff-field[data-ff="${f.key}"]`);
+    p.closest(".docx-edit-root").focus();
+    const r = document.createRange();
+    if (at === "inside") { const t = document.createTreeWalker(w, NodeFilter.SHOW_TEXT).nextNode(); r.setStart(t, 1); r.setEnd(t, 3); }
+    else if (at === "after") { r.setStartAfter(w); r.collapse(true); }
+    else { r.selectNodeContents(p); r.collapse(false); }
+    getSelection().removeAllRanges(); getSelection().addRange(r);
+    return f.key;
+  }, [find, at]);
+  await caretIn("^KLATKA", "inside");
+  await page.keyboard.press("Enter");
+  await settle();
+  let ek = await errsNow();
+  check("Enter na części tekstu pola: pole całe, podgląd = plik", !ek.length, ek.join(" | "));
+  await caretIn("^KLATKA", "after");
+  await page.keyboard.press("Backspace");
+  await settle();
+  ek = await errsNow();
+  check("Backspace za polem (cała treść akapitu): akapit zostaje, podgląd = plik", !ek.length, ek.join(" | "));
+  await caretIn("^301$", "end");
+  for (let i = 0; i < 3; i++) await page.keyboard.press("Backspace");
+  await settle();
+  await page.keyboard.press("Delete");
+  await page.keyboard.press("Delete");
+  await settle();
+  ek = await errsNow();
+  check("Backspace na końcu wiersza z polem, potem Delete: podgląd = plik", !ek.length, ek.join(" | "));
 
   // 4. przełącznik wyłączony: dawny wynik (zwykły tekst, bez kontrolek)
   await page.evaluate(() => { const b = document.getElementById("pdfFormFields"); b.checked = false; b.dispatchEvent(new Event("change")); });

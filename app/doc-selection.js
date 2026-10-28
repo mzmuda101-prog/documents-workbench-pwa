@@ -150,12 +150,16 @@ const dwbSel = (() => {
       const mid = document.createRange();
       mid.setStartBefore(a);
       mid.setEndBefore(b);
+      if (typeof dwbTextbox !== "undefined") info.list.slice(ia, ib).forEach((q) => dwbTextbox.dropAnchoredTo?.(q));
       mid.deleteContents();
       pristineParas.delete(b);
       setCaret(b, 0);
       const mergedRuns = extractRunsFromPreviewParagraph(b);
       mirrorBaseline(ia, ib - ia + 1, mergedRuns);
-      queue({ op: "deleteRange", from: ia, to: ib, keep: "last", mergedRuns }, crossSection);
+      // początek akapitu b był zaznaczony — pola tekstowe zakotwiczone w nim znikają (Word: kotwica
+      // w zaznaczeniu = kształt usunięty; Ctrl/⌘+A + pisanie zostawiało pole z ostatniego akapitu)
+      if (typeof dwbTextbox !== "undefined") dwbTextbox.dropAnchoredTo?.(b);
+      queue({ op: "deleteRange", from: ia, to: ib, keep: "last", mergedRuns, dropBoxes: true }, crossSection);
       return b;
     }
     const tail = document.createRange();
@@ -169,6 +173,9 @@ const dwbSel = (() => {
     const mid = document.createRange();
     mid.setStartAfter(a);
     mid.setEndBefore(b);
+    // akapity znikające w całości (i b — jego początek był zaznaczony): ich pola tekstowe też
+    // (plik usuwa je razem z akapitami; podgląd zostawiał je „w powietrzu”)
+    if (typeof dwbTextbox !== "undefined") info.list.slice(ia + 1, ib + 1).forEach((q) => dwbTextbox.dropAnchoredTo?.(q));
     mid.deleteContents();
     b.remove();
     const join = a.childNodes.length;

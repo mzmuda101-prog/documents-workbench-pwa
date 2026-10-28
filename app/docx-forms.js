@@ -134,7 +134,28 @@ function formTextAround(p, el) {
     if (el.compareDocumentPosition(t) & Node.DOCUMENT_POSITION_PRECEDING) before += t.textContent || "";
     else after += t.textContent || "";
   });
-  return { before, after };
+  return { before, after, at: formOffsetBefore(p, el) };
+}
+
+// Położenie elementu w tekście akapitu tak, jak liczy podgląd: tekst + tabulator = 1 znak (span
+// z twardą spacją). Samo `before` pomija tabulatory — pusta kontrolka za kropkami („Miejscowość:⇥[pole]”)
+// stawała w podglądzie PRZED kropkami, a zapis akapitu przenosił ją tam w pliku (test chaos).
+function formOffsetBefore(p, el) {
+  let n = 0;
+  const walk = (node) => {
+    for (let c = node.firstChild; c; c = c.nextSibling) {
+      if (c.nodeType !== 1) continue;
+      if (c === el || c.contains?.(el) === false && (el.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING)) return true;
+      if (c.contains(el)) return walk(c);
+      if (c.namespaceURI === W_NS && (c.localName === "pPr" || c.localName === "rPr" || c.localName === "sdtPr" || c.localName === "instrText" || c.localName === "delText")) continue;
+      if (c.namespaceURI === W_NS && c.localName === "t") n += (c.textContent || "").length;
+      else if (c.namespaceURI === W_NS && c.localName === "tab") n += 1;
+      else if (walk(c)) return true;
+    }
+    return false;
+  };
+  walk(p);
+  return n;
 }
 
 function formShortLabel(before, after, kind) {
@@ -170,7 +191,7 @@ function readSdtField(sdt, key, paraIndexOf) {
     placeholder: !!ffKid(sdtPr, "showingPlcHdr"),
     locked: lock === "contentLocked" || lock === "sdtContentLocked",
     display, value: display, options: [],
-    before: around.before, after: around.after,
+    before: around.before, after: around.after, at: around.at,
     paraIndex: p && paraIndexOf.has(p) ? paraIndexOf.get(p) : null,
   };
   if (f.kind === "checkbox") {
@@ -586,6 +607,19 @@ async function refreshFormScan() {
   } else if (formScan?.bytes !== bytes) {
     try { formScan = { bytes, ...(await scanFormFields(bytes)) }; } catch (_) { formScan = { bytes, fields: [], protection: null }; }
     if (bytes !== originalFileBytes) return; // w międzyczasie nowa wersja — zrobi to kolejne wywołanie
+    // XML pól-wysp („s<N>” = N-ta kontrolka) z TEJ wersji pliku: paintFormFields przenumerowuje
+    // opakowania po usunięciu/wstawieniu pola bez przerysowania, a stary XML pod nowym kluczem
+    // wpisywał przy zapisie akapitu cudze pole (test chaos: zaznaczenie z polem + Enter →
+    // „Teren nr: NIEPODLEGŁOŚCI 1” z sąsiedniej karty)
+    try {
+      const doc = await getDocumentXmlDom(bytes);
+      if (doc && bytes === originalFileBytes && typeof docIslandXml !== "undefined") {
+        [...docIslandXml.keys()].forEach((k) => { if (/^s\d+$/.test(k)) docIslandXml.delete(k); });
+        Array.from(doc.getElementsByTagNameNS(W_NS, "sdt")).forEach((sdt, i) => {
+          if (formIslandSdt(sdt)) docIslandXml.set(`s${i}`, new XMLSerializer().serializeToString(sdt));
+        });
+      }
+    } catch (_) { /* zostaje poprzedni XML */ }
   }
   const main = formMainFields();
   docFormCounts = { fields: main.length, empty: main.filter(formIsEmpty).length };
@@ -644,10 +678,44 @@ function formPreviewRange(p, f) {
     return range;
   }
   if (!f.display || (f.source === "legacy" && f.kind === "checkbox")) return null;
+  if (f.display.includes("\n")) return formBreakRange(p, f);
   const text = p.textContent || "";
   let at = text.indexOf(f.display, Math.max(0, f.before.length - 4));
   if (at < 0 || Math.abs(at - f.before.length) > 12) at = text.indexOf(f.display);
   return at >= 0 ? formTightRange(p, formDomRange(p, at, at + f.display.length)) : null;
+}
+
+// Pole wielowierszowe (w:br w treści kontrolki — wielowierszowe pola z PDF): podgląd ma <br>,
+// którego textContent nie widzi — tekst pola nie był znajdowany, opakowanie zostawało puste obok
+// tekstu i zapis brał treść dwa razy (pole + luźny tekst; Cofnij → Ponów podwajało pole).
+// Tu <br> liczy się jako „\n”, jak w wartości pola.
+function formBreakRange(p, f) {
+  const nodes = [];
+  const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+    acceptNode: (n) => (n.nodeType === 3 || (n.localName === "br" && !n.dataset.dwbPh) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP),
+  });
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) nodes.push(n);
+  const text = nodes.map((n) => (n.nodeType === 3 ? n.data : "\n")).join("");
+  let at = text.indexOf(f.display, Math.max(0, f.before.length - 4));
+  if (at < 0 || Math.abs(at - f.before.length) > 12) at = text.indexOf(f.display);
+  if (at < 0) return null;
+  const start = at, end = at + f.display.length;
+  const range = document.createRange();
+  let pos = 0;
+  let startSet = false;
+  for (const n of nodes) {
+    const len = n.nodeType === 3 ? n.length : 1;
+    if (!startSet && start <= pos + len && (n.nodeType === 3 || start === pos)) {
+      if (n.nodeType === 3) range.setStart(n, start - pos); else range.setStartBefore(n);
+      startSet = true;
+    }
+    if (startSet && end <= pos + len) {
+      if (n.nodeType === 3) range.setEnd(n, end - pos); else if (end === pos) range.setEndBefore(n); else range.setEndAfter(n);
+      return formTightRange(p, range);
+    }
+    pos += len;
+  }
+  return null;
 }
 
 // Zakres zaczynający się NA KOŃCU poprzedniego elementu (np. tabulatora: <span class="docx-tab">
@@ -676,7 +744,10 @@ function formWrap(p, f) {
   }
   // stare pole wyboru / lista bez wyniku w pliku / pusta kontrolka — znaczek w miejscu pola
   w.classList.add("ff-glyph");
-  const at = formDomRange(p, f.before.length, f.before.length);
+  // na końcu poprzedniego elementu (tabulatora z kropkami) → za nim: inaczej znaczek lądował W
+  // tabulatorze, odczyt akapitu stawiał pole PRZED kropkami i zapis je tam przenosił (test chaos)
+  const off = f.at ?? f.before.length;
+  const at = formTightRange(p, formDomRange(p, off, off));
   if (at) at.insertNode(w); else p.prepend(w);
   return w;
 }
@@ -721,6 +792,16 @@ function paintFormFields() {
   // Opakowania z poprzedniego skanu, których klucz wskazuje dziś inne pole (numeracja „N-ta
   // kontrolka” przesuwa się po wstawieniu/usunięciu pola) — precz, zanim powstaną nowe. Dawniej
   // zostawały: pole dostawało drugie opakowanie, a zapis brał XML cudzej kontrolki.
+  // Pole usunięte / wstawione w podglądzie bez przerysowania (zaznaczenie z polem + Enter, Backspace):
+  // numery „N-ta kontrolka” przesuwają się, a kolejność nie — opakowania dostają klucze po kolei,
+  // jeśli liczba i akapity się zgadzają. Samo „ten sam akapit” nie wystarczało przy dwóch polach
+  // w wierszu („Miejscowość … Teren nr …”): klucze się zamieniały, zapis mieszał pola (test chaos).
+  const inBody = formScan.fields.filter((f) => Number.isFinite(f.paraIndex) && previews[f.paraIndex]);
+  const wraps = [...host.querySelectorAll(".ff-field[data-ff]")];
+  if (wraps.length === inBody.length && wraps.some((w, i) => w.dataset.ff !== inBody[i].key)
+    && wraps.every((w, i) => w.closest("p") === previews[inBody[i].paraIndex])) {
+    wraps.forEach((w, i) => { w.dataset.ff = inBody[i].key; });
+  }
   const where = new Map(formScan.fields.map((f) => [f.key, Number.isFinite(f.paraIndex) ? previews[f.paraIndex] : null]));
   host.querySelectorAll(".ff-field[data-ff]").forEach((w) => {
     const p = w.closest("p");
@@ -1025,6 +1106,11 @@ document.addEventListener("DOMContentLoaded", () => {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && formUi.pop) { e.preventDefault(); e.stopPropagation(); closeFormPop(); }
   }, true);
+  // fokus poszedł gdzie indziej (np. Wstaw → Pole tekstowe przy otwartym okienku): okienko znika —
+  // inaczej zostawało pod spodem i zjadało Esc pisaniu w polu tekstowym (edytor nie kończył się)
+  document.addEventListener("focusin", (e) => { if (formUi.pop && !formUi.pop.contains(e.target)) closeFormPop(); }, true);
+  // Edycja ↔ Czytanie przerysowuje dokument — okienko zostawało przy starym polu (test chaos)
+  if (typeof readModeEl !== "undefined") readModeEl?.addEventListener("change", () => closeFormPop());
   docViewportEl?.addEventListener("scroll", () => { if (formUi.pop && !formUi.pop.contains(document.activeElement)) closeFormPop(); }, { passive: true });
   // Po każdym narysowaniu dokumentu (otwarcie, edycja z panelu, Cofnij): pola od nowa.
   const origRender = window.renderStructurePanel;

@@ -640,6 +640,7 @@ const dwbTextbox = (() => {
     let card = null;
     let editor = null; // { ta, el, text0, finish }
     let pendingSelect = null; // { index, nth, edit, char }
+    let committing = null; // zapis tekstu pola w toku (Cofnij czeka — undo.js)
     let guides = [];
 
     const inDoc = (el) => !!el && !!docCanvasEl?.contains(el) && !!el.closest(".docx-edit-root");
@@ -1188,6 +1189,8 @@ const dwbTextbox = (() => {
         const op = { action: "text", ...id, text };
         if (b.autoFit) op.h = Math.max(8, hNeed);
         done = edit(op, { ...id });
+        committing = done;
+        done.finally(() => { if (committing === done) committing = null; });
         return done;
       };
       editor = { ta, el, finish };
@@ -1268,11 +1271,12 @@ const dwbTextbox = (() => {
       window.addEventListener("resize", () => placeCard());
       if (typeof readModeEl !== "undefined") readModeEl?.addEventListener("change", () => deselect());
     }
-    return { init, afterRender, insertAtCaret, deselect, isEditing: () => !!editor, finishEdit: () => editor?.finish(), snapAxis };
+    return { init, afterRender, insertAtCaret, deselect, isEditing: () => !!editor, finishEdit: () => editor?.finish(), settle: () => (editor ? editor.finish() : committing), pending: () => committing, snapAxis,
+      dropAnchoredTo: (p) => boxEls().forEach((el) => { if (el.__tbAnchor === p) { if (sel?.el === el) deselect(); el.remove(); } }) };
   })();
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => ui.init());
   else ui.init();
 
-  return { prepare, render, insert: ui.insertAtCaret, deselect: ui.deselect, finishEdit: ui.finishEdit, isEditing: ui.isEditing, _snapAxis: ui.snapAxis }; // _snapAxis: testy
+  return { prepare, render, insert: ui.insertAtCaret, deselect: ui.deselect, finishEdit: ui.finishEdit, settle: ui.settle, pending: ui.pending, dropAnchoredTo: ui.dropAnchoredTo, isEditing: ui.isEditing, _snapAxis: ui.snapAxis }; // _snapAxis: testy
 })();

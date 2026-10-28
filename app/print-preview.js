@@ -369,6 +369,8 @@ const dwbPrint = (() => {
     src.className = "doc-canvas dwb-pp-src";
     src.setAttribute("aria-hidden", "true");
     try {
+      const tbText = typeof dwbTextbox !== "undefined" ? dwbTextbox.settle?.() : null; // Ctrl/⌘+P w trakcie pisania w polu tekstowym
+      if (tbText) await tbText.catch(() => {});
       const bytes = await buildDocumentForSave();
       document.body.appendChild(src);
       await renderDocxPreview(bytes, src, { pages: true });

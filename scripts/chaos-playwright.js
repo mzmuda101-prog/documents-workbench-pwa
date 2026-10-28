@@ -64,6 +64,13 @@ const WEIGHTS = {
   align: 0.5, link: 1, autolink: 1, bookmark: 0.6, paste: 2, pageBreak: 0.5, table: 0.4, image: 0.3,
   footnote: 0.3, undo: 2.5, redo: 1, mode: 0.5, typeInLink: 0.5,
 };
+// FOCUS=new — nowe funkcje (pola tekstowe, kropki, kontrolki z PDF, Zamień obraz, malarz formatów,
+// podgląd wydruku) przemieszane ze zwykłą edycją; najlepiej z DOC=karta.docx (konwersja z PDF)
+const NEW_WEIGHTS = {
+  tbInsert: 2, tbClick: 2, tbDrag: 2.5, tbResize: 1.2, tbKey: 2, tbCard: 1.5, tbEdit: 2.5,
+  leader: 2.5, leaderSel: 1, formField: 3, imgReplace: 1, painter: 1.5, print: 0.8,
+};
+if (process.env.FOCUS === "new") { for (const k of Object.keys(WEIGHTS)) WEIGHTS[k] *= 0.45; Object.assign(WEIGHTS, NEW_WEIGHTS); }
 const NAMES = Object.keys(WEIGHTS);
 const TOTAL_W = NAMES.reduce((a, n) => a + WEIGHTS[n], 0);
 function pickAction(r) {
@@ -78,9 +85,12 @@ function planActions(seed, n) {
 
 // ── czekanie na spokój ────────────────────────────────────────────────────────
 async function idle(page, ms = 250) {
-  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && !inlineLocksPending, null, { timeout: 20000 });
+  const quiet = () => page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && !inlineLocksPending
+    && !(typeof dwbTextbox !== "undefined" && dwbTextbox.pending?.()), null, { timeout: 20000 });
+  await quiet();
   await page.evaluate(() => (typeof waitInlineStructuralIdle === "function" ? Promise.race([waitInlineStructuralIdle(), new Promise((r) => setTimeout(r, 8000))]) : null));
   await page.waitForTimeout(ms);
+  await quiet(); // druga operacja w łańcuchu (np. zapis tekstu pola, potem jego format) — ruszyła w przerwie
 }
 
 // Punkt w tekście (współrzędne na ekranie) w akapicie fracP (0..1) na pozycji fracC (0..1).
@@ -120,6 +130,24 @@ async function clickAt(page, r0, r1) {
   if (MOBILE) await page.touchscreen.tap(pt.x, pt.y); else await page.mouse.click(pt.x, pt.y);
   return pt;
 }
+
+// losowe pole tekstowe / tabulator z kropkami na ekranie (przewinięte do widoku)
+const tbAt = (page, x) => page.evaluate((x) => {
+  const bs = [...document.querySelectorAll(".docx-preview-host .dwb-tb")].filter((b) => b.getClientRects().length);
+  const el = bs[Math.floor(x * bs.length)];
+  if (!el) return null;
+  el.scrollIntoView({ block: "center" });
+  const b = el.getBoundingClientRect();
+  return { x: b.left + Math.min(b.width / 2, 30), y: b.top + b.height / 2, i: bs.indexOf(el) };
+}, x);
+const leaderAt = (page, x) => page.evaluate((x) => {
+  const ts = [...document.querySelectorAll(".docx-preview-host span.docx-tab.tab-dot, .docx-preview-host span.docx-tab.tab-line")].filter((t) => t.offsetWidth > 12);
+  const el = ts[Math.floor(x * ts.length)];
+  if (!el) return null;
+  el.scrollIntoView({ block: "center" });
+  const b = el.getBoundingClientRect();
+  return { x: b.left + b.width / 2, y: b.top + b.height / 2, i: ts.indexOf(el) };
+}, x);
 
 const ACT = {
   async click(page, r) { const pt = await clickAt(page, r[0], r[1]); return pt && `klik w akapit ${pt.i} (znak ${pt.off})`; },
@@ -237,6 +265,193 @@ const ACT = {
     await page.keyboard.press("Escape");
     return "przypis (Ctrl/⌘+Alt+F) + tekst";
   },
+  // ── nowe funkcje (FOCUS=new) ──
+  async tbInsert(page, r) {
+    const pt = await clickAt(page, r[0], r[1]);
+    if (!pt) return null;
+    await idle(page);
+    await page.evaluate(() => dwbTextbox.insert());
+    await idle(page);
+    const t = TEXTS[Math.floor(r[2] * TEXTS.length)];
+    await page.keyboard.type(t, { delay: 5 });
+    if (r[3] < 0.3) { await page.keyboard.press("Enter"); await page.keyboard.type("druga", { delay: 5 }); }
+    await page.keyboard.press("Escape");
+    return `Wstaw → Pole tekstowe w akapicie ${pt.i} + „${t}”`;
+  },
+  async tbClick(page, r) {
+    const c = await tbAt(page, r[0]);
+    if (!c) return null;
+    if (MOBILE) await page.touchscreen.tap(c.x, c.y); else await page.mouse.click(c.x, c.y);
+    if (r[1] < 0.4) { await page.keyboard.type("Z", { delay: 5 }); await page.keyboard.press("Escape"); return `klik w pole ${c.i} + pisze „Z” + Esc`; }
+    return `klik w pole ${c.i}`;
+  },
+  async tbDrag(page, r) {
+    const c = await tbAt(page, r[0]);
+    if (!c) return null;
+    const dx = Math.round((r[1] - 0.5) * 500), dy = Math.round((r[2] - 0.5) * (r[3] < 0.2 ? 1600 : 400));
+    await page.mouse.move(c.x, c.y);
+    await page.mouse.down();
+    await page.mouse.move(c.x + dx / 3, c.y + dy / 3, { steps: 3 });
+    await page.mouse.move(c.x + dx, c.y + dy, { steps: 6 });
+    await page.mouse.up();
+    return `przeciąga pole ${c.i} o ${dx},${dy}`;
+  },
+  async tbResize(page, r) {
+    const c = await tbAt(page, r[0]);
+    if (!c) return null;
+    await page.mouse.click(c.x, c.y);
+    await page.waitForTimeout(120);
+    const h = await page.evaluate((x) => { const hs = [...document.querySelectorAll(".dwb-tb.is-selected .dwb-tb-h")]; const el = hs[Math.floor(x * hs.length)]; if (!el) return null; const b = el.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2, d: el.dataset.h }; }, r[1]);
+    if (!h) return `klik w pole ${c.i} (bez uchwytów)`;
+    const dx = Math.round((r[2] - 0.5) * 300), dy = Math.round((r[3] - 0.5) * 200);
+    await page.mouse.move(h.x, h.y);
+    await page.mouse.down();
+    await page.mouse.move(h.x + dx, h.y + dy, { steps: 6 });
+    await page.mouse.up();
+    return `uchwyt ${h.d} pola ${c.i} o ${dx},${dy}`;
+  },
+  async tbKey(page, r) {
+    const c = await tbAt(page, r[0]);
+    if (!c) return null;
+    await page.mouse.click(c.x, c.y);
+    await page.waitForTimeout(100);
+    const keys = ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Shift+ArrowDown", "Shift+ArrowRight", "Delete", "Backspace", "Enter", "Tab"];
+    const k = keys[Math.floor(r[1] * keys.length)];
+    const n = /Arrow/.test(k) ? 1 + Math.floor(r[2] * 4) : 1;
+    for (let i = 0; i < n; i++) await page.keyboard.press(k);
+    if (k === "Enter") { await page.keyboard.type("Q", { delay: 5 }); await page.keyboard.press("Escape"); }
+    return `pole ${c.i}: ${k} ×${n}`;
+  },
+  async tbCard(page, r) {
+    const c = await tbAt(page, r[0]);
+    if (!c) return null;
+    await page.mouse.click(c.x, c.y);
+    await page.waitForTimeout(150);
+    const lab = await page.evaluate((x) => { const bs = [...document.querySelectorAll(".dwb-tb-card button")].filter((b) => !b.disabled && b.offsetParent); const b = bs[Math.floor(x * bs.length)]; if (!b) return null; b.click(); return b.getAttribute("aria-label") || b.textContent.trim(); }, r[1]);
+    return lab ? `pole ${c.i}: karta „${lab}”` : `klik w pole ${c.i} (bez karty)`;
+  },
+  async tbEdit(page, r) {
+    const c = await tbAt(page, r[0]);
+    if (!c) return null;
+    await page.mouse.dblclick(c.x, c.y);
+    await page.waitForTimeout(150);
+    const ops = r[1];
+    if (ops < 0.3) await page.keyboard.press(`${MOD}+a`);
+    if (r[2] < 0.3) for (let i = 0; i < 3; i++) await page.keyboard.press("Backspace");
+    const t = TEXTS[Math.floor(r[3] * TEXTS.length)];
+    await page.keyboard.type(t, { delay: 5 });
+    if (r[4] < 0.3) { await page.keyboard.press("Enter"); await page.keyboard.type("nowa", { delay: 5 }); }
+    if (r[5] < 0.5) await page.keyboard.press("Escape");
+    else { const pt = await pointIn(page, r[6], r[7]); if (pt) await page.mouse.click(pt.x, pt.y); }
+    return `edytuje pole ${c.i}: „${t}”${r[5] < 0.5 ? " + Esc" : " + klik w tekst"}`;
+  },
+  async leader(page, r) {
+    const c = await leaderAt(page, r[0]);
+    if (!c) return null;
+    await page.mouse.click(c.x, c.y);
+    await page.waitForTimeout(150);
+    if (r[1] < 0.5) {
+      const n = 1 + Math.floor(r[2] * 4);
+      const d = r[3] < 0.5 ? "-1" : "1";
+      for (let i = 0; i < n; i++) await page.evaluate((d) => document.querySelector(`.dwb-tabstop-card button[data-d="${d}"]`)?.click(), d);
+      return `kropki ${c.i}: ${d === "1" ? "▶" : "◀"} ×${n}`;
+    }
+    const h = await page.evaluate(() => { const el = document.querySelector(".dwb-tabstop-handle"); if (!el) return null; const b = el.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; });
+    if (!h) return `klik w kropki ${c.i} (bez uchwytu)`;
+    const dx = Math.round((r[2] - 0.6) * 400);
+    await page.mouse.move(h.x, h.y);
+    await page.mouse.down();
+    await page.mouse.move(h.x + dx, h.y + (r[3] - 0.5) * 20, { steps: 6 });
+    await page.mouse.up();
+    return `kropki ${c.i}: uchwyt o ${dx}`;
+  },
+  async leaderSel(page, r) {
+    const c = await leaderAt(page, r[0]);
+    if (!c) return null;
+    await page.mouse.dblclick(c.x, c.y);
+    await page.waitForTimeout(120);
+    const k = ["type", "Backspace", "Delete", "Shift+ArrowRight"][Math.floor(r[1] * 4)];
+    if (k === "type") await page.keyboard.type("ok", { delay: 5 }); else await page.keyboard.press(k);
+    return `dwuklik w kropki ${c.i} + ${k}`;
+  },
+  async formField(page, r) {
+    const c = await page.evaluate((x) => {
+      const fs = [...document.querySelectorAll(".docx-preview-host .ff-field")].filter((f) => f.getClientRects().length);
+      const f = fs[Math.floor(x * fs.length)];
+      if (!f) return null;
+      f.scrollIntoView({ block: "center" });
+      const b = [...f.getClientRects()].find((q) => q.width || q.height) || f.getBoundingClientRect();
+      return { x: b.left + Math.max(2, Math.min(b.width - 2, b.width / 2)), y: b.top + b.height / 2, i: fs.indexOf(f) };
+    }, r[0]);
+    if (!c) return null;
+    if (MOBILE) await page.touchscreen.tap(c.x, c.y); else await page.mouse.click(c.x, c.y);
+    await page.waitForTimeout(150);
+    const t = ["401", "Kraków", "ul. Długa 5/7", "", "x".repeat(40), "zażółć"][Math.floor(r[1] * 6)];
+    if (r[2] < 0.3) await page.keyboard.press(`${MOD}+a`);
+    if (t) await page.keyboard.type(t, { delay: 5 }); else await page.keyboard.press("Backspace");
+    const end = ["Tab", "Shift+Tab", "Enter", "Escape"][Math.floor(r[3] * 4)];
+    await page.keyboard.press(end);
+    return `pole formularza ${c.i}: „${t}” + ${end}`;
+  },
+  async imgReplace(page, r) {
+    const c = await page.evaluate((x) => {
+      const im = [...document.querySelectorAll(".docx-preview-host img")].filter((i) => i.getClientRects().length && i.offsetWidth > 8);
+      const i = im[Math.floor(x * im.length)];
+      if (!i) return null;
+      i.scrollIntoView({ block: "center" });
+      const b = i.getBoundingClientRect();
+      return { x: b.left + b.width / 2, y: b.top + b.height / 2, i: im.indexOf(i) };
+    }, r[0]);
+    if (!c) return null;
+    await page.mouse.click(c.x, c.y);
+    await page.waitForTimeout(150);
+    const w = 40 + Math.floor(r[1] * 300), h = 40 + Math.floor(r[2] * 300);
+    await page.evaluate(async ([w, h]) => {
+      const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+      const g = cv.getContext("2d"); g.fillStyle = "#c33"; g.fillRect(0, 0, w, h);
+      const blob = await new Promise((res) => cv.toBlob(res, "image/png"));
+      const dt = new DataTransfer();
+      dt.items.add(new File([blob], "nowy.png", { type: "image/png" }));
+      const n = getSelection().anchorNode;
+      const target = (n?.nodeType === 1 ? n : n?.parentElement) || docCanvasEl;
+      (docCanvasEl.contains(target) ? target : docCanvasEl).dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+    }, [w, h]);
+    await idle(page);
+    if (r[3] < 0.4) { const fit = await page.evaluate(() => { const b = document.querySelector(".image-card .ic-fit:not([hidden])"); b?.click(); return !!b; }); if (fit) return `obraz ${c.i}: wklejony ${w}×${h} + przełącz dopasowanie`; }
+    return `obraz ${c.i}: klik + wkleja obraz ${w}×${h}`;
+  },
+  async painter(page, r) {
+    if (!(await page.isVisible("#fmtPainterBtn").catch(() => false))) return null; // telefon: pędzel w schowanym pasku
+    const a = await clickAt(page, r[0], r[1]);
+    if (!a) return null;
+    await page.waitForTimeout(80);
+    // programowo: na telefonie pasek bywa przewinięty / zasłonięty (klik myszą czekał w nieskończoność)
+    await page.evaluate((two) => { const b = document.getElementById("fmtPainterBtn"); b.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 })); if (two) b.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 2 })); }, r[2] < 0.25);
+    await page.waitForTimeout(80);
+    const b = await pointIn(page, r[3], r[4]);
+    const e = await pointIn(page, Math.min(0.999, r[3] + r[5] * 0.04), r[6]);
+    if (!b || !e) return "malarz (bez celu)";
+    const b2 = await pointIn(page, r[3], r[4]);
+    await page.mouse.move(b2.x, b2.y);
+    await page.mouse.down();
+    await page.mouse.move(e.x, e.y, { steps: 4 });
+    await page.mouse.up();
+    await page.waitForTimeout(100);
+    await page.keyboard.press("Escape");
+    return `malarz formatów z ${a.i}:${a.off} na ${b2.i}:${b2.off}–${e.i}:${e.off}`;
+  },
+  async print(page) {
+    await page.evaluate(() => dwbPrint.open());
+    await page.waitForFunction(() => document.querySelector(".pp-sheet") || document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 20000 });
+    await page.waitForTimeout(200);
+    const res = await page.evaluate(() => ({ sheets: document.querySelectorAll(".pp-sheet").length, tb: [...document.querySelectorAll(".pp-sheet .dwb-tb")].map((e) => e.textContent).sort() }));
+    await page.evaluate(() => dwbPrint.close());
+    const want = await page.evaluate(() => [...document.querySelectorAll(".docx-preview-host .dwb-tb")].map((e) => e.textContent).sort());
+    if (!res.sheets) throw new Error("podgląd wydruku bez kartek");
+    // w Widoku mobilnym pola są w akapitach (blok pod kotwicą) — liczba i tekst ta sama
+    if (JSON.stringify(res.tb) !== JSON.stringify(want)) throw new Error(`podgląd wydruku: pola ${JSON.stringify(res.tb)} ≠ dokument ${JSON.stringify(want)}`);
+    return `podgląd wydruku (${res.sheets} kartek, ${res.tb.length} pól)`;
+  },
   async undo(page) { await page.keyboard.press(`${MOD}+z`); return "Cofnij"; },
   async redo(page) { await page.keyboard.press(`${MOD}+Shift+z`); return "Ponów"; },
   async mode(page) {
@@ -260,7 +475,10 @@ async function openDoc(browser, doc) {
   page.on("dialog", (d) => d.accept());
   await page.goto(APP_URL, { waitUntil: "load" });
   await page.evaluate(() => document.getElementById("heroSplash")?.remove());
-  if (doc === "blank") {
+  if (/\.docx$/i.test(doc)) {
+    await page.setInputFiles("#fileInput", path.resolve(doc));
+    await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 30000 });
+  } else if (doc === "blank") {
     await page.evaluate(() => composeUi.createNew("note"));
   } else {
     await page.evaluate((d) => loadSampleDocument(d), doc);
@@ -300,6 +518,17 @@ async function runSession(browser, doc, actions, { final = true } = {}) {
       if (VERBOSE) console.log(`   ${k + 1}. ${label}`);
       if (failure) break;
       if (errors.length) { failure = { step: k, code: "PAGE_ERROR", msg: errors.join(" | ").slice(0, 400) }; break; }
+      const tbBad = await page.evaluate(async () => {
+        if (typeof dwbTextbox === "undefined" || dwbTextbox.isEditing()) return null;
+        const z = await JSZip.loadAsync(await buildDocumentForSave());
+        const doc = new DOMParser().parseFromString(await z.file("word/document.xml").async("string"), "application/xml");
+        const file = [];
+        collectParagraphElements(doc.documentElement, "all").forEach((p) => tbBoxesOfParagraph(p).forEach((b) => file.push(tbDescribe(b).text.replace(/\s+/g, ""))));
+        const view = [...document.querySelectorAll(".docx-preview-host .dwb-tb")].map((e) => e.textContent.replace(/\s+/g, ""));
+        file.sort(); view.sort();
+        return JSON.stringify(file) === JSON.stringify(view) ? null : `pola: plik ${JSON.stringify(file)} ≠ podgląd ${JSON.stringify(view)}`;
+      }).catch((e) => `TB_CHECK_THROW ${e.message}`);
+      if (tbBad) { failure = { step: k, code: "TEXTBOX_SYNC", msg: tbBad.slice(0, 400) }; break; }
       const res = await page.evaluate(() => dwbSelfCheck().then((r) => r.problems)).catch((e) => [{ level: "error", code: "SELF_CHECK_THROW", msg: String(e.message || e) }]);
       const fresh = res.filter((p) => p.level === "error" && !known.has(`${p.code}|${p.msg}`));
       if (fresh.length) failure = { step: k, code: fresh[0].code, msg: fresh.map((p) => `${p.code}: ${p.msg}`).join(" | ").slice(0, 600) };
@@ -308,6 +537,10 @@ async function runSession(browser, doc, actions, { final = true } = {}) {
     if (!failure && final) {
       // zapis → ponowne otwarcie: ten sam tekst
       await ensureEdit(page);
+      // otwarte pisanie w polu tekstowym — do pliku przed „zdjęciem” stanu (Cofnij i tak je zapisze)
+      await page.evaluate(() => (typeof dwbTextbox !== "undefined" ? dwbTextbox.settle?.() : null));
+      await page.evaluate(() => (typeof dwbTabLeaders !== "undefined" ? dwbTabLeaders.flush?.() : null)); // odroczony zapis ◀ ▶
+      await idle(page);
 
       // Cofnij wszystko = dokument z początku (cofanie przywraca migawki bajtów — dokładnie), potem
       // Ponów wszystko = najdalszy stan historii. Seria mogła skończyć się na „Cofnij”, więc
@@ -325,7 +558,8 @@ async function runSession(browser, doc, actions, { final = true } = {}) {
           let m = 0;
           while (m < 120 && (await page.evaluate(() => dwbUndo.canRedo()))) { await page.evaluate(() => dwbUndo.redo()); await idle(page, 120); m++; }
           const xR = await docXml(page);
-          if (xR !== xN) failure = { step: actions.length, code: "REDO_ALL", msg: `Ponów wszystko (${m}) ≠ koniec historii: ${firstDiff(xR, xN)}` };
+          if (xR !== xN && process.env.DUMP) { fs.writeFileSync(path.join(process.env.DUMP, "xR.xml"), xR); fs.writeFileSync(path.join(process.env.DUMP, "xN.xml"), xN); }
+          if (xR !== xN) failure = { step: actions.length, code: "REDO_ALL", msg: `Ponów wszystko (${m}, cofnięto ${n}; stos: ${JSON.stringify(await page.evaluate(() => dwbUndo._debug()))}) ≠ koniec historii: ${firstDiff(xR, xN)}` };
         }
       }
       if (!failure) {
@@ -352,7 +586,7 @@ async function runSession(browser, doc, actions, { final = true } = {}) {
 function firstDiff(a, b) {
   let i = 0;
   while (i < a.length && a[i] === b[i]) i++;
-  return `@${i}: „${a.slice(Math.max(0, i - 60), i + 80)}” ≠ „${b.slice(Math.max(0, i - 60), i + 80)}”`;
+  return `@${i}: „${a.slice(Math.max(0, i - 60), i + 80)}” ≠ „${b.slice(Math.max(0, i - 60), i + 80)}”`.replace(/\n/g, " ");
 }
 
 // ── skracanie serii (ddmin): najmniejsza seria z tym samym kodem błędu ──
@@ -414,4 +648,5 @@ async function main() {
   process.exit(failures.length ? 1 : 0);
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });
+module.exports = { ACT, openDoc, idle, docXml }; // skrypty śledzące (odtworzenie serii z podglądem stanu)

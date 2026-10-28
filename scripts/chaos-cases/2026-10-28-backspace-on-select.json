@@ -1,0 +1,36 @@
+{
+ "note": "2026-10-28 (chaos FOCUS=new, WebKit telefon): Tab na pasek (lista stylów) + Backspace — WebKit cofał historię, strona znikała",
+ "doc": "przewodnik",
+ "actions": [
+  {
+   "name": "tab",
+   "r": [
+    0.673123,
+    0.17715,
+    0.364839,
+    0.852788,
+    0.812499,
+    0.678287,
+    0.96786,
+    0.82336
+   ]
+  },
+  {
+   "name": "backspace",
+   "r": [
+    0.458068,
+    0.743983,
+    0.119666,
+    0.223941,
+    0.778262,
+    0.253707,
+    0.046148,
+    0.61204
+   ]
+  }
+ ],
+ "steps": [
+  "Tab",
+  "Backspace ×2"
+ ]
+}

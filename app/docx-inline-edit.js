@@ -263,6 +263,16 @@ function stampCommentMarks(xp, el, nextKey, noteLabels = []) {
     // tuż za numerem przypisu położenie wypada W JEGO tekście — znacznik idzie za wyspę
     const inNote = range && (range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement)?.closest?.('[data-cm-kind="note"]');
     if (inNote && el.contains(inNote)) { range.setStartAfter(inNote); range.collapse(true); }
+    // na granicy pola formularza (wyspa w:sdt) położenie wypada W jego tekście — znacznik obok pola
+    // (z wnętrza pola zapis go nie bierze: koniec zakładki-celu linku do nagłówka z kontrolką z PDF ginął)
+    const inField = range && (range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement)?.closest?.(".ff-field");
+    if (inField && el.contains(inField)) {
+      const head = document.createRange();
+      head.selectNodeContents(inField);
+      head.setEnd(range.startContainer, range.startOffset);
+      if (head.toString().length) range.setStartAfter(inField); else range.setStartBefore(inField);
+      range.collapse(true);
+    }
     if (range) range.insertNode(frag);
     else if (at === 0) el.insertBefore(frag, el.firstChild);
     else el.appendChild(frag);
@@ -506,6 +516,37 @@ function restoreInlineParagraphs(snapshotEdits) {
     else applyRunsToPreviewParagraph(p, baselineParagraphRuns[i]);
   });
   return true;
+}
+
+// Kasowanie pola / tabulatora na końcu wiersza: przeglądarka dokłada na koniec akapitu zastępczy
+// <br> (żeby kursor miał gdzie stać). Odczyt akapitu brał go za łamanie wiersza (do pliku szło
+// w:br), a Delete tuż przed nim obsługiwała sama przeglądarka — sklejała akapity poza Edycją
+// (podgląd o akapit krótszy niż plik; test chaos: kropki → Backspace ×4 → Delete). Usuwamy taki
+// <br>, gdy go nie było w akapicie z renderu, a przed nim jest tekst.
+function dropBrowserTrailingBr(e) {
+  if (!/^delete/.test(e.inputType || "")) return;
+  const p = docCaretParagraph(e.target);
+  if (!p) return;
+  let last = p.lastChild;
+  for (;;) {
+    while (last && ((last.nodeType === 3 && !last.data) || (last.nodeType === 1 && last.localName !== "br" && !last.textContent && !last.querySelector("br, img, svg, canvas, [contenteditable='false']")))) last = last.previousSibling;
+    if (last?.nodeType === 1 && last.localName !== "br" && last.getAttribute("contenteditable") !== "false" && last.lastChild) { last = last.lastChild; continue; }
+    break;
+  }
+  if (last?.localName !== "br" || last.dataset.dwbPh) return;
+  const pristine = pristineParas.get(p);
+  const before = pristine ? pristine.querySelectorAll("br:not([data-dwb-ph])").length : 0;
+  if (p.querySelectorAll("br:not([data-dwb-ph])").length <= before) return;
+  const head = document.createRange();
+  head.setStart(p, 0);
+  head.setEndBefore(last);
+  if (!head.toString().replace(/\uFEFF/g, "").trim()) return; // pusty akapit — <br> trzyma wysokość linijki
+  const sel = window.getSelection();
+  const caretAtBr = sel?.rangeCount && sel.isCollapsed && sel.getRangeAt(0).comparePoint(last, 0) >= 0;
+  const parent = last.parentNode;
+  const at = Array.prototype.indexOf.call(parent.childNodes, last);
+  last.remove();
+  if (caretAtBr) { const r = document.createRange(); r.setStart(parent, Math.min(at, parent.childNodes.length)); r.collapse(true); sel.removeAllRanges(); sel.addRange(r); }
 }
 
 function onInlineParagraphInput() {
@@ -1295,7 +1336,7 @@ function insertLineBreakAtCaret(p) {
   const sel = window.getSelection();
   if (!sel?.rangeCount) return false;
   const range = sel.getRangeAt(0);
-  if (!range.collapsed) range.deleteContents();
+  if (!range.collapsed) { rangeOutOfIslands(range, p); if (!range.collapsed) range.deleteContents(); }
   caretOutOfIsland(range, p);
   let tn;
   let at;
@@ -1407,6 +1448,23 @@ function jumpToHeading(delta) {
 // przypisu, rysunku (contenteditable=false) — wychodzi przed nią (na samym początku jej tekstu)
 // albo za nią. Strzałkami da się wejść kursorem w tekst pola; Enter rozcinał wtedy pole na dwa
 // (zdublowana kontrolka, przesunięta numeracja pól i cudze pola w następnych akapitach).
+// Zaznaczenie zaczynające się / kończące W wyspie (pole formularza, obraz, znacznik) — końce na
+// zewnątrz, zanim zaznaczenie zostanie usunięte. Dawniej Enter / Shift+Enter na części tekstu pola
+// („5/4” z „5/41 - 50”) obcinał tekst w podglądzie, a plik zostawiał całe pole (podgląd ≠ plik).
+function rangeOutOfIslands(range, p) {
+  const outer = (n) => {
+    let isl = (n.nodeType === 1 ? n : n.parentElement)?.closest?.('[contenteditable="false"]');
+    if (!isl || isl === p || !p.contains(isl)) return null;
+    for (let up = isl.parentElement?.closest('[contenteditable="false"]'); up && up !== p && p.contains(up); up = up.parentElement?.closest('[contenteditable="false"]')) isl = up;
+    return isl;
+  };
+  const a = outer(range.startContainer);
+  const b = outer(range.endContainer);
+  if (a) range.setStartAfter(a);
+  if (b && !range.collapsed) range.setEndBefore(b);
+  if (range.collapsed || range.compareBoundaryPoints(Range.START_TO_END, range) <= 0) range.collapse(true);
+}
+
 function caretOutOfIsland(range, p) {
   const n = range.startContainer;
   const el = n.nodeType === 1 ? n : n.parentElement;
@@ -1430,7 +1488,7 @@ function splitParagraphDomAtCaret(p) {
   const sel = window.getSelection();
   if (!sel?.rangeCount) return null;
   const range = sel.getRangeAt(0);
-  if (!range.collapsed) range.deleteContents();
+  if (!range.collapsed) { rangeOutOfIslands(range, p); if (!range.collapsed) range.deleteContents(); }
   caretOutOfIsland(range, p);
   const tailRange = document.createRange();
   tailRange.setStart(range.startContainer, range.startOffset);
@@ -1575,6 +1633,46 @@ async function handleInlineEnter(p, paraIndex, e) {
   });
 }
 
+// Backspace tuż za wyspą (pole formularza, znacznik — contenteditable=false): usuwa samą wyspę.
+// Przeglądarka robiła to sama, a Chromium przy polu będącym całą treścią akapitu usuwał też akapit
+// (podgląd o akapit krótszy niż plik; test chaos: podział strony → Backspace ×3 przy „2/11 - 20”).
+function removeIslandBeforeCaret(p, sel, e) {
+  const r = sel.getRangeAt(0);
+  let n = r.startContainer;
+  let off = r.startOffset;
+  // kursor W tekście wyspy (np. po sklejeniu akapitów stoi na końcu tekstu pola) — liczy się wyspa
+  let inIsl = (n.nodeType === 1 ? n : n.parentElement)?.closest?.('[contenteditable="false"]');
+  if (inIsl && inIsl !== p && p.contains(inIsl)) {
+    for (let up = inIsl.parentElement?.closest('[contenteditable="false"]'); up && up !== p && p.contains(up); up = up.parentElement?.closest('[contenteditable="false"]')) inIsl = up;
+    const tail = document.createRange();
+    tail.setStart(n, off);
+    tail.setEnd(inIsl, inIsl.childNodes.length);
+    if (tail.toString().replace(/\uFEFF/g, "")) return; // w środku pola — nic (pole jest całością)
+    n = inIsl.parentNode;
+    off = Array.prototype.indexOf.call(n.childNodes, inIsl) + 1;
+  } else if (n.nodeType === 3) { if (n.data.slice(0, off).replace(/\uFEFF/g, "")) return; off = Array.prototype.indexOf.call(n.parentNode.childNodes, n); n = n.parentNode; }
+  // węzeł tuż przed kursorem (przez puste teksty i domknięcia fragmentów)
+  let prev = n.childNodes[off - 1] || null;
+  for (let up = n; !prev && up && up !== p; up = up.parentNode) prev = up.previousSibling;
+  // w głąb ostatnich dzieci fragmentów (<span style> wokół pola), pomijając puste teksty
+  for (;;) {
+    while (prev && prev.nodeType === 3 && !prev.data.replace(/\uFEFF/g, "")) prev = prev.previousSibling;
+    if (prev?.nodeType === 1 && prev.getAttribute("contenteditable") !== "false" && prev.lastChild) { prev = prev.lastChild; continue; }
+    break;
+  }
+  if (prev?.nodeType !== 1) return;
+  const isl = prev.getAttribute("contenteditable") === "false" ? prev : prev.closest?.('[contenteditable="false"]');
+  if (!isl || !p.contains(isl) || isl === p || !isl.matches(".ff-field")) return;
+  e.preventDefault();
+  const at = document.createRange();
+  at.setStartBefore(isl);
+  at.collapse(true);
+  isl.remove();
+  sel.removeAllRanges();
+  sel.addRange(at);
+  onInlineParagraphInput();
+}
+
 async function handleInlineBackspace(p, paraIndex, e) {
   const sel = window.getSelection();
   // Zaznaczenie (np. od początku akapitu myszą) — Backspace kasuje ZAZNACZENIE, nie znak akapitu.
@@ -1583,7 +1681,10 @@ async function handleInlineBackspace(p, paraIndex, e) {
   if (sel?.rangeCount && !sel.isCollapsed && !e.fromDelete) return;
   // Delete na końcu poprzedniego: zawsze sklejenie z całym tym akapitem — placeCaret(p, 0) stawia
   // kursor w pierwszym węźle TEKSTU, czyli za ewentualnym łamaniem wiersza na początku akapitu
-  if (!e.fromDelete && getCaretModelOffset(p) !== 0) return;
+  if (!e.fromDelete && getCaretModelOffset(p) !== 0) {
+    if (sel?.isCollapsed) removeIslandBeforeCaret(p, sel, e);
+    return;
+  }
   // Backspace na początku punktu listy najpierw zdejmuje numerację (jak w Wordzie); kolejny skleja
   if (isListParagraph(p) && sel?.isCollapsed && !e.fromDelete && typeof composeUi !== "undefined") {
     e.preventDefault();
@@ -1624,12 +1725,21 @@ async function handleInlineBackspace(p, paraIndex, e) {
     return;
   }
   const join = p.firstChild;
+  const fields = !!(prev.querySelector(".ff-field") || p.querySelector(".ff-field"));
   mergeParagraphDom(prev, p);
   placeCaretAtJoin(prev, join);
   const mergedRuns = extractRunsFromPreviewParagraph(prev);
   pristineParas.delete(prev);
   mirrorBaseline(paraIndex - 1, 2, mergedRuns);
   await applyInlineStructuralEdit({ op: "mergeParagraph", index: paraIndex, mergedRuns });
+  // pola formularza w sklejanych akapitach: numeracja pól i akapitów przesuwa się — przerysowanie
+  // z pliku (inaczej pole doklejonego akapitu znikało z podglądu, a w pliku zostawało; test pdf-fields)
+  if (fields && !inlineStructuralPending) {
+    const caret = { paraIndex: paraIndex - 1, offset: getCaretOffset(prev) };
+    await mergeInlineEditsIntoBytes();
+    pendingInlineCursor = caret;
+    await reloadFromBytes(originalFileBytes);
+  }
 }
 
 // Pusty akapit tuż za tabelą — zwykle „pusta strona na końcu”: tabela wypełnia stronę, a za nią
@@ -1840,14 +1950,16 @@ let heldTyping = null; // null = nie trzymamy; inaczej znaki oraz "\n" / "\b" / 
 const HELD_KEYS = { Enter: "\n", Backspace: "\b", Tab: "\t" };
 // w dokumencie albo na <body> — WebKit na czas przerysowania zdejmuje fokus z tekstu
 const heldTypingTarget = (t) => t === document.body || !!docCanvasEl?.contains(t);
-window.addEventListener("keydown", (e) => {
-  if (!heldTyping || e.isComposing || e.ctrlKey || e.metaKey || e.altKey || !heldTypingTarget(e.target)) return;
+function holdKeyEvent(e) { // true = klawisz zatrzymany do dopisania po przerysowaniu
+  if (!heldTyping || e.isComposing || e.ctrlKey || e.metaKey || e.altKey || !heldTypingTarget(e.target)) return false;
   const k = e.key.length === 1 ? e.key : HELD_KEYS[e.key];
-  if (!k || (e.key === "Tab" && e.shiftKey)) return;
+  if (!k || (e.key === "Tab" && e.shiftKey)) return false;
   e.preventDefault();
   e.stopImmediatePropagation();
   heldTyping.push(k);
-}, true);
+  return true;
+}
+window.addEventListener("keydown", holdKeyEvent, true);
 window.addEventListener("beforeinput", (e) => {
   if (!heldTyping || e.isComposing || !heldTypingTarget(e.target)) return;
   e.preventDefault();
@@ -2452,6 +2564,17 @@ function paintFormatOn(range) {
   return true;
 }
 
+// Zmiany w dokumencie tylko przy fokusie w nim. WebKit edytuje zaznaczenie w contenteditable także
+// wtedy, gdy fokus jest gdzie indziej (np. po Esc na obszarze przewijania) — Enter dzielił akapit
+// poza obsługą Edycji (podgląd ≠ plik, test chaos). Chromium tego nie robi.
+function guardDetachedEditing() {
+  docCanvasEl?.addEventListener("beforeinput", (e) => {
+    const a = document.activeElement;
+    if (a && docCanvasEl.contains(a)) return;
+    e.preventDefault();
+  }, true);
+}
+
 function wireFormatPainter() {
   const btn = document.getElementById("fmtPainterBtn");
   let clickTimer = 0;
@@ -2717,6 +2840,7 @@ function bindInlineEditKeyboard() {
   // input/beforeinput przychodzą do POLA edycji (pojemnik dokumentu albo akapit przypisu) — delegacja
   docCanvasEl.addEventListener("input", (e) => { if (docCaretParagraph(e.target) || e.target?.classList?.contains("docx-edit-root")) onInlineParagraphInput(); });
   docCanvasEl.addEventListener("beforeinput", onParagraphBeforeInput);
+  docCanvasEl.addEventListener("input", dropBrowserTrailingBr);
   docCanvasEl.addEventListener("pointerover", onHangingProbe, { passive: true });
   docCanvasEl.addEventListener("focusin", onHangingProbe);
 }
@@ -2891,3 +3015,4 @@ function wireFormatToolbar() {
 }
 wireFormatToolbar();
 wireFormatPainter();
+guardDetachedEditing();
