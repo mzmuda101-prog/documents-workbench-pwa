@@ -68,7 +68,9 @@ async function run() {
   check("odstępy jak w Wordzie: „1. Czytanie i edycja” ~468,0 pt od góry (±6)", /^1\. Czytanie/.test(y19.text) && Math.abs(y19.pt - 468.0) < 6, JSON.stringify(y19));
 
   const s1 = await pageStarts(page);
-  check("domyślnie włączone: 5 granic (6 stron; Word od str. 4 o 2–3 linijki dalej)", s1.length === 5 && s1.map((s) => s.label).join(",") === "str. 2,str. 3,str. 4,str. 5,str. 6", JSON.stringify(s1));
+  // przewodnik po dopisaniu pól tekstowych, Zamień obraz, pól z PDF i kropek (2026-10-28): Word —
+  // 7 stron (compute statistics, wyrocznia AppleScript)
+  check("domyślnie włączone: 6 granic (7 stron jak w Wordzie)", s1.length === 6 && s1.map((s) => s.label).join(",") === "str. 2,str. 3,str. 4,str. 5,str. 6,str. 7", JSON.stringify(s1));
   // granice zmierzone w Wordzie (AppleScript: range information → active end page number) po
   // dopisaniu do przewodnika akapitów o zaznaczaniu i czcionkach (2026-10-04)
   check("str. 2 zaczyna się jak w Wordzie: „2. Szukanie oraz Znajdź i zamień”", /^2\. Szukanie/.test(s1[0]?.text || ""), JSON.stringify(s1[0]));

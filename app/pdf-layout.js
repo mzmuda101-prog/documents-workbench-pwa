@@ -1042,6 +1042,25 @@
     return w;
   }
 
+  // Szerokość wiersza ze spacjami w ich zwykłej szerokości (bez rozpychania/ściskania z PDF):
+  // znaki swoją szerokością, spacja swoją, przerwa bez znaku spacji jak spacja kroju.
+  function naturalLineWidth(l) {
+    const gl = l.parts.flatMap((p) => p.glyphs || []).filter((g) => !g.invisible).sort((a, b) => a.x - b.x);
+    while (gl.length && gl[0].isSpace) gl.shift();
+    while (gl.length && gl[gl.length - 1].isSpace) gl.pop();
+    if (!gl.length) return l.x1 - l.x0;
+    let w = 0, prev = null;
+    for (const g of gl) {
+      if (g.isSpace) w += g.adv;
+      else {
+        if (prev && !prev.isSpace && g.x - prev.x1 > g.size * 0.15) w += g.size * (g.font?.serif ? 0.25 : 0.278);
+        w += g.x1 - g.x;
+      }
+      prev = g;
+    }
+    return w;
+  }
+
   function maxRight(para) {
     return Math.max(...para.lines.map((l) => l.x1));
   }
@@ -1114,7 +1133,23 @@
       let safe = maxR + size * 1.2;
       for (let i = 0; i + 1 < lines.length; i++) safe = Math.min(safe, lines[i].x1 + size * 0.25 + firstWordWidth(lines[i + 1], size) - 0.5);
       indRight = Math.max(0, box.x1 - Math.max(maxR + size * 0.15 + 1, safe));
-      if (align === "both") indRight = Math.max(0, box.x1 - maxR - 0.3);
+      if (align === "both") {
+        // Wyjustowany wiersz w PDF bywa WĘŻSZY niż jego tekst ze zwykłymi spacjami: Word 2013+
+        // ściska spacje, zanim przeniesie słowo („CO-23”: „…niebezpiecznym zacho-” 484,9 pt tekstu
+        // w 481,6 pt). Szerokość jak w PDF nie wystarcza wtedy ani podglądowi, ani Wordowi (próg
+        // ściskania zależy od kroju i rozmiaru — wyrocznia 2026-10-28) — słowo zjeżdżało i cała strona
+        // za nim. Szerokość zawijania ≥ najdłuższy wiersz w naturalnej szerokości, ale nie tyle,
+        // żeby wciągnąć pierwsze słowo następnego wiersza.
+        let right = maxR + 0.3;
+        const nat = lines.map((l) => l.x0 + naturalLineWidth(l));
+        const want = Math.max(...nat.slice(0, -1)) + 0.3;
+        if (want > right) {
+          let cap = Infinity;
+          for (let i = 0; i + 1 < lines.length; i++) cap = Math.min(cap, nat[i] + size * 0.25 + firstWordWidth(lines[i + 1]) - 0.5);
+          right = Math.max(right, Math.min(want, cap));
+        }
+        indRight = right <= box.x1 ? box.x1 - right : Math.max(box.x1 - right, -Math.min(28, size * 2));
+      }
     }
     // interlinia: mediana odstępów linii bazowych
     let lineGap = null;

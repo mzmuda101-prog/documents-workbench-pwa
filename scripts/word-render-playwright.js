@@ -89,11 +89,16 @@ async function fixtureTables() {
   // para scalona w pionie (bez linii): linijka dokładnie 9,4 pt, odstęp przed 3,5 pt; minima 3,5 + 9,95 pt
   const pair = (i) => `<w:tr><w:trPr><w:trHeight w:val="70" w:hRule="atLeast"/></w:trPr>${cell(`Scalona ${i}`, '<w:vMerge w:val="restart"/>', '<w:spacing w:before="70" w:after="0" w:line="188" w:lineRule="exact"/><w:rPr><w:sz w:val="16"/></w:rPr>')}</w:tr><w:tr><w:trPr><w:trHeight w:val="199" w:hRule="atLeast"/></w:trPr>${cell("", "<w:vMerge/>", '<w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/>')}</w:tr>`;
   const merged = `<w:tbl><w:tblPr><w:tblW w:w="4000" w:type="dxa"/>${mar}</w:tblPr><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid>${pair(1)}${pair(2)}</w:tbl>`;
+  // ta sama para, ale obok zwykła kolumna (kwota w 2. wierszu — jak tabele z konwersji PDF): Word NIE
+  // podnosi 1. wiersza do linijki, minima 3,5 + 9,95 pt wystarczą (wyrocznia 2026-10-28: 13,25 pt)
+  const side = (w, txt, extra, pPr) => `<w:tc><w:tcPr><w:tcW w:w="${w}" w:type="dxa"/>${extra}</w:tcPr><w:p><w:pPr>${pPr}<w:rPr><w:sz w:val="16"/></w:rPr></w:pPr>${txt ? `<w:r><w:rPr><w:sz w:val="16"/></w:rPr>${t(txt)}</w:r>` : ""}</w:p></w:tc>`;
+  const pairSide = (i) => `<w:tr><w:trPr><w:trHeight w:val="70" w:hRule="atLeast"/></w:trPr>${side(2700, `Obok ${i}`, '<w:vMerge w:val="restart"/>', '<w:spacing w:before="70" w:after="0" w:line="188" w:lineRule="exact"/>')}${side(1300, "", "", '<w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/>')}</w:tr><w:tr><w:trPr><w:trHeight w:val="199" w:hRule="atLeast"/></w:trPr>${side(2700, "", "<w:vMerge/>", '<w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/>')}${side(1300, `kwota ${i}`, "", '<w:spacing w:before="1" w:after="0" w:line="188" w:lineRule="exact"/>')}</w:tr>`;
+  const mergedSide = `<w:tbl><w:tblPr><w:tblW w:w="4000" w:type="dxa"/>${mar}</w:tblPr><w:tblGrid><w:gridCol w:w="2700"/><w:gridCol w:w="1300"/></w:tblGrid>${pairSide(1)}${pairSide(2)}</w:tbl>`;
   // marginesy komórki ponad minimum wiersza, wiersz „dokładnie”, w:trPr/w:jc (położenie, nie tekst)
   const bc = '<w:tcBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="000000"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="000000"/></w:tcBorders>';
   const mrow = (txt, trPr) => `<w:tr><w:trPr>${trPr}</w:trPr><w:tc><w:tcPr><w:tcW w:w="4000" w:type="dxa"/>${bc}</w:tcPr><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="20"/></w:rPr>${t(txt)}</w:r></w:p></w:tc></w:tr>`;
   const marg = `<w:tbl><w:tblPr><w:tblW w:w="4000" w:type="dxa"/><w:tblCellMar><w:top w:w="200" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid>${mrow("Min A", '<w:trHeight w:val="340"/><w:jc w:val="center"/>')}${mrow("Min B", '<w:trHeight w:val="340"/>')}${mrow("Exact A", '<w:trHeight w:val="1000" w:hRule="exact"/>')}${mrow("Exact B", '<w:trHeight w:val="1000" w:hRule="exact"/>')}</w:tbl>`;
-  z.file("word/document.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${NS}><w:body>${merged}${P("Przed marginesami")}${marg}${P("Między tabelami")}${big}${P("Koniec")}${SECT()}</w:body></w:document>`);
+  z.file("word/document.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${NS}><w:body>${merged}${P("Obok scalenia")}${mergedSide}${P("Przed marginesami")}${marg}${P("Między tabelami")}${big}${P("Koniec")}${SECT()}</w:body></w:document>`);
   return z.generateAsync({ type: "nodebuffer" });
 }
 
@@ -218,7 +223,7 @@ async function run() {
     const r1 = tr("Wiersz 1"), m1 = tr("Scalona 1"), m2 = tr("Scalona 2");
     const top = (x) => tr(x).getBoundingClientRect().top;
     const minA = tr("Min A");
-    return { row: r1.getBoundingClientRect().height, pair: m2.getBoundingClientRect().top - m1.getBoundingClientRect().top, head: !!tr("Nagłówek tabeli")?.dataset.dwbHeader,
+    return { row: r1.getBoundingClientRect().height, pair: m2.getBoundingClientRect().top - m1.getBoundingClientRect().top, pairSide: top("Obok 2") - top("Obok 1"), head: !!tr("Nagłówek tabeli")?.dataset.dwbHeader,
       minFirst: top("Min B") - top("Min A"), min: top("Exact A") - top("Min B"), exact: top("Exact B") - top("Exact A"),
       rowAlign: getComputedStyle(minA.cells[0].querySelector("p")).textAlign };
   });
@@ -227,6 +232,7 @@ async function run() {
   // było też przed regułą; tam tylko pilnujemy, żeby nie było gorzej (30,45 px)
   if (ENGINE === "webkit") check("scalenie w pionie (WebKit): nie wyżej niż przed regułą Worda", tb.pair < 31, JSON.stringify(tb));
   else check("scalenie w pionie: para wierszy = linijka 9,4 pt + minimum 9,95 pt (Word 19,4 pt ≈ 25,8 px)", Math.abs(tb.pair - 19.35 * 4 / 3) < 0.8, JSON.stringify(tb));
+  check("scalenie w pionie ze zwykłą komórką obok: minima wierszy, bez linijki (Word 13,25 pt ≈ 17,7 px)", Math.abs(tb.pairSide - 13.45 * 4 / 3) < 0.8, JSON.stringify(tb));
   check("wiersz nagłówka oznaczony (w:tblHeader bez wartości = tak)", tb.head, JSON.stringify(tb));
   // wyrocznia 2026-10-25: minimum 17 pt + margines komórki 200 tw + linia 0,5 pt = 36,7 px; „dokładnie” 1000 tw = 66,7 px
   check("minimum wiersza bez marginesów komórki — marginesy ponad nie (Word 36,7 px)", Math.abs(tb.min - 36.67) < 0.6, JSON.stringify(tb));

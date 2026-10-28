@@ -217,7 +217,7 @@ function layoutTabStops(host) {
       st.width = `${pl.width.toFixed(2)}pt`;
       st.whiteSpace = "pre";
       st.overflow = "hidden"; // wyrównanie w pionie: CSS (.docx-tab-laid, p.dwb-exact)
-      pl.sp.innerHTML = "&nbsp;";
+      if (pl.sp.textContent !== "\u00a0") pl.sp.innerHTML = "&nbsp;"; // ponowne liczenie przy pisaniu — bez zbędnej zmiany węzłów
       pl.sp.classList.add("docx-tab-laid");
       pl.sp.classList.toggle("tab-dot", pl.leader === "dot" || pl.leader === "middleDot");
       pl.sp.classList.toggle("tab-line", pl.leader === "underscore" || pl.leader === "heavy" || pl.leader === "hyphen");
@@ -450,14 +450,39 @@ function addTableBorderHeights(host) {
 // Zmierzone w Wordzie na plikach testowych (2026-10-09): linijka 9,4 pt, minima 3,5 + 9,95 pt →
 // Word 19,4 pt, przeglądarka 13,45 („ubezp” z konwersji PDF: tabele o 30 % za niskie, 4 strony
 // zamiast 7). Wysokość linijki = interlinia pierwszego akapitu komórki.
+// TYLKO wiersz, w którym KAŻDA komórka zaczyna scalenie w pionie (wyrocznia 2026-10-28): jedna
+// zwykła komórka obok (też pusta) albo kontynuacja scalenia z wiersza wyżej — wiersz trzyma swoje
+// minimum, a scalona treść rozkłada się na kolejne wiersze. Tabele z konwersji PDF („ubezp”: kwoty
+// obok scalonego opisu) rosły w podglądzie o linijkę na scalenie, w Wordzie nie (pdf:score 93 → 79 %).
+function rowsOfMergeStartsOnly(table) {
+  const occ = [];
+  [...table.rows].forEach((tr, r) => {
+    let col = 0;
+    for (const td of tr.cells) {
+      while (occ[r]?.[col]) col++;
+      for (let dr = 0; dr < Math.max(1, td.rowSpan); dr++) for (let dc = 0; dc < Math.max(1, td.colSpan); dc++) (occ[r + dr] ||= [])[col + dc] = { td, r0: r };
+      col += Math.max(1, td.colSpan);
+    }
+  });
+  const out = new Set();
+  [...table.rows].forEach((tr, r) => {
+    const slots = occ[r] || [];
+    if (slots.length && [...slots].every((s) => s && s.r0 === r && s.td.rowSpan >= 2)) out.add(tr);
+  });
+  return out;
+}
 function applyMergedCellFirstLine(host) {
   if (!host) return 0;
   let n = 0;
+  const onlyStarts = new Map(); // tabela → wiersze z samymi początkami scaleń
   host.querySelectorAll("section.docx td[rowspan]").forEach((td) => {
     if (td.rowSpan < 2) return;
     const p = td.querySelector("p");
     const tr = td.parentElement;
     if (!p || !p.textContent.trim() || tr?.tagName !== "TR") return;
+    const table = tr.closest("table");
+    if (!onlyStarts.has(table)) onlyStarts.set(table, rowsOfMergeStartsOnly(table));
+    if (!onlyStarts.get(table).has(tr)) return;
     const cs = getComputedStyle(p);
     const lh = parseFloat(cs.lineHeight);
     if (!lh) return;

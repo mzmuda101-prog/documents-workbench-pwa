@@ -21,7 +21,7 @@
   }
 })();
 
-const APP_BUILD_VERSION = "20261028-07";
+const APP_BUILD_VERSION = "20261028-08";
 
 const IS_LOW_POWER = (() => {
   try {

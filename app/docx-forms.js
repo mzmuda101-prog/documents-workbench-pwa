@@ -836,6 +836,8 @@ async function fillFormFieldsInPlace(vals) {
     if (!w.classList.contains("ff-glyph")) formSetWrapText(w, f.display || "");
     touched.add(p);
   });
+  // dłuższy / krótszy tekst pola — tabulatory za nim do swoich pozycji („Teren nr:” zostaje w miejscu)
+  if (typeof layoutTabStops === "function") touched.forEach((p) => { if (p.querySelector("span.docx-tab")) layoutTabStops(p); });
   // XML kontrolek-wysp (akapit edytowalny z polem) — z NOWEGO pliku, inaczej pisanie w tym akapicie
   // zapisałoby kontrolkę ze starą wartością
   Array.from(doc.getElementsByTagNameNS(W_NS, "sdt")).forEach((sdt, i) => {

@@ -190,6 +190,14 @@ const dwbTabLeaders = (() => {
     requestAnimationFrame(again);
   }
 
+  // Tabulatory akapitu od nowa (raz na klatkę) — po zmianie tekstu przed nimi.
+  const pending = new Set();
+  function relayout(p) {
+    if (!p || typeof layoutTabStops !== "function") return;
+    if (!pending.size) requestAnimationFrame(() => { pending.forEach((q) => { if (q.isConnected) layoutTabStops(q); }); pending.clear(); if (sel) place(); });
+    pending.add(p);
+  }
+
   function init() {
     if (!docCanvasEl) return;
     docCanvasEl.addEventListener("click", (e) => {
@@ -206,6 +214,14 @@ const dwbTabLeaders = (() => {
       if (e.key === "Escape") { clear(); return; }
       if (!e.ctrlKey && !e.metaKey && !e.altKey && !/^(Shift|Control|Meta|Alt)$/.test(e.key)) clear(); // pisanie / Backspace — dalej jak zwykły tekst
     }, true);
+    // Pisanie przed tabulatorem: koniec kropek stoi na pozycji tabulatora (jak w Wordzie), a nie
+    // przesuwa się z tekstem — inaczej „Teren nr: 401” wyjeżdżał za kolumnę.
+    docCanvasEl.addEventListener("input", (e) => {
+      if (e.isComposing) return;
+      const n = getSelection()?.focusNode;
+      const p = (n?.nodeType === 1 ? n : n?.parentElement)?.closest?.(".docx-edit-root p");
+      if (p?.querySelector("span.docx-tab")) relayout(p);
+    });
     docViewportEl?.addEventListener("scroll", () => place(), { passive: true });
     window.addEventListener("resize", () => place());
     if (typeof readModeEl !== "undefined") readModeEl?.addEventListener("change", () => clear());
@@ -213,5 +229,5 @@ const dwbTabLeaders = (() => {
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
   else init();
 
-  return { select, clear, isActive: () => !!sel };
+  return { select, clear, relayout, isActive: () => !!sel };
 })();

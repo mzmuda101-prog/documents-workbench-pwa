@@ -18,6 +18,7 @@ const mod = process.platform === "darwin" ? "Meta" : "Control";
 
 const tab = '<w:r><w:tab/></w:r>';
 const t = (s) => `<w:r><w:t xml:space="preserve">${s}</w:t></w:r>`;
+const sdt = (id, name, v) => `<w:sdt><w:sdtPr><w:alias w:val="${name}"/><w:tag w:val="${name}"/><w:id w:val="${id}"/><w:text/></w:sdtPr><w:sdtContent>${t(v)}</w:sdtContent></w:sdt>`;
 async function fixture() {
   const z = new JSZip();
   z.file("[Content_Types].xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>');
@@ -29,6 +30,8 @@ async function fixture() {
     `<w:p><w:pPr><w:tabs><w:tab w:val="left" w:leader="dot" w:pos="2000"/><w:tab w:val="left" w:leader="dot" w:pos="6000"/><w:tab w:val="left" w:leader="dot" w:pos="8000"/></w:tabs></w:pPr>${t("Miejscowość:")}${tab}${t("PILECKIEGO 23")}${tab}${t("Teren nr:")}${tab}</w:p>`,
     `<w:p><w:pPr><w:pStyle w:val="Formularz"/></w:pPr>${t("Imię:")}${tab}</w:p>`,
     `<w:p>${t("Koniec.")}</w:p>`,
+    // karta z PDF: kontrolki Worda (Miejscowość, Teren nr) między tabulatorami z kropkami
+    `<w:p><w:pPr><w:tabs><w:tab w:val="left" w:leader="dot" w:pos="2000"/><w:tab w:val="left" w:leader="dot" w:pos="5000"/><w:tab w:val="left" w:leader="dot" w:pos="6600"/><w:tab w:val="left" w:leader="dot" w:pos="8500"/></w:tabs></w:pPr>${t("Miejscowość:")}${tab}${sdt(11, "Miejscowość", "PILECKIEGO 23")}${tab}${t("Teren nr:")}${tab}${sdt(12, "Teren nr", "401")}${tab}</w:p>`,
   ].join("");
   z.file("word/document.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1417" w:right="1417" w:bottom="1417" w:left="1417" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr></w:body></w:document>`);
   return z.generateAsync({ type: "nodebuffer" });
@@ -136,6 +139,41 @@ async function run() {
   await page.waitForTimeout(400);
   st = await tabsOf(page, 1);
   check("Backspace za kropkami usuwa tabulator (znak), karta znika", st.tabChars === 0 && await page.evaluate(() => !document.querySelector(".dwb-tabstop-card")), JSON.stringify(st));
+
+  // 7b. Dłuższy tekst przed kropkami (nagranie 2026-10-28: „PILECKIEGO 23” → „PILECKIEGO 233450”):
+  // kropki kończą się na pozycji tabulatora, więc „Teren nr:” zostaje w miejscu — dawniej szerokości
+  // tabulatorów liczone tylko przy renderze i reszta wiersza wyjeżdżała za kolumnę.
+  const terenX = () => page.evaluate(() => {
+    const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[3];
+    const w = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+    for (let n = w.nextNode(); n; n = w.nextNode()) {
+      const k = n.data.indexOf("Teren");
+      if (k >= 0) { const q = document.createRange(); q.setStart(n, k); q.setEnd(n, k + 1); return q.getBoundingClientRect().left - p.getBoundingClientRect().left; }
+    }
+    return null;
+  });
+  const x0 = await terenX();
+  const fkey = await page.evaluate(() => [...formUi.ranges.keys()].find((k) => formUi.ranges.get(k).toString().includes("PILECKIEGO")));
+  const fbox = await page.evaluate((k) => { const q = formUi.ranges.get(k); const c = [...q.getClientRects()].find((x) => x.width > 0); return { x: c.left + 10, y: c.top + c.height / 2 }; }, fkey);
+  await page.mouse.click(fbox.x, fbox.y);
+  await page.waitForSelector(".ff-pop .ff-pop-input");
+  await page.fill(".ff-pop .ff-pop-input", "PILECKIEGO 233450");
+  await page.keyboard.press("Enter");
+  await idle(page);
+  await page.waitForTimeout(300);
+  let x1 = await terenX();
+  check("dłuższy tekst w kontrolce: „Teren nr:” w tym samym miejscu (kropki krótsze)", x0 != null && Math.abs(x1 - x0) < 1, `${x0} → ${x1}`);
+  await page.evaluate(() => {
+    const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[3];
+    p.closest(".docx-edit-root").focus();
+    const q = document.createRange(); q.setStart(document.createTreeWalker(p, NodeFilter.SHOW_TEXT).nextNode(), 5);
+    getSelection().removeAllRanges(); getSelection().addRange(q);
+  });
+  await page.keyboard.type("ab");
+  await page.waitForTimeout(300);
+  x1 = await terenX();
+  const savedText = await page.evaluate(async () => (await extractParagraphTextsFromDocx(await buildDocumentForSave())).map(String)[3]);
+  check("pisanie przed kropkami: „Teren nr:” w tym samym miejscu, tekst w pliku", Math.abs(x1 - x0) < 1 && /^Miejsabcowość:PILECKIEGO 233450Teren nr:401$/.test(savedText), `${x0} → ${x1} | ${JSON.stringify(savedText)}`);
 
   // 8. Czytanie: klik w kropki nic nie pokazuje
   await page.evaluate(() => { readModeEl.checked = true; readModeEl.dispatchEvent(new Event("change")); });

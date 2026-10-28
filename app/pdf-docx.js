@@ -383,7 +383,44 @@
       return `<w:${side} w:val="single" w:sz="${sz}" w:space="0" w:color="${(e.color || "000000").toUpperCase()}"/>`;
     }
 
+    // Grubość linii (pt, jak zapisze borderXml), którą Word dołoży do wysokości wiersza r.
+    rowLineExtra(t, r) {
+      const w = (e) => (e ? Math.max(2, Math.min(96, Math.round(e.w * 8))) / 8 : 0);
+      let extra = 0;
+      for (let c = 0; c < t.X.length - 1; c++) {
+        const a = t.cellOf?.[r]?.[c], b = t.cellOf?.[r + 1]?.[c];
+        if (a && a.r1 === r) extra = Math.max(extra, w(a.borders?.bottom));
+        if (b && b.r0 === r + 1) extra = Math.max(extra, w(b.borders?.top));
+      }
+      return extra;
+    }
+
+    // Granica wierszy, przez którą w KAŻDEJ kolumnie ciągnie się ta sama komórka, niczego nie dzieli —
+    // a wiersz z samych początków scaleń w pionie Word podnosi do pierwszej linijki scalonej treści
+    // (wyrocznia 2026-10-28; „ubezp”: „operacja chirurgiczna” — reszta strony o linijkę niżej).
+    // Takie wiersze łączymy w jeden (komórki kopiowane z nowymi r0/r1, układ strony bez zmian).
+    compactRows(t) {
+      const nC = t.X.length - 1, nR = t.Y.length - 1;
+      const keep = [0]; // indeksy wierszy, od których zaczyna się wiersz wyniku
+      for (let r = 1; r < nR; r++) {
+        let same = true;
+        for (let c = 0; c < nC && same; c++) same = !!t.cellOf?.[r]?.[c] && t.cellOf[r][c] === t.cellOf[r - 1]?.[c];
+        if (!same) keep.push(r);
+      }
+      if (keep.length === nR) return t;
+      const map = []; // stary wiersz → nowy
+      keep.forEach((r0, i) => { for (let r = r0; r < (keep[i + 1] ?? nR); r++) map[r] = i; });
+      const copies = new Map();
+      const cellOf = keep.map((r) => (t.cellOf?.[r] || []).map((cell) => {
+        if (!cell) return cell;
+        if (!copies.has(cell)) copies.set(cell, { ...cell, r0: map[cell.r0], r1: map[cell.r1] });
+        return copies.get(cell);
+      }));
+      return { ...t, Y: [...keep.map((r) => t.Y[r]), t.Y[nR]], cellOf };
+    }
+
     tableXml(t, box, ctx) {
+      t = this.compactRows(t);
       const X = t.X, Y = t.Y;
       const nC = X.length - 1, nR = Y.length - 1;
       const grid = [];
@@ -421,7 +458,10 @@
           cells += `<w:tc><w:tcPr>${tcPr.join("")}</w:tcPr>${body}</w:tc>`;
           c += span;
         }
-        const h = Y[r + 1] - Y[r];
+        // Word dolicza poziomą linię ponad minimum wiersza (grubszą z dolnej tego wiersza i górnej
+        // następnego; górna linia tabeli — nie): odstęp między liniami w PDF to minimum + linia.
+        // Bez tego tabela z liniami rosła w Wordzie (i w podglądzie) o linię na wiersz — DC-85.
+        const h = Math.max(0.5, Y[r + 1] - Y[r] - this.rowLineExtra(t, r));
         rows += `<w:tr><w:trPr><w:cantSplit/><w:trHeight w:val="${TW(h)}" w:hRule="atLeast"/></w:trPr>${cells}</w:tr>`;
       }
       const ind = t.x0 - box.x0;
