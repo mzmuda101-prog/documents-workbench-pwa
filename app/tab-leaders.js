@@ -91,6 +91,10 @@ const dwbTabLeaders = (() => {
     handle.className = "dwb-tabstop-handle";
     handle.setAttribute("role", "slider");
     handle.setAttribute("aria-label", t("tabLeaderHandle"));
+    handle.dataset.hint = "";
+    handle.dataset.hintPl = I18N.pl.tabLeaderHandle;
+    handle.dataset.hintEn = I18N.en.tabLeaderHandle;
+    handle.dataset.hintDelay = "0.5";
     handle.tabIndex = -1;
     const card = document.createElement("div");
     card.className = "image-card dwb-tabstop-card";
@@ -137,6 +141,48 @@ const dwbTabLeaders = (() => {
     ui.card.style.top = `${top + window.scrollY}px`;
   }
 
+  // ── przyciąganie z ⌘ (Mac) / Ctrl (2026-10-29, prośba Mateusza) ──
+  // Bez klawisza — swobodnie (jak dotąd). Z klawiszem koniec kropek staje na: końcu kropek w innym
+  // wierszu tej samej karty / kolumny (równe „Teren nr:” jeden pod drugim), pozycji sprzed
+  // przeciągania, prawym brzegu. W pliku to dalej zwykła pozycja tabulatora — zgodność z Wordem.
+  const SNAP_PX = 6;
+  const snapKey = (e) => (/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? e.metaKey : e.ctrlKey);
+  function snapTargets() { // w pt od początku kolumny akapitu
+    const box = sel.sp.closest("td, th") || sel.sp.closest("section.docx");
+    const out = [{ pos: sel.stop0, kind: "start" }, { pos: sel.maxPos, kind: "edge" }];
+    box?.querySelectorAll("span.docx-tab.tab-dot, span.docx-tab.tab-line").forEach((t) => {
+      if (t === sel.sp || t.closest("p") === sel.p || (t.closest("td, th") || null) !== (sel.sp.closest("td, th") || null)) return;
+      const r = t.getBoundingClientRect();
+      if (r.width < 2) return;
+      out.push({ pos: ((r.right - drag.originPx) / drag.scale) * PX2PT, kind: "tab", el: t });
+    });
+    return out;
+  }
+  let guide = null;
+  function showGuide(pos) {
+    if (pos == null) { guide?.remove(); guide = null; return; }
+    const box = (sel.sp.closest("td, th") || sel.sp.closest("section.docx")).getBoundingClientRect();
+    if (!guide) { guide = document.createElement("div"); guide.className = "dwb-tabstop-guide"; document.body.append(guide); }
+    const x = drag.originPx + (pos / PX2PT) * drag.scale;
+    Object.assign(guide.style, { left: `${x + window.scrollX}px`, top: `${box.top + window.scrollY}px`, height: `${box.height}px` });
+  }
+  function dragTo(clientX, snap) {
+    let pos = clampPos((((clientX - drag.dx) - drag.originPx) / drag.scale) * PX2PT);
+    let hit = null;
+    if (snap) {
+      const tol = (SNAP_PX * (drag.touch ? 2 : 1) / drag.scale) * PX2PT;
+      snapTargets().forEach((t) => { const d = Math.abs(t.pos - pos); if (d <= tol && (!hit || d < Math.abs(hit.pos - pos))) hit = t; });
+      if (hit) pos = clampPos(hit.pos);
+    }
+    preview(pos);
+    showGuide(hit && Math.abs(hit.pos - pos) < 0.5 ? pos : null);
+  }
+  function onSnapKey(e) {
+    if (!drag || !/^(Meta|Control)$/.test(e.key)) return;
+    drag.snap = e.type === "keydown";
+    dragTo(drag.lastX, drag.snap);
+  }
+
   let drag = null;
   function onHandleDown(e) {
     if (!sel || e.button > 0) return;
@@ -144,7 +190,10 @@ const dwbTabLeaders = (() => {
     e.stopPropagation();
     clearTimeout(commitTimer);
     const g = geometry(sel.sp);
-    drag = { id: e.pointerId, originPx: g.originPx, scale: g.scale, dx: e.clientX - sel.sp.getBoundingClientRect().right };
+    sel.stop0 = sel.pos;
+    drag = { id: e.pointerId, originPx: g.originPx, scale: g.scale, dx: e.clientX - sel.sp.getBoundingClientRect().right, lastX: e.clientX, snap: snapKey(e), touch: e.pointerType === "touch" };
+    window.addEventListener("keydown", onSnapKey, true);
+    window.addEventListener("keyup", onSnapKey, true);
     ui.handle.classList.add("is-dragging");
     try { ui.handle.setPointerCapture(e.pointerId); } catch (_) { /* — */ }
     ui.handle.addEventListener("pointermove", onHandleMove);
@@ -154,11 +203,16 @@ const dwbTabLeaders = (() => {
   function onHandleMove(e) {
     if (!drag || e.pointerId !== drag.id) return;
     e.preventDefault();
-    preview(clampPos((((e.clientX - drag.dx) - drag.originPx) / drag.scale) * PX2PT));
+    drag.lastX = e.clientX;
+    drag.snap = snapKey(e);
+    dragTo(e.clientX, drag.snap);
   }
   function onHandleUp(e) {
     if (!drag || e.pointerId !== drag.id) return;
     drag = null;
+    showGuide(null);
+    window.removeEventListener("keydown", onSnapKey, true);
+    window.removeEventListener("keyup", onSnapKey, true);
     ui?.handle.classList.remove("is-dragging");
     ui?.handle.removeEventListener("pointermove", onHandleMove);
     commit();

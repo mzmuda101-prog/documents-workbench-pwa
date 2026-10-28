@@ -2663,10 +2663,11 @@ p.dwb-exact img { vertical-align: baseline; }
 .dwb-tabstop-handle::before { content: ""; position: absolute; inset: -6px -12px; }
 .dwb-tabstop-handle.is-dragging { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
 .dwb-tabstop-card { position: absolute; }
+.dwb-tabstop-guide { position: absolute; z-index: 8845; width: 1px; margin-left: -0.5px; pointer-events: none; background: #e0338b; }
 .dwb-tabstop-label { padding: 0 6px 0 4px; font-size: 12px; font-weight: 600; color: var(--ink-2); }
 /* tabulator (kropki) w zaznaczeniu — kolor zaznaczenia systemu, kropki widoczne pod spodem */
 .dwb-tab-selmark { position: absolute; z-index: 8830; pointer-events: none; background: Highlight; mix-blend-mode: multiply; }
-@media print { .dwb-tabstop-hl, .dwb-tabstop-handle, .dwb-tabstop-card, .dwb-tab-selmark { display: none !important; } }
+@media print { .dwb-tabstop-guide, .dwb-tabstop-hl, .dwb-tabstop-handle, .dwb-tabstop-card, .dwb-tab-selmark { display: none !important; } }
 .docx-preview-host img.img-drop-target { outline: 3px dashed var(--accent); outline-offset: 2px; }
 .ic-alt-text { font-size: 10.5px; font-weight: 800; letter-spacing: .04em; }
 @media (pointer: coarse) { .image-card .tb-btn { min-width: 40px; height: 40px; } .image-size input { width: 120px; height: 32px; } }

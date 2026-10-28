@@ -216,6 +216,39 @@ async function run() {
   await page.waitForTimeout(600);
   check("Backspace na zaznaczonych kropkach usuwa je", /^Miejscowość:PILECKIEGO 23⇥/.test(flat(await runsOf(0))), await runsOf(0));
 
+  // 7b2. (2026-10-29) przyciąganie z ⌘ / Ctrl: koniec kropek na końcu kropek w innym wierszu;
+  // bez klawisza — tam, gdzie puszczono
+  const snapDrag = async (withKey) => {
+    const tgt = await page.evaluate(() => { const ps = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")); const ts = [...ps[0].querySelectorAll("span.docx-tab.tab-dot")].map((t) => t.getBoundingClientRect().right); return ts; });
+    const last = await page.evaluate(() => collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[3].querySelectorAll(".docx-tab").length - 1);
+    const rr = await tabRect(page, 3, last); // ostatnie kropki — sięgają do marginesu
+    await page.mouse.click(rr.x, rr.y);
+    await page.waitForTimeout(250);
+    const h = await page.evaluate(() => { const b = document.querySelector(".dwb-tabstop-handle").getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; });
+    // cel w zasięgu tych kropek (za ich początkiem, nie ten sam koniec)
+    const ok = tgt.filter((x) => x > rr.l + 8 && Math.abs(x - rr.r) > 6);
+    const goal = ok.reduce((best, x) => (Math.abs(x - h.x) < Math.abs(best - h.x) ? x : best), ok[0]);
+    if (withKey) await page.keyboard.down(mod);
+    await page.mouse.move(h.x, h.y);
+    await page.mouse.down();
+    await page.mouse.move(goal + 3, h.y, { steps: 8 });
+    const guideSeen = await page.evaluate(() => !!document.querySelector(".dwb-tabstop-guide"));
+    await page.mouse.up();
+    if (withKey) await page.keyboard.up(mod);
+    await page.waitForTimeout(900);
+    await idle(page);
+    const end = (await tabRect(page, 3, last)).r;
+    await page.keyboard.press("Escape");
+    await page.evaluate(() => document.querySelector(".docx-edit-root")?.focus());
+    await page.keyboard.press(`${mod}+z`);
+    await idle(page);
+    return { goal, end, guideSeen, tgt, l: rr.l, r: rr.r };
+  };
+  const sn = await snapDrag(true);
+  check("⌘/Ctrl + przeciągnięcie: koniec kropek równo z kropkami w innym wierszu, linia pomocnicza", Math.abs(sn.end - sn.goal) < 0.75 && sn.guideSeen, JSON.stringify(sn));
+  const fr = await snapDrag(false);
+  check("bez ⌘/Ctrl: bez przyciągania (koniec tam, gdzie puszczono)", Math.abs(fr.end - (fr.goal + 3)) < 1.5 && !fr.guideSeen, JSON.stringify(fr));
+
   // 7c. (chaos 2026-10-28) ◀ i od razu Enter — zmiana kropek czeka chwilę na kolejne kliknięcia;
   // Enter w tym czasie dzielił akapit tylko w pliku (podgląd o akapit krótszy)
   const paraCount = () => page.evaluate(async () => {
