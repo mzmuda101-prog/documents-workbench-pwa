@@ -864,6 +864,7 @@ function applyEditToXml(xml, edit, opts = {}) {
   if (edit.op === "runStyle") return applyRunStyleInXml(xml, edit);
   if (edit.op === "table") return applyTableInXml(xml, edit);
   if (edit.op === "image") return applyImageInXml(xml, edit);
+  if (edit.op === "tabStop") return applyTabStopInXml(xml, edit); // docx-compose.js
   if (edit.op === "textbox") return applyTextboxInXml(xml, edit); // textboxes.js
   if (edit.op === "mergeParagraph") return mergeParagraphInXml(xml, edit.index, edit.mergedRuns);
   if (edit.op === "deleteRange") return deleteParagraphRangeInXml(xml, edit); // doc-selection.js

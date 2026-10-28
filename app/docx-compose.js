@@ -2283,6 +2283,33 @@ async function applyImageInsertInZip(zip, xml, edit) {
   return { xml: composeSerialize(doc), count: 1 };
 }
 
+// op "tabStop": { index, from, to } (twipy) — przesunięcie tabulatora akapitu, np. końca kropek
+// („Miejscowość: ………… Teren nr:”) — to samo, co przeciągnięcie znacznika na linijce Worda.
+// Tabulator wprost w akapicie: nowa pozycja; ze stylu: „wyczyść” starą pozycję + nowy (jak Word).
+function applyTabStopInXml(xml, edit) {
+  const doc = composeParse(xml);
+  const p = collectParagraphElements(doc.documentElement, "all")[edit.index];
+  const from = Math.round(Number(edit.from)), to = Math.round(Number(edit.to));
+  if (!p || !Number.isFinite(from) || !Number.isFinite(to) || to <= 0 || Math.abs(to - from) < 1) return { xml, count: 0 };
+  const pPr = composeEnsurePPr(p);
+  let tabs = composeDirectChild(pPr, "tabs");
+  const pos = (t) => parseInt(t.getAttributeNS(W_NS, "pos"), 10);
+  const own = tabs ? Array.from(tabs.childNodes).filter((n) => n.nodeType === 1 && n.localName === "tab") : [];
+  let hit = own.find((t) => Math.abs(pos(t) - from) <= 3 && t.getAttributeNS(W_NS, "val") !== "clear");
+  if (!tabs) { tabs = composeEl(doc, "tabs"); composeSetPPrChild(pPr, "tabs", tabs); }
+  if (hit) {
+    hit.setAttributeNS(W_NS, "w:pos", String(to));
+  } else {
+    if (!edit.leader) return { xml, count: 0 };
+    tabs.appendChild(composeEl(doc, "tab", { val: "clear", pos: from }));
+    hit = composeEl(doc, "tab", { val: edit.align || "left", leader: edit.leader, pos: to });
+    tabs.appendChild(hit);
+  }
+  // rosnąco po pozycji (tak zapisuje Word)
+  Array.from(tabs.childNodes).filter((n) => n.nodeType === 1).sort((a, b) => pos(a) - pos(b)).forEach((n) => tabs.appendChild(n));
+  return { xml: composeSerialize(doc), count: 1 };
+}
+
 // op "image": { index, action: "size" (widthPct) | "align" (align) | "alt" (descr) | "delete" }
 // Działa na pierwszym obrazie akapitu — także z plików z Worda (wp:inline albo wp:anchor).
 function applyImageInXml(xml, edit) {
