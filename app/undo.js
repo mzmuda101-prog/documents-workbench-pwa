@@ -50,6 +50,7 @@ const UNDO_OP_LABEL = {
   tableInsert: "undoOpTable",
   table: "undoOpTable",
   imageInsert: "undoOpImage",
+  imageReplace: "undoOpImage",
   image: "undoOpImage",
   runStyle: "undoOpFormat",
   commentAdd: "undoOpComment",

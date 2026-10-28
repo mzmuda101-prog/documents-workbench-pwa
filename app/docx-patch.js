@@ -1034,8 +1034,10 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
       total += res.count;
       continue;
     }
-    if (normalized.op === "tableInsert" || normalized.op === "imageInsert") { // docx-compose.js — style / pliki w paczce
-      const res = normalized.op === "tableInsert" ? await applyTableInsertInZip(zip, xml, normalized) : await applyImageInsertInZip(zip, xml, normalized);
+    if (normalized.op === "tableInsert" || normalized.op === "imageInsert" || normalized.op === "imageReplace") { // docx-compose.js — style / pliki w paczce
+      const res = normalized.op === "tableInsert" ? await applyTableInsertInZip(zip, xml, normalized)
+        : normalized.op === "imageReplace" ? await applyImageReplaceInZip(zip, xml, normalized)
+        : await applyImageInsertInZip(zip, xml, normalized);
       xml = res.xml;
       total += res.count;
       continue;

@@ -1973,6 +1973,122 @@ const composeUi = (() => {
     input.click();
   }
 
+  // ── „Zamień obraz” (Word: Zmień obraz): nowy plik w tym samym miejscu i rozmiarze ─────────
+  // Zgłoszenie (karty terenu z PDF): nowa mapka ma wejść dokładnie w miejsce starej, bez ruszania
+  // układu karty. Ramka (wp:extent) zostaje; proporcje dopasowujemy tutaj, na kanwie — „Wypełnij”
+  // przycina brzegi (środek zostaje), „Cała” dokłada białe pasy. Przycięty plik, a nie a:srcRect:
+  // tak samo w Wordzie, w podglądzie, w PDF i w każdym innym programie.
+  let lastReplace = null; // { index, nth, file, mode, aspect } — przełącznik w karcie
+  const caretKey = () => {
+    const s = window.getSelection?.();
+    if (!s?.rangeCount) return "";
+    const r = s.getRangeAt(0);
+    const id = (n) => (n ? `${n.nodeName}:${Array.prototype.indexOf.call(n.parentNode?.childNodes || [], n)}:${n.textContent?.length}` : "");
+    return `${id(r.startContainer)}@${r.startOffset}|${id(r.endContainer)}@${r.endOffset}`;
+  };
+  function imageTarget(img) {
+    return typeof docImageTargets === "function" ? docImageTargets(host()).find((x) => x.img === img) || null : null;
+  }
+  async function fitImageToFrame(file, frameAspect, mode) {
+    let bitmap;
+    let url = null;
+    try { bitmap = await createImageBitmap(file); } catch (_) {
+      url = URL.createObjectURL(file);
+      try {
+        bitmap = await new Promise((resolve, reject) => { const im = new Image(); im.onload = () => resolve(im); im.onerror = reject; im.src = url; });
+      } finally { URL.revokeObjectURL(url); }
+    }
+    const w0 = bitmap.width, h0 = bitmap.height;
+    const a0 = w0 / h0;
+    if (!frameAspect || Math.abs(a0 / frameAspect - 1) < 0.01) { // proporcje prawie te same — plik jak jest
+      bitmap.close?.();
+      return { ...(await prepareImage(file)), aspect: "same" };
+    }
+    // obszar źródła (Wypełnij) albo płótno z pasami (Cała); długi bok ≤ IMG_MAX_PX
+    let sx = 0, sy = 0, sw = w0, sh = h0, cw, ch, dx = 0, dy = 0, dw, dh;
+    if (mode === "fill") {
+      if (a0 > frameAspect) { sw = h0 * frameAspect; sx = (w0 - sw) / 2; } else { sh = w0 / frameAspect; sy = (h0 - sh) / 2; }
+      const k = Math.min(1, IMG_MAX_PX / Math.max(sw, sh));
+      cw = dw = Math.max(1, Math.round(sw * k)); ch = dh = Math.max(1, Math.round(sh * k));
+    } else {
+      const fw = a0 > frameAspect ? w0 : h0 * frameAspect;
+      const fh = a0 > frameAspect ? w0 / frameAspect : h0;
+      const k = Math.min(1, IMG_MAX_PX / Math.max(fw, fh));
+      cw = Math.max(1, Math.round(fw * k)); ch = Math.max(1, Math.round(fh * k));
+      dw = Math.round(w0 * k); dh = Math.round(h0 * k);
+      dx = Math.round((cw - dw) / 2); dy = Math.round((ch - dh) / 2);
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = cw; canvas.height = ch;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, cw, ch);
+    ctx.drawImage(bitmap, sx, sy, sw, sh, dx, dy, dw, dh);
+    bitmap.close?.();
+    const png = /^image\/(png|gif|webp|svg\+xml)$/.test((file.type || "").toLowerCase());
+    const mime = png ? "image/png" : "image/jpeg";
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, mime, 0.9));
+    return { bytes: new Uint8Array(await blob.arrayBuffer()), ext: png ? "png" : "jpeg", mime, width: cw, height: ch, aspect: "fitted" };
+  }
+  async function replaceImageWith(img, file, mode = "fill") {
+    if (!file || !/^image\//.test(file.type || "")) { toast(t("imageBadType"), "warning"); return; }
+    const tg = imageTarget(img);
+    if (!tg || tg.paraIndex < 0) { toast(t("imageReplaceFailed"), "warning"); return; }
+    const frame = img.offsetWidth && img.offsetHeight ? img.offsetWidth / img.offsetHeight : 0;
+    let prepared;
+    try { prepared = await fitImageToFrame(file, frame, mode); } catch (err) {
+      log(`Obraz: ${err.message || err}`, "error");
+      toast(t("imageBadType"), "warning");
+      return;
+    }
+    if (imgCard) imgCard.busy = true;
+    const { aspect, ...data } = prepared;
+    const n = await applyDocumentEdit({ op: "imageReplace", index: tg.paraIndex, nth: tg.nth, count: tg.count, ...data })
+      .catch((err) => { log(`Obraz: ${err.message || err}`, "error"); return 0; });
+    if (!n) { if (imgCard) imgCard.busy = false; toast(t("imageReplaceFailed"), "warning"); return; }
+    lastReplace = { index: tg.paraIndex, nth: tg.nth, file, mode, aspect };
+    await whenEditable();
+    const again = typeof docImageTargets === "function" ? docImageTargets(host()).find((x) => x.paraIndex === tg.paraIndex && x.nth === tg.nth) : null;
+    hideImageCard();
+    if (again && !readOnlyMode) showImageCard(again.img);
+    if (aspect !== "same") toast(t(mode === "fill" ? "imageReplacedFill" : "imageReplacedFit"), "info");
+  }
+  function pickReplacement(img) {
+    if (!img) return;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.addEventListener("change", () => { if (input.files?.[0]) replaceImageWith(img, input.files[0], "fill"); }, { once: true });
+    input.click();
+  }
+  // Plik obrazu upuszczony NA obraz w dokumencie (Edycja) = zamiana (zamiast otwarcia pliku)
+  const imgUnder = (e) => {
+    const img = e.target?.closest?.(".docx-preview-host img");
+    return img && !readOnlyMode && img.closest(".docx-edit-root") && imageTarget(img) ? img : null;
+  };
+  const dragImageFile = (e) => Array.from(e.dataTransfer?.items || []).some((it) => it.kind === "file" && /^image\//.test(it.type || ""));
+  let dropHover = null;
+  docCanvasEl?.addEventListener("dragover", (e) => {
+    const img = dragImageFile(e) ? imgUnder(e) : null;
+    if (dropHover && dropHover !== img) dropHover.classList.remove("img-drop-target");
+    dropHover = img;
+    if (!img) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    img.classList.add("img-drop-target");
+  });
+  docCanvasEl?.addEventListener("dragleave", (e) => { if (dropHover && e.target === dropHover) { dropHover.classList.remove("img-drop-target"); dropHover = null; } });
+  docCanvasEl?.addEventListener("drop", (e) => {
+    dropHover?.classList.remove("img-drop-target");
+    dropHover = null;
+    const img = imgUnder(e);
+    const files = Array.from(e.dataTransfer?.files || []);
+    if (!img || files.length !== 1 || !/^image\//.test(files[0].type || "")) return;
+    e.preventDefault(); // app-frame.js: upuszczony plik otwierałby się jako dokument
+    e.stopPropagation();
+    replaceImageWith(img, files[0], "fill");
+  }, true);
+
   // Karta obrazu: klik w obraz w Edycji — rozmiar (suwak, % szerokości tekstu), wyrównanie, podgląd
   // (imageViewer: pół / cały ekran, przybliżanie), opis, usuń.
   let imgCard = null; // { el, img, p }
@@ -2032,6 +2148,8 @@ const composeUi = (() => {
       <span class="tb-sep" aria-hidden="true"></span>
       <button type="button" class="tb-btn" data-align="left"></button><button type="button" class="tb-btn" data-align="center"></button><button type="button" class="tb-btn" data-align="right"></button>
       <span class="tb-sep" aria-hidden="true"></span>
+      <button type="button" class="tb-btn ic-replace"></button><button type="button" class="tb-btn ic-fit" hidden></button>
+      <span class="tb-sep" aria-hidden="true"></span>
       <button type="button" class="tb-btn ic-view"></button><button type="button" class="tb-btn ic-alt"></button><button type="button" class="tb-btn ic-del"></button>`;
     const range = el.querySelector("input");
     const val = el.querySelector(".image-size-val");
@@ -2085,6 +2203,22 @@ const composeUi = (() => {
       b.innerHTML = alignSvg(b.dataset.align);
       b.addEventListener("click", () => imageEdit(imgCard.index, { action: "align", align: b.dataset.align }));
     });
+    const repl = el.querySelector(".ic-replace");
+    hint(repl, "imageReplace");
+    repl.innerHTML = ICON('<rect x="3" y="5" width="13" height="11" rx="1.5"/><path d="m3 14 4-4 3 3"/><path d="M14 20h5a2 2 0 0 0 2-2v-5"/><polyline points="18 16 21 13 24 16" transform="translate(-3 0)"/>');
+    repl.addEventListener("click", () => pickReplacement(imgCard.img));
+    // po „Zamień”: przycięcie do ramki ↔ cały obraz z białymi pasami (Word: Przytnij ▸ Wypełnij / Dopasuj)
+    const fit = el.querySelector(".ic-fit");
+    const tgt = imageTarget(img);
+    if (lastReplace && tgt && lastReplace.index === tgt.paraIndex && lastReplace.nth === tgt.nth && lastReplace.aspect !== "same") {
+      fit.hidden = false;
+      const key = lastReplace.mode === "fill" ? "imageFitWhole" : "imageFitFill";
+      hint(fit, key);
+      fit.innerHTML = lastReplace.mode === "fill"
+        ? ICON('<rect x="3" y="3" width="18" height="18" rx="1.5"/><rect x="6" y="8" width="12" height="8" rx="1"/>')
+        : ICON('<rect x="3" y="3" width="18" height="18" rx="1.5"/><path d="M8 3v18M16 3v18" stroke-dasharray="2 2"/>');
+      fit.addEventListener("click", () => replaceImageWith(imgCard.img, lastReplace.file, lastReplace.mode === "fill" ? "fit" : "fill"));
+    }
     const view = el.querySelector(".ic-view");
     hint(view, "imageView");
     view.innerHTML = ICON('<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16" y2="16"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>');
@@ -2099,7 +2233,7 @@ const composeUi = (() => {
     del.addEventListener("click", () => { const i = imgCard.index; hideImageCard(); imageEdit(i, { action: "delete" }, false); });
     el.addEventListener("mousedown", (e) => { if (e.target.closest("button")) e.preventDefault(); });
     document.body.appendChild(el);
-    imgCard = { el, img, p, index, savedPct: +range.value, isDragging: () => dragging, textPx: 0 };
+    imgCard = { el, img, p, index, savedPct: +range.value, isDragging: () => dragging, textPx: 0, caret: caretKey() };
     placeImageCard();
     // procent względem strony z pliku (Widok mobilny ≠ szerokość ekranu)
     pageTextPx(index).then((tp) => {
@@ -3385,6 +3519,15 @@ const composeUi = (() => {
     const file = Array.from(e.clipboardData?.files || []).find((f) => /^image\//.test(f.type));
     if (!file) return;
     if (typeof dwbSel !== "undefined") dwbSel.collapseForInsert(); // obraz w miejsce zaznaczenia kilku akapitów
+    // zaznaczony obraz (karta obrazu) — wklejony obraz go zastępuje, jak w Wordzie. Tylko gdy od
+    // kliknięcia w obraz kursor się nie ruszył: karta bywa jeszcze otwarta, gdy piszesz dalej
+    // (np. zaraz po wstawieniu obrazu) — wtedy wklejka idzie w miejsce kursora.
+    if (imgCard?.img?.isConnected && imgCard.caret === caretKey()) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      replaceImageWith(imgCard.img, file, "fill");
+      return;
+    }
     const p = docCaretParagraph(e.target);
     if (!p) return;
     e.preventDefault();

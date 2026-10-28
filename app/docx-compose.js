@@ -2205,6 +2205,50 @@ function composeDrawingXml({ rid, cx, cy, id, name, descr }) {
   return `<w:r xmlns:w="${W_NS}"><w:drawing><wp:inline xmlns:wp="${COMPOSE_NS.wp}" distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="${id}" name="${esc(name)}" descr="${esc(descr)}"/><wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="${COMPOSE_NS.a}" noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic xmlns:a="${COMPOSE_NS.a}"><a:graphicData uri="${COMPOSE_NS.pic}"><pic:pic xmlns:pic="${COMPOSE_NS.pic}"><pic:nvPicPr><pic:cNvPr id="0" name="${esc(name)}" descr="${esc(descr)}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip xmlns:r="${COMPOSE_NS.r}" r:embed="${rid}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
 }
 
+// op "imageReplace": { index, nth, count, bytes (Uint8Array), ext, mime } — „Zamień obraz” (Word:
+// Zmień obraz). Nowy plik w TYM SAMYM miejscu i rozmiarze: wp:extent, kotwica, oblewanie, opis
+// zostają, zmienia się tylko r:embed (proporcje dopasowuje wcześniej przeglądarka — przycięcie albo
+// białe pasy, compose-ui.js). Przycięcie z pliku (a:srcRect) i warianty SVG dotyczyły starego obrazu —
+// usuwane. Stary plik z paczki znika, gdy nic już go nie używa. nth/count = który obraz w akapicie
+// w podglądzie (docImageTargets) — gdy liczba się nie zgadza, tylko obrazy w linii tekstu.
+async function applyImageReplaceInZip(zip, xml, edit) {
+  const doc = composeParse(xml);
+  const p = collectParagraphElements(doc.documentElement, "all")[edit.index];
+  if (!p || !edit.bytes?.length) return { xml, count: 0 };
+  let runs = composeImageRuns(p);
+  if (edit.count != null && runs.length !== edit.count) {
+    runs = runs.filter((r) => Array.from(r.getElementsByTagNameNS(COMPOSE_NS.wp, "inline")).length);
+    if (runs.length !== edit.count) return { xml, count: 0 };
+  }
+  const run = runs[edit.nth | 0];
+  const blip = run && Array.from(run.getElementsByTagNameNS(COMPOSE_NS.a, "blip")).find((b) => b.getAttributeNS(COMPOSE_NS.r, "embed"));
+  if (!blip) return { xml, count: 0 };
+  const oldRid = blip.getAttributeNS(COMPOSE_NS.r, "embed");
+  const { rid } = await composeAddMedia(zip, edit.bytes, edit.ext, edit.mime);
+  blip.setAttributeNS(COMPOSE_NS.r, "r:embed", rid);
+  Array.from(blip.childNodes).filter((n) => n.localName === "extLst").forEach((n) => blip.removeChild(n));
+  const fill = blip.parentNode;
+  Array.from(fill?.childNodes || []).filter((n) => n.localName === "srcRect").forEach((n) => fill.removeChild(n));
+  const out = composeSerialize(doc);
+  if (oldRid && oldRid !== rid && !out.includes(`"${oldRid}"`)) await composeDropMediaRel(zip, oldRid);
+  return { xml: out, count: 1 };
+}
+
+// Powiązanie z obrazem, którego nic już nie używa: wpis w rels i plik w word/media (o ile żaden
+// inny rels — nagłówek, stopka — nie wskazuje tego samego pliku).
+async function composeDropMediaRel(zip, rid) {
+  const rels = await composeReadRels(zip);
+  const rel = Array.from(rels.doc.documentElement.getElementsByTagName("Relationship")).find((r) => r.getAttribute("Id") === rid);
+  if (!rel || !/\/image$/.test(rel.getAttribute("Type") || "") || rel.getAttribute("TargetMode") === "External") return;
+  const target = rel.getAttribute("Target") || "";
+  rel.parentNode.removeChild(rel);
+  zip.file(rels.path, composeSerialize(rels.doc));
+  const media = `word/${target.replace(/^\/?word\//, "").replace(/^\//, "")}`;
+  const others = zip.file(/_rels\/.*\.rels$/).filter((f) => f.name !== rels.path);
+  for (const f of others) if ((await f.async("string")).includes(target.split("/").pop())) return;
+  if (zip.file(media)) zip.remove(media);
+}
+
 // op "imageInsert": { index, bytes (Uint8Array), ext, mime, width, height (px), descr }
 // Obraz w osobnym akapicie (wyśrodkowany) pod akapitem z kursorem — albo w nim, gdy jest pusty.
 // Szerszy niż tekst — zmniejszony do szerokości tekstu (proporcje zostają).
