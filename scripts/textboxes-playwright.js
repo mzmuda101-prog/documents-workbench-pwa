@@ -193,6 +193,87 @@ async function run() {
   saved = await savedBoxes(page);
   check("Cofnij przywraca usunięte pole", saved.boxes.length === before, `${saved.boxes.length}`);
 
+  // 8b. linia bazowa (jak Affinity): pole z większą czcionką staje spodem liter na spodzie liter
+  // wiersza obok; lepkość: po przyciągnięciu ruch o 9 px (tolerancja 6) dalej trzyma linię
+  const baseOf = () => page.evaluate(() => {
+    const desc = (el) => { const cs = getComputedStyle(el); const c = document.createElement("canvas").getContext("2d"); c.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`; return c.measureText("Hg").fontBoundingBoxDescent || parseFloat(cs.fontSize) * 0.21; };
+    const sec = document.querySelector(".docx-preview-host section.docx");
+    const s = sec.getBoundingClientRect().width / sec.offsetWidth;
+    const lineText = [...sec.querySelectorAll("article p")].find((p) => /Drugi akapit pierwszej/.test(p.textContent));
+    const tn = document.createTreeWalker(lineText, NodeFilter.SHOW_TEXT).nextNode();
+    const r1 = document.createRange(); r1.selectNodeContents(tn); const lr = [...r1.getClientRects()][0];
+    const box = [...document.querySelectorAll(".dwb-tb")].find((b) => b.textContent === "ok 34 m.");
+    const bt = document.createTreeWalker(box, NodeFilter.SHOW_TEXT).nextNode();
+    const r2 = document.createRange(); r2.selectNodeContents(bt); const br = r2.getClientRects()[0];
+    const bb = box.getBoundingClientRect();
+    return { lineBase: lr.bottom - desc(tn.parentElement) * s, lineRight: lr.right, boxBase: br.bottom - desc(bt.parentElement) * s, boxL: bb.left, boxT: bb.top, boxW: bb.width, boxH: bb.height, lineSize: getComputedStyle(tn.parentElement).fontSize, boxSize: getComputedStyle(bt.parentElement).fontSize };
+  });
+  await page.evaluate(() => { dwbTextbox.deselect(); document.querySelector(".docx-preview-host section.docx").scrollIntoView({ block: "start" }); });
+  await page.waitForTimeout(300);
+  let bl = await baseOf();
+  const grab = { x: bl.boxL + bl.boxW / 2, y: bl.boxT + bl.boxH / 2 };
+  const off = { x: grab.x - bl.boxL, base: bl.boxBase - grab.y };
+  // cel: lewa krawędź 60 px za końcem wiersza, linia bazowa 3 px pod linią bazową wiersza
+  const tx = bl.lineRight + 60 + off.x, ty = bl.lineBase + 3 - off.base;
+  await page.mouse.move(grab.x, grab.y);
+  await page.mouse.down();
+  await page.mouse.move(grab.x + 15, grab.y + 15, { steps: 3 });
+  await page.mouse.move(tx, ty, { steps: 10 });
+  let mid = await baseOf();
+  check("linia bazowa: większa czcionka pola stoi spodem liter na wierszu obok (w trakcie)", bl.boxSize !== bl.lineSize && Math.abs(mid.boxBase - mid.lineBase) < 0.75, JSON.stringify({ mid, rozmiary: [bl.boxSize, bl.lineSize] }));
+  await page.mouse.move(tx, ty, { steps: 6 });
+  await page.mouse.up();
+  await idle(page);
+  bl = await baseOf();
+  check("po upuszczeniu (zapis i przerysowanie) linia bazowa dalej równa", Math.abs(bl.boxBase - bl.lineBase) < 0.75, JSON.stringify(bl));
+  await page.evaluate(() => dwbTextbox.deselect()); // karta pola nie zasłania kolejnych kroków
+
+  // 8b2. uchwyt: ta sama szerokość co inne pole (pole z Worda) — gdy krawędź nie trafia na linię
+  {
+    const info = await page.evaluate(() => {
+      const ok = [...document.querySelectorAll(".dwb-tb")].find((b) => b.textContent === "ok 34 m.");
+      const wb = [...document.querySelectorAll(".dwb-tb")].find((b) => /Pole z Worda/.test(b.textContent));
+      ok.scrollIntoView({ block: "center" });
+      const r = ok.getBoundingClientRect();
+      return { okW: r.width, wbW: wb.getBoundingClientRect().width, l: r.left, y: r.top + r.height / 2 };
+    });
+    await page.waitForTimeout(200);
+    const c0 = await boxCenter(page, (await previewBoxes(page)).findIndex((b) => b.text === "ok 34 m."));
+    await page.mouse.click(c0.x, c0.y);
+    await page.waitForTimeout(250);
+    const he = await page.evaluate(() => { const el = document.querySelector(".dwb-tb.is-selected"); const r = el?.querySelector('.dwb-tb-h[data-h="w"]')?.getBoundingClientRect(); return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2, right: el.getBoundingClientRect().right } : null; });
+    if (he) {
+      const target = he.right - info.wbW - 3; // lewy uchwyt: 3 px ponad szerokość pola z Worda
+      await page.mouse.move(he.x, he.y);
+      await page.mouse.down();
+      await page.mouse.move(he.x + 20, he.y, { steps: 3 });
+      await page.mouse.move(target, he.y, { steps: 8 });
+      const wNow = await page.evaluate(() => document.querySelector(".dwb-tb.is-selected").getBoundingClientRect().width);
+      await page.mouse.up();
+      await idle(page);
+      check("uchwyt: ta sama szerokość co pole z Worda", Math.abs(wNow - info.wbW) < 0.75, JSON.stringify({ wNow, wbW: info.wbW }));
+    } else check("uchwyt: ta sama szerokość — uchwyt dostępny", false, "");
+    await page.evaluate(() => dwbTextbox.deselect());
+  }
+
+  // 8c. reguły przyciągania (jak Figma / Affinity): bliższe w tolerancji wygrywa, trzymana linia
+  // puszcza dopiero po 1,8 × tolerancji, gdy nic innego nie jest blisko; dalekie obiekty pomijane
+  const rules = await page.evaluate(() => {
+    const sa = dwbTextbox._snapAxis;
+    const box = { L: 100, R: 200, T: 100, B: 120 };
+    const near = { v: 104, src: { L: 210, R: 300, T: 90, B: 130 } };
+    const far = { v: 102, src: { L: 900, R: 950, T: 90, B: 130 } };
+    const a = sa([{ f: 100, id: "t" }], [near, far], 6, box, 300, null);
+    const held = { id: "t", v: 104, src: near.src };
+    const b = sa([{ f: 95, id: "t" }], [], 6, box, 300, held); // 9 od trzymanej linii, nic innego
+    const c = sa([{ f: 92, id: "t" }], [], 6, box, 300, held); // 12 — za daleko
+    const d = sa([{ f: 95, id: "t" }], [{ v: 97, src: near.src }], 6, box, 300, held); // inna linia bliżej
+    return { a: a && a.v, b: b && [b.v, !!b.held], c, d: d && [d.v, !!d.held] };
+  });
+  check("przyciąganie: daleki obiekt pominięty, bliski wygrywa", rules.a === 104, JSON.stringify(rules));
+  check("lepkość: bez konkurencji trzyma linię do 1,8 × tolerancji, potem puszcza", JSON.stringify(rules.b) === "[104,true]" && rules.c === null, JSON.stringify(rules));
+  check("lepkość nie blokuje bliższej linii w tolerancji", JSON.stringify(rules.d) === "[97,false]", JSON.stringify(rules));
+
   // 9. przeniesienie pola z Worda na drugą stronę: kotwica w akapicie drugiej strony
   pv = await previewBoxes(page);
   const wi = pv.findIndex((b) => /Pole z Worda/.test(b.text));

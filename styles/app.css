@@ -2682,17 +2682,17 @@ p.dwb-exact img { vertical-align: baseline; }
 .docx-edit-root .dwb-tb.is-dragging { opacity: .85; }
 .docx-edit-root .dwb-tb.is-editing .dwb-tb-p { visibility: hidden; }
 .dwb-tb-h { position: absolute; width: 9px; height: 9px; margin: -5px 0 0 -5px; background: var(--surface); border: 1.5px solid var(--accent); border-radius: 50%; box-sizing: border-box; z-index: 2; }
-/* pole dotyku uchwytu tylko NA ZEWNĄTRZ ramki — środek pola zawsze przesuwa */
+/* pole dotyku uchwytu = całe kółko + zapas NA ZEWNĄTRZ ramki — środek pola zawsze przesuwa */
 .dwb-tb-h { pointer-events: none; }
 .dwb-tb-h::before { content: ""; position: absolute; pointer-events: auto; }
-.dwb-tb-h[data-h="n"]::before { left: -6px; right: -6px; top: -12px; bottom: 50%; }
-.dwb-tb-h[data-h="s"]::before { left: -6px; right: -6px; top: 50%; bottom: -12px; }
-.dwb-tb-h[data-h="e"]::before { top: -6px; bottom: -6px; left: 50%; right: -12px; }
-.dwb-tb-h[data-h="w"]::before { top: -6px; bottom: -6px; left: -12px; right: 50%; }
-.dwb-tb-h[data-h="nw"]::before { left: -12px; top: -12px; right: 50%; bottom: 50%; }
-.dwb-tb-h[data-h="ne"]::before { right: -12px; top: -12px; left: 50%; bottom: 50%; }
-.dwb-tb-h[data-h="se"]::before { right: -12px; bottom: -12px; left: 50%; top: 50%; }
-.dwb-tb-h[data-h="sw"]::before { left: -12px; bottom: -12px; right: 50%; top: 50%; }
+.dwb-tb-h[data-h="n"]::before { left: -6px; right: -6px; top: -12px; bottom: 0; }
+.dwb-tb-h[data-h="s"]::before { left: -6px; right: -6px; top: 0; bottom: -12px; }
+.dwb-tb-h[data-h="e"]::before { top: -6px; bottom: -6px; left: 0; right: -12px; }
+.dwb-tb-h[data-h="w"]::before { top: -6px; bottom: -6px; left: -12px; right: 0; }
+.dwb-tb-h[data-h="nw"]::before { left: -12px; top: -12px; right: 0; bottom: 0; }
+.dwb-tb-h[data-h="ne"]::before { right: -12px; top: -12px; left: 0; bottom: 0; }
+.dwb-tb-h[data-h="se"]::before { right: -12px; bottom: -12px; left: 0; top: 0; }
+.dwb-tb-h[data-h="sw"]::before { left: -12px; bottom: -12px; right: 0; top: 0; }
 .dwb-tb-h[data-h="nw"] { left: 0; top: 0; cursor: nwse-resize; } .dwb-tb-h[data-h="n"] { left: 50%; top: 0; cursor: ns-resize; }
 .dwb-tb-h[data-h="ne"] { left: 100%; top: 0; cursor: nesw-resize; } .dwb-tb-h[data-h="e"] { left: 100%; top: 50%; cursor: ew-resize; }
 .dwb-tb-h[data-h="se"] { left: 100%; top: 100%; cursor: nwse-resize; } .dwb-tb-h[data-h="s"] { left: 50%; top: 100%; cursor: ns-resize; }

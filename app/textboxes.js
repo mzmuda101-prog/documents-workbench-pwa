@@ -833,47 +833,117 @@ const dwbTextbox = (() => {
     }
     // Linie do przyciągania na kartce: marginesy, środek, krawędzie innych pól i obrazów,
     // linijki tekstu (góra i dół wiersza — napis w polu staje „na linii” tekstu obok)
+    // Spód liter (linia bazowa) dla kroju i rozmiaru: zstępniki z metryk kroju (kanwa), jak liczy
+    // przeglądarka prostokąt tekstu (góra = wysokość wydłużeń, dół = linia bazowa + zstępniki)
+    const descents = new Map();
+    function descentOf(cs) {
+      const font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+      if (!descents.has(font)) {
+        let d = parseFloat(cs.fontSize) * 0.21;
+        try {
+          const ctx = document.createElement("canvas").getContext("2d");
+          ctx.font = font;
+          const m = ctx.measureText("Hg");
+          if (Number.isFinite(m.fontBoundingBoxDescent)) d = m.fontBoundingBoxDescent;
+        } catch (_) { /* stary silnik — przybliżenie */ }
+        descents.set(font, d);
+      }
+      return descents.get(font);
+    }
+    // Wiersze tekstu w elemencie: { T, B, base, L, R } (px kartki bez skali)
+    function textLines(root, sr, s, limit = 800, own = false) {
+      const out = new Map();
+      const range = document.createRange();
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let n = 0;
+      for (let t = walker.nextNode(); t && n < limit; t = walker.nextNode()) {
+        if (!t.data.trim() || !t.parentElement || t.parentElement.closest(own ? ".ff-glyph, .docx-tab" : ".dwb-tb, .ff-glyph, .docx-tab")) continue;
+        n++;
+        const cs = getComputedStyle(t.parentElement);
+        const desc = descentOf(cs);
+        range.selectNodeContents(t);
+        for (const r of range.getClientRects()) {
+          if (r.height < 4 || r.width < 1) continue;
+          const base = Math.round(((r.bottom - sr.top) / s - desc / 1) * 2) / 2;
+          const T = (r.top - sr.top) / s, B = (r.bottom - sr.top) / s, L = (r.left - sr.left) / s, R = (r.right - sr.left) / s;
+          // jeden wiersz = ta sama linia bazowa w tym samym pasie (kolumna karty) — łączymy fragmenty
+          const key = `${base}|${Math.round(L / 400)}`;
+          const cur = out.get(key);
+          if (cur) { cur.L = Math.min(cur.L, L); cur.R = Math.max(cur.R, R); cur.T = Math.min(cur.T, T); cur.B = Math.max(cur.B, B); }
+          else out.set(key, { T, B, base, L, R });
+        }
+      }
+      return [...out.values()];
+    }
+    // Linie do przyciągania na kartce (jak Affinity / Word): marginesy, środek, krawędzie i środki
+    // innych pól i obrazów, linijki tekstu — linia bazowa (napis w polu staje „w tym samym wierszu”
+    // także przy innym rozmiarze czcionki), lewy i prawy brzeg tekstu. Cel pamięta prostokąt źródła
+    // (src): dalekie obiekty nie przyciągają, bliższe wygrywają przy remisie.
     function snapTargets(section, self) {
       const m = sectionMetrics(section);
       const s = scaleOf(section);
       const sr = section.getBoundingClientRect();
-      const xs = [m.pl, m.W - m.pr, m.W / 2];
-      const ys = [m.pt, m.H - m.pb, m.H / 2];
-      const lines = [];
+      const xs = [m.pl, m.W - m.pr, m.W / 2].map((v) => ({ v }));
+      const ys = [m.pt, m.H - m.pb, m.H / 2].map((v) => ({ v }));
+      const sizes = []; // szerokości innych obiektów (uchwyt: „ta sama szerokość”)
       section.querySelectorAll(":scope > .dwb-tb, :scope > .dwb-page-anchor, img").forEach((o) => {
         if (o === self || self.contains(o) || o.closest(".dwb-tb") === self) return;
         const r = o.getBoundingClientRect();
-        if (!r.width || !r.height) return;
-        const L = (r.left - sr.left) / s, T = (r.top - sr.top) / s, W = r.width / s, H = r.height / s;
-        xs.push(L, L + W, L + W / 2);
-        ys.push(T, T + H, T + H / 2);
+        if (!r.width || !r.height || r.width >= sr.width * 0.98) return; // warstwa całej strony nie jest obiektem
+        const src = { L: (r.left - sr.left) / s, T: (r.top - sr.top) / s, R: (r.right - sr.left) / s, B: (r.bottom - sr.top) / s };
+        xs.push({ v: src.L, src }, { v: src.R, src }, { v: (src.L + src.R) / 2, src });
+        ys.push({ v: src.T, src }, { v: src.B, src }, { v: (src.T + src.B) / 2, src });
+        sizes.push({ v: src.R - src.L, src });
       });
-      const range = document.createRange();
-      const seen = new Set();
-      for (const p of section.querySelectorAll("article p")) {
-        if (seen.size > 600) break;
-        if (!p.textContent.trim()) continue;
-        range.selectNodeContents(p);
-        for (const r of range.getClientRects()) {
-          if (r.height < 4) continue;
-          const T = Math.round((r.top - sr.top) / s * 2) / 2, B = Math.round((r.bottom - sr.top) / s * 2) / 2;
-          const k = `${T}|${B}`;
-          if (seen.has(k)) continue;
-          seen.add(k);
-          lines.push({ T, B, L: (r.left - sr.left) / s });
+      const lines = [];
+      section.querySelectorAll(":scope > article").forEach((art) => lines.push(...textLines(art, sr, s)));
+      lines.forEach((l) => {
+        const src = { L: l.L, T: l.T, R: l.R, B: l.B };
+        xs.push({ v: l.L, src, kind: "text" }, { v: l.R, src, kind: "text" });
+      });
+      const bases = lines.map((l) => ({ v: l.base, src: { L: l.L, T: l.T, R: l.R, B: l.B }, kind: "base" }));
+      return { m, xs, ys, bases, lines, sizes };
+    }
+    // Linia bazowa 1. wiersza tekstu pola — od górnej krawędzi pola (px kartki)
+    function boxBaseline(el, sr, s) {
+      const top = (el.getBoundingClientRect().top - sr.top) / s;
+      const own = textLines(el, sr, s, 4, true).sort((a, b) => a.base - b.base)[0];
+      if (own) return own.base - top;
+      const pd = el.querySelector(".dwb-tb-p");
+      const b = el.__tb;
+      const cs = pd ? getComputedStyle(pd) : null;
+      const lh = cs ? parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.15 : 14;
+      return b.inset.t + lh * 0.8;
+    }
+    // Odległość prostokąta źródła od pola (0 = nachodzą) — w pikselach kartki
+    function gapTo(src, box) {
+      if (!src) return 0;
+      const gx = Math.max(0, src.L - box.R, box.L - src.R);
+      const gy = Math.max(0, src.T - box.B, box.T - src.B);
+      return Math.hypot(gx, gy);
+    }
+    // Najlepsze przyciągnięcie jednej osi. features: [{ f, id }] (położenia cech pola), targets: [{ v, src }].
+    // Lepkość: przyciągnięta para trzyma, dopóki odchyłka < 1,8 × tolerancja (bez skakania między
+    // bliskimi liniami). Dalekie źródła (> ⅓ szerokości kartki) pomijane; przy remisie bliższe.
+    function snapAxis(features, targets, tol, box, near, lock) {
+      let best = null;
+      for (const f of features) {
+        for (const tg of targets) {
+          const d = tg.v - f.f;
+          if (Math.abs(d) > tol) continue;
+          const gap = gapTo(tg.src, box);
+          if (gap > near) continue;
+          const score = Math.abs(d) + gap * 0.01;
+          if (!best || score < best.score) best = { d, at: tg.v, id: f.id, v: tg.v, kind: tg.kind, src: tg.src, score };
         }
       }
-      lines.forEach((l) => { xs.push(l.L); });
-      return { m, xs: [...new Set(xs)], ys: [...new Set(ys)], lines };
-    }
-    // najbliższe dopasowanie: cechy pola (krawędzie, środek) do linii; zwraca przesunięcie i linię
-    function bestSnap(features, targets, tol) {
-      let best = null;
-      features.forEach((f) => targets.forEach((tg) => {
-        const d = tg - f;
-        if (Math.abs(d) <= tol && (!best || Math.abs(d) < Math.abs(best.d))) best = { d, at: tg };
-      }));
-      return best;
+      if (best) return best; // najbliższe w tolerancji zawsze wygrywa
+      // nic w pobliżu — przy odjeżdżaniu trzymana para jeszcze chwilę trzyma (lepkość)
+      if (lock) {
+        const f = features.find((x) => x.id === lock.id);
+        if (f && Math.abs(lock.v - f.f) <= tol * 1.8) return { d: lock.v - f.f, at: lock.v, id: lock.id, v: lock.v, kind: lock.kind, src: lock.src, held: true };
+      }
+      return null;
     }
     function sectionAt(clientY, fallback) {
       const secs = [...(docCanvasEl?.querySelectorAll(".docx-preview-host section.docx") || [])];
@@ -908,7 +978,7 @@ const dwbTextbox = (() => {
         el, handle, wasSelected, pointerId: e.pointerId, sx: e.clientX, sy: e.clientY, moved: false, s,
         x0: parseFloat(el.style.left) || 0, y0: parseFloat(el.style.top) || 0, w0: el.offsetWidth, h0: el.offsetHeight,
         grabX: (e.clientX - el.getBoundingClientRect().left) / s, grabY: (e.clientY - el.getBoundingClientRect().top) / s,
-        section, targets: null, fixedH: false,
+        section, targets: null, fixedH: false, touch: e.pointerType === "touch", lock: {},
       };
       try { el.setPointerCapture(e.pointerId); } catch (_) { /* już puszczony */ }
     }
@@ -924,29 +994,35 @@ const dwbTextbox = (() => {
       }
       const el = drag.el;
       const b = el.__tb;
-      const tol = 6 / drag.s;
+      // tolerancja w pikselach ekranu: palec mniej precyzyjny niż mysz
+      const tol = (drag.touch ? 12 : 6) / drag.s;
       if (!drag.handle) {
         const sec = sectionAt(e.clientY, drag.section);
-        if (sec !== el.parentElement) { sec.insertBefore(el, sec.firstChild); drag.targets = null; }
+        if (sec !== el.parentElement) { sec.insertBefore(el, sec.firstChild); drag.targets = null; drag.lock = {}; }
         const s = scaleOf(sec);
         const sr = sec.getBoundingClientRect();
-        if (!drag.targets) drag.targets = snapTargets(sec, el);
-        const { m, xs, ys } = drag.targets;
+        if (!drag.targets) { drag.targets = snapTargets(sec, el); drag.base = boxBaseline(el, sr, s); }
+        const { m, xs, ys, bases } = drag.targets;
         let x = (e.clientX - sr.left) / s - drag.grabX;
         let y = (e.clientY - sr.top) / s - drag.grabY;
         const w = drag.w0, h = drag.h0;
         const gx = [], gy = [];
         if (!e.altKey) {
-          // tekst w polu (po wewnętrznym marginesie) też trafia na linie: lewy brzeg tekstu, linijki
-          const sx = bestSnap([x, x + w, x + w / 2, x + b.inset.l], xs, tol);
+          const box = { L: x, R: x + w, T: y, B: y + h };
+          const near = m.W / 3;
+          // poziomo: krawędzie, środek, początek i koniec tekstu pola (po wewnętrznych marginesach)
+          const sx = snapAxis([{ f: x, id: "l" }, { f: x + w, id: "r" }, { f: x + w / 2, id: "c" }, { f: x + b.inset.l, id: "tl" }, { f: x + w - b.inset.r, id: "tr" }], xs, tol, box, near, drag.lock.x);
+          drag.lock.x = sx || null;
           if (sx) { x += sx.d; gx.push(sx.at); }
-          const textTop = y + b.inset.t;
-          const lineYs = drag.targets.lines.map((l) => l.T);
-          const sy = bestSnap([y, y + h, y + h / 2], ys, tol);
-          const sl = bestSnap([textTop], lineYs, tol);
-          const pick = sy && sl ? (Math.abs(sl.d) <= Math.abs(sy.d) ? sl : sy) : sy || sl;
-          if (pick) { y += pick.d; gy.push(pick === sl ? pick.at - b.inset.t + b.inset.t : pick.at); }
-        }
+          // pionowo: linia bazowa tekstu pola ↔ linia bazowa wiersza obok (pierwszeństwo przy remisie),
+          // krawędzie i środek pola ↔ marginesy, środek strony, inne obiekty
+          const sb = snapAxis([{ f: y + drag.base, id: "base" }], bases, tol, box, near, drag.lock.y?.id === "base" ? drag.lock.y : null);
+          const se = snapAxis([{ f: y, id: "t" }, { f: y + h, id: "b" }, { f: y + h / 2, id: "m" }], ys, tol, box, near, drag.lock.y && drag.lock.y.id !== "base" ? drag.lock.y : null);
+          // świeże przyciągnięcie wygrywa z trzymanym; między świeżymi — linia bazowa przy remisie
+          const sy = sb && se ? (sb.held && !se.held ? se : se.held && !sb.held ? sb : Math.abs(sb.d) <= Math.abs(se.d) + 0.5 ? sb : se) : sb || se;
+          drag.lock.y = sy || null;
+          if (sy) { y += sy.d; gy.push(sy.at); }
+        } else drag.lock = {};
         x = Math.max(-w + 8, Math.min(m.W - 8, x));
         y = Math.max(-h + 8, Math.min(m.H - 8, y));
         el.style.left = `${x}px`;
@@ -955,16 +1031,35 @@ const dwbTextbox = (() => {
       } else {
         const sec = el.parentElement;
         if (!drag.targets) drag.targets = snapTargets(sec, el);
-        const { m, xs, ys } = drag.targets;
+        const { m, xs, ys, lines, sizes } = drag.targets;
         let L = drag.x0, T = drag.y0, R = drag.x0 + drag.w0, B = drag.y0 + drag.h0;
         const hd = drag.handle;
         const gx = [], gy = [];
-        const snapX = (v) => { const sn = e.altKey ? null : bestSnap([v], xs, tol); if (sn) gx.push(sn.at); return sn ? sn.at : v; };
-        const snapY = (v) => { const sn = e.altKey ? null : bestSnap([v], [...ys, ...drag.targets.lines.flatMap((l) => [l.T, l.B])], tol); if (sn) gy.push(sn.at); return sn ? sn.at : v; };
-        if (hd.includes("w")) L = Math.min(R - 12, snapX(drag.x0 + dx / drag.s));
-        if (hd.includes("e")) R = Math.max(L + 12, snapX(drag.x0 + drag.w0 + dx / drag.s));
-        if (hd.includes("n")) { T = Math.min(B - 8, snapY(drag.y0 + dy / drag.s)); drag.fixedH = true; }
-        if (hd.includes("s")) { B = Math.max(T + 8, snapY(drag.y0 + drag.h0 + dy / drag.s)); drag.fixedH = true; }
+        const box = { L, R, T, B };
+        const near = m.W / 3;
+        const yTargets = [...ys, ...lines.flatMap((l) => [{ v: l.T, src: l }, { v: l.B, src: l }])];
+        const snapY = (v, id) => { const sn = e.altKey ? null : snapAxis([{ f: v, id }], yTargets, tol, box, near, drag.lock[id]); drag.lock[id] = sn || null; if (sn) gy.push(sn.at); return sn ? sn.at : v; };
+        // krawędź w poziomie: linia (krawędź obiektu, brzeg tekstu, margines) albo ta sama szerokość
+        // co inne pole / obraz — wygrywa bliższe (przy remisie szerokość)
+        drag.sameW = null;
+        const sideX = (raw, other, moving) => {
+          if (e.altKey) return raw;
+          const id = `h${moving}`;
+          const sn = snapAxis([{ f: raw, id }], xs, tol, box, near, drag.lock[id]);
+          const width = moving === "e" ? raw - other : other - raw;
+          const sw = snapAxis([{ f: width, id: "w" }], sizes, tol, box, Infinity, drag.lock.w);
+          const useW = sw && (!sn || Math.abs(sw.d) <= Math.abs(sn.d) + 0.25);
+          drag.lock[id] = useW ? null : sn || null;
+          drag.lock.w = useW ? sw : null;
+          if (useW) { drag.sameW = sw.src || null; return moving === "e" ? other + sw.v : other - sw.v; }
+          if (sn) { gx.push(sn.at); return sn.at; }
+          return raw;
+        };
+        if (hd.includes("w")) L = Math.min(R - 12, sideX(drag.x0 + dx / drag.s, R, "w"));
+        if (hd.includes("e")) R = Math.max(L + 12, sideX(drag.x0 + drag.w0 + dx / drag.s, L, "e"));
+        if (hd.includes("n")) { T = Math.min(B - 8, snapY(drag.y0 + dy / drag.s, "hn")); drag.fixedH = true; }
+        if (hd.includes("s")) { B = Math.max(T + 8, snapY(drag.y0 + drag.h0 + dy / drag.s, "hs")); drag.fixedH = true; }
+        if (drag.sameW) gx.push(hd.includes("e") ? R : L, drag.sameW.L, drag.sameW.R); // „tej samej szerokości co…”
         el.style.left = `${L}px`;
         el.style.top = `${T}px`;
         el.style.width = `${R - L}px`;
@@ -1173,11 +1268,11 @@ const dwbTextbox = (() => {
       window.addEventListener("resize", () => placeCard());
       if (typeof readModeEl !== "undefined") readModeEl?.addEventListener("change", () => deselect());
     }
-    return { init, afterRender, insertAtCaret, deselect, isEditing: () => !!editor, finishEdit: () => editor?.finish() };
+    return { init, afterRender, insertAtCaret, deselect, isEditing: () => !!editor, finishEdit: () => editor?.finish(), snapAxis };
   })();
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => ui.init());
   else ui.init();
 
-  return { prepare, render, insert: ui.insertAtCaret, deselect: ui.deselect, finishEdit: ui.finishEdit, isEditing: ui.isEditing };
+  return { prepare, render, insert: ui.insertAtCaret, deselect: ui.deselect, finishEdit: ui.finishEdit, isEditing: ui.isEditing, _snapAxis: ui.snapAxis }; // _snapAxis: testy
 })();
