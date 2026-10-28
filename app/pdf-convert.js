@@ -404,7 +404,7 @@
     for (let i = 0; i < raws.length; i++) {
       if (env.signal?.cancelled) throw new CancelledError();
       env.onProgress?.(i + 1, n, "layout");
-      const L = NS.layoutPage(raws[i], { glyphFixes: raws[i].glyphFixes });
+      const L = NS.layoutPage(raws[i], { glyphFixes: raws[i].glyphFixes, formFields: env.formFields !== false });
       layouts.push(L);
       report.tables += L.tables.length;
       report.images += raws[i].images.length;

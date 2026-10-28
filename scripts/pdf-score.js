@@ -49,6 +49,8 @@ async function run() {
   await context.addInitScript(() => {
     sessionStorage.setItem("introPlayed", "true");
     try { localStorage.setItem("dwb-page-breaks-v1", "0"); } catch (_) { /* nic */ }
+    // wyróżnienie pól formularza (ramki, tło) to interfejs jak znaczniki granic stron — na wydruku znika
+    try { localStorage.setItem("dwb.forms.shade", "0"); } catch (_) { /* nic */ }
   });
   const page = await context.newPage();
   await page.goto(APP_URL, { waitUntil: "load" });

@@ -2013,6 +2013,9 @@ button.stat-row { cursor: pointer; }
 /* Pole w środku fragmentu tekstu: reguła docx-preview „.docx span” dawała mu domyślną czcionkę
    dokumentu (np. □ 16 pt rysowany 11 pt Calibri) — pole ma wyglądać jak jego fragment. */
 .docx span.ff-field { font-size: inherit; font-family: inherit; min-height: 0; }
+/* odstęp wewnątrz ramki pola nie przesuwa tekstu: tekst pola stoi tam, gdzie w Wordzie i w PDF
+   (karta z PDF: każde pole przesuwało wiersz o ~2 pt — miernik pdf:score −3 pp) */
+.ff-field:not(.ff-glyph):not(.ff-checkbox) { margin-left: -.18em; margin-right: -.18em; }
 /* position: relative = znaczek malowany NAD tłem sąsiednich wierszy (interlinia „dokładnie” +
    cieniowanie/wyróżnienie następnego wiersza zasłaniało dolną połowę □). */
 .ff-field.ff-checkbox { background: transparent; box-shadow: none; padding: 0 .08em; color: var(--ff-c); position: relative; }
@@ -2033,6 +2036,12 @@ button.stat-row { cursor: pointer; }
 .ff-field.is-locked::after { display: inline-block; --ff-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='11' width='16' height='10' rx='2'/%3E%3Cpath d='M8 11V7a4 4 0 0 1 8 0v4'/%3E%3C/svg%3E"); }
 .ff-field.ff-glyph { display: inline-block; min-width: 1em; text-align: center; }
 .ff-field.ff-glyph.is-empty { min-width: 2.5em; }
+/* pusta kontrolka tekstowa (np. pole z PDF między kropkami): w wierszu nic nie zajmuje — kropki
+   i tabulatory jak w Wordzie i na wydruku; do kliknięcia pole nad kropkami za nią */
+.ff-field.ff-text.ff-glyph.is-empty { min-width: 0; width: 0; position: relative; overflow: visible; }
+.ff-field.ff-text.ff-glyph.is-empty::before { content: ""; position: absolute; left: 0; top: -.15em; bottom: -.15em; width: 4em; outline: 1px dashed color-mix(in srgb, var(--ff-c) 50%, transparent); outline-offset: -1px; background: color-mix(in srgb, var(--ff-c) 4%, transparent); }
+.ff-plain .ff-field.ff-text.ff-glyph.is-empty::before { outline: 0; background: none; }
+@media print { .ff-field.ff-text.ff-glyph.is-empty::before { display: none; } }
 .ff-field.is-block { display: inline; }
 /* „Wyróżniaj pola” wyłączone + wydruk: dokument jak w Wordzie, bez ramek i znaczków */
 @media (hover: hover) {

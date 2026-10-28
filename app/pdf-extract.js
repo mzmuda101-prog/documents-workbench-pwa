@@ -631,8 +631,9 @@
           const da = a.defaultAppearanceData || {};
           const color = da.fontColor ? Array.from(da.fontColor).map((v) => Math.round(v).toString(16).padStart(2, "0")).join("") : "000000";
           annotations.push({ type: "text", id: a.id, ...box, text, size: da.fontSize || 0, fontName: da.fontName || "Helv", color, hidden: !!a.hidden || (a.annotationFlags & 2) !== 0, glyphs: annotGlyphs[a.id] || [], align: a.textAlignment || 0 });
-        } else if (a.subtype === "Widget" && a.fieldType === "Tx" && a.fieldValue) {
-          annotations.push({ type: "text", id: a.id, ...box, text: String(a.fieldValue), size: a.defaultAppearanceData?.fontSize || 0, fontName: "Helv", color: "000000", field: true, glyphs: annotGlyphs[a.id] || [], align: a.textAlignment || 0, multiLine: !!a.multiLine, comb: !!a.comb });
+        } else if (a.subtype === "Widget" && a.fieldType === "Tx") {
+          // puste pole też (pdf-layout: kontrolka Worda w miejscu pola, gdy włączona „pola PDF jako pola Worda”)
+          annotations.push({ type: "text", id: a.id, ...box, text: String(a.fieldValue || ""), size: a.defaultAppearanceData?.fontSize || 0, fontName: "Helv", color: "000000", field: true, fieldName: String(a.alternativeText || a.fieldName || ""), readOnly: !!a.readOnly, glyphs: annotGlyphs[a.id] || [], align: a.textAlignment || 0, multiLine: !!a.multiLine, comb: !!a.comb });
         } else if (a.subtype === "Widget" && a.fieldType === "Btn" && a.checkBox) {
           annotations.push({ type: "check", ...box, checked: a.fieldValue && a.fieldValue !== "Off" });
         }

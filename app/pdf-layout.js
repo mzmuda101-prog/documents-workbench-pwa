@@ -806,8 +806,8 @@
     const pushText = (g, text) => {
       const style = styleKey(g);
       const last = toks[toks.length - 1];
-      if (last && last.type === "text" && last.key === style.key && last.link === (g.link || null)) last.text += text;
-      else toks.push({ type: "text", text, ...style, link: g.link || null });
+      if (last && last.type === "text" && last.key === style.key && last.link === (g.link || null) && last.field === (g.field || null) && !g.fieldMarker && !last.fieldMarker) last.text += text;
+      else toks.push({ type: "text", text, ...style, link: g.link || null, field: g.field || null, fieldMarker: !!g.fieldMarker });
     };
     for (let p = 0; p < line.parts.length; p++) {
       const part = line.parts[p];
@@ -844,13 +844,19 @@
             continue;
           }
         }
+        if (g.fieldMarker) { // puste pole: kontrolka między kropkami (kropki przed i za zostają)
+          pushText(g, "");
+          prev = null;
+          i++;
+          continue;
+        }
         if (prev) {
           const gap = g.x - prev.x1;
           const sp = Math.max(prev.size, g.size) * 0.17;
           if (!g.isSpace && !prev.isSpace && gap > sp) {
             if (gap > Math.max(prev.size, g.size) * 1.6) {
               toks.push({ type: "tab", pos: g.x - regionX0, leader: null, align: "left", startX: g.x });
-            } else pushText(g, " ");
+            } else pushText(g.field && prev.field !== g.field ? prev : g, " "); // odstęp przed polem — poza polem
           }
         }
         if (g.isSpace) {
@@ -868,7 +874,7 @@
       if (k > 0 && toks[k - 1].type === "text") toks[k - 1].text = toks[k - 1].text.replace(/ +$/, "");
       if (k + 1 < toks.length && toks[k + 1].type === "text") toks[k + 1].text = toks[k + 1].text.replace(/^ +/, "");
     }
-    return toks.filter((t) => t.type !== "text" || t.text.length);
+    return toks.filter((t) => t.type !== "text" || t.text.length || t.fieldMarker); // puste pole formularza zostaje
   }
 
   function styleKey(g) {
@@ -1215,10 +1221,26 @@
 
   // Tekst pól formularza i dymków: wartość pola (pełne Unicode), ułożona tam, gdzie rysuje ją
   // wygląd pola (rozmiar, linie bazowe, początek wiersza). Bez wyglądu — z prostokąta pola.
-  function annotationFrags(raw) {
+  // opts.formFields: znaki wartości pola dostają g.field = { id, name, multi } — pdf-docx.js robi z nich
+  // kontrolkę tekstową Worda (w:sdt). Puste pole = znacznik zerowej szerokości tam, gdzie pole się zaczyna.
+  function annotationFrags(raw, opts = {}) {
     const frags = [];
     for (const a of raw.annotations) {
       if (a.type !== "text" || a.hidden) continue;
+      const field = opts.formFields && a.field && !a.readOnly ? { id: a.id, name: a.fieldName || "", multi: !!a.multiLine } : null;
+      if (!String(a.text).trim()) {
+        if (field && !a.multiLine) {
+          const size = a.size || Math.max(4, Math.min(12, (a.y1 - a.y0 - 2) / 1.15));
+          const y = (a.y0 + a.y1) / 2 + size * 0.3;
+          const x = a.x0 + 2;
+          const g = { u: "", x, x1: x, adv: 0, y, size, asc: size * 0.72, desc: size * 0.21, angle: 0, font: { id: "annot", family: "Arial", bold: false, italic: false, mono: false, serif: false, symbolic: false, asc: 0.72, desc: 0.21 }, isSpace: false, color: "000000", bold: false, italic: false, order: 1e9, fromField: true, field, fieldMarker: true };
+          const f = finishFrag({ glyphs: [g], x0: x, x1: x, size });
+          f.fromField = true;
+          f.fieldMarker = true;
+          frags.push(f);
+        }
+        continue;
+      }
       const ag = (a.glyphs || []).filter((g) => !g.isSpace);
       const apLines = [];
       for (const g of ag.slice().sort((p, q) => p.y - q.y || p.x - q.x)) {
@@ -1271,7 +1293,7 @@
         const glyphs = [];
         for (const ch of txt) {
           const w = charW(ch, size);
-          glyphs.push({ u: ch, x, x1: x + w, adv: w, y, size, asc: size * 0.72, desc: size * 0.21, angle: 0, font, isSpace: ch === " ", color, bold: font.bold, italic: font.italic, order: 1e9, fromField: true });
+          glyphs.push({ u: ch, x, x1: x + w, adv: w, y, size, asc: size * 0.72, desc: size * 0.21, angle: 0, font, isSpace: ch === " ", color, bold: font.bold, italic: font.italic, order: 1e9, fromField: true, field });
           x += w;
         }
         if (glyphs.length) {
@@ -1301,10 +1323,10 @@
         }
       }
       if (!host) {
-        rest.push(ff);
+        if (!ff.fieldMarker) rest.push(ff); // puste pole poza wierszem z kropkami — bez kontrolki
         continue;
       }
-      const covered = (g) => (g.u === "." || g.u === "_" || g.u === "\u2026" || g.isSpace) && g.x1 > ff.x0 - ff.size * 0.3 && g.x < ff.x1 + ff.size * 0.3;
+      const covered = (g) => !ff.fieldMarker && (g.u === "." || g.u === "_" || g.u === "\u2026" || g.isSpace) && g.x1 > ff.x0 - ff.size * 0.3 && g.x < ff.x1 + ff.size * 0.3;
       const kept = host.glyphs.filter((g) => !covered(g));
       for (const g of ff.glyphs) g.y = host.y; // jedna linia bazowa
       const merged = kept.concat(ff.glyphs).sort((p, q) => p.x - q.x);
@@ -1408,7 +1430,7 @@
     const paints = [];
     const glyphs = prepareGlyphs(raw, { ...opts, paints });
     let frags = buildFragments(glyphs).filter((f) => f.glyphs.length);
-    frags = mergeFieldFrags(frags, annotationFrags(raw));
+    frags = mergeFieldFrags(frags, annotationFrags(raw, opts));
     const bulletShapes = shapeBullets(raw, frags);
     applyLinks(frags, raw.annotations);
     const { tables, leftovers } = detectTables(raw, frags, W, H);

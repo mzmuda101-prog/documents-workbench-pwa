@@ -119,6 +119,23 @@
           i++;
           continue;
         }
+        // pole formularza z PDF → kontrolka tekstowa Worda (w:sdt): ciąg tokenów tego samego pola
+        if (t.type === "text" && t.field) {
+          let inner = "";
+          const f = t.field;
+          while (i < tokens.length && tokens[i].type === "text" && tokens[i].field === f) {
+            inner += this.textRun(tokens[i]);
+            i++;
+          }
+          // tytuł z napisu przed polem („Miejscowość: ……” → „Miejscowość”), gdy nazwa z PDF techniczna
+          const before = tokens.slice(0, i).reverse().find((x) => x.type === "text" && x.field !== f && /[\p{L}\d]/u.test(x.text)); // same kropki pomijamy
+          const label = before && !before.field ? before.text.replace(/[\s.…_:\-–]+$/, "").replace(/^.*[.…_]{2,}\s*/, "").trim().slice(-40) : "";
+          // pole wielowierszowe (lista klatek): bez napisu przed — nazwą pierwsza linijka pola („KLATKI:”)
+          if (!this.fieldLabels) this.fieldLabels = new Map();
+          if (!this.fieldLabels.has(f)) this.fieldLabels.set(f, label || (f.multi ? t.text.replace(/[\s:.…]+$/, "").trim().slice(0, 40) : ""));
+          out += this.fieldSdt(f, t, inner, label || this.fieldLabels.get(f));
+          continue;
+        }
         if (t.link) {
           const id = this.addRel("http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink", t.link, true);
           let inner = "";
@@ -133,6 +150,18 @@
         i++;
       }
       return out;
+    }
+
+    // Kontrolka „zwykły tekst” Worda. Nazwa pola z PDF jako tytuł (alias) i znacznik (tag), o ile to
+    // nie techniczne „Text12”; wtedy etykietę daje tekst przed polem („Miejscowość:”, docx-forms.js).
+    // Puste pole = pusta kontrolka (bez tekstu zastępczego — wydruk zostaje jak w PDF: same kropki).
+    fieldSdt(f, t, inner, label = "") {
+      this.sdtSeq = (this.sdtSeq || 0) + 1; // w:id jedyne w dokumencie (pole wielowierszowe = kontrolka na wiersz)
+      const name = String(f.name || "").replace(/\s+/g, " ").trim();
+      const human = name && !/^(text|tekst|field|pole|fill|textfield|untitled)[\s._-]*\d*$/i.test(name) && !/^[a-z]{1,8}[\s._-]?\d+$/i.test(name) && !/^\d+$/.test(name); // „Text12”, „Tex11”
+      const title = esc((human ? name : label).slice(0, 64));
+      const rPr = this.runProps({ ...t, hl: false });
+      return `<w:sdt><w:sdtPr>${rPr}${title ? `<w:alias w:val="${title}"/><w:tag w:val="${title}"/>` : ""}<w:id w:val="${0x2f000000 + this.sdtSeq}"/><w:text${f.multi ? ' w:multiLine="1"' : ""}/></w:sdtPr><w:sdtContent>${inner}</w:sdtContent></w:sdt>`;
     }
 
     textRun(t) {

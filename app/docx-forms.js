@@ -647,7 +647,20 @@ function formPreviewRange(p, f) {
   const text = p.textContent || "";
   let at = text.indexOf(f.display, Math.max(0, f.before.length - 4));
   if (at < 0 || Math.abs(at - f.before.length) > 12) at = text.indexOf(f.display);
-  return at >= 0 ? formDomRange(p, at, at + f.display.length) : null;
+  return at >= 0 ? formTightRange(p, formDomRange(p, at, at + f.display.length)) : null;
+}
+
+// Zakres zaczynający się NA KOŃCU poprzedniego elementu (np. tabulatora: <span class="docx-tab">
+// z jedną spacją) albo kończący się na początku następnego — przesunięty poza ten element.
+// Inaczej extractContents w formWrap rozcinał element: pusta kopia tabulatora lądowała w polu,
+// dostawała szerokość do następnego tabulatora i spychała resztę wiersza (karta z PDF:
+// „Miejscowość: …… [pole] …… Teren nr:” — „Teren nr” w następnej linijce).
+function formTightRange(p, range) {
+  if (!range) return range;
+  const atEnd = (n, o) => (n.nodeType === 3 ? o >= n.length : o >= n.childNodes.length);
+  for (let g = 0; g < 20 && range.startContainer !== p && atEnd(range.startContainer, range.startOffset); g++) range.setStartAfter(range.startContainer);
+  for (let g = 0; g < 20 && range.endContainer !== p && range.endOffset === 0 && !range.collapsed; g++) range.setEndBefore(range.endContainer);
+  return range;
 }
 
 function formWrap(p, f) {
@@ -679,7 +692,7 @@ function formDecorate(w, f) {
     // Word rysuje stare pole wyboru i wybraną pozycję starej listy sam — pokazujemy je tu
     const shown = f.kind === "checkbox" ? (f.value ? f.on.char : f.off.char) : f.kind === "dropdown" && f.value ? f.value : "";
     w.classList.toggle("is-empty", !shown);
-    w.textContent = shown || "  ";
+    w.textContent = shown || (f.kind === "text" ? "" : "  "); // pusty tekst: bez szerokości (CSS rysuje pole nad kropkami)
   }
   w.tabIndex = 0;
   w.contentEditable = "false"; // w edytowalnym akapicie pole jest całością — pisze się obok
@@ -925,6 +938,19 @@ function openFormPop(f, anchorRect) {
     row.append(ok);
     row.addEventListener("submit", (e) => { e.preventDefault(); commit(input.value); });
     if (f.multiLine) input.addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); commit(input.value); } });
+    // Tab / Shift+Tab: wpis do pola i od razu następne / poprzednie pole (jak formularz w Wordzie) —
+    // karta z PDF wypełnia się jednym ciągiem: Miejscowość, Tab, Teren nr, Tab…
+    input.addEventListener("keydown", (e) => {
+      if (e.key !== "Tab" || e.ctrlKey || e.metaKey || e.altKey) return;
+      const order = (formScan?.fields || []).filter((x) => !x.locked && formUi.ranges.has(x.key));
+      const at = order.findIndex((x) => x.key === f.key);
+      const next = at >= 0 ? order[(at + (e.shiftKey ? -1 : 1) + order.length) % order.length] : null;
+      if (!next || next.key === f.key) return;
+      e.preventDefault();
+      const changed = f.kind === "date" ? input.value !== (f.value || "") : input.value !== (f.placeholder ? "" : f.kind === "combo" ? f.display : f.value);
+      closeFormPop();
+      (changed ? fillFormFields({ [f.key]: input.value }) : Promise.resolve()).then(() => jumpToFormField(next.key, { open: true }));
+    });
     pop.append(row);
   }
   document.body.append(pop);

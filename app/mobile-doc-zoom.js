@@ -153,6 +153,21 @@ function syncReflowOptions() {
 });
 syncReflowOptions();
 
+// Konwersja PDF: pola formularza z PDF jako kontrolki Worda (domyślnie tak; pdf-import.js czyta przy
+// konwersji). Wyłączone = dawny wynik: wartość pola jako zwykły tekst między kropkami.
+const PDF_FIELDS_KEY = "dwb-pdf-form-fields-v1";
+function pdfFormFieldsOn() {
+  try { return localStorage.getItem(PDF_FIELDS_KEY) !== "0"; } catch (_) { return true; }
+}
+(() => {
+  const box = document.getElementById("pdfFormFields");
+  if (!box) return;
+  box.checked = pdfFormFieldsOn();
+  box.addEventListener("change", () => {
+    try { localStorage.setItem(PDF_FIELDS_KEY, box.checked ? "1" : "0"); } catch (_) { /* tryb prywatny: tylko do odświeżenia */ }
+  });
+})();
+
 // ── zoom w obu widokach ─────────────────────────────────────────────────────
 function syncViewportClass() {
   rootEl.classList.toggle("is-mobile", isMobileViewport());

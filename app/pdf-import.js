@@ -648,6 +648,7 @@
         renderVectors,
         glyphFixes,
         askOcr: (kind) => askOcr(options.photo && kind !== "curves" ? "photo" : kind),
+        formFields: typeof pdfFormFieldsOn === "function" ? pdfFormFieldsOn() : true, // panel Widok (mobile-doc-zoom.js)
         ocrPage,
         ocrParallel: window.__dwbOcrParallel || OCR_PARALLEL,
         signal,
