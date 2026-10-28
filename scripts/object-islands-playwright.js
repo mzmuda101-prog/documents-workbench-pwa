@@ -37,6 +37,8 @@ async function fixture() {
     `<w:p>${textbox}${textRun("Akapit z polem tekstowym")}</w:p>`,
     `<w:p><w:r><w:t xml:space="preserve">Tekst i rysunek w jednym fragmencie </w:t><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="457200" cy="228600"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="7" name="Obraz 7"/><wp:cNvGraphicFramePr/>${pic(7)}</wp:inline></w:drawing></w:r></w:p>`,
     `<w:p>${textRun("Zwykły akapit na końcu.")}</w:p>`,
+    // mapka z PDF → DOCX: znak akapitu i fragment z obrazem 1 pt (pdf-docx.js imageParaXml)
+    `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/><w:rPr><w:sz w:val="2"/><w:szCs w:val="2"/></w:rPr></w:pPr>${inlineRun(8).replace("<w:r><w:drawing>", '<w:r><w:rPr><w:sz w:val="2"/><w:szCs w:val="2"/></w:rPr><w:drawing>')}</w:p>`,
   ].join("");
   z.file("word/document.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${NS} mc:Ignorable=""><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1417" w:right="1417" w:bottom="1417" w:left="1417" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr></w:body></w:document>`);
   return z.generateAsync({ type: "base64" });
@@ -86,6 +88,32 @@ async function run() {
   check("pisanie obok przypiętego rysunku: tekst w pliku, rysunek zachowany (ten sam obraz)", saved[0].drawings === 1 && saved[0].embed && /Tytuł pisma z logo przypiętym do akapitu — NOWE/.test(saved[0].order), JSON.stringify(saved[0]));
   check("pisanie przed i za obrazkiem w zdaniu: obraz zostaje między tekstami", /^T:Na początku: Przed obrazkiem \|D\|T: za obrazkiem\. Koniec\.$/.test(saved[1].order), saved[1].order);
   check("zablokowane akapity bez zmian (pole tekstowe, wspólny fragment)", saved[2].drawings === 1 && saved[3].drawings === 1, JSON.stringify([saved[2], saved[3]]));
+
+  // 2026-10-28: pisanie obok mapki z PDF → DOCX dawało mikroskopijne literki (rozmiar znaku
+  // akapitu 1 pt), choć w pliku tekst ma zwykły rozmiar
+  for (const atEnd of [false, true]) {
+    await page.evaluate((atEnd) => {
+      const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[5];
+      const r = document.createRange();
+      r.setStart(p, atEnd ? p.childNodes.length : 0);
+      r.collapse(true);
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+    }, atEnd);
+    await page.keyboard.type(atEnd ? "za mapką" : "przed mapką");
+    await page.waitForTimeout(300);
+  }
+  const tiny = await page.evaluate(() => {
+    const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[5];
+    const w = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+    const sizes = [];
+    for (let n = w.nextNode(); n; n = w.nextNode()) if (n.data.trim()) sizes.push(parseFloat(getComputedStyle(n.parentElement).fontSize));
+    return { text: p.textContent, sizes };
+  });
+  check("tekst obok obrazu z akapitu 1 pt ma zwykły rozmiar (nie mikroskopijny)", /przed mapką/.test(tiny.text) && /za mapką/.test(tiny.text) && tiny.sizes.length && tiny.sizes.every((s) => s >= 10), JSON.stringify(tiny));
+  saved = await savedDoc(page);
+  check("tekst obok mapki w pliku bez rozmiaru 1 pt, obraz zostaje", saved[5].drawings === 1 && /przed mapką/.test(saved[5].order) && /za mapką/.test(saved[5].order), saved[5].order);
+  const xml5 = await page.evaluate(async () => { const z = await JSZip.loadAsync(await buildDocumentForSave()); const d = await z.file("word/document.xml").async("string"); return (d.match(/<w:r>(?:(?!<\/w:r>).)*?mapką.*?<\/w:r>/g) || []).join(""); });
+  check("wpisane fragmenty nie mają w:sz=2", xml5 && !/w:sz w:val="2"/.test(xml5), xml5);
 
   // usunięcie obrazka z zdania (zaznacz go i Delete) — znika też z pliku, tekst zostaje
   await page.evaluate(() => {

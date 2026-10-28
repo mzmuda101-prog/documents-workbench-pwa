@@ -1669,10 +1669,22 @@ function restoreTinyParagraph(p) {
   applyInlineStructuralEdit({ op: "paraFormat", indices: [index], spacing: { before: null, after: null, line: null, lineRule: null } });
   return true;
 }
+// Tekst wpisany wprost w akapit (bez fragmentu) dziedziczy\u0142 rozmiar ZNAKU akapitu. Akapit z obrazem
+// z PDF \u2192 DOCX ma znak 1 pt (\u017Ceby pod mapk\u0105 nie by\u0142o p\u00F3\u0142 wiersza zapasu) \u2014 pisanie obok mapki
+// dawa\u0142o mikroskopijne literki, cho\u0107 w pliku zapisuj\u0105 si\u0119 w zwyk\u0142ym rozmiarze (fragment bez
+// w:sz = styl). Rozmiar techniczny (< 3 pt) zdejmujemy: podgl\u0105d = rozmiar ze stylu, jak w pliku.
+function restoreTechnicalMarkSize(p) {
+  if (!p?.style.fontSize || !(parseFloat(getComputedStyle(p).fontSize) < 4)) return;
+  const bare = [...p.childNodes].some((n) => n.nodeType === 3 && n.data.replace(/\uFEFF/g, "").trim());
+  if (!bare) return;
+  p.style.removeProperty("font-size");
+  p.style.removeProperty("--dwb-p-size");
+}
 docCanvasEl?.addEventListener("input", (e) => {
   if (readOnlyMode) return;
   const p = docCaretParagraph(e.target);
   if (p?.classList.contains("dwb-tiny-para") && p.textContent.replace(/\uFEFF/g, "")) restoreTinyParagraph(p);
+  restoreTechnicalMarkSize(p);
 });
 // Akapit 1 pt jest za niski, żeby trafić w niego kliknięciem — klik pod tabelą (do ~1,5 cm
 // niżej, w szerokości akapitu) stawia w nim kursor, jak w Wordzie.
