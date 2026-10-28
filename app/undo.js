@@ -27,6 +27,7 @@ const UNDO_OP_LABEL = {
   trim: "undoOpTrim",
   affix: "undoOpAffix",
   paragraphBatch: "undoOpParagraphs",
+  textbox: "undoOpTextbox",
   coreMetadata: "undoOpMetadata",
   revisions: "undoOpReview",
   formFill: "undoOpForm",

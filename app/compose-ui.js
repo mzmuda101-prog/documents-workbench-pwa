@@ -470,6 +470,11 @@ const composeUi = (() => {
       icon: ICON('<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 17-5-5-8 8"/>'),
       onPick: pickImage,
     });
+    popItem(el, {
+      label: t("insertTextbox"), desc: t("insertTextboxDesc"),
+      icon: ICON('<rect x="3" y="4" width="18" height="16" rx="1" stroke-dasharray="3 2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="9" y1="8" x2="15" y2="8"/>'),
+      onPick: () => { if (typeof dwbTextbox !== "undefined") dwbTextbox.insert(); },
+    });
     const hasToc = typeof composeHasToc === "function" && composeHasToc();
     popItem(el, {
       label: t(hasToc ? "tocUpdate" : "tocInsert"), desc: t(hasToc ? "tocUpdateDesc" : "tocInsertDesc"),

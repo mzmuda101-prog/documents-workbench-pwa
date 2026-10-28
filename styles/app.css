@@ -2650,6 +2650,44 @@ p.dwb-exact img { vertical-align: baseline; }
 .ic-alt-text { font-size: 10.5px; font-weight: 800; letter-spacing: .04em; }
 @media (pointer: coarse) { .image-card .tb-btn { min-width: 40px; height: 40px; } .image-size input { width: 120px; height: 32px; } }
 @media print { .image-card { display: none !important; } .docx-preview-host img.img-selected { outline: 0; } }
+/* Pola tekstowe (textboxes.js): warstwa nad kartką, w px strony (skala widoku = transform kartki) */
+.dwb-tb { position: absolute; box-sizing: border-box; display: flex; flex-direction: column; }
+.dwb-tb-body { flex: 1 1 auto; display: flex; flex-direction: column; box-sizing: border-box; min-height: 100%; overflow: hidden; }
+.dwb-tb-fit .dwb-tb-body { overflow: visible; }
+.dwb-tb-p { white-space: pre-wrap; overflow-wrap: break-word; }
+.dwb-tb.dwb-tb-flow { position: relative; margin: 4px 0; }
+.dwb-tb-behind { pointer-events: none; }
+.docx-edit-root .dwb-tb { cursor: move; touch-action: auto; }
+.docx-edit-root .dwb-tb-noline:not(.is-selected) .dwb-tb-body { outline: 1px dashed color-mix(in srgb, var(--accent) 35%, transparent); outline-offset: -1px; }
+.docx-edit-root .dwb-tb.is-selected { outline: 1.5px solid var(--accent); outline-offset: 0; touch-action: none; z-index: 6 !important; }
+.docx-edit-root .dwb-tb.is-dragging { opacity: .85; }
+.docx-edit-root .dwb-tb.is-editing .dwb-tb-p { visibility: hidden; }
+.dwb-tb-h { position: absolute; width: 9px; height: 9px; margin: -5px 0 0 -5px; background: var(--surface); border: 1.5px solid var(--accent); border-radius: 50%; box-sizing: border-box; z-index: 2; }
+/* pole dotyku uchwytu tylko NA ZEWNĄTRZ ramki — środek pola zawsze przesuwa */
+.dwb-tb-h { pointer-events: none; }
+.dwb-tb-h::before { content: ""; position: absolute; pointer-events: auto; }
+.dwb-tb-h[data-h="n"]::before { left: -6px; right: -6px; top: -12px; bottom: 50%; }
+.dwb-tb-h[data-h="s"]::before { left: -6px; right: -6px; top: 50%; bottom: -12px; }
+.dwb-tb-h[data-h="e"]::before { top: -6px; bottom: -6px; left: 50%; right: -12px; }
+.dwb-tb-h[data-h="w"]::before { top: -6px; bottom: -6px; left: -12px; right: 50%; }
+.dwb-tb-h[data-h="nw"]::before { left: -12px; top: -12px; right: 50%; bottom: 50%; }
+.dwb-tb-h[data-h="ne"]::before { right: -12px; top: -12px; left: 50%; bottom: 50%; }
+.dwb-tb-h[data-h="se"]::before { right: -12px; bottom: -12px; left: 50%; top: 50%; }
+.dwb-tb-h[data-h="sw"]::before { left: -12px; bottom: -12px; right: 50%; top: 50%; }
+.dwb-tb-h[data-h="nw"] { left: 0; top: 0; cursor: nwse-resize; } .dwb-tb-h[data-h="n"] { left: 50%; top: 0; cursor: ns-resize; }
+.dwb-tb-h[data-h="ne"] { left: 100%; top: 0; cursor: nesw-resize; } .dwb-tb-h[data-h="e"] { left: 100%; top: 50%; cursor: ew-resize; }
+.dwb-tb-h[data-h="se"] { left: 100%; top: 100%; cursor: nwse-resize; } .dwb-tb-h[data-h="s"] { left: 50%; top: 100%; cursor: ns-resize; }
+.dwb-tb-h[data-h="sw"] { left: 0; top: 100%; cursor: nesw-resize; } .dwb-tb-h[data-h="w"] { left: 0; top: 50%; cursor: ew-resize; }
+@media (pointer: coarse) { .dwb-tb-h { width: 14px; height: 14px; margin: -7px 0 0 -7px; } }
+.dwb-tb-guide { position: absolute; z-index: 7; pointer-events: none; background: #e0338b; }
+.dwb-tb-guide-v { top: 0; width: 1px; margin-left: -0.5px; }
+.dwb-tb-guide-h { left: 0; height: 1px; margin-top: -0.5px; }
+.dwb-tb-editor { position: absolute; z-index: 8800; margin: 0; border: 0; outline: 0; resize: none; overflow: hidden; background: transparent; box-sizing: border-box; white-space: pre-wrap; overflow-wrap: break-word; }
+.dwb-tb-card .tbc-size { min-width: 30px; text-align: center; font-size: 12px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.dwb-tb-card .tbc-a { font-weight: 700; font-size: 12px; } .dwb-tb-card .tbc-a-big { font-size: 15px; } .dwb-tb-card .tbc-pm { font-size: 11px; margin-left: 1px; }
+.dwb-tb-card .tb-btn.is-on { background: var(--accent-light); color: var(--accent); }
+.dwb-tb-card .tb-btn:disabled { opacity: .4; }
+@media print { .dwb-tb-card, .dwb-tb-editor, .dwb-tb-h, .dwb-tb-guide { display: none !important; } .dwb-tb { outline: 0 !important; } .dwb-tb-body { outline: 0 !important; } }
 /* wąski ekran: karta obrazu w dwóch rzędach — suwak na całą szerokość, przyciski pod nim */
 @media (max-width: 520px) {
   .image-card { flex-wrap: wrap; justify-content: center; width: min(360px, calc(100vw - 16px)); overflow: visible; }

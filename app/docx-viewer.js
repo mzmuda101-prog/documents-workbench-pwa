@@ -64,6 +64,9 @@ async function renderDocxPreview(bytes, container, opts = {}) {
   container.appendChild(wrapper);
 
   const mobileReflow = !opts.pages && typeof shouldUseMobileReflow === "function" && shouldUseMobileReflow();
+  // pola tekstowe (textboxes.js): docx-preview ich nie rysuje — wycinamy, rysujemy po ułożeniu stron
+  const boxes = typeof dwbTextbox !== "undefined" ? await dwbTextbox.prepare(bytes) : null;
+  if (boxes) bytes = boxes.bytes;
   const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
   await window.docx.renderAsync(ab, wrapper, null, {
     className: "docx",
@@ -111,5 +114,6 @@ async function renderDocxPreview(bytes, container, opts = {}) {
     }
   }
   if (mobileReflow && typeof applyMobileReflowLayout === "function") applyMobileReflowLayout(wrapper);
+  if (boxes) dwbTextbox.render(wrapper, boxes, { reflow: mobileReflow });
   watchParagraphLayout(wrapper); // Edycja: nowe/usunięte akapity → odstępy list i puste akapity od nowa
 }

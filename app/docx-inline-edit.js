@@ -115,7 +115,8 @@ function paragraphObjectLock(xp) {
     const r = objectRunOf(o);
     if (!r || r.parentNode !== xp) return "lockObject";
     if (Array.from(r.childNodes).some((n) => n.nodeType === 1 && !OBJECT_RUN_KIDS.has(n.localName))) return "lockObject";
-    if (r.getElementsByTagNameNS(W_NS, "txbxContent").length) return "lockObject";
+    // pole tekstowe Worda (textboxes.js) — edycja przez operacje na pliku, wyspa zawsze świeża
+    if (r.getElementsByTagNameNS(W_NS, "txbxContent").length && !(typeof textboxRunSupported === "function" && textboxRunSupported(r))) return "lockObject";
   }
   return null;
 }
@@ -286,6 +287,7 @@ function paragraphNestedRunLock(xp) {
   for (let i = 0; i < runs.length; i++) {
     const parent = runs[i].parentNode;
     if (parent === xp) continue;
+    if (isInsideTextbox(runs[i], xp)) continue; // tekst pola tekstowego (wyspa, textboxes.js)
     if (parent.localName === "hyperlink" && parent.parentNode === xp) continue;
     const sdt = parent.localName === "sdtContent" ? parent.parentNode : null;
     if (sdt && sdt.parentNode === xp && typeof formIslandSdt === "function" && formIslandSdt(sdt)) continue; // pole-wyspa

@@ -4,7 +4,7 @@
 // obiekt”), bo do pierwszego akapitu strony przypięta jest warstwa grafiki. To samo w pismach
 // z Worda (logo przypięte do akapitu, obrazek w zdaniu). Teraz fragment z samym rysunkiem jest
 // wyspą: pisanie obok go nie gubi, zapis oddaje go bez zmian. Blokada zostaje tam, gdzie wyspa
-// mogłaby coś zgubić: pole tekstowe w rysunku, rysunek we wspólnym fragmencie z tekstem.
+// mogłaby coś zgubić: rysunek we wspólnym fragmencie z tekstem. Pole tekstowe — od 2026-10-28 też wyspa.
 // ENGINE=webkit (Safari/iPad).
 
 const pw = require("playwright");
@@ -73,7 +73,8 @@ async function run() {
   const st = await page.evaluate(() => collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).map((p) => ({ lock: p.dataset.lock || null, edit: p.isContentEditable, objIsland: !!p.querySelector('[data-cm-kind="obj"]'), mark: !!p.querySelector('[data-cm-kind="obj-mark"]') })));
   check("rysunek przypięty + tekst: akapit edytowalny (znacznik-wyspa)", !st[0].lock && st[0].mark, JSON.stringify(st[0]));
   check("obrazek w zdaniu: akapit edytowalny, sam obraz jest wyspą", !st[1].lock && st[1].objIsland, JSON.stringify(st[1]));
-  check("pole tekstowe w rysunku: dalej tylko do odczytu", st[2].lock === "lockObject", JSON.stringify(st[2]));
+  // 2026-10-28: pole tekstowe to wyspa — edytuje się je osobno (textboxes.js), akapit obok nie jest blokowany
+  check("pole tekstowe w rysunku: akapit edytowalny, pole jako wyspa", !st[2].lock && st[2].mark, JSON.stringify(st[2]));
   check("tekst i rysunek w jednym fragmencie: dalej tylko do odczytu", st[3].lock === "lockObject", JSON.stringify(st[3]));
 
   const typeAt = async (i, text, atEnd = true) => {

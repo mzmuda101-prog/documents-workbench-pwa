@@ -43,10 +43,18 @@ function collectTextNodes(doc, scope) {
   return nodes;
 }
 
+// Węzeł w treści pola tekstowego (w:txbxContent) wewnątrz akapitu — to tekst KSZTAŁTU, nie akapitu
+// (pole przypięte do akapitu ma własne akapity; textboxes.js)
+function isInsideTextbox(node, stop) {
+  for (let n = node?.parentNode; n && n !== stop; n = n.parentNode) if (n.localName === "txbxContent") return true;
+  return false;
+}
+
 function getParagraphText(pEl) {
   let out = "";
   const runs = pEl.getElementsByTagNameNS(W_NS, "r");
   for (let r = 0; r < runs.length; r++) {
+    if (isInsideTextbox(runs[r], pEl)) continue;
     const children = runs[r].childNodes;
     for (let c = 0; c < children.length; c++) {
       const child = children[c];
@@ -856,6 +864,7 @@ function applyEditToXml(xml, edit, opts = {}) {
   if (edit.op === "runStyle") return applyRunStyleInXml(xml, edit);
   if (edit.op === "table") return applyTableInXml(xml, edit);
   if (edit.op === "image") return applyImageInXml(xml, edit);
+  if (edit.op === "textbox") return applyTextboxInXml(xml, edit); // textboxes.js
   if (edit.op === "mergeParagraph") return mergeParagraphInXml(xml, edit.index, edit.mergedRuns);
   if (edit.op === "deleteRange") return deleteParagraphRangeInXml(xml, edit); // doc-selection.js
   if (edit.op === "pasteParas") return pasteParagraphsInXml(xml, edit); // docx-inline-edit.js
