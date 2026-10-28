@@ -22,6 +22,7 @@ async function buildDocx() {
   const sect = xml.match(/<w:sectPr[\s\S]*<\/w:sectPr>/)[0];
   const t = (s) => `<w:r><w:t xml:space="preserve">${s}</w:t></w:r>`;
   const comment = (s) => `<w:commentRangeStart w:id="10"/>${t(s)}<w:commentRangeEnd w:id="10"/><w:r><w:commentReference w:id="10"/></w:r>`;
+  const dots = '<w:pPr><w:tabs><w:tab w:val="left" w:leader="dot" w:pos="5000"/></w:tabs></w:pPr>';
   const list = '<w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr>';
   const cell = (s) => `<w:tc><w:tcPr><w:tcW w:w="4500" w:type="dxa"/></w:tcPr><w:p>${t(s)}</w:p></w:tc>`;
   const body = [
@@ -33,6 +34,9 @@ async function buildDocx() {
     ...[1, 2, 3].map((i) => `<w:tr>${cell(`Wiersz ${i}`)}${cell(`Wartość ${i}`)}</w:tr>`),
     "</w:tbl>",
     `<w:p>${t("Koniec dokumentu.")}</w:p>`,
+    // tabulator z kropkami na końcu / początku akapitu (wyspa contenteditable=false)
+    `<w:p>${dots}${t("Imię:")}<w:r><w:tab/></w:r></w:p>`,
+    `<w:p>${dots}<w:r><w:tab/></w:r>${t("Nazwisko")}</w:p>`,
   ].join("");
   zip.file("word/document.xml", `${head}${body}${sect}</w:body></w:document>`);
   const file = path.join(os.tmpdir(), `dwb-nav-keys-${process.pid}.docx`);
@@ -227,6 +231,65 @@ async function run() {
   const s1 = await press("Shift+ArrowDown");
   const s2 = await press("Shift+ArrowDown");
   check("Shift+↓ ×2: kotwica w miejscu, koniec w 2. wierszu następnego akapitu", s1.anchor === a0 && s2.anchor === a0 && s1.i === P_CMT && s1.li === 0 && s2.i === P_CMT && s2.li === 1 && !s2.collapsed, JSON.stringify([s1, s2]));
+
+  // End / Home przy tabulatorze z kropkami (2026-10-28): „Imię:⇥” — klik w tekst, chwila przerwy,
+  // End → Chrome stawiał kursor W tabulatorze (contenteditable=false), wpisane „X” nie trafiało
+  // do pliku, Backspace nic nie usuwał. Przy szybkim tempie przechodziło — stąd przerwa 1,5 s.
+  const P_TAB = await page.evaluate(() => __nav.list().findIndex((p) => p.textContent.startsWith("Imię:")));
+  const P_TAB0 = await page.evaluate(() => __nav.list().findIndex((p) => /Nazwisko/.test(p.textContent)));
+  // tekst akapitu w zapisanym pliku (tabulator jako ⇥)
+  const saved = (re) => page.evaluate(async (src) => {
+    const z = await JSZip.loadAsync(await buildDocumentForSave());
+    const d = new DOMParser().parseFromString(await z.file("word/document.xml").async("string"), "application/xml");
+    const p = collectParagraphElements(d.documentElement, "all").find((q) => new RegExp(src).test(q.textContent));
+    return p ? Array.from(p.getElementsByTagNameNS(W_NS, "r")).map((r) => Array.from(r.childNodes).map((c) => (c.localName === "tab" ? "⇥" : c.localName === "t" ? c.textContent : "")).join("")).join("") : null;
+  }, re.source);
+  const inIsland = () => page.evaluate(() => { const n = getSelection().focusNode; return !!(n?.nodeType === 1 ? n : n?.parentElement)?.closest('[contenteditable="false"]'); });
+  const clickWord = async (i, word) => {
+    const at = await page.evaluate(([i, word]) => {
+      const p = __nav.list()[i];
+      p.scrollIntoView({ block: "center" });
+      const w = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+      for (let n = w.nextNode(); n; n = w.nextNode()) {
+        const k = n.data.indexOf(word);
+        if (k < 0) continue;
+        const r = document.createRange(); r.setStart(n, k + 1); r.setEnd(n, k + 2);
+        const c = r.getBoundingClientRect();
+        return { x: c.left + c.width / 2, y: c.top + c.height / 2 };
+      }
+      return null;
+    }, [i, word]);
+    await page.mouse.click(at.x, at.y);
+    await page.waitForTimeout(1500);
+  };
+  await clickWord(P_TAB, "Imię");
+  w = await press("End");
+  check("„Imię:⇥”: End po przerwie → koniec akapitu (nie w tabulatorze, nie poza akapitem)", w.i === P_TAB && w.collapsed && w.off === w.len && !(await inIsland()), JSON.stringify(w));
+  await page.keyboard.type("X");
+  await page.waitForTimeout(700);
+  check("…wpisane „X” trafia do pliku za tabulatorem", (await saved(/^Imię:/)) === "Imię:⇥X", String(await saved(/^Imię:/)));
+  await press("Backspace");
+  await press("Backspace");
+  await page.waitForTimeout(700);
+  check("…Backspace ×2 kasuje „X” i tabulator", (await saved(/^Imię/)) === "Imię:", String(await saved(/^Imię/)));
+  await press("Control+z");
+  await press("Control+z");
+  await page.waitForTimeout(700);
+  await clickWord(P_TAB, "Imię");
+  w = await press("Home");
+  check("„Imię:⇥”: Home → początek akapitu", w.i === P_TAB && w.off === 0, JSON.stringify(w));
+  w = await press("Shift+End");
+  check("„Imię:⇥”: Shift+End zaznacza do końca akapitu (koniec nie w tabulatorze, nie poza akapitem)", w.i === P_TAB && !w.collapsed && w.off === w.len && !(await inIsland()), JSON.stringify(w));
+  w = await press("Shift+Home");
+  check("…Shift+Home wraca na początek akapitu", w.i === P_TAB && w.off === 0, JSON.stringify(w));
+  await clickWord(P_TAB0, "Nazwisko");
+  w = await press("Home");
+  check("„⇥Nazwisko”: Home po przerwie → początek akapitu (przed tabulatorem)", w.i === P_TAB0 && w.collapsed && w.off === 0 && !(await inIsland()), JSON.stringify(w));
+  await page.keyboard.type("Y");
+  await page.waitForTimeout(700);
+  check("…wpisane „Y” trafia do pliku przed tabulatorem", (await saved(/Nazwisko/)) === "Y⇥Nazwisko", String(await saved(/Nazwisko/)));
+  w = await press("End");
+  check("„⇥Nazwisko”: End → koniec akapitu", w.i === P_TAB0 && w.off === w.len, JSON.stringify(w));
 
   await browser.close();
   fs.rmSync(file, { force: true });

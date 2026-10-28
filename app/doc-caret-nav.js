@@ -488,13 +488,52 @@
     });
   }
 
+  // Wyspa w akapicie p tuż przed (dir < 0) / za (dir > 0) pozycją node:offset — null, gdy obok jest tekst.
+  function islandBeside(p, node, offset, dir) {
+    let n = null;
+    if (node.nodeType === 1) n = node.childNodes[dir < 0 ? offset - 1 : offset] || null;
+    else if (dir < 0 ? offset > 0 : offset < node.length) return null;
+    if (!n) {
+      n = node;
+      while (n && n !== p && !(dir < 0 ? n.previousSibling : n.nextSibling)) n = n.parentNode;
+      if (!n || n === p) return null;
+      n = dir < 0 ? n.previousSibling : n.nextSibling;
+    }
+    while (n.nodeType === 1 && !n.matches(MARK_SEL) && (dir < 0 ? n.lastChild : n.firstChild)) n = dir < 0 ? n.lastChild : n.firstChild;
+    const island = (n.nodeType === 1 ? n : n.parentElement)?.closest(MARK_SEL);
+    return island && island !== p && p.contains(island) ? island : null;
+  }
+
   // Home / End — początek / koniec wiersza (Word). Na Macu Chrome tylko przewijał stronę, a Shift+End
   // zaznaczał do końca całego pola edycji (poza akapit).
   function moveLineBoundary(e, dir) {
     const sel = getSelection();
-    if (!sel?.modify) return;
+    if (!sel?.modify || !sel.rangeCount) return;
+    const p = focusModel().p;
     e.preventDefault();
-    sel.modify(e.shiftKey ? "extend" : "move", dir > 0 ? "forward" : "backward", "lineboundary");
+    // Granicę liczymy zwiniętym kursorem w miejscu końca zaznaczenia, kotwicę oddajemy na koniec:
+    // modify("extend", "backward", "lineboundary") przy zaznaczeniu w przód nic nie robił (Shift+End,
+    // potem Shift+Home stał w miejscu — Chrome i WebKit, także w zwykłym akapicie). Zwinięty kursor
+    // zostawiamy, jak jest — sel.collapse gubi stronę granicy zawinięcia (koniec 1. / początek 2. wiersza).
+    const anchor = [sel.anchorNode, sel.anchorOffset];
+    const put = (node, offset) => sel.collapse(node, offset);
+    if (!sel.isCollapsed) put(sel.focusNode, sel.focusOffset);
+    const move = () => sel.modify("move", dir > 0 ? "forward" : "backward", "lineboundary");
+    const was = [sel.focusNode, sel.focusOffset];
+    move();
+    // Kursor tuż za / przed wyspą (po End w „Imię:⇥”): przeglądarka nie liczy stamtąd wiersza
+    // i Home stał w miejscu — przeskakujemy wyspę i liczymy jeszcze raz.
+    const over = p && sel.focusNode === was[0] && sel.focusOffset === was[1] && islandBeside(p, was[0], was[1], dir);
+    const edge = (el, after) => { const r = document.createRange(); if (after) r.setStartAfter(el); else r.setStartBefore(el); put(r.startContainer, r.startOffset); };
+    if (over) { edge(over, dir > 0); move(); }
+    // Wiersz kończący się (zaczynający) wyspą — tabulator z kropkami „Imię:⇥”, pole: Chrome stawiał
+    // kursor W wyspie (albo poza akapitem, w sekcji), a wpisany tekst nie trafiał do pliku. Wtedy
+    // kursor za / przed wyspą, jak placeCaret (na końcu akapitu = koniec akapitu).
+    const n = sel.focusNode;
+    const island = (n?.nodeType === 1 ? n : n?.parentElement)?.closest(MARK_SEL);
+    if (p && island && island !== p && p.contains(island)) edge(island, dir > 0);
+    else if (p && !p.contains(n)) put(p, dir > 0 ? p.childNodes.length : 0);
+    if (e.shiftKey) sel.setBaseAndExtent(anchor[0], anchor[1], sel.focusNode, sel.focusOffset);
     nav = null;
     revealFocus();
     if (dir > 0) rememberLineEnd(true);
