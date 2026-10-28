@@ -198,8 +198,86 @@ const dwbTabLeaders = (() => {
     pending.add(p);
   }
 
+  // ── kropki w zaznaczeniu (jak w Wordzie) ─────────────────────────────────────────
+  // Zaznaczenie przez tabulator działało (Delete usuwał go z tekstem), ale kropek w nim nie było
+  // widać — przeglądarka podświetla tylko znak w środku, nie całe pudełko z kropkami. Rysujemy
+  // podświetlenie systemowym kolorem zaznaczenia nad każdym tabulatorem w zaznaczeniu (nakładka
+  // w body; zmiana klas w dokumencie budzi obserwatory edytora).
+  let marks = [];
+  let markRaf = 0;
+  function paintSelectedTabs() {
+    markRaf = 0;
+    marks.forEach((m) => m.remove());
+    marks = [];
+    const s = window.getSelection?.();
+    if (!s?.rangeCount || s.isCollapsed) { syncHl(); return; }
+    const r = s.getRangeAt(0);
+    const host = docCanvasEl?.querySelector(".docx-preview-host");
+    let common = r.commonAncestorContainer;
+    if (common.nodeType !== 1) common = common.parentElement;
+    if (!host || !common || !(host.contains(common) || common.contains(host))) return;
+    const scope = host.contains(common) ? common : host;
+    const vp = docViewportEl?.getBoundingClientRect();
+    const probe = document.createRange();
+    for (const t of scope.querySelectorAll("span.docx-tab")) {
+      if (marks.length > 400 || !r.intersectsNode(t)) continue;
+      const b = t.getBoundingClientRect();
+      if (b.width < 1 || (vp && (b.bottom < vp.top || b.top > vp.bottom))) continue;
+      // wysokość pasa jak zaznaczenie liter tuż obok kropek (sąsiad z lewej / z prawej w tej linijce)
+      const p = t.closest("p");
+      let top = null, bottom = null;
+      if (p) {
+        const w = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+        for (let n = w.nextNode(); n; n = w.nextNode()) {
+          if (!n.data.trim() || t.contains(n)) continue;
+          probe.selectNodeContents(n);
+          for (const x of probe.getClientRects()) {
+            if (x.bottom < b.top - 4 || x.top > b.bottom + 4) continue;
+            if (Math.abs(x.right - b.left) > 3 && Math.abs(x.left - b.right) > 3) continue;
+            top = top == null ? x.top : Math.min(top, x.top);
+            bottom = bottom == null ? x.bottom : Math.max(bottom, x.bottom);
+          }
+        }
+      }
+      if (top == null) { probe.selectNodeContents(t); const tr = probe.getBoundingClientRect(); top = tr.height ? tr.top : b.top; bottom = top + (tr.height || b.height); }
+      const h = bottom - top;
+      const m = document.createElement("div");
+      m.className = "dwb-tab-selmark";
+      Object.assign(m.style, { left: `${b.left + window.scrollX}px`, top: `${top + window.scrollY}px`, width: `${b.width}px`, height: `${h}px` });
+      document.body.appendChild(m);
+      m.__tab = t;
+      marks.push(m);
+    }
+    syncHl();
+  }
+  // kropki zaznaczone i zarazem wybrane do zmiany długości — jedno podświetlenie, nie dwa
+  function syncHl() {
+    if (ui?.hl) ui.hl.style.display = sel && marks.some((m) => m.__tab === sel.sp) ? "none" : "";
+  }
+  const repaintMarks = () => { if (!markRaf) markRaf = requestAnimationFrame(paintSelectedTabs); };
+
+  // Dwuklik w tabulator zaznacza go w całości (Word); przeglądarka brała słowo obok.
+  // Potem Delete / Backspace usuwa kropki, pisanie wpisuje tekst w ich miejsce.
+  function selectTab(sp) {
+    const s = window.getSelection?.();
+    if (!s) return;
+    const r = document.createRange();
+    r.setStartBefore(sp);
+    r.setEndAfter(sp);
+    s.removeAllRanges();
+    s.addRange(r);
+  }
+
   function init() {
     if (!docCanvasEl) return;
+    document.addEventListener("selectionchange", repaintMarks);
+    docCanvasEl.addEventListener("dblclick", (e) => {
+      if (!editable()) return;
+      const sp = e.target.closest?.(".docx-edit-root span.docx-tab");
+      if (!sp) return;
+      e.preventDefault();
+      selectTab(sp);
+    });
     docCanvasEl.addEventListener("click", (e) => {
       if (!editable()) return;
       const sp = leaderTab(e.target);
@@ -222,8 +300,8 @@ const dwbTabLeaders = (() => {
       const p = (n?.nodeType === 1 ? n : n?.parentElement)?.closest?.(".docx-edit-root p");
       if (p?.querySelector("span.docx-tab")) relayout(p);
     });
-    docViewportEl?.addEventListener("scroll", () => place(), { passive: true });
-    window.addEventListener("resize", () => place());
+    docViewportEl?.addEventListener("scroll", () => { place(); repaintMarks(); }, { passive: true });
+    window.addEventListener("resize", () => { place(); repaintMarks(); });
     if (typeof readModeEl !== "undefined") readModeEl?.addEventListener("change", () => clear());
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);

@@ -175,6 +175,47 @@ async function run() {
   const savedText = await page.evaluate(async () => (await extractParagraphTextsFromDocx(await buildDocumentForSave())).map(String)[3]);
   check("pisanie przed kropkami: „Teren nr:” w tym samym miejscu, tekst w pliku", Math.abs(x1 - x0) < 1 && /^Miejsabcowość:PILECKIEGO 233450Teren nr:401$/.test(savedText), `${x0} → ${x1} | ${JSON.stringify(savedText)}`);
 
+  // 7b. zaznaczanie kropek jak tekstu (Word): przeciągnięcie przez kropki — kropki podświetlone
+  // w miejscu kropek; dwuklik zaznacza kropki; pisanie zastępuje, Backspace usuwa
+  const runsOf = (i) => page.evaluate(async (i) => { const z = await JSZip.loadAsync(await buildDocumentForSave()); const d = new DOMParser().parseFromString(await z.file("word/document.xml").async("string"), "application/xml"); const p = collectParagraphElements(d.documentElement, "all")[i]; return Array.from(p.getElementsByTagNameNS(W_NS, "r")).map((r) => (r.getElementsByTagNameNS(W_NS, "tab").length ? "⇥" : r.textContent)).join("|"); }, i);
+  await page.keyboard.press("Escape");
+  const pts = await page.evaluate(() => { const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[0]; const w = document.createTreeWalker(p, NodeFilter.SHOW_TEXT); let a, z; for (let n = w.nextNode(); n; n = w.nextNode()) { if (/Miejscowo/.test(n.data)) a = n; if (/PILECKIEGO/.test(n.data)) z = n; } const ra = document.createRange(); ra.setStart(a, a.data.length - 2); ra.setEnd(a, a.data.length - 1); const rz = document.createRange(); rz.setStart(z, 2); rz.setEnd(z, 3); const A = ra.getBoundingClientRect(), Z = rz.getBoundingClientRect(); return { ax: A.left + 1, ay: A.top + A.height / 2, zx: Z.left + 1, zy: Z.top + Z.height / 2 }; });
+  await page.mouse.move(pts.ax, pts.ay);
+  await page.mouse.down();
+  await page.mouse.move(pts.zx, pts.zy, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForTimeout(250);
+  const mk = await page.evaluate(() => { const m = document.querySelector(".dwb-tab-selmark"); const t = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[0].querySelector(".docx-tab"); if (!m) return null; const a = m.getBoundingClientRect(), b = t.getBoundingClientRect(); return { dl: Math.abs(a.left - b.left), dw: Math.abs(a.width - b.width), h: a.height }; });
+  check("przeciągnięcie przez kropki: kropki podświetlone w swoim miejscu", mk && mk.dl < 1 && mk.dw < 1 && mk.h > 5, JSON.stringify(mk));
+  const before7b = await runsOf(0);
+  await page.keyboard.press("Delete");
+  await page.waitForTimeout(600);
+  const del7b = await runsOf(0);
+  const flat = (x) => x.replace(/\|/g, "");
+  check("Delete na zaznaczeniu z kropkami usuwa tekst i kropki", /^MiejscowośLECKIEGO 23⇥/.test(flat(del7b)) && flat(del7b).split("⇥").length === flat(before7b).split("⇥").length - 1, `${before7b} → ${del7b}`);
+  await page.evaluate(() => document.querySelector(".docx-edit-root")?.focus());
+  await page.keyboard.press(`${mod}+z`);
+  await idle(page);
+  check("Cofnij przywraca", (await runsOf(0)) === before7b, await runsOf(0));
+  r = await tabRect(page, 0, 0); // pierwsze kropki (te za „PILECKIEGO” skrócone wyżej do oporu)
+  await page.mouse.dblclick(r.x, r.y);
+  await page.waitForTimeout(250);
+  const dbl = await page.evaluate(() => { const s = getSelection(); const t = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[0].querySelectorAll(".docx-tab")[0]; return { inSel: s.rangeCount > 0 && s.getRangeAt(0).intersectsNode(t), text: s.toString(), marks: document.querySelectorAll(".dwb-tab-selmark").length }; });
+  check("dwuklik w kropki zaznacza kropki (nie słowo obok)", dbl.inSel && !/\w/.test(dbl.text) && dbl.marks === 1, JSON.stringify(dbl));
+  await page.keyboard.type("X");
+  await page.waitForTimeout(600);
+  const typed = await runsOf(0);
+  check("pisanie na zaznaczonych kropkach: tekst zamiast kropek", /^Miejscowość:XPILECKIEGO 23⇥/.test(flat(typed)), typed);
+  await page.evaluate(() => document.querySelector(".docx-edit-root")?.focus());
+  await page.keyboard.press(`${mod}+z`);
+  await idle(page);
+  r = await tabRect(page, 0, 0);
+  await page.mouse.dblclick(r.x, r.y);
+  await page.waitForTimeout(250);
+  await page.keyboard.press("Backspace");
+  await page.waitForTimeout(600);
+  check("Backspace na zaznaczonych kropkach usuwa je", /^Miejscowość:PILECKIEGO 23⇥/.test(flat(await runsOf(0))), await runsOf(0));
+
   // 8. Czytanie: klik w kropki nic nie pokazuje
   await page.evaluate(() => { readModeEl.checked = true; readModeEl.dispatchEvent(new Event("change")); });
   await page.waitForTimeout(300);
