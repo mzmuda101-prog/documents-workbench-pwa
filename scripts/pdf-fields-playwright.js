@@ -34,7 +34,7 @@ function formPdf() {
   objs.push("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R /Annots [6 0 R 7 0 R 8 0 R] >>");
   objs.push(`<< /Length ${Buffer.byteLength(content, "latin1")} >>\nstream\n${content}\nendstream`);
   objs.push(helv);
-  objs.push("<< /Type /Annot /Subtype /Widget /FT /Tx /T (Text1) /V (PILECKIEGO 23) /Rect [118 696 266 711] /F 4 /DA (/Helv 10 Tf 0 g) /P 3 0 R >>");
+  objs.push("<< /Type /Annot /Subtype /Widget /FT /Tx /T (Text1) /V (PILECKIEGO 23) /Rect [118 696 266 711] /F 4 /DA (/Helv 13 Tf 0 g) /P 3 0 R >>");
   objs.push("<< /Type /Annot /Subtype /Widget /FT /Tx /T (Text2) /V () /Rect [328 696 415 711] /F 4 /DA (/Helv 10 Tf 0 g) /P 3 0 R >>");
   objs.push("<< /Type /Annot /Subtype /Widget /FT /Tx /T (Text3) /Ff 4096 /V (BLOK 3\rKLATKA 1) /Rect [72 560 300 640] /F 4 /DA (/Helv 11 Tf 0 g) /P 3 0 R >>");
   let out = "%PDF-1.4\n";
@@ -140,6 +140,14 @@ async function run() {
   await convert(page, pdf);
   ff = await fileFields(page);
   check("wyłączone: bez kontrolek, wpis z PDF jako zwykły tekst", ff.sdts.length === 0 && /PILECKIEGO 23/.test(ff.plain) && /KLATKA 1/.test(ff.plain), JSON.stringify(ff));
+  // kropki za wpisem większą czcionką (13 pt przy tekście 11 pt) — na tej samej wysokości co
+  // pozostałe (2026-10-28: przypięte do góry linijki, ~2,5 px wyżej; zeroWhitespaceRun przed layoutTabStops)
+  for (const ro of [true, false]) {
+    await page.evaluate((ro) => { if (readOnlyMode !== ro) { readModeEl.checked = ro; readModeEl.dispatchEvent(new Event("change")); } }, ro);
+    await page.waitForTimeout(700);
+    const tops = await page.evaluate(() => { const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).find((q) => /Miasto/.test(q.textContent)); return [...p.querySelectorAll(".docx-tab.tab-dot")].map((t) => Math.round(t.getBoundingClientRect().bottom * 10) / 10); });
+    check(`kropki w wierszu na jednej wysokości (${ro ? "Czytanie" : "Edycja"})`, tops.length >= 2 && Math.max(...tops) - Math.min(...tops) < 0.6, JSON.stringify(tops));
+  }
   await page.evaluate(() => { const b = document.getElementById("pdfFormFields"); b.checked = true; b.dispatchEvent(new Event("change")); });
 
   // 5. schemat Office (gdy jest .NET)

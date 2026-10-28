@@ -221,6 +221,12 @@ function layoutTabStops(host) {
       pl.sp.classList.add("docx-tab-laid");
       pl.sp.classList.toggle("tab-dot", pl.leader === "dot" || pl.leader === "middleDot");
       pl.sp.classList.toggle("tab-line", pl.leader === "underscore" || pl.leader === "heavy" || pl.leader === "hyphen");
+      // Kropki / linia są widoczne — nie chowamy ich do góry linijki (zeroWhitespaceRun liczy przed
+      // nami, gdy klasy tab-dot jeszcze nie ma: kropki za większym krojem, np. „PILECKIEGO 23” Arial
+      // 10,5 pt w akapicie Times 10 pt, stały ~2,5 px wyżej niż pozostałe)
+      if (pl.sp.classList.contains("tab-dot") || pl.sp.classList.contains("tab-line")) {
+        for (let a = pl.sp; a && a.tagName === "SPAN"; a = a.parentElement) if (a.classList.contains("dwb-ws-hide")) a.classList.remove("dwb-ws-hide");
+      }
       done++;
     }
   }
