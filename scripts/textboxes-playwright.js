@@ -58,6 +58,19 @@ const previewBoxes = (page) => page.evaluate(() => [...document.querySelectorAll
   const secs = [...document.querySelectorAll(".docx-preview-host section.docx")];
   return { text: el.textContent, left: parseFloat(el.style.left), top: parseFloat(el.style.top), w: el.offsetWidth, h: el.offsetHeight, page: secs.indexOf(sec), sel: el.classList.contains("is-selected"), index: +el.dataset.tbIndex, nth: +el.dataset.tbNth };
 }));
+// Podgląd wydruku: pola na kartkach (numer kartki, miejsce na kartce, widoczność)
+const printBoxes = async (page) => {
+  await page.evaluate(() => dwbPrint.open());
+  await page.waitForFunction(() => document.querySelector(".pp-sheet"), null, { timeout: 20000 });
+  await page.waitForTimeout(300);
+  const out = await page.evaluate(() => [...document.querySelectorAll(".pp-sheet .dwb-tb")].map((el) => {
+    const sh = el.closest(".pp-sheet"), r = el.getBoundingClientRect(), sr = sh.getBoundingClientRect();
+    return { text: el.textContent, page: +sh.dataset.page - 1, left: parseFloat(el.style.left), top: parseFloat(el.style.top), visible: r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden" && r.top >= sr.top - 1 && r.bottom <= sr.bottom + 1 };
+  }));
+  await page.evaluate(() => dwbPrint.close());
+  return out;
+};
+const samePrint = (pv, pp) => pv.length === pp.length && pv.every((b) => pp.some((q) => q.visible && q.page === b.page && q.text === b.text && Math.abs(q.left - b.left) < 1 && Math.abs(q.top - b.top) < 1));
 const boxCenter = (page, i = 0) => page.evaluate((i) => { const r = document.querySelectorAll(".docx-preview-host .dwb-tb")[i].getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, r: { l: r.left, t: r.top, w: r.width, h: r.height } }; }, i);
 
 async function run() {
@@ -91,6 +104,10 @@ async function run() {
   check("akapit z polem tekstowym edytowalny (dawniej tylko do odczytu)", !st0.lock && st0.edit, JSON.stringify(st0));
   let saved = await savedBoxes(page);
   check("liczba akapitów podglądu = pliku (pola nie przesuwają numeracji)", saved.paraCount === st0.count, `${saved.paraCount} vs ${st0.count}`);
+
+  // 1b. podgląd wydruku: pole z Worda na kartce, w tym samym miejscu co w Edycji (dawniej znikało)
+  let pp = await printBoxes(page);
+  check("podgląd wydruku: pole z Worda na 1. kartce, w tym samym miejscu, widoczne", samePrint(pv, pp), JSON.stringify({ pv, pp }));
 
   // 2. pisanie w akapicie kotwicy — pole zostaje nietknięte
   await page.evaluate(() => { const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[0]; placeCaret(p, 6); });
@@ -308,6 +325,10 @@ async function run() {
   require("fs").rmSync(f2, { force: true });
   const pv2 = await previewBoxes(page);
   check("po ponownym otwarciu: te same pola w tych samych miejscach", pv2.length === saved.boxes.length && saved.boxes.every((b) => pv2.some((q) => q.text.replace(/\s/g, "") === b.text.replace(/\s/g, "") && Math.abs(q.left - b.x) < 1 && Math.abs(q.top - b.y) < 1)), JSON.stringify({ pv2, s: saved.boxes }));
+
+  // 10b. podgląd wydruku po zapisie: wszystkie pola na swoich kartkach (też to na 2. stronie)
+  pp = await printBoxes(page);
+  check("podgląd wydruku: wszystkie pola na swoich kartkach, w miejscach z Edycji", samePrint(pv2, pp) && pp.some((q) => q.page === 1), JSON.stringify({ pv2, pp }));
 
   // 11. Czytanie: pola widoczne, bez uchwytów i bez reakcji na klik
   await page.evaluate(() => { readModeEl.checked = true; readModeEl.dispatchEvent(new Event("change")); });

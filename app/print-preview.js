@@ -77,8 +77,19 @@ const dwbPrint = (() => {
       const starts = [S.contentTop, ...S.cuts.map((c) => c.top)];
       // powtarzane wiersze nagłówka tabeli (page-breaks.js: cut.header) — miejsce tabeli zmierzone teraz
       const heads = [null, ...S.cuts.map((c) => c.header && { ...c.header, box: rel(c.header.table, base) })];
+      // pola tekstowe (textboxes.js) — osobne warstwy w sekcji, nie bloki treści; jak w Wordzie stoją
+      // na stronie akapitu kotwicy: względem akapitu przesuwają się z nim, względem strony/marginesu
+      // zostają w swoim miejscu kartki. Poza oknem treści (pole na marginesie nie jest przycinane).
+      const boxes = [...sec.querySelectorAll(":scope > .dwb-tb")].map((el) => {
+        const v = el.__tb?.v || {};
+        const flow = /^(paragraph|line)$/.test(v.rel) || v.align == null && v.off == null;
+        const at = el.__tbAnchor?.isConnected ? rel(el.__tbAnchor, base).top : 0;
+        let page = 0;
+        starts.forEach((s, j) => { if (s <= at + 1) page = j; });
+        return { el, box: rel(el, base), flow, page };
+      });
       plan.push({
-        S, sec, secH, blocks, heads, footOl,
+        S, sec, secH, blocks, heads, footOl, boxes,
         header: header && { el: header, box: rel(header, base) },
         footer: footer && { el: footer, box: rel(footer, base), fromBottom: secH - rel(footer, base).top },
         ols: [...sec.querySelectorAll(":scope > ol")],
@@ -147,6 +158,14 @@ const dwbPrint = (() => {
           sheet.appendChild(t);
         }
         sheet.appendChild(clip);
+        P.boxes.forEach((b) => {
+          if (b.page !== j) return;
+          const y = b.flow ? b.box.top - ws + top + headH : b.box.top;
+          b.el.style.top = `${y}px`;
+          b.el.style.left = `${b.box.left}px`;
+          sheet.appendChild(b.el);
+          if (b.el.textContent.trim() && (b.box.left < zone || b.box.right > S.pageW - zone || y < zone || y + b.box.height > S.pageH - zone)) near = true;
+        });
         const notes = P.footOl && S.pageNotes?.[j];
         if (notes?.length) {
           // przypisy tej strony przy dolnym marginesie (nad stopką, jak w Wordzie); numer z oryginału
