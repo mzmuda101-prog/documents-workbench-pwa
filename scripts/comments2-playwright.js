@@ -17,7 +17,7 @@ const MOD = ENGINE === "webkit" ? "Meta" : "Control";
 const results = [];
 const check = (name, ok, detail) => results.push({ name, ok: !!ok, detail });
 const idle = (page) => page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && !inlineLocksPending, null, { timeout: 20000 }).then(() => page.waitForTimeout(700));
-const IDX = 40;
+const IDX = 43; // „Snippet to zapisany fragment…” (od 2026-10-29 spis treści ma 17 pozycji)
 const select = (page, a, z) => page.evaluate(([i, a, z]) => {
   const el = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[i];
   const r = formDomRange(el, a, z); el.closest(".docx-edit-root").focus({ preventScroll: true }); getSelection().removeAllRanges(); getSelection().addRange(r);

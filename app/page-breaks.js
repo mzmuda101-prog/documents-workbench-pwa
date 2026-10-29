@@ -398,7 +398,7 @@ const dwbPageBreaks = (() => {
     if (!h) return;
     const on = enabled() && !(typeof shouldUseMobileReflow === "function" && shouldUseMobileReflow());
     rootEl.classList.toggle("page-breaks-on", on);
-    if (!on || docCanvasEl.classList.contains("hidden")) { clear(h); return; }
+    if (!on || docCanvasEl.classList.contains("hidden")) { clear(h); relayoutTextboxes(h); return; }
     await ensureKeepInfo();
     if (myRun !== run) return; // w międzyczasie zaczęło się nowsze liczenie
     let page = 1;
@@ -551,12 +551,17 @@ const dwbPageBreaks = (() => {
       }
     });
     splits.forEach(fitSplit);
+    relayoutTextboxes(h); // pola tekstowe za swoimi akapitami / na swoich kartkach
     if (typeof syncPageScaleHeightNow === "function") syncPageScaleHeightNow(); // inaczej przewinięcie niżej obcina stary, krótszy obszar
     if (pending) restoreDocScrollAnchor(pending);
     else if (anchor && docViewportEl) {
       const d = anchor.el.getBoundingClientRect().top - anchor.top;
       if (Math.abs(d) > 0.5) docViewportEl.scrollTop += d;
     }
+  }
+
+  function relayoutTextboxes(h) {
+    if (typeof dwbTextbox !== "undefined") dwbTextbox.relayout?.(h);
   }
 
   // Odstęp w środku akapitu: „dystans” tak wysoki, żeby pas zaczął się w połowie linijki granicy

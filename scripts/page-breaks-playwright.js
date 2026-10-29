@@ -8,7 +8,8 @@
 // page number” dla każdego akapitu docs/samples/przewodnik.docx): 5 stron; strona 2 zaczyna się
 // od „3. Placeholdery…”, strona 3 od „8. Przypisy, tabele i listy”. Akapit „1. Czytanie
 // i edycja” (rozdział) Word stawia 468,0 pt od góry strony 1 (pomiar 2026-10-03 po dodaniu
-// rozdziału 14 — spis treści o jedną pozycję dłuższy; wcześniej 452,6 pt przy 13 rozdziałach).
+// rozdziału 14 — spis treści o jedną pozycję dłuższy; wcześniej 452,6 pt przy 13 rozdziałach);
+// 2026-10-29: 17 rozdziałów i jednolinijkowa wskazówka pod spisem → 502,0 pt.
 
 const pw = require("playwright");
 const { APP_URL } = require("./docx-test-helpers");
@@ -65,12 +66,13 @@ async function run() {
     const p = [...sec.querySelectorAll("article p")].filter((x) => !x.closest("table") && /^1\. Czytanie/.test(x.textContent) && !x.querySelector("a"))[0];
     return { text: p.textContent.slice(0, 20), pt: (p.getBoundingClientRect().top - sec.getBoundingClientRect().top) * 0.75 };
   });
-  check("odstępy jak w Wordzie: „1. Czytanie i edycja” ~468,0 pt od góry (±6)", /^1\. Czytanie/.test(y19.text) && Math.abs(y19.pt - 468.0) < 6, JSON.stringify(y19));
+  check("odstępy jak w Wordzie: „1. Czytanie i edycja” ~502,0 pt od góry (±6)", /^1\. Czytanie/.test(y19.text) && Math.abs(y19.pt - 502.0) < 6, JSON.stringify(y19));
 
   const s1 = await pageStarts(page);
-  // przewodnik po dopisaniu pól tekstowych, Zamień obraz, pól z PDF i kropek (2026-10-28): Word —
-  // 7 stron (compute statistics, wyrocznia AppleScript)
-  check("domyślnie włączone: 6 granic (7 stron jak w Wordzie)", s1.length === 6 && s1.map((s) => s.label).join(",") === "str. 2,str. 3,str. 4,str. 5,str. 6,str. 7", JSON.stringify(s1));
+  // przewodnik po dopisaniu rozdziałów 15–17 (kropki i pole tekstowe, malarz formatów, śledzenie,
+  // wersje, korespondencja seryjna, asystent — 2026-10-29): Word — 8 stron, „1. Czytanie” na 502 pt
+  // (compute statistics, wyrocznia AppleScript)
+  check("domyślnie włączone: 7 granic (8 stron jak w Wordzie)", s1.length === 7 && s1.map((s) => s.label).join(",") === "str. 2,str. 3,str. 4,str. 5,str. 6,str. 7,str. 8", JSON.stringify(s1));
   // granice zmierzone w Wordzie (AppleScript: range information → active end page number) po
   // dopisaniu do przewodnika akapitów o zaznaczaniu i czcionkach (2026-10-04)
   check("str. 2 zaczyna się jak w Wordzie: „2. Szukanie oraz Znajdź i zamień”", /^2\. Szukanie/.test(s1[0]?.text || ""), JSON.stringify(s1[0]));
@@ -98,7 +100,9 @@ async function run() {
   const s3 = await pageStarts(page);
   // (dopisane linijki zjadają wolne miejsce na dole str. 1, które zostawił nagłówek przeniesiony
   //  „razem z następnym” — dlatego sprawdzamy położenie granicy, nie tekst)
-  check("po dopisaniu tekstu granice przeliczają się (str. 2 niżej w kartce)", s3[0] && parseFloat(s3[0].top) > parseFloat(s1[0].top), JSON.stringify({ przed: s1[0], po: s3[0] }));
+  // (od 2026-10-29 str. 1 jest pełniejsza: dopisek przenosi koniec rozdziału 1 na str. 2 — granica
+  //  wyżej w kartce, ale wcześniej w treści)
+  check("po dopisaniu tekstu granice przeliczają się (str. 2 niżej w kartce albo wcześniej w treści)", s3[0] && (parseFloat(s3[0].top) > parseFloat(s1[0].top) || s3[0].text !== s1[0].text), JSON.stringify({ przed: s1[0], po: s3[0] }));
   check("dalej nie w tekście dokumentu (także w trybie Edycja)", await page.evaluate(() => !collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).some((p) => p.querySelector(".dwb-page-break"))));
 
   // opcja w panelu Widok: wyłączenie chowa granice i jest pamiętane

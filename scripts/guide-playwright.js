@@ -54,7 +54,7 @@ async function run() {
     out.xref = host.querySelector("a.doc-xref")?.getAttribute("href");
     return out;
   });
-  check("skróty sekcji: tytuł + 14 rozdziałów", r.chips === 15, String(r.chips));
+  check("skróty sekcji: tytuł + 17 rozdziałów", r.chips === 18, String(r.chips));
   const [all, ww, mc] = r.find;
   check("szukanie „najemca” znajduje też „Najemcami”", all.some((t) => /^Najemcami/.test(t)), all.join("|"));
   check("„Tylko całe słowa” wyklucza „Najemcami”", ww.length === all.length - all.filter((t) => /^Najemcami/i.test(t)).length && !ww.some((t) => /^najemcami/i.test(t)), ww.join("|"));
@@ -73,7 +73,7 @@ async function run() {
   check("zablokowane: zmiana, odsyłacz (linki, pola w zdaniu, przypisy i obrazy edytowalne)",
     !r.locked.lockLink && !r.locked.lockForm && !r.locked.lockNote && !r.locked.lockObject && r.locked.lockField === 1 && r.locked.lockTracked === 1 && Object.keys(r.locked).length === 2, JSON.stringify(r.locked));
   check("formularz: tekst, lista, data, pole wyboru", r.forms === "text,dropdown,date,checkbox", r.forms);
-  check("spis treści: 14 linków do rozdziałów + odsyłacz do „Zapisu”", r.toc === 14 && r.xref === "#_Guide12", `${r.toc} ${r.xref}`);
+  check("spis treści: 17 linków do rozdziałów (+ link do rozdz. 3 z rozdz. 16) + odsyłacz do „Zapisu”", r.toc === 18 && r.xref === "#_Guide12", `${r.toc} ${r.xref}`);
 
   // ── „Spróbuj:” z nowych rozdziałów robi to, co obiecuje ────────────────────
   const clickIn = async (sel) => {
@@ -137,6 +137,82 @@ async function run() {
   await page.waitForTimeout(500);
   const sp = await page.evaluate(async () => (await (await JSZip.loadAsync(originalFileBytes)).file("word/document.xml").async("string")).match(/<w:pgMar [^>]*>/)?.[0]);
   check("rozdz. 13: „Układ” → „Wąskie” zmienia marginesy", /w:left="720"/.test(sp || ""), sp);
+
+  // rozdział 15 (2026-10-29): karta z kropkami + pole tekstowe; ⌘/Ctrl przyciąga koniec kropek
+  const card = await page.evaluate(() => {
+    const ps = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"));
+    return ["Miejscowość:", "Teren nr:", "Data wydania:"].map((t) => ps.findIndex((p) => p.textContent.startsWith(t) && p.querySelector(".docx-tab")));
+  });
+  await page.evaluate((i) => collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[i].scrollIntoView({ block: "center" }), card[0]);
+  await page.waitForTimeout(500);
+  const tb = await page.evaluate((i) => {
+    const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[i];
+    const el = [...document.querySelectorAll(".dwb-tb")].find((x) => x.__tbAnchor === p);
+    if (!el) return null;
+    const a = p.getBoundingClientRect(), r = el.getBoundingClientRect();
+    return { text: el.textContent.trim(), dy: Math.round(r.top - a.top), right: r.left > a.left + a.width / 2 };
+  }, card[0]);
+  check("rozdz. 15: pole „ok. 34 m od drogi” obok karty (przy akapicie kotwicy, choć to dalsza strona)", card.every((i) => i > 0) && tb?.text === "ok. 34 m od drogi" && Math.abs(tb.dy) < 30 && tb.right, JSON.stringify({ card, tb }));
+  const tabAt = (i) => page.evaluate((i) => { const r = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[i].querySelector(".docx-tab").getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, r: r.right }; }, i);
+  const goal = (await tabAt(card[0])).r; // koniec kropek „Miejscowość:”
+  const dots = await tabAt(card[1]);
+  await page.mouse.click(dots.x, dots.y);
+  await page.waitForTimeout(300);
+  const hd = await page.evaluate(() => { const e = document.querySelector(".dwb-tabstop-handle"); if (!e || e.style.visibility === "hidden") return null; const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  const mod = process.platform === "darwin" ? "Meta" : "Control";
+  let snapped = null;
+  if (hd) {
+    await page.keyboard.down(mod);
+    await page.mouse.move(hd.x, hd.y);
+    await page.mouse.down();
+    await page.mouse.move(goal + 3, hd.y, { steps: 8 });
+    const guideSeen = await page.evaluate(() => !!document.querySelector(".dwb-tabstop-guide"));
+    await page.mouse.up();
+    await page.keyboard.up(mod);
+    await page.waitForTimeout(900);
+    await page.waitForFunction(() => !inlineLocksPending && document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 10000 });
+    snapped = { guideSeen, end: (await tabAt(card[1])).r, goal };
+  }
+  check("rozdz. 15: kropki „Teren nr:” z ⌘/Ctrl kończą się równo z kropkami wiersza wyżej, linia pomocnicza", hd && snapped.guideSeen && Math.abs(snapped.end - goal) < 0.75, JSON.stringify({ hd, snapped }));
+  await page.keyboard.press("Escape");
+
+  // rozdział 16: pędzel z czerwonego fragmentu na „ten jest zwykły”
+  const span = (text) => page.evaluate((text) => {
+    const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).find((x) => x.textContent.includes("czeka na pędzel"));
+    const at = p.textContent.indexOf(text);
+    const r = formDomRange(p, at, at + text.length);
+    const rs = r.getClientRects();
+    return { a: at, p: true, x0: rs[0].left + 1, y0: rs[0].top + rs[0].height / 2, x1: rs[rs.length - 1].right - 1, y1: rs[rs.length - 1].top + rs[rs.length - 1].height / 2 };
+  }, text);
+  await page.evaluate(() => collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).find((x) => x.textContent.includes("czeka na pędzel")).scrollIntoView({ block: "center" }));
+  await page.waitForTimeout(400);
+  const src = await span("fragment");
+  await page.mouse.click((src.x0 + src.x1) / 2, src.y0);
+  await page.waitForTimeout(200);
+  await page.click("#fmtPainterBtn");
+  await page.waitForTimeout(350);
+  const dst = await span("ten jest zwykły");
+  await page.mouse.move(dst.x0, dst.y0);
+  await page.mouse.down();
+  await page.mouse.move(dst.x1, dst.y1, { steps: 6 });
+  await page.mouse.up();
+  await page.waitForTimeout(900);
+  await page.waitForFunction(() => !inlineLocksPending && document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 10000 });
+  const painted = await page.evaluate(async () => {
+    const xml = await (await JSZip.loadAsync(await buildDocumentForSave())).file("word/document.xml").async("string");
+    const para = xml.split("</w:p>").find((x) => /czeka na pędzel/.test(x)) || "";
+    const runs = para.split("</w:r>").filter((r) => /ten jest zwyk/.test(r));
+    return runs.map((r) => ({ b: /<w:b\/>/.test(r), red: /C0392B/i.test(r) }));
+  });
+  check("rozdz. 16: malarz formatów — „ten jest zwykły” pogrubione i czerwone w pliku", painted.length > 0 && painted.every((r) => r.b && r.red), JSON.stringify(painted));
+
+  // rozdział 17: „Zapytaj dokument” bez asystenta wskazuje zdanie z rozdziału 2
+  const ask = await page.evaluate(async () => {
+    document.getElementById("docAskQuery").value = "Do którego dnia najemca płaci czynsz?";
+    await docAskRun();
+    return document.getElementById("docAskAnswer").textContent;
+  });
+  check("rozdz. 17: „Zapytaj dokument” → zdanie o czynszu do dziesiątego dnia (rozdz. 2)", /dziesiątego dnia/.test(ask), ask.slice(0, 200));
   assertNoErrors(errors, "guide");
   await browser.close();
   let failed = 0;

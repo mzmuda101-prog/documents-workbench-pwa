@@ -552,6 +552,20 @@ const dwbTextbox = (() => {
   function scaleOf(el) {
     return el.offsetWidth ? el.getBoundingClientRect().width / el.offsetWidth || 1 : 1;
   }
+  // Kartka, na której leży y (px sekcji bez skali): page-breaks.js stawia w sekcji prowadnice
+  // marginesów, po jednej na stronę (góra i wysokość kartki). Bez nich (jedna strona, granice
+  // wyłączone, Widok mobilny) cała sekcja to jedna kartka → null.
+  function sheetAt(section, y) {
+    let sheet = null;
+    section.querySelectorAll(":scope > .dwb-page-margin-guide").forEach((g) => {
+      const top = parseFloat(g.style.top) || 0;
+      if (top <= y + 1) sheet = { top, H: parseFloat(g.style.height) || 0 };
+    });
+    return sheet;
+  }
+  function sectionY(section, el) {
+    return (el.getBoundingClientRect().top - section.getBoundingClientRect().top) / scaleOf(section);
+  }
   // Położenie pola na kartce (px bez skali widoku) — jak Word: od strony/marginesu/akapitu
   function boxPosition(b, p, section, m, w, h) {
     const frameH = { page: [0, m.W], margin: [m.pl, m.W - m.pr], column: [m.pl, m.W - m.pr], character: [m.pl, m.W - m.pr], leftMargin: [0, m.pl], rightMargin: [m.W - m.pr, m.W], insideMargin: [0, m.pl], outsideMargin: [m.W - m.pr, m.W] }[b.h.rel] || [m.pl, m.W - m.pr];
@@ -593,6 +607,34 @@ const dwbTextbox = (() => {
     return el;
   }
 
+  // Miejsce pola na kartce akapitu kotwicy: względem akapitu — od akapitu (tam, gdzie stoi TERAZ,
+  // także po odstępach między stronami), względem strony/marginesu — od góry jego kartki.
+  function place(el, section) {
+    const b = el.__tb;
+    const p = el.__tbAnchor;
+    const sheet = sheetAt(section, sectionY(section, p));
+    const m = sectionMetrics(section);
+    const h = b.autoFit ? el.offsetHeight || b.hgt : b.hgt;
+    const pos = boxPosition(b, p, section, sheet ? { ...m, H: sheet.H } : m, b.w, h);
+    el.style.left = `${pos.x}px`;
+    el.style.top = `${pos.y + (sheet && !/^(paragraph|line)$/.test(b.v.rel) ? sheet.top : 0)}px`;
+  }
+
+  // Po ułożeniu stron (page-breaks.js): odstępy między kartkami przesuwają akapity w dół, a pola
+  // ustawione przy rysowaniu zostawały na starym miejscu (pole przy akapicie na 7. stronie
+  // wisiało ~1000 px wyżej) — ustawiamy je jeszcze raz.
+  function relayout(wrapper) {
+    let n = 0;
+    wrapper?.querySelectorAll(".dwb-tb:not(.dwb-tb-flow):not(.is-dragging)").forEach((el) => {
+      const section = el.parentElement;
+      if (!el.__tb || !el.__tbAnchor?.isConnected || !section?.matches("section.docx")) return;
+      place(el, section);
+      n++;
+    });
+    if (n) ui.refreshCard();
+    return n;
+  }
+
   // Rysowanie pól po ułożeniu stron (renderDocxPreview). Widok mobilny (bez kartek): pole jako
   // zwykły blok pod akapitem kotwicy.
   function render(wrapper, prep, { reflow = false } = {}) {
@@ -621,11 +663,7 @@ const dwbTextbox = (() => {
       if (getComputedStyle(section).position === "static") section.style.position = "relative";
       section.style.isolation = "isolate";
       section.insertBefore(el, section.firstChild);
-      const m = sectionMetrics(section);
-      const h = b.autoFit ? el.offsetHeight || b.hgt : b.hgt;
-      const pos = boxPosition(b, p, section, m, b.w, h);
-      el.style.left = `${pos.x}px`;
-      el.style.top = `${pos.y}px`;
+      place(el, section);
       el.style.zIndex = b.behind ? "-1" : "3";
       if (b.behind) el.classList.add("dwb-tb-behind");
       n++;
@@ -1087,15 +1125,19 @@ const dwbTextbox = (() => {
       const id = identity(el);
       let toIndex = id.index;
       let nth = id.nth;
-      if (el.__tbAnchor?.closest("section.docx") !== sec) {
-        const target = anchorParagraphIn(sec, parseFloat(el.style.top) || 0);
+      const top = parseFloat(el.style.top) || 0;
+      const sheet = sheetAt(sec, top);
+      const anchorSheet = el.__tbAnchor?.closest("section.docx") === sec ? sheetAt(sec, sectionY(sec, el.__tbAnchor)) : undefined;
+      // inna sekcja albo inna kartka tej samej sekcji — kotwica w akapicie tamtej strony (jak w Wordzie)
+      if (anchorSheet === undefined || (anchorSheet?.top ?? 0) !== (sheet?.top ?? 0)) {
+        const target = anchorParagraphIn(sec, top);
         const ti = target ? resolveParaIndex(target) : -1;
         if (ti >= 0) {
           toIndex = ti;
           nth = boxEls().filter((o) => o !== el && o.__tbAnchor === target).length;
         }
       }
-      const geo = { x: parseFloat(el.style.left) || 0, y: parseFloat(el.style.top) || 0, w: el.offsetWidth, h: el.offsetHeight, fixedH: fixedH || !b.autoFit };
+      const geo = { x: parseFloat(el.style.left) || 0, y: top - (sheet?.top || 0), w: el.offsetWidth, h: el.offsetHeight, fixedH: fixedH || !b.autoFit };
       await edit({ action: "geometry", ...id, toIndex, ...geo }, { index: toIndex, nth });
     }
     // Akapit kotwicy na danej kartce: akapit poza tabelą najbliżej nad polem (Word kotwiczy do
@@ -1249,7 +1291,8 @@ const dwbTextbox = (() => {
       const index = anchor ? resolveParaIndex(anchor) : -1;
       if (index < 0) return;
       const nth = boxEls().filter((o) => o.__tbAnchor === anchor).length;
-      await edit({ action: "insert", index, x, y, w, h: lineH + 9.6, text: "" }, { index, nth, edit: true });
+      const sheetTop = sheetAt(section, y)?.top || 0; // plik: położenie względem strony
+      await edit({ action: "insert", index, x, y: y - sheetTop, w, h: lineH + 9.6, text: "" }, { index, nth, edit: true });
     }
 
     function init() {
@@ -1271,12 +1314,12 @@ const dwbTextbox = (() => {
       window.addEventListener("resize", () => placeCard());
       if (typeof readModeEl !== "undefined") readModeEl?.addEventListener("change", () => deselect());
     }
-    return { init, afterRender, insertAtCaret, deselect, isEditing: () => !!editor, finishEdit: () => editor?.finish(), settle: () => (editor ? editor.finish() : committing), pending: () => committing, snapAxis,
+    return { init, afterRender, insertAtCaret, deselect, refreshCard: () => { if (sel?.el) placeCard(); }, isEditing: () => !!editor, finishEdit: () => editor?.finish(), settle: () => (editor ? editor.finish() : committing), pending: () => committing, snapAxis,
       dropAnchoredTo: (p) => boxEls().forEach((el) => { if (el.__tbAnchor === p) { if (sel?.el === el) deselect(); el.remove(); } }) };
   })();
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => ui.init());
   else ui.init();
 
-  return { prepare, render, insert: ui.insertAtCaret, deselect: ui.deselect, finishEdit: ui.finishEdit, settle: ui.settle, pending: ui.pending, dropAnchoredTo: ui.dropAnchoredTo, isEditing: ui.isEditing, _snapAxis: ui.snapAxis }; // _snapAxis: testy
+  return { prepare, render, relayout, insert: ui.insertAtCaret, deselect: ui.deselect, finishEdit: ui.finishEdit, settle: ui.settle, pending: ui.pending, dropAnchoredTo: ui.dropAnchoredTo, isEditing: ui.isEditing, _snapAxis: ui.snapAxis }; // _snapAxis: testy
 })();

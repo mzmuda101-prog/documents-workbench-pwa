@@ -9,7 +9,9 @@
  * długie zdanie (Statystyki) i metadane z autorem („Usuń dane osobowe”), klikalny spis treści
  * (linki do zakładek przy nagłówkach) i odsyłacz REF \h (Linki), pola formularza Worda —
  * tekst z tekstem zastępczym, lista, data, pole wyboru (Formularz), obraz z podpisem i link do
- * niego (podgląd obrazu po najechaniu, suwak rozmiaru).
+ * niego (podgląd obrazu po najechaniu, suwak rozmiaru), karta z kropkami (tabulatory z kropkami o różnych
+ * długościach — przyciąganie z ⌘/Ctrl) i polem tekstowym, fragment dla malarza formatów, śledzenie zmian,
+ * porównanie wersji, korespondencję seryjną (pola z rozdz. 3) oraz asystenta, słownik i autokorektę.
  *
  *   node scripts/gen-guide-docx.mjs
  */
@@ -21,7 +23,7 @@ import JSZip from "jszip";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.join(__dirname, "..", "docs", "samples", "przewodnik.docx");
 
-const NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml"';
+const NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:w15="http://schemas.microsoft.com/office/word/2012/wordml" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office"';
 const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const REV = 'w:author="Anna Recenzentka" w:date="2026-09-20T10:00:00Z"';
 
@@ -56,6 +58,17 @@ const sdtCheck = (alias) => ({ raw: `<w:sdt><w:sdtPr><w:alias w:val="${alias}"/>
 const image = (rId, cx, cy, name, descr) => ({ raw: `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="1" name="${esc(name)}" descr="${esc(descr)}"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="1" name="${esc(name)}"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${rId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>` });
 // link do miejsca w dokumencie (Wstaw → Link → Miejsce w tym dokumencie)
 const anchorLink = (bookmark, text) => ({ raw: `<w:hyperlink w:anchor="${bookmark}" w:history="1"><w:r><w:rPr><w:rStyle w:val="Hyperlink"/></w:rPr><w:t xml:space="preserve">${esc(text)}</w:t></w:r></w:hyperlink>` });
+// tabulator z kropkami (Word: Akapit → Tabulatory → Znaki wiodące 2) — „Miejscowość: ………”
+const tabRun = { raw: "<w:r><w:tab/></w:r>" };
+const dots = (label, pos) => p([label, tabRun], null, `<w:tabs><w:tab w:val="left" w:leader="dot" w:pos="${pos}"/></w:tabs>`);
+// pole tekstowe (Wstaw → Pole tekstowe): wps + kopia VML jak zapisuje Word; położenie od marginesu
+// i akapitu kotwicy (przesuwa się razem z akapitem), cm → EMU / pt
+const textbox = (id, text, xCm, wCm, hCm) => {
+  const E = (cm) => Math.round(cm * 360000);
+  const P = (cm) => Math.round(cm * 2835) / 100;
+  const para = `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/><w:jc w:val="center"/></w:pPr><w:r><w:rPr><w:sz w:val="20"/></w:rPr><w:t xml:space="preserve">${esc(text)}</w:t></w:r></w:p>`;
+  return { raw: `<w:r><w:rPr><w:noProof/></w:rPr><mc:AlternateContent><mc:Choice Requires="wps"><w:drawing><wp:anchor distT="45720" distB="45720" distL="114300" distR="114300" simplePos="0" relativeHeight="${251659264 + id}" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="margin"><wp:posOffset>${E(xCm)}</wp:posOffset></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:extent cx="${E(wCm)}" cy="${E(hCm)}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapNone/><wp:docPr id="${id}" name="Pole tekstowe ${id}"/><wp:cNvGraphicFramePr/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:cNvSpPr txBox="1"/><wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${E(wCm)}" cy="${E(hCm)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill><a:ln w="9525"><a:solidFill><a:srgbClr val="1F5FBF"/></a:solidFill><a:miter lim="800000"/></a:ln></wps:spPr><wps:txbx><w:txbxContent>${para}</w:txbxContent></wps:txbx><wps:bodyPr rot="0" vert="horz" wrap="square" lIns="91440" tIns="45720" rIns="91440" bIns="45720" anchor="t" anchorCtr="0"><a:spAutoFit/></wps:bodyPr></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></mc:Choice><mc:Fallback><w:pict><v:rect id="Pole tekstowe ${id}" style="position:absolute;margin-left:${P(xCm)}pt;margin-top:0;width:${P(wCm)}pt;height:${P(hCm)}pt;z-index:${id};mso-wrap-style:square;mso-position-horizontal-relative:margin;mso-position-vertical-relative:text" filled="t" fillcolor="white" stroked="t" strokecolor="#1F5FBF" strokeweight=".75pt"><v:textbox style="mso-fit-shape-to-text:t"><w:txbxContent>${para}</w:txbxContent></v:textbox></v:rect></w:pict></mc:Fallback></mc:AlternateContent></w:r>` };
+};
 // podpis rysunku (styl Legenda) z zakładką — cel linku / odsyłacza, jak przy „Wstaw podpis” w Wordzie
 const caption = (bookmark, id, text) => `<w:p><w:pPr><w:pStyle w:val="Caption"/><w:jc w:val="center"/></w:pPr><w:bookmarkStart w:id="${id}" w:name="${bookmark}"/>${run(text)}<w:bookmarkEnd w:id="${id}"/></w:p>`;
 const h2 = (t) => p(t, "Heading2");
@@ -161,6 +174,7 @@ const body = [
   bullet("Dwa palce przybliżają i oddalają tekst — procent widać na żywo."),
   bullet("Nagłówek aplikacji chowa się przy przewijaniu; pociągnij w dół na samej górze, żeby go wysunąć."),
   bullet("„Zapisz” w Safari zapisuje kopię pliku (Pliki → Pobrane)."),
+  bullet("Widok mobilny zawija tekst do szerokości ekranu (jak Word na iPhonie), a desktopowy pokazuje kartki jak na wydruku — wybierzesz go przyciskiem z procentem powiększenia; „Auto” dobiera widok do ekranu."),
 
   h1("12. Zapis i otwieranie plików"),
   p("„Zapisz” zapisuje zmiany w oryginalnym pliku, jeśli otworzyłeś go przyciskiem „Otwórz”, przeciągnięciem do okna albo przez „Otwórz za pomocą” (Chrome i Edge na komputerze) — o zgodę zapyta raz. W innym wypadku zapyta, gdzie zapisać kopię. „Zapisz jako” zawsze tworzy kopię. Licznik przy „Zapisz” pokazuje, ile zmian czeka na zapis. Plik zostaje zwykłym .docx — otworzysz go w Wordzie, Pages i LibreOffice."),
@@ -197,12 +211,41 @@ const body = [
   p("PDF, w którym tekst jest zapisany jako rysunek (same kształty liter — np. po „zamianie czcionek na krzywe”), też da się rozpoznać: aplikacja o to zapyta, a kształty liter zastąpi zwykłym tekstem."),
   p("Po konwersji dokument jest nowy i niezapisany — „Zapisz” zapyta o nazwę i miejsce pliku .docx. Sprawdź wynik, zwłaszcza po OCR."),
   tip("zapisz dowolną stronę WWW jako PDF (Drukuj → Zapisz jako PDF) i otwórz ją tutaj — zobaczysz, jak wygląda po zamianie na Worda."),
+
+  h1("15. Kropki i pola tekstowe — karta do wypełnienia"),
+  p("Tak wygląda karta po zamianie PDF na Worda: etykiety z kropkami do wpisania i dopisek w polu tekstowym obok. Możesz ją też zrobić sam — tabulator z kropkami ustawisz w Wordzie, a pole tekstowe wstawisz przez „＋ Wstaw → Pole tekstowe”."),
+  p(["Miejscowość:", tabRun, textbox(2, "ok. 34 m od drogi", 11.5, 4.6, 0.9)], null, '<w:tabs><w:tab w:val="left" w:leader="dot" w:pos="6000"/></w:tabs>'),
+  dots("Teren nr:", 4800),
+  dots("Data wydania:", 6000),
+  tip("przełącz na Edycja i kliknij w kropki przy „Teren nr:” — na ich końcu pojawi się uchwyt. Przeciągnij go z wciśniętym ⌘ (Mac) albo Ctrl: koniec kropek przyciągnie się do końca kropek w wierszu obok, a różowa linia pokaże, do czego. Bez klawisza przesuwasz swobodnie, a karta ◀ ▶ skraca i wydłuża kropki krokami."),
+  p("Wpisz coś za „Miejscowość:” przed kropkami — kropki same się skracają, a koniec wiersza zostaje na miejscu. Dwuklik w kropki zaznacza je jak słowo: Delete je usuwa, pisanie wstawia tekst w ich miejsce."),
+  tip("kliknij pole „ok. 34 m od drogi” — przeciągnij je w inne miejsce: przyciąga się do linii bazowej wiersza obok, brzegów tekstu i marginesów (Alt wyłącza). Drugie kliknięcie albo Enter to pisanie w polu, Esc kończy, a karta pod polem zmienia czcionkę, ramkę i tło."),
+
+  h1("16. Malarz formatów, śledzenie zmian i wersje"),
+  p(["Malarz formatów (pędzel na pasku w trybie Edycja) przenosi wygląd tekstu jak w Wordzie. W tym zdaniu ", { t: "ten fragment ma format", b: true, color: "C0392B" }, ", a ten jest zwykły i czeka na pędzel."]),
+  tip("postaw kursor w czerwonym fragmencie, kliknij pędzel, a potem zaznacz „ten jest zwykły” — dostanie pogrubienie i kolor. Dwuklik w pędzel zostawia go włączonego dla kolejnych fragmentów (Esc kończy); Ctrl/⌘+Shift+C kopiuje format, a Ctrl/⌘+Shift+V wkleja go na zaznaczenie."),
+  p("„Śledź zmiany” w panelu Recenzja działa jak w Wordzie: aplikacja zapyta raz o Twoje imię, a każda zmiana zostaje zapisana jako poprawka z podpisem — dopisany tekst podkreślony, usunięty przekreślony, pasek przy akapicie. W Wordzie zobaczysz te same poprawki do przyjęcia albo odrzucenia."),
+  tip("w panelu Recenzja zaznacz „Śledź zmiany”, popraw w tym akapicie jedno słowo i zobacz poprawkę na liście. Potem wyłącz śledzenie i rozstrzygnij poprawkę ✓ albo ✗."),
+  p("Porównaj wersje (panel o tej nazwie) zestawia otwarty dokument z drugim plikiem .docx i pokazuje, co dopisano, usunięto albo zmieniono. Porównanie dzieje się na tym urządzeniu i nie zmienia żadnego z plików."),
+  tip("„Zapisz jako” zrób kopię przewodnika i zmień w niej kilka słów, a potem otwórz oryginał i w panelu Porównaj wersje wskaż kopię."),
+  p(["Korespondencja seryjna (panel Placeholdery, pod polami formularza) robi z jednego szablonu wiele dokumentów: tabela CSV albo XLSX, w której pierwszy wiersz to nazwy pól, a każdy kolejny to jeden dokument. Pola z rozdziału ", anchorLink("_Guide3", "3. Placeholdery"), " pasują od razu — wystarczą kolumny data_podpisania, miasto, wynajmujacy, najemca i kwota."]),
+  tip("przygotuj w Excelu (albo w Sheet Workbench) taką tabelę z dwoma wierszami danych, w panelu Placeholdery kliknij „Wczytaj dane (CSV / XLSX)”, obejrzyj „Podgląd” wiersza i „Utwórz dokumenty (ZIP)” — dostaniesz dwa gotowe pliki .docx. Nazwy plików mogą pochodzić z wybranej kolumny."),
+
+  h1("17. Asystent i słownik na urządzeniu"),
+  p("Wszystko w tym rozdziale działa na tym urządzeniu — tekst nie wychodzi z przeglądarki. Asystenta AI (mały model językowy) pobierasz raz, za Twoją zgodą; bez niego część funkcji działa na samym słowniku."),
+  bullet("„Przepisz” (pasek w trybie Edycja): nowa wersja akapitu, zaznaczenia albo kilku akapitów — prościej, krócej, uprzejmiej albo według własnego polecenia. Propozycję wstawisz jako poprawkę do przejrzenia w Recenzji albo od razu."),
+  bullet("„Popraw błędy” w tym samym okienku działa bez asystenta: słownik poprawia polskie znaki i literówki w akapicie, zaznaczeniu albo w całym dokumencie, a nazw, kodu i pól do wypełnienia nie rusza."),
+  bullet("Zapytaj dokument (panel): pytanie zwykłymi słowami, odpowiedź z tego dokumentu z numerem miejsca, z którego pochodzi — kliknięcie numeru przewija do fragmentu."),
+  bullet("Znajdź sens (panel): szukanie po znaczeniu, nie po literach — „wypowiedzenie” znajdzie też „rozwiązanie umowy”."),
+  bullet("Ortografia (panel Korekta): słowa spoza słownika z podpowiedziami; „Do słownika” zapamiętuje słowo tylko na tym urządzeniu."),
+  bullet("Autokorekta podczas pisania (panel Narzędzia edycji), jak w Wordzie: juz → już, -- → –, 1/2 → ½, wielka litera na początku zdania, cudzysłowy drukarskie i listy z „1. ” albo „* ” na początku akapitu. Ctrl/⌘+Z zaraz po poprawce cofa samą poprawkę."),
+  tip("w panelu Zapytaj dokument wpisz „Do którego dnia najemca płaci czynsz?” — odpowiedź wskaże zdanie z rozdziału 2. Potem w trybie Edycja dopisz na końcu tego akapitu „juz” i spację — autokorekta zamieni je na „już”."),
 ];
 
 const tocBlock = [
   `<w:p><w:pPr><w:pStyle w:val="TOCHeading"/></w:pPr>${run("Spis treści")}</w:p>`,
   ...chapters.map((_, i) => tocEntry(i + 1)),
-  tip("kliknij dowolny rozdział — przeskoczysz do niego. „↩ Wróć” na dole (albo Alt+←) przywróci to miejsce."),
+  tip("kliknij rozdział, żeby do niego przejść — „↩ Wróć” (Alt+←) wraca tutaj."),
 ].join("\n");
 const bodyXml = body.map((x) => (x === "@@TOC@@" ? tocBlock : x));
 

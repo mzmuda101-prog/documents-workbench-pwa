@@ -134,6 +134,9 @@ async function run() {
   });
   await pickInPopover(page, "desktop");
   await page.waitForTimeout(400);
+  // przewodnik ma 8 stron (2026-10-29) — w tłoku testów przejście trwa dłużej niż 0,4 s; „wisi” = nie
+  // skończyło się po 3 s
+  await page.waitForFunction(() => !document.documentElement.classList.contains("dwb-vt"), null, { timeout: 3000 }).catch(() => {});
   const vt = await page.evaluate(() => { __vtObs.disconnect(); return { seen: __vtSeen, overlay: __overlaySeen, left: document.documentElement.classList.contains("dwb-vt") }; });
   check("zmiana widoku: płynne przejście, bez mignięcia nakładki „Renderowanie…”", vt.seen && !vt.overlay && !vt.left, JSON.stringify(vt));
   const d0 = await look(page);
