@@ -21,7 +21,7 @@
   }
 })();
 
-const APP_BUILD_VERSION = "20261029-01";
+const APP_BUILD_VERSION = "20261029-02";
 
 const IS_LOW_POWER = (() => {
   try {
@@ -261,7 +261,10 @@ function syncDocViewportHeight() {
     const available = Math.floor(viewportHeight - rect.top - statusH - bottomGap);
     const minHeight = kbOpen ? 120 : mobile ? 280 : 420;
     const height = Math.max(minHeight, available);
-    docPanelEl.style.setProperty("--doc-panel-height", `${height}px`);
+    // zapis tej samej wartości też unieważnia układ panelu z dokumentem — a zaraz niżej
+    // scrollHeight by go wymusił (drugi pełny układ przy każdym Enterze/zmianie paska)
+    const setPanelHeight = (v) => { if (docPanelEl.style.getPropertyValue("--doc-panel-height") !== v) docPanelEl.style.setProperty("--doc-panel-height", v); };
+    setPanelHeight(`${height}px`);
     if (kbOpen) return;
     // Korekta po pomiarze: wyliczenie wyżej nie zna odstępów między panelem a paskiem stanu,
     // marginesu strony ani miejsca na pasek Home (safe-area) — na telefonie strona wystawała
@@ -269,7 +272,7 @@ function syncDocViewportHeight() {
     // Mierzymy, o ile strona jest wyższa od okna, i tyle odejmujemy.
     const over = document.documentElement.scrollHeight - window.innerHeight;
     if (over > 0 && over < 400 && height - over >= minHeight) {
-      docPanelEl.style.setProperty("--doc-panel-height", `${height - over}px`);
+      setPanelHeight(`${height - over}px`);
       if (window.scrollY) window.scrollTo(0, 0);
     }
   });

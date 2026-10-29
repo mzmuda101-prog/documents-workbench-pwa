@@ -38,7 +38,16 @@ function attachOverflowFade(el) {
   }, { passive: false });
   el.addEventListener("scroll", sync, { passive: true });
   if (typeof ResizeObserver === "function") new ResizeObserver(sync).observe(el);
-  if (typeof MutationObserver === "function") new MutationObserver(sync).observe(el, { childList: true, subtree: true, characterData: true });
+  // Zmiana treści rzędu → odczyt szerokości raz na klatkę (w rAF), nie w mikrozadaniu
+  // zaraz po mutacji: tam scrollWidth wymuszał synchroniczny układ CAŁEJ strony (z tabelą)
+  // w środku pracy, która za chwilę i tak znów go unieważni — kilka razy na jedną akcję.
+  let syncQueued = false;
+  const syncSoon = () => {
+    if (syncQueued) return;
+    syncQueued = true;
+    requestAnimationFrame(() => { syncQueued = false; sync(); });
+  };
+  if (typeof MutationObserver === "function") new MutationObserver(syncSoon).observe(el, { childList: true, subtree: true, characterData: true });
   el._dwbFadeSync = sync;
   sync();
 }
@@ -947,6 +956,22 @@ const appFrame = (() => {
     syncZoomNow();
     syncPanelCounts();
     renderSectionChips();
+  }
+
+  // ── szeroki panel (≥ 860 px treści) → pasek w jednym ciągu (styles/app.css) ────────
+  // Zamiast @container: zapytanie kontenerowe na przodku dokumentu wymuszało układ całego
+  // panelu przy każdym getComputedStyle akapitu. Pierwszy pomiar od razu (bez mignięcia
+  // wąskiego paska), dalej ResizeObserver — ta sama szerokość treści, co w zapytaniu.
+  const docPanelNode = document.querySelector(".doc-panel");
+  if (docPanelNode) {
+    const setWide = (w) => docPanelNode.classList.toggle("dwb-panel-wide", w >= 860);
+    const cs = getComputedStyle(docPanelNode);
+    setWide(docPanelNode.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0));
+    if (typeof ResizeObserver === "function") {
+      new ResizeObserver((entries) => { const e = entries[entries.length - 1]; if (e) setWide(e.contentRect.width); }).observe(docPanelNode);
+    } else {
+      window.addEventListener("resize", () => setWide(docPanelNode.clientWidth));
+    }
   }
 
   // ── start ──────────────────────────────────────────────────────────────────

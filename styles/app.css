@@ -1411,16 +1411,20 @@ details.panel > summary .panel-title { flex: 1; }
    szerokości), a pasek Edycji dostaje własny rząd pod spodem. Dawniej w Edycji cały drugi
    rząd zjeżdżał niżej i przyciski zmieniały miejsce. Węższy pasek — jak było (tam drugi
    rząd i tak zawsze stoi pod szukaniem, więc nic nie skacze). */
-.doc-panel { container: docpanel / inline-size; }
-@container docpanel (min-width: 860px) {
-  .doc-toolbar { flex-direction: row; flex-wrap: wrap; align-items: center; }
-  .doc-toolbar-row:first-child { flex: 1 1 240px; }
-  .doc-toolbar-row-2 { display: contents; }
-  .doc-toolbar-row-2 > .format-toolbar {
-    order: 1; flex: 1 1 100%; padding-left: 0; border-left: 0;
-  }
-  .section-strip { order: 2; flex: 1 1 100%; }
+/* Szeroki panel (≥ 860 px) = pasek w jednym ciągu. Dawniej zapytanie kontenerowe na .doc-panel —
+   ale container-type na przodku dokumentu sprawiał, że KAŻDY odczyt stylu akapitu po zmianie
+   (getComputedStyle w łatkach składu, podziale stron…) wymuszał układ całego panelu: otwarcie
+   100 stron wolniejsze o ~70%. Klasę ustawia ResizeObserver (app-frame.js, ta sama szerokość
+   treści co zapytanie); zamknięcie układu zostaje to samo, co dawało container-type, a :where()
+   trzyma specyficzność jak w dawnym @container. */
+.doc-panel { contain: layout style inline-size; }
+:where(.doc-panel.dwb-panel-wide) .doc-toolbar { flex-direction: row; flex-wrap: wrap; align-items: center; }
+:where(.doc-panel.dwb-panel-wide) .doc-toolbar-row:first-child { flex: 1 1 240px; }
+:where(.doc-panel.dwb-panel-wide) .doc-toolbar-row-2 { display: contents; }
+:where(.doc-panel.dwb-panel-wide) .doc-toolbar-row-2 > .format-toolbar {
+  order: 1; flex: 1 1 100%; padding-left: 0; border-left: 0;
 }
+:where(.doc-panel.dwb-panel-wide) .section-strip { order: 2; flex: 1 1 100%; }
 .doc-search {
   flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px;
   border: 1px solid var(--border); border-radius: 11px; background: var(--field); color: var(--muted);
