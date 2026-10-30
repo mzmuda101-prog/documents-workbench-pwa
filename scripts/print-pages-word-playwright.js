@@ -14,7 +14,9 @@
 // (5) w:widowControl / keepNext / keepLines wpisane w akapit trafiają do podglądu (łatka 22).
 // (6) Wyjustowany akapit łamie się jak w Wordzie: spacja może się ścisnąć o ¼ (wyrocznia Worda,
 //     output/word-oracle/jx-arial.docx: Arial 10,5 pt, wcięcie z prawej 25 pt — „feugiat” jeszcze
-//     w 1. linijce; ten sam akapit do lewej — już w 2.).
+//     w 1. linijce; ten sam akapit do lewej — już w 2.). Krótkie słowo Word wciąga tylko, gdy
+//     wystaje ≤ 0,345 × (spacja + słowo) (output/word-oracle/jw-limit.docx: 11 × „nnn” + „i” —
+//     1,5 pt za marginesem zostaje, 2,5 pt idzie do nowej linijki).
 // ENGINE=webkit (Safari/iPad).
 
 const pw = require("playwright");
@@ -50,6 +52,7 @@ async function fixture() {
     P("Akapit bez kontroli bękartów", '<w:widowControl w:val="0"/><w:keepNext/>'),
     `<w:p><w:pPr><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="5000"/></w:tabs><w:ind w:right="4000"/></w:pPr><w:r>${t("Miejscowość:")}</w:r><w:r><w:tab/></w:r><w:r>${t("Teren nr:")}</w:r><w:r><w:tab/></w:r></w:p>`,
     ...["both", "left"].map((jc) => `<w:p><w:pPr><w:ind w:right="500"/><w:jc w:val="${jc}"/></w:pPr><w:r><w:rPr><w:sz w:val="21"/></w:rPr>${t(`${jc[0]}25 fringilla magna at augue maximus finibus. Donec mi dui, volutpat ut lectus sit amet, feugiat tincidunt ex. Sed id justo lobortis, eleifend lorem vitae.`)}</w:r></w:p>`),
+    ...[["k1", 4559], ["k2", 4579]].map(([tag, ind]) => `<w:p><w:pPr><w:ind w:right="${ind}"/><w:jc w:val="both"/></w:pPr><w:r><w:rPr><w:sz w:val="21"/></w:rPr>${t(Array.from({ length: 11 }, () => "nnn").join(" ") + " i")}</w:r><w:r><w:rPr><w:sz w:val="21"/></w:rPr><w:br/>${t(tag)}</w:r></w:p>`),
     `<w:p><w:r><w:br w:type="page"/></w:r></w:p>`,
     table,
     P("Za tabelą"),
@@ -121,12 +124,26 @@ async function fixture() {
       return [...sh.querySelectorAll(".pp-clip td p")].map((p) => { const r = p.getBoundingClientRect(); return { t: p.textContent, top: r.top - s0.top, bottom: r.bottom - s0.top }; })
         .filter((x) => x.bottom > clip.top - s0.top + 0.5 && x.top < clip.bottom - s0.top - 0.5).map((x) => ({ ...x, cut: x.top < clip.top - s0.top - 1.5 || x.bottom > clip.bottom - s0.top + 1.5, clipTop: clip.top - s0.top }));
     };
+    // krótkie „i” na końcu linijki: w 1. linijce czy niżej (k1 — zostaje, k2 — w nowej linijce)
+    const shortWord = ["k1", "k2"].map((tag) => {
+      const p = [...document.querySelectorAll(".pp-sheet p")].find((x) => x.textContent.endsWith(tag));
+      if (!p) return null;
+      const r = document.createRange();
+      const tops = [];
+      for (const t of [...p.querySelectorAll("*")].flatMap((e) => [...e.childNodes]).filter((n) => n.nodeType === 3)) {
+        for (const m of t.data.matchAll(/\S+/g)) { r.setStart(t, m.index); r.setEnd(t, m.index + m[0].length); tops.push([m[0], Math.round(r.getBoundingClientRect().top)]); }
+      }
+      const first = tops[0]?.[1];
+      return tops.find(([w]) => w === "i")?.[1] === first ? "w 1. linijce" : "niżej";
+    });
     return {
+      shortWord,
       n: sheets.length,
       footers: sheets.map((sh) => [...sh.querySelectorAll("footer.pp-hf")].map((f) => f.textContent.trim()).join("|")),
       table: sheets.slice(1, 3).map(lines),
     };
   });
+  check("wydruk: krótkie słowo wciągane jak w Wordzie (1,5 pt za marginesem — zostaje, 2,5 pt — niżej)", JSON.stringify(pp.shortWord) === '["w 1. linijce","niżej"]', JSON.stringify(pp.shortWord));
   const n = pp.n;
   check(`wydruk: pierwsza kartka ze stopką „first”, dalsze z numerem (${n} kartek)`, n >= 3 && pp.footers[0] === "Pierwsza strona" && pp.footers.slice(1).every((f, i) => f === `Strona ${i + 2} z ${n}`), JSON.stringify(pp.footers));
   const [s2, s3] = pp.table;

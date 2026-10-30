@@ -412,6 +412,98 @@ function applyJustifySpaceCompression(host) {
   return n;
 }
 
+// Wydruk (osobna kopia): ostatnie słowo linijki wyjustowanego akapitu Word wciąga ściskaniem
+// spacji tylko wtedy, gdy wystaje za margines o ≤ 0,345 × (spacja + to słowo) — poza granicą
+// ¼ spacji na każdą spację (wyrocznia 2026-10-30, output/word-oracle/jw-limit.docx: „i” ~1,9 pt,
+// „ab” 5,0, „tym.” 7,9, „abcd” 8,9; dłuższe słowa — tylko ¼ spacji; to samo w ostatniej linijce).
+// CSS ściska do ¼ bez tej drugiej granicy — za długie wciągnięcie cofamy: słowo sklejamy twardą
+// spacją z następnym (przechodzi do nowej linijki, poprzednia zostaje wyjustowana), a w ostatniej
+// linijce akapitu — niewidocznym marginesem za jego ostatnią literą.
+function wordJustifyBreaks(host) {
+  const range = document.createRange();
+  const SEP = /[ \t\n]/; // granica słowa (twarda spacja skleja — jak w Wordzie)
+  // granica Worda na spację: Times 12 pt 0,236–0,246, Arial 10,5 pt 0,249–0,257 (wyrocznia jx/jy);
+  // CSS ściska do ¼ — co ponad, cofamy tutaj
+  const BUDGET = 0.245;
+  host.querySelectorAll("p.dwb-justify").forEach((p) => {
+    const cs = getComputedStyle(p);
+    const spw = parseFloat(p.style.getPropertyValue("--dwb-spw")) || 0.25;
+    const prevAlign = p.style.textAlign;
+    p.style.textAlign = "left"; // te same linijki, spacje ściśnięte, bez rozciągania
+    const right = p.getBoundingClientRect().right - (parseFloat(cs.paddingRight) || 0);
+    for (let guard = 0; guard < 60; guard++) {
+      // słowa: początek (węzeł, indeks) i koniec, prostokąty, ściśnięcie spacji przed nim (px)
+      // słowa — też część słowa do łącznika („star-” | „szym”: tam Word może złamać); gap =
+      // szerokość zwykłych spacji przed nim (tylko one się ściskają)
+      const words = [];
+      const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+      // ściśnięcie spacji liczone od jej WŁASNEGO kroju (spacja bywa w osobnym fragmencie, np.
+      // wyzerowanym przez zeroWhitespaceRuns — CSS ściska ją od jej rozmiaru)
+      let cur = null, gap = 0;
+      for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+        const fs = parseFloat(getComputedStyle(t.parentElement).fontSize) || 0;
+        for (let i = 0; i < t.data.length; i++) {
+          const ch = t.data[i];
+          if (SEP.test(ch)) {
+            const prev = words[words.length - 1];
+            if (prev && !prev.sepT) { prev.sepT = t; prev.sepI = i; } // pierwszy odstęp za słowem
+            cur = null;
+            if (ch === " ") gap += spw * fs;
+            continue;
+          }
+          range.setStart(t, i);
+          range.setEnd(t, i + 1);
+          const r = range.getBoundingClientRect();
+          if (!r.height) continue;
+          if (!cur || Math.abs(r.top - cur.y) > 2) { cur = { t, i, x: r.left, y: r.top, end: r.right, endT: t, endI: i, sp: spw * fs, nb: 0, gap }; words.push(cur); gap = 0; }
+          else { cur.end = r.right; cur.endT = t; cur.endI = i; }
+          if (ch === "\u00a0") cur.nb += 1; // twardą spację CSS też ściska — Word nie
+          if (/[-\u2010\u00ad]/.test(ch)) cur = null; // za łącznikiem można złamać
+        }
+      }
+      let fixed = false;
+      for (let k = 0, start = 0; k < words.length && !fixed; k++) {
+        const lastOfLine = k + 1 === words.length || Math.abs(words[k + 1].y - words[k].y) > 2;
+        if (!lastOfLine) continue;
+        const w = words[k];
+        if (k > start) {
+          // bez ściskania: każda spacja przed tym słowem i każda twarda spacja w linijce szersza
+          // o ¼ spacji; Word ściska tylko zwykłe spacje (twarda ma stałą szerokość)
+          let shrink = 0, budget = 0;
+          for (let j = start; j <= k; j++) {
+            if (j > start) { shrink += 0.25 * words[j].gap; budget += BUDGET * words[j].gap; }
+            shrink += 0.25 * words[j].sp * words[j].nb;
+          }
+          const over = w.end + shrink - right;
+          const width = w.end - w.x + 0.25 * w.sp * w.nb;
+          if (over > budget + 0.1 || over > 0.345 * (w.sp + width) + 0.1) {
+            // za słowem pojedyncza zwykła spacja (też w osobnym fragmencie), a dalej następne słowo
+            // → twarda spacja: idzie razem z następnym do nowej linijki, bez śladu w jej szerokości.
+            // Inaczej (koniec akapitu, złamanie wiersza) — niewidoczny margines za ostatnią literą
+            // (dalej nic nie ma, więc nie przesuwa następnej linijki)
+            const nx = words[k + 1];
+            const one = w.sepT && w.sepT.data[w.sepI] === " " && nx && (nx.t === w.sepT ? nx.i === w.sepI + 1 : !/[ \t\n]/.test(w.sepT.data.slice(w.sepI + 1)));
+            if (one) {
+              w.sepT.data = `${w.sepT.data.slice(0, w.sepI)}\u00a0${w.sepT.data.slice(w.sepI + 1)}`;
+              fixed = true;
+            } else {
+              const tail = w.endT.splitText(w.endI);
+              const push = document.createElement("dwb-push");
+              push.style.marginRight = `${Math.ceil(right - w.x) + 2}px`;
+              tail.before(push);
+              push.appendChild(tail);
+              fixed = true;
+            }
+          }
+        }
+        start = k + 1;
+      }
+      if (!fixed) break;
+    }
+    p.style.textAlign = prevAlign;
+  });
+}
+
 // Wydruk (osobna kopia): ostatnia linijka wyjustowanego akapitu ma w Wordzie zwykłe spacje, a
 // ściśnięte tylko wtedy, gdy inaczej by się nie zmieściła (wyrocznia: jednolinijkowe akapity
 // output/word-oracle/jl-last.docx — ta sama granica ¼ spacji). <dwb-last> ze zwykłym odstępem,

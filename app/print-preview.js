@@ -470,6 +470,7 @@ const dwbPrint = (() => {
         if (arts.length) arts[arts.length - 1].style.marginBottom = "0";
         ol.style.marginBottom = "auto";
       });
+      if (typeof wordJustifyBreaks === "function") wordJustifyBreaks(host); // słowo wciągane ściskaniem — granica Worda
       if (typeof relaxJustifyLastLines === "function") relaxJustifyLastLines(host); // ostatnia linijka wyjustowanego — zwykłe spacje (Word)
       const sections = await dwbPageBreaks.paginate(host, { includeNotes: true, splitRows: true });
       // strony parzyste z własnym nagłówkiem/stopką tylko z tym ustawieniem pliku (jak Word)
