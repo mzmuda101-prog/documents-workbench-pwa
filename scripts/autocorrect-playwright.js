@@ -3,7 +3,7 @@
 // Reguły jak zaobserwowane w Microsoft Word 16.114 (język polski): poprawka słowa po spacji,
 // wielka litera na początku zdania (nie po „np.”), „PIerwszy” → „Pierwszy”, cudzysłowy „ ” i ‘ ’,
 // „ - ” / „ -- ” → półpauza, „a--b” → pauza, „1/2” → „½”, „...” → „…”, „(c)” → „©”,
-// „1. ” / „* ” na początku akapitu → lista. Ctrl/⌘+Z zaraz po poprawce cofa SAMĄ poprawkę,
+// „1. ” / „* ” (też „1.” + Tab) na początku akapitu → lista. Ctrl/⌘+Z zaraz po poprawce cofa SAMĄ poprawkę,
 // a po liście — wraca do wpisanego „1. ”. Pisanie w tekście z formatem (Ctrl/⌘+B) też poprawia.
 // Wyłącznik działa. Zapisany plik ma poprawiony tekst. ENGINE=webkit (Safari/iPad).
 
@@ -118,6 +118,20 @@ async function run() {
   await idle(page);
   cp = await caretPara(page);
   check("po końcu listy szybkie pisanie nie gubi liter", cp && !cp.list && cp.text === "Dalej zwykly tekst ", JSON.stringify(cp));
+
+  // 7c) „1.” + Tab → lista jak ze spacją (Word: tabulator nie zostaje); Enter + Tab → poziom 2 „a.”
+  // (nagranie Mateusza 2026-10-30: zostawał tekst „1.⇥”, a następne „1.⇥” dawało wciętą listę)
+  await page.keyboard.press("Enter");
+  for (const k of ["1", ".", "Tab", "d", "a", "Enter", "Tab"]) { await page.keyboard.press(k); await page.waitForTimeout(60); }
+  await idle(page);
+  const tabList = await page.evaluate(() => {
+    const p = docCaretParagraph(document.activeElement);
+    const prev = p?.previousElementSibling;
+    return [prev, p].map((x) => x && [x.textContent, dwbListNum.labelOf(x)]);
+  });
+  check("„1.⇥da⏎⇥” → „1. Da” i pusty punkt „a.” (jak Word)", JSON.stringify(tabList) === '[["Da","1."],["","a."]]', JSON.stringify(tabList));
+  // wyjście z listy (pusty punkt + Enter, aż akapit przestanie być punktem) — dalej zwykły tekst
+  for (let i = 0; i < 3 && (await caretPara(page))?.list; i++) { await page.keyboard.press("Enter"); await idle(page); }
 
   // 8) wyłącznik
   await page.keyboard.press("Enter");

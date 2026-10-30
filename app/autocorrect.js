@@ -300,6 +300,19 @@ const dwbAutoCorrect = (() => {
     if (!docCaretParagraph(e.target)) return;
     const spot = caretSpot();
     if (!spot || LETTER_RE.test(charAfter(spot.p, spot.node, spot.offset))) return;
+    // „1.” / „1)” / „*” / „-” + Tab na samym początku akapitu → lista, jak ze spacją (Word 16.114,
+    // sprawdzone pisaniem: „1.⇥” = lista numerowana, tabulator nie zostaje w tekście). Dawniej
+    // zostawał tekst „1.⇥”, a kolejne „1.⇥” w akapicie pod nim dawały dziwnie wciętą listę.
+    if (e.key === "Tab" && !e.shiftKey && isOn("lists") && !spot.p.dataset.noteKey && !isListParagraph(spot.p)) {
+      const before = textBefore(spot.p, spot.node, spot.offset);
+      const m = before.match(/^(1[.)]|\*|-)$/u);
+      if (m && !charAfter(spot.p, spot.node, spot.offset)) {
+        e.preventDefault();
+        e.stopPropagation();
+        makeList(spot, m[1] === "*" || m[1] === "-" ? "bullet" : "number", before.length);
+        return;
+      }
+    }
     applyEdits(spot, planWord(spot, spot.offset, e.key === "Enter" ? "\n" : "\t", docLang(spot.p)));
   }
 
