@@ -79,6 +79,7 @@ async function renderDocxPreview(bytes, container, opts = {}) {
     renderFooters: true, // Widok mobilny: schowana CSS-em, opcja w panelu Widok (syncReflowOptions)
     renderFootnotes: true,
     renderEndnotes: true,
+    dwbAltHeaderFooter: !!opts.altHeaderFooter, // wydruk: wszystkie wersje nagłówka/stopki (łatka 23)
   });
   addGenericFontFallbacks(wrapper); // brak kroju na urządzeniu → systemowy bezszeryfowy/szeryfowy z prawdziwym pogrubieniem
   applyRunDefaultsToParagraphs(wrapper); // pusty / nowy akapit: krój i rozmiar dokumentu, nie aplikacji
@@ -90,6 +91,7 @@ async function renderDocxPreview(bytes, container, opts = {}) {
   fixDocxBulletRendering(wrapper);
   if (typeof dwbListNum !== "undefined") await dwbListNum.apply(wrapper, bytes); // numery list jak w Wordzie
   fixPageAnchoredDrawings(wrapper);
+  applyJustifySpaceCompression(wrapper); // wyjustowane: łamanie jak Word (spacja ściskana o ¼)
   applyWordLineMetrics(wrapper); // odstępy między wierszami jak w Wordzie (też granice stron)
   zeroWhitespaceRuns(wrapper); // spacje/tabulatory bez tekstu nie podnoszą linijki (Word)
   addFallbackSymbolLines(wrapper); // ✓ ✗ ＋ — linijka w wysokości kroju zastępczego Worda (po zerowaniu spacji)
@@ -105,7 +107,7 @@ async function renderDocxPreview(bytes, container, opts = {}) {
     // Czcionki osadzone w pliku (np. z PDF) docx-preview wczytuje z opóźnieniem — po ich
     // dojściu szerokości tekstu się zmieniają: liczymy tabulatory jeszcze raz.
     if (document.fonts) {
-      const again = () => { if (wrapper.isConnected) { layoutTabStops(wrapper); hangTrailingSpaces(wrapper); } };
+      const again = () => { if (wrapper.isConnected) { applyJustifySpaceCompression(wrapper); layoutTabStops(wrapper); hangTrailingSpaces(wrapper); } };
       document.fonts.ready.then(again).catch(() => {});
       let t = 0;
       const onDone = () => { clearTimeout(t); t = setTimeout(again, 60); };

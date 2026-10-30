@@ -58,27 +58,35 @@ const dwbPageBreaks = (() => {
 
   // „Razem z następnym” / „Wiersze razem” ze stylów pliku (z dziedziczeniem po stylu bazowym)
   // — Word nie zostawia nagłówka na dole strony. Klasa akapitu w podglądzie = docx_<styleId>.
-  let keep = { bytes: null, next: new Set(), lines: new Set() };
+  // Kontrola bękartów (w:widowControl): Word ma ją włączoną, dopóki plik jej nie wyłączy — w
+  // domyślnych akapitu (docDefaults), stylu albo samym akapicie (data-dwb-widow, łatka 22).
+  let keep = { bytes: null, next: new Set(), lines: new Set(), noWidow: new Set(), widow: true };
   async function ensureKeepInfo() {
     if (keep.bytes === originalFileBytes) return;
-    keep = { bytes: originalFileBytes, next: new Set(), lines: new Set() };
+    keep = { bytes: originalFileBytes, next: new Set(), lines: new Set(), noWidow: new Set(), widow: true };
     try {
       const zip = await loadDocxZipCached(originalFileBytes);
       const xml = await zip.file("word/styles.xml")?.async("string");
       if (!xml) return;
       const styles = [...composeParse(xml).getElementsByTagNameNS(W_NS, "style")].filter((st) => st.getAttributeNS(W_NS, "type") === "paragraph");
       const byId = new Map(styles.map((st) => [st.getAttributeNS(W_NS, "styleId"), st]));
+      const on = (el) => !/^(0|false|off)$/i.test(el.getAttributeNS(W_NS, "val") || "");
+      // wartość ze stylu albo jego bazowego; null — nigdzie w łańcuchu
       const flag = (st, name, depth = 0) => {
-        if (!st || depth > 12) return false;
+        if (!st || depth > 12) return null;
         const pPr = composeDirectChild(st, "pPr");
         const el = pPr && composeDirectChild(pPr, name);
-        if (el) return !/^(0|false|off)$/i.test(el.getAttributeNS(W_NS, "val") || "");
+        if (el) return on(el);
         const based = composeDirectChild(st, "basedOn")?.getAttributeNS(W_NS, "val");
-        return based ? flag(byId.get(based), name, depth + 1) : false;
+        return based ? flag(byId.get(based), name, depth + 1) : null;
       };
+      const dflt = composeParse(xml).getElementsByTagNameNS(W_NS, "pPrDefault")[0];
+      const dWidow = dflt && [...dflt.getElementsByTagNameNS(W_NS, "widowControl")][0];
+      if (dWidow) keep.widow = on(dWidow);
       byId.forEach((st, id) => {
         if (flag(st, "keepNext")) keep.next.add(docxStyleClassName(id));
         if (flag(st, "keepLines")) keep.lines.add(docxStyleClassName(id));
+        if ((flag(st, "widowControl") ?? keep.widow) === false) keep.noWidow.add(docxStyleClassName(id));
       });
     } catch (_) { /* uszkodzony styles.xml — bez tych zasad */ }
   }
@@ -140,8 +148,12 @@ const dwbPageBreaks = (() => {
     const out = [];
     const range = document.createRange();
     const add = (el, lines, row = false) => {
-      const next = !row && hasClass(el, keep.next);
-      const together = !row && hasClass(el, keep.lines);
+      // wpisane w akapit (data-dwb-*, łatka 22) wygrywa ze stylem
+      const own = (k, set) => (el.dataset[k] ? el.dataset[k] === "1" : hasClass(el, set));
+      const next = !row && own("dwbKeepNext", keep.next);
+      const together = !row && own("dwbKeepLines", keep.lines);
+      // styl bez klasy (Normalny) → domyślne pliku
+      const widow = !row && (el.dataset.dwbWidow ? el.dataset.dwbWidow === "1" : !hasClass(el, keep.noWidow) && (keep.widow || [...el.classList].some((c) => c.startsWith("docx_"))));
       // Dół linijki do sprawdzania, czy mieści się na stronie — jak w Wordzie (porównanie z
       // PDF-ami): środek liter + POŁOWA wysokości pojedynczej interlinii kroju (rozmiar ×
       // współczynnik Worda); dodatkowy odstęp interlinii wielokrotnej może wystawać w dolny
@@ -155,7 +167,7 @@ const dwbPageBreaks = (() => {
         if (single > 0) lines = lines.map(([t, b]) => [t, Math.max(b, (t + b) / 2 + single / 2)]);
       }
       lines.forEach(([top, bottom], i) => out.push({ top: (top - secTop) / scale, bottom: (bottom - secTop) / scale,
-        el, i, n: lines.length, row, next, together }));
+        el, i, n: lines.length, row, next, together, widow }));
     };
     if (multiColumn(article)) {
       const r = article.getBoundingClientRect();
@@ -167,7 +179,28 @@ const dwbPageBreaks = (() => {
       if (el.tagName === "TR") {
         if (el.parentElement?.closest("tr")) return; // tabela w tabeli — liczy się zewnętrzny wiersz
         const r = el.getBoundingClientRect();
-        if (r.height) add(el, [[r.top, r.bottom]], true);
+        // Komórka scalona w pionie (rowspan) sięga w następne wiersze, a jej tekst może wystawać
+        // poza ten wiersz. Linijki tekstu granica strony nie przetnie — wiersz kończy się pod
+        // ostatnią linijką, która zaczyna się w nim (Word przenosi go w całości; „ubezp”: odstęp
+        // przed akapitem + linijka wyższe niż wiersz, tekst wjeżdżał na następną kartkę).
+        let bottom = r.bottom;
+        for (const td of el.cells) {
+          if (td.rowSpan > 1) td.querySelectorAll("p").forEach((p) => textLines(p, range).forEach(([t, b]) => { if (t < r.bottom - 0.5) bottom = Math.max(bottom, b); }));
+        }
+        // wiersz podzielony między strony (podgląd wydruku: splitRowsAtPages) — części osobno
+        if (el.dataset.ppSplit && r.height) {
+          let a = r.top;
+          for (const y of el.dataset.ppSplit.split(",").map(Number).sort((x, z) => x - z)) {
+            const at = secTop + y * scale;
+            if (at > a + 0.5 && at < bottom - 0.5) { add(el, [[a, at]], true); a = at; }
+          }
+          add(el, [[a, bottom]], true);
+          return;
+        }
+        if (r.height) {
+          add(el, [[r.top, bottom]], true);
+          if (bottom > r.bottom + 0.5) out[out.length - 1].spill = true; // tekst wystaje pod wiersz
+        }
         return;
       }
       if (el.closest("table")) return;
@@ -190,9 +223,16 @@ const dwbPageBreaks = (() => {
     const cur = u[b];
     if (!cur.row && cur.i > 0) {
       const head = b - cur.i; // pierwsza linijka tego akapitu
-      if (cur.together || cur.i === 1) b = head; // wiersze razem / sierota → cały akapit dalej
-      else if (cur.n - cur.i === 1 && cur.n >= 3) b -= 1; // wdowa → jeszcze jedna linijka dalej
+      if (cur.together || cur.widow && cur.i === 1) b = head; // wiersze razem / sierota → cały akapit dalej
+      else if (cur.widow && cur.n - cur.i === 1 && cur.n >= 3) b -= 1; // wdowa → jeszcze jedna linijka dalej
       if (b <= first) b = k;
+    }
+    // wiersz tabeli, którego tekst (komórka scalona w pionie) wchodzi w wiersz zaczynający stronę:
+    // linijka nie zmieściła się w części komórki na tej stronie — Word przenosi i ten wiersz
+    for (let guard = 0; guard < 20 && u[b].row; guard++) {
+      const prev = u[b - 1];
+      if (!prev?.row || !prev.spill || b - 1 <= first || prev.bottom <= u[b].top + 0.5) break;
+      b -= 1;
     }
     // poprzedzające akapity „razem z następnym” idą razem z tym, co zaczyna nową stronę
     for (let guard = 0; guard < 20; guard++) {
@@ -384,10 +424,138 @@ const dwbPageBreaks = (() => {
     return out;
   }
 
+  // ── Wiersz tabeli na granicy strony (podgląd wydruku) ─────────────────────────────────────
+  // Word dzieli wiersz bez „nie dziel” (w:cantSplit) między strony KAŻDĄ KOMÓRKĘ OSOBNO, między
+  // linijkami: w komórce zostaje to, co się mieści, a reszta zaczyna się u góry następnej strony —
+  // też gdy w sąsiedniej komórce granica wypada gdzie indziej. Dawniej wiersz szedł w całości na
+  // następną stronę, a wyższy niż strona był cięty jedną kreską (przez linijki; „karty” z PDF:
+  // druga kolumna 70 px wyżej niż w Wordzie). Na niewidocznym renderze wydruku w każdej takiej
+  // komórce wstawiamy przed pierwszą niemieszczącą się linijkę odstęp do granicy strony, a wiersz
+  // dostaje data-pp-split (miejsce podziału) — lineUnits liczy jego części osobno.
+  function cellLines(td, Y, range) {
+    const table = td.closest("table");
+    const out = [];
+    td.querySelectorAll("p, table").forEach((el) => {
+      if (el.tagName === "TABLE") {
+        if (el.parentElement?.closest("td, th") !== td) return; // tabela w tabeli — w całości
+        const r = el.getBoundingClientRect();
+        if (r.height) out.push({ top: Y(r.top), bottom: Y(r.bottom), el, i: 0, n: 1 });
+        return;
+      }
+      if (el.closest("table") !== table) return;
+      let lines = textLines(el, range);
+      if (!lines.length) { const r = el.getBoundingClientRect(); if (r.height) lines = [[r.top, r.bottom]]; }
+      const widow = el.dataset.dwbWidow ? el.dataset.dwbWidow === "1" : !hasClass(el, keep.noWidow) && (keep.widow || [...el.classList].some((c) => c.startsWith("docx_")));
+      lines.forEach(([t, b], i) => out.push({ top: Y(t), bottom: Y(b), el, i, n: lines.length, widow }));
+    });
+    return out.sort((a, b) => a.top - b.top);
+  }
+
+  // Odstęp przed linijką `ln` komórki: jej górny brzeg (z półinterlinią) staje na `y`.
+  function pushLineTo(ln, y, Y, range) {
+    const el = ln.el;
+    let spacer;
+    if (el.tagName === "TABLE" || ln.i === 0) {
+      spacer = document.createElement("div");
+      spacer.className = "pp-row-split";
+      el.before(spacer);
+    } else {
+      // w środku akapitu: pełnej szerokości blok w linii przed pierwszym znakiem linijki — tekst
+      // przed nim zostaje w swoich wierszach (wyjustowanie też), dalszy idzie pod niego
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+      let at = null;
+      for (let n = walker.nextNode(); n && !at; n = walker.nextNode()) {
+        if (n.nodeType === 1) {
+          if (n.matches(ATOMS) && Y(n.getBoundingClientRect().top) >= ln.top - 1) at = { node: n };
+          continue;
+        }
+        for (let i = 0; i < n.data.length; i++) {
+          range.setStart(n, i);
+          range.setEnd(n, i + 1);
+          const r = range.getBoundingClientRect();
+          if (r.height && Y(r.top) >= ln.top - 1) { at = { node: n, i }; break; }
+        }
+      }
+      if (!at) return false;
+      spacer = document.createElement("span");
+      spacer.className = "pp-row-split";
+      Object.assign(spacer.style, { display: "inline-block", width: "100%", verticalAlign: "top", lineHeight: "0" });
+      if (at.i != null) at.node.splitText(at.i).before(spacer);
+      else at.node.before(spacer);
+    }
+    spacer.setAttribute("aria-hidden", "true");
+    spacer.style.margin = "0";
+    const lh = parseFloat(getComputedStyle(el).lineHeight);
+    const half = el.tagName === "TABLE" || !(lh > 0) ? 0 : Math.max(0, (lh - (ln.bottom - ln.top)) / 2);
+    const mt = el.tagName === "TABLE" || ln.i === 0 ? parseFloat(getComputedStyle(el).marginTop) || 0 : 0;
+    // wysokość dociągana pomiarem (marginesy, wiersz z blokiem) — dwa podejścia wystarczają
+    let hgt = Math.max(0, y - (ln.top - half - mt));
+    for (let pass = 0; pass < 3; pass++) {
+      spacer.style.height = `${hgt}px`;
+      const lines = el.tagName === "TABLE" ? [[el.getBoundingClientRect().top]] : textLines(el, range);
+      const now = lines.map(([t]) => Y(t)).find((t) => t >= y - half - mt - 2);
+      if (now == null) break;
+      const err = y - (now - half - (ln.i === 0 ? mt : 0));
+      if (Math.abs(err) < 0.3) break;
+      hgt = Math.max(0, hgt + err);
+    }
+    return true;
+  }
+
+  // Jeden podział na raz (potem przeliczenie stron — dalsza treść się przesunęła). true = zmiana.
+  function splitRowsAtPages(sections) {
+    const range = document.createRange();
+    for (const S of sections) {
+      const sec = S.sec;
+      const secRect = sec.getBoundingClientRect();
+      const scale = secRect.height / sec.offsetHeight || 1;
+      const Y = (v) => (v - secRect.top) / scale;
+      const starts = [S.contentTop, ...S.cuts.map((c) => c.top)];
+      for (let j = 0; j < S.cuts.length; j++) {
+        const limit = j === 0 ? S.pageH - S.bottomZone : starts[j] + S.bodyH - (S.cuts[j - 1].header?.h || 0);
+        for (const tr of sec.querySelectorAll(":scope > article tr")) {
+          if (tr.parentElement.closest("tr") || [...tr.cells].some((td) => td.rowSpan > 1)) continue;
+          const r = tr.getBoundingClientRect();
+          const top = Y(r.top), bottom = Y(r.bottom);
+          if (!(top >= starts[j] - 0.5 && top < limit - 0.5 && bottom > limit + 0.5)) continue;
+          // „nie dziel”: chyba że wiersz jest wyższy niż cała strona — wtedy Word i tak go dzieli
+          // (zaczyna go na nowej stronie)
+          if (tr.dataset.dwbCantSplit === "1" && !(top <= starts[j] + 1 && bottom - top > limit - starts[j] + 0.5)) continue;
+          if ((tr.dataset.ppSplit || "").split(",").some((v) => v && Math.abs(+v - limit) < 1)) continue;
+          // Word dzieli wiersz tylko wtedy, gdy w KAŻDEJ komórce coś zostaje na tej stronie
+          // (S-99: komórka z dwulinijkowym akapitem — sierota — przenosi cały wiersz)
+          const plan = [];
+          let fits = true;
+          for (const td of tr.cells) {
+            const lines = cellLines(td, Y, range);
+            let k = lines.findIndex((l) => l.bottom > limit + 0.5);
+            if (k < 0) continue;
+            const ln = lines[k];
+            if (ln.widow && ln.i === 1) k -= 1; // sierota: cały akapit dalej
+            else if (ln.widow && ln.n - ln.i === 1 && ln.n >= 3) k -= 1; // wdowa: jeszcze jedna linijka
+            if (k <= 0) { fits = false; break; }
+            plan.push(lines[k]);
+          }
+          // bez linijki do przeniesienia (za stronę wystaje tylko dół komórki) — jak dotąd w całości
+          if (!fits || !plan.length) continue; // wiersz idzie w całości na następną stronę (jak dotąd)
+          const ys = (tr.dataset.ppSplit || "").split(",").filter(Boolean);
+          plan.forEach((ln) => pushLineTo(ln, limit, Y, range));
+          tr.dataset.ppSplit = [...ys, String(Math.round(limit * 100) / 100)].join(",");
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   // Wszystkie kartki podglądu po kolei (podgląd wydruku liczy na osobnym, niewidocznym renderze).
   async function paginate(h, opts) {
     await ensureKeepInfo();
-    return [...h.querySelectorAll(".docx-wrapper > section.docx")].map((sec) => paginateSection(sec, opts)).filter(Boolean);
+    const run = () => [...h.querySelectorAll(".docx-wrapper > section.docx")].map((sec) => paginateSection(sec, opts)).filter(Boolean);
+    let res = run();
+    // wydruk: wiersze tabel dzielone między strony jak w Wordzie (zmienia render — tylko na kopii)
+    if (opts?.splitRows) for (let guard = 0; guard < 200 && splitRowsAtPages(res); guard++) res = run();
+    return res;
   }
 
   let run = 0;

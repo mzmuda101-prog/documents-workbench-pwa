@@ -290,6 +290,64 @@ function patchBundle() {
   if (!reLinked.test(src)) throw new Error("łatka stylów powiązanych: wzorzec renderStyles nie pasuje (nowa wersja docx-preview?)");
   src = src.replace(reLinked, "");
   console.log("  ✅  łatka: styl powiązany (w:link) nie nadpisuje stylu akapitu");
+
+  // 21) Pola w akapicie. (a) Wynik pola złożonego (fldChar begin → instrText → separate → WYNIK → end)
+  //     docx-preview rysował jako zwykły tekst, bez śladu, z jakiego pola pochodzi — numer strony w
+  //     stopce zostawał wartością zapisaną w pliku („1 / 4” na każdej kartce zamiast „2 / 7”), chyba
+  //     że przebieg miał styl znakowy „page number”. Przebiegi wyniku dostają data-dwb-field = nazwa
+  //     pola (PAGE, NUMPAGES, SECTIONPAGES…); print-preview.js / compose-ui.js liczą je jak Word.
+  //     (b) <w:fldSimple> stoi w akapicie, a parser znał go tylko wewnątrz przebiegu — treść pola
+  //     prostego (wynik) znikała. Teraz to przebiegi akapitu z tym samym znacznikiem.
+  const reParaEnd = /(case"del":(\w+)\.children\.push\(this\.parseDeleted\((\w+),(\w+)=>this\.parseParagraph\(\4\)\)\);break)\}return \2\}/;
+  if (!reParaEnd.test(src)) throw new Error("łatka pól: wzorzec parseParagraph nie pasuje (nowa wersja docx-preview?)");
+  src = src.replace(reParaEnd, (m, last, e, r) => `${last};case"fldSimple":{const __n=((m.attr(${r},"instr")||"").trim().split(/\\s+/)[0]||"").toUpperCase();for(const __c of m.elements(${r},"r")){const __run=this.parseRun(__c,${e});__n&&(__run.dwbField=__n);${e}.children.push(__run)}break}}return __dwbMarkFields(${e}),${e}}`);
+  // przebiegi akapitu (także w linkach/smartTagach) po kolei; stos pól — pola bywają zagnieżdżone
+  const markFields = `function __dwbMarkFields(p){const st=[];const walk=(l)=>{for(const x of l||[]){if(!x)continue;if(x.type==="run"){let res=!1;for(const c of x.children||[]){if(c.type==="complexField"){if(c.charType==="begin")st.push({n:"",sep:!1});else if(c.charType==="separate"){st.length&&(st[st.length-1].sep=!0)}else if(c.charType==="end")st.pop()}else if(c.type==="instruction"){const f=st[st.length-1];f&&!f.sep&&(f.n+=c.text||"")}}const f=st[st.length-1];if(!x.fieldRun&&f&&f.sep&&!x.dwbField){const n=(f.n.trim().split(/\\s+/)[0]||"").toUpperCase();n&&(x.dwbField=n)}}else if(x.children&&x.type!=="paragraph")walk(x.children)}};walk(p.children)}`;
+  const reRender = /renderRun\((\w+)\)\{if\(\1\.fieldRun\)return null;let (\w+)=this\.createElement\("span"\);/;
+  if (!reRender.test(src)) throw new Error("łatka pól: wzorzec renderRun nie pasuje");
+  src = src.replace(reRender, (m, t, e) => `${m}${t}.dwbField&&(${e}.dataset.dwbField=${t}.dwbField);`);
+  src = `${markFields}\n${src}`;
+  console.log("  ✅  łatka: wynik pól (PAGE, NUMPAGES…) oznaczony, w:fldSimple w akapicie");
+
+  // 22) Podział stron akapitu: „razem z następnym” / „wiersze razem” wpisane w sam akapit (nie w
+  //     styl) docx-preview czytał i wyrzucał, a „kontrolę bękartów” (w:widowControl) pomijał.
+  //     page-breaks.js znał tylko style — akapit z w:widowControl w:val="0" (np. z konwersji PDF)
+  //     i tak przerzucał linijkę na następną stronę („ubezp” str. 3→4; Word zostawia).
+  //     Akapit dostaje data-dwb-keep-next / -keep-lines / -widow = 1|0 (tylko gdy plik je podaje).
+  const reKeepParse = /case"keepLines":(\w+)\.keepLines=(\w+)\.boolAttr\((\w+),"val",!0\);break;/;
+  if (!reKeepParse.test(src)) throw new Error("łatka podziału akapitu: wzorzec parsera keepLines nie pasuje (nowa wersja docx-preview?)");
+  src = src.replace(reKeepParse, (m, t, e, s) => `${m}case"widowControl":${t}.widowControl=${e}.boolAttr(${s},"val",!0);break;`);
+  const reKeepRender = /(renderParagraph\((\w+)\)\{var (\w+)=this\.renderContainer\(\2,"p"\);)/;
+  if (!reKeepRender.test(src)) throw new Error("łatka podziału akapitu: wzorzec renderParagraph nie pasuje");
+  src = src.replace(reKeepRender, (m, head, t, e) => `${head}${t}.keepNext!=null&&(${e}.dataset.dwbKeepNext=${t}.keepNext?"1":"0");${t}.keepLines!=null&&(${e}.dataset.dwbKeepLines=${t}.keepLines?"1":"0");${t}.widowControl!=null&&(${e}.dataset.dwbWidow=${t}.widowControl?"1":"0");`);
+  // …i „nie dziel wiersza między strony” (w:trPr/w:cantSplit) — data-dwb-cant-split na <tr>
+  //     (podgląd wydruku dzieli pozostałe wiersze jak Word: page-breaks.js splitRowsAtPages)
+  const reCant = /case"tblHeader":(\w+)\.isHeader=(\w+)\.boolAttr\((\w+),"val",!0\);break;/;
+  if (!reCant.test(src)) throw new Error("łatka cantSplit: wzorzec parseTableRowProperties nie pasuje");
+  src = src.replace(reCant, (m, e, mm, r) => `${m}case"cantSplit":${e}.cantSplit=${mm}.boolAttr(${r},"val",!0);break;`);
+  const reCantR = /(\w+)\.isHeader&&\((\w+)\.dataset\.dwbHeader="1"\);/;
+  if (!reCantR.test(src)) throw new Error("łatka cantSplit: wzorzec renderTableRow nie pasuje");
+  src = src.replace(reCantR, (m, t, e) => `${m}${t}.cantSplit&&(${e}.dataset.dwbCantSplit="1");`);
+  console.log("  ✅  łatka: keepNext / keepLines / widowControl akapitu i cantSplit wiersza w data-dwb-*");
+
+  // 23) Inna pierwsza strona (w:titlePg) / strony parzyste: docx-preview rysował na kartce jedną
+  //     wersję nagłówka i stopki — tę pierwszej strony — a podgląd wydruku powielał ją na każdej
+  //     stronie sekcji („S-99”: pierwsza strona bez numeru, dalsze z polem PAGE — u nas nigdzie
+  //     numeru). Z opcją dwbAltHeaderFooter (tylko render wydruku) pozostałe wersje też są na
+  //     kartce: ukryte (display: none — CSS kartki nadpisuje atrybut hidden), z data-dwb-hf = first | default | even; wybiera print-preview.js.
+  const reHF = /(let\[(\w+)\]=this\.renderElements\(\[(\w+)\.rootElement\],(\w+)\);)(\w+)\?\.pageMargins&&\(\3\.rootElement\.type===_\.Header\?\(\2\.style\.marginTop=`calc\(\$\{\5\.pageMargins\.header\} - \$\{\5\.pageMargins\.top\}\)`,\2\.style\.minHeight=`calc\(\$\{\5\.pageMargins\.top\} - \$\{\5\.pageMargins\.header\}\)`\):\3\.rootElement\.type===_\.Footer&&\(\2\.style\.marginBottom=`calc\(\$\{\5\.pageMargins\.footer\} - \$\{\5\.pageMargins\.bottom\}\)`,\2\.style\.minHeight=`calc\(\$\{\5\.pageMargins\.bottom\} - \$\{\5\.pageMargins\.footer\}\)`\)\),/;
+  if (!reHF.test(src)) throw new Error("łatka nagłówków/stopek: wzorzec renderHeaderFooter nie pasuje (nowa wersja docx-preview?)");
+  src = src.replace(reHF, (m, head, J, tt, k, e) => {
+    const sig = /renderHeaderFooter\((\w+),(\w+),(\w+),(\w+),(\w+)\)\{if\(\1\)\{var (\w+)=/.exec(src);
+    const [, refs, , , first, , chosen] = sig;
+    return `${m}${J}&&(${J}.dataset.dwbHf=${chosen}.type,${first}&&${e}?.titlePage&&(${k}.dataset.dwbTitlePg="1"));`
+      + `if(${J}&&this.options.dwbAltHeaderFooter)for(const __a of ${refs}){if(__a===${chosen}||!/^(first|default|even)$/.test(__a.type))continue;`
+      + `const __p=this.document.findPartByRelId(__a.id,this.document.documentPart);if(!__p)continue;const __was=this.currentPart;this.currentPart=__p;`
+      + `this.usedHederFooterParts.includes(__p.path)||(this.processElement(__p.rootElement),this.usedHederFooterParts.push(__p.path));`
+      + `let[__E]=this.renderElements([__p.rootElement],${k});this.currentPart=__was;`
+      + `__E&&(__E.dataset.dwbHf=__a.type,__E.classList.add("dwb-hf-alt"),__E.style.display="none",["marginTop","marginBottom","minHeight"].forEach(__s=>__E.style[__s]=${J}.style[__s]))}`;
+  });
+  console.log("  ✅  łatka: wersje nagłówka/stopki (pierwsza / parzysta / domyślna) dla wydruku");
   fs.writeFileSync(OUT, src);
 }
 

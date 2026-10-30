@@ -3059,20 +3059,43 @@ const composeUi = (() => {
       default: return String(n);
     }
   }
+  // Pola z pliku w nagłówku/stopce (data-dwb-field: wynik pola, vendor-libs łatka 21) — jak Word:
+  // PAGE = ta strona, NUMPAGES = wszystkie, SECTIONPAGES = strony sekcji. Wynik bywa rozbity na
+  // kilka przebiegów: pierwszy dostaje liczbę, reszta znika. Zwraca, czy jakieś pole było.
+  function stampPageFields(part, page, total, secPages) {
+    const text = { PAGE: () => pageNumberText(page), NUMPAGES: () => String(total), SECTIONPAGES: () => String(secPages || total) };
+    let prev = null, any = false;
+    part.querySelectorAll("span[data-dwb-field]").forEach((s) => {
+      const f = text[s.dataset.dwbField];
+      if (!f) return;
+      any = true;
+      s.textContent = prev && s.previousElementSibling === prev && prev.dataset.dwbField === s.dataset.dwbField ? "" : f();
+      prev = s;
+    });
+    return any;
+  }
+  // Numery w nagłówku/stopce jednej części: pola z pliku, a w akapitach bez pól — dawny sposób
+  // (przebiegi w stylu znakowym „page number”: pierwszy = strona, drugi = liczba stron).
+  function stampPageNumbers(part, page, total, secPages, sel = pageNumberSelector()) {
+    stampPageFields(part, page, total, secPages);
+    if (!sel) return;
+    part.querySelectorAll("p").forEach((p) => {
+      if (p.querySelector("span[data-dwb-field]")) return;
+      const spans = Array.from(p.querySelectorAll(sel));
+      if (spans[0]) spans[0].textContent = pageNumberText(page);
+      if (spans[1]) spans[1].textContent = String(total);
+    });
+  }
   function fixPreviewPageNumbers() {
     const sel = pageNumberSelector();
-    if (!sel) return;
+    const host = document.querySelector(".docx-preview-host");
+    if (!sel && !host?.querySelector(":is(header, footer) span[data-dwb-field]")) return;
     if (pageNumbering.bytes !== originalFileBytes) { refreshPageNumbering().then(fixPreviewPageNumbers); return; }
     const { list, total } = sectionPages();
     // „z N” = liczba stron dokumentu (pole NUMPAGES nie zależy od „Zacznij od”)
     list.forEach(({ sec, first, last }) => {
       sec.querySelectorAll(":scope > header, :scope > footer").forEach((part) => {
-        const page = part.localName === "header" ? first : last;
-        part.querySelectorAll("p").forEach((p) => {
-          const spans = Array.from(p.querySelectorAll(sel));
-          if (spans[0]) spans[0].textContent = pageNumberText(page);
-          if (spans[1]) spans[1].textContent = String(total);
-        });
+        stampPageNumbers(part, part.localName === "header" ? first : last, total, last - first + 1, sel);
       });
     });
   }
@@ -3653,5 +3676,5 @@ const composeUi = (() => {
     document.getElementById(id)?.addEventListener("click", openNewDialog);
   });
 
-  return { openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, clearIndentAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
+  return { openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, stampPageNumbers, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, clearIndentAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
 })();

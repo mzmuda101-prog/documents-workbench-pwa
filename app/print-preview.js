@@ -38,11 +38,15 @@ const dwbPrint = (() => {
     try { return typeof composeUi !== "undefined" && composeUi.pageNumberSelector ? composeUi.pageNumberSelector() : ""; } catch (_) { return ""; }
   }
 
-  function stampPageNumbers(part, page, total, sel) {
-    if (!part || !sel) return;
+  // numery stron w nagłówku/stopce kartki: pola z pliku (PAGE, NUMPAGES…) i styl „page number” —
+  // composeUi.stampPageNumbers; bez niego (sam podgląd) tylko styl znakowy
+  function stampPageNumbers(part, page, total, sel, secPages) {
+    if (!part) return;
+    if (typeof composeUi !== "undefined" && composeUi.stampPageNumbers) { composeUi.stampPageNumbers(part, page, total, secPages, sel); return; }
+    if (!sel) return;
     part.querySelectorAll("p").forEach((p) => {
       const spans = Array.from(p.querySelectorAll(sel));
-      if (spans[0]) spans[0].textContent = typeof composeUi !== "undefined" && composeUi.pageNumberText ? composeUi.pageNumberText(page) : String(page);
+      if (spans[0]) spans[0].textContent = String(page);
       if (spans[1]) spans[1].textContent = String(total);
     });
   }
@@ -85,7 +89,38 @@ const dwbPrint = (() => {
   }
 
   // Kartki ze zrenderowanego, niewidocznego dokumentu (host) i podziału na strony (sections).
-  function buildSheets(host, sections) {
+  // Wersje nagłówka/stopki kartki (łatka 23: ukryte data-dwb-hf) — pomiar każdej: na chwilę zamiast
+  // narysowanej. Stopka rośnie od dołu (jak w Wordzie) — jej dół zostaje tam, gdzie dół narysowanej.
+  function hfVersions(sec, tag, base) {
+    const shown = sec.querySelector(`:scope > ${tag}:not(.dwb-hf-alt)`);
+    if (!shown) return null;
+    const box = rel(shown, base);
+    const out = { [shown.dataset.dwbHf || "default"]: { el: shown, box } };
+    sec.querySelectorAll(`:scope > ${tag}.dwb-hf-alt`).forEach((alt) => {
+      shown.style.display = "none";
+      alt.style.display = "";
+      // tabulatory ukrytej wersji liczone bez wymiarów — od nowa, gdy jest na kartce
+      if (typeof layoutTabStops === "function") layoutTabStops(alt);
+      const b = rel(alt, base);
+      alt.style.display = "none";
+      shown.style.display = "";
+      if (tag === "footer") b.top = box.bottom - b.height;
+      out[alt.dataset.dwbHf] = { el: alt, box: b };
+    });
+    return { shown: shown.dataset.dwbHf || "default", all: out };
+  }
+  // Która wersja na stronie: pierwsza strona sekcji — narysowana (docx-preview wybrał „first” przy
+  // w:titlePg), dalsze — parzysta (gdy plik ma w:evenAndOddHeaders) albo domyślna; bez domyślnej po
+  // „first” — nic (Word: pusta), w pozostałych przypadkach zostaje narysowana.
+  function hfFor(V, j, pageNo, evenOdd) {
+    if (!V) return null;
+    if (j === 0) return V.all[V.shown];
+    if (evenOdd && pageNo % 2 === 0 && V.all.even) return V.all.even;
+    if (V.all.default) return V.all.default;
+    return V.shown === "first" ? null : V.all[V.shown];
+  }
+
+  function buildSheets(host, sections, evenOdd = false) {
     const zone = UNPRINTABLE_MM * PX_PER_MM;
     const plan = [];
     // 1) pomiary — przed przenoszeniem czegokolwiek
@@ -93,8 +128,8 @@ const dwbPrint = (() => {
       const sec = S.sec;
       const base = sec.getBoundingClientRect();
       const secH = sec.offsetHeight;
-      const header = sec.querySelector(":scope > header");
-      const footer = sec.querySelector(":scope > footer");
+      const headerV = hfVersions(sec, "header", base);
+      const footerV = hfVersions(sec, "footer", base);
       const blocks = [];
       // wszystkie <article> kartki (sekcje ciągłe, np. fragment w 2 kolumnach) — bloki i tak stoją
       // bezwzględnie w zmierzonym miejscu, więc kolumny zostają, gdzie były
@@ -119,8 +154,7 @@ const dwbPrint = (() => {
       });
       plan.push({
         S, sec, secH, blocks, heads, footOl, boxes,
-        header: header && { el: header, box: rel(header, base) },
-        footer: footer && { el: footer, box: rel(footer, base), fromBottom: secH - rel(footer, base).top },
+        headerV, footerV,
         ols: [...sec.querySelectorAll(":scope > ol")],
         starts,
         pad: { l: parseFloat(cs.paddingLeft) || 0, r: parseFloat(cs.paddingRight) || 0 },
@@ -225,21 +259,26 @@ const dwbPrint = (() => {
           ol.style.margin = "0";
           sheet.appendChild(ol);
         }
-        if (P.header) {
-          const h = P.header.el.cloneNode(true);
+        const hv = hfFor(P.headerV, j, pageNo, evenOdd);
+        if (hv) {
+          const h = hv.el.cloneNode(true);
+          h.style.display = "";
           h.classList.add("pp-hf");
-          placeAbs(h, P.header.box);
-          stampPageNumbers(h, pageNo, total, numSel);
+          placeAbs(h, hv.box);
+          stampPageNumbers(h, pageNo, total, numSel, P.starts.length);
           sheet.appendChild(h);
-          if (P.header.box.top < zone && h.textContent.trim()) near = true;
+          if (hv.box.top < zone && h.textContent.trim()) near = true;
         }
-        if (P.footer) {
-          const f = P.footer.el.cloneNode(true);
+        const fv = hfFor(P.footerV, j, pageNo, evenOdd);
+        if (fv) {
+          const fromBottom = P.secH - fv.box.top;
+          const f = fv.el.cloneNode(true);
+          f.style.display = "";
           f.classList.add("pp-hf");
-          placeAbs(f, { ...P.footer.box, top: S.pageH - P.footer.fromBottom });
-          stampPageNumbers(f, pageNo, total, numSel);
+          placeAbs(f, { ...fv.box, top: S.pageH - fromBottom });
+          stampPageNumbers(f, pageNo, total, numSel, P.starts.length);
           sheet.appendChild(f);
-          if (S.pageH - P.footer.fromBottom + P.footer.box.height > S.pageH - zone && f.textContent.trim()) near = true;
+          if (S.pageH - fromBottom + fv.box.height > S.pageH - zone && f.textContent.trim()) near = true;
         }
         if (S.padT < zone || S.padB < zone || P.pad.l < zone || P.pad.r < zone) near = true;
         const z = document.createElement("div");
@@ -411,7 +450,7 @@ const dwbPrint = (() => {
       if (tbText) await tbText.catch(() => {});
       const bytes = await buildDocumentForSave();
       document.body.appendChild(src);
-      await renderDocxPreview(bytes, src, { pages: true });
+      await renderDocxPreview(bytes, src, { pages: true, altHeaderFooter: true });
       await waitDocFontsSettled(src); // pomiary dopiero na właściwych krojach
       await frame();
       await frame();
@@ -431,8 +470,12 @@ const dwbPrint = (() => {
         if (arts.length) arts[arts.length - 1].style.marginBottom = "0";
         ol.style.marginBottom = "auto";
       });
-      const sections = await dwbPageBreaks.paginate(host, { includeNotes: true });
-      const result = buildSheets(host, sections);
+      if (typeof relaxJustifyLastLines === "function") relaxJustifyLastLines(host); // ostatnia linijka wyjustowanego — zwykłe spacje (Word)
+      const sections = await dwbPageBreaks.paginate(host, { includeNotes: true, splitRows: true });
+      // strony parzyste z własnym nagłówkiem/stopką tylko z tym ustawieniem pliku (jak Word)
+      let evenOdd = false;
+      try { evenOdd = /<w:evenAndOddHeaders(?![^>]*w:val="(0|false|off)")/.test(await (await loadDocxZipCached(bytes)).file("word/settings.xml")?.async("string") || ""); } catch (_) { /* bez ustawień */ }
+      const result = buildSheets(host, sections, evenOdd);
       // Przeniesienie <style> buduje arkusz od nowa z TEKSTU — zmiany w CSSOM (zamienniki krojów z
       // rodzajem, krój pustych akapitów, kolejność stylów tabeli: docx-render-fixes.js) przepadały i
       // wydruk różnił się od podglądu („Zapotrzebowanie”: tabela w Calibri zamiast Arial).

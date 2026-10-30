@@ -190,13 +190,24 @@ function layoutTabStops(host) {
       stops = stops.filter((t) => t.style !== "clear").sort((a, b) => a.pos - b.pos);
       if (hanging && indent > x + 0.5 && !stops.some((t) => t.pos > x + 0.5 && t.pos < indent)) stops.push({ pos: indent, leader: "none", style: "left" });
       stops.sort((a, b) => a.pos - b.pos);
+      const dt = parseFloat(sp.dataset.dt) || 36;
+      const nextDefault = (from) => {
+        let pos = Math.max(stops.length ? stops[stops.length - 1].pos : 0, 0);
+        while (pos <= from + 0.5) pos += dt;
+        return { pos, leader: "none", style: "left" };
+      };
       let stop = stops.find((t) => t.pos > x + 0.5);
+      // Za ostatnim tabulatorem akapitu, a domyślny wypada za prawym wcięciem: Word przenosi
+      // tabulator do nowej linijki i liczy go od jej początku („Miejscowość: …… Teren nr:⇥” —
+      // pod spodem cała linijka kropek do tego samego tabulatora; karty z PDF). Szerokość od
+      // początku nowej linijki — w bieżącej się nie mieści, więc przeglądarka sama go tam przeniesie.
+      let wrapX = null;
       if (!stop) {
-        const dt = parseFloat(sp.dataset.dt) || 36;
-        const last = stops.length ? stops[stops.length - 1].pos : 0;
-        let pos = Math.max(last, 0);
-        while (pos <= x + 0.5) pos += dt;
-        stop = { pos, leader: "none", style: "left" };
+        stop = nextDefault(x);
+        const right = (ml + p.offsetWidth - (parseFloat(cs.paddingRight) || 0)) * PX2PT;
+        const x0 = indent;
+        const again = stops.find((t) => t.pos > x0 + 0.5);
+        if (stop.pos > right + 0.5 && x > x0 + 0.5 && again && again.pos <= right + 0.5) { stop = again; wrapX = x0; }
       }
       let after = 0;
       if (stop.style === "right" || stop.style === "center" || stop.style === "decimal") {
@@ -207,7 +218,7 @@ function layoutTabStops(host) {
         after = (range.getBoundingClientRect().width / scale) * PX2PT;
         if (stop.style === "center") after /= 2;
       }
-      return { sp, width: Math.max(0, stop.pos - x - after), leader: stop.leader };
+      return { sp, width: Math.max(0, stop.pos - (wrapX ?? x) - after), leader: stop.leader };
     });
     // zapis
     for (const pl of plans) {
@@ -363,6 +374,87 @@ const PT_PX = 96 / 72;
 
 // Indeks górny/dolny: rozmiar jak w Wordzie = 2/3 tekstu zaokrąglone w dół do pół punktu
 // (pomiar w Wordzie, 13 rozmiarów — app.css). Odnośniki przypisów też (styl z vertAlign).
+// Wyjustowany akapit: Word łamie linijkę tak, jakby każda spacja mogła się ścisnąć o ¼ swojej
+// szerokości (wyrocznia Worda 2026-10-30, output/word-oracle/jx-*.docx: ten sam tekst z prawym
+// wcięciem co 1 pt — Arial 10,5 pt przyjęte 0,249 / odrzucone 0,272 spacji, Times 12 pt 0,236 /
+// 0,246; akapit do lewej bez ściskania). Przeglądarka nie ściska — łamała słowo wcześniej i na
+// dłuższym tekście rozjeżdżały się strony („sample-docx-file…”: 11 stron zamiast 10). Ujemny
+// odstęp między słowami = ¼ spacji kroju akapitu (--dwb-spw, em); wyjustowanie i tak rozciąga
+// linijkę do pełnej szerokości, więc łamanie jest jak w Wordzie, a wygląd linijek — bez zmian.
+const SPACE_EM = new Map();
+function spaceEm(family) {
+  if (SPACE_EM.has(family)) return SPACE_EM.get(family);
+  let em = 0.25;
+  try {
+    const c = (spaceEm.ctx ||= document.createElement("canvas").getContext("2d"));
+    c.font = `100px ${family}`;
+    em = c.measureText(" ").width / 100 || 0.25;
+  } catch (_) { /* bez canvasa — przeciętna spacja */ }
+  SPACE_EM.set(family, em);
+  return em;
+}
+function applyJustifySpaceCompression(host) {
+  const root = host?.querySelector?.(".docx-wrapper") || host;
+  if (!root) return 0;
+  let n = 0;
+  root.querySelectorAll("section.docx p").forEach((p) => {
+    const on = getComputedStyle(p).textAlign === "justify";
+    if (!on) {
+      if (p.classList.contains("dwb-justify")) { p.classList.remove("dwb-justify"); p.style.removeProperty("--dwb-spw"); }
+      return;
+    }
+    const run = [...p.querySelectorAll("span")].find((x) => x.firstChild?.nodeType === 3 && /\S/.test(x.firstChild.data)) || p;
+    const em = spaceEm(getComputedStyle(run).fontFamily).toFixed(4);
+    if (p.style.getPropertyValue("--dwb-spw") !== em) p.style.setProperty("--dwb-spw", em);
+    if (!p.classList.contains("dwb-justify")) p.classList.add("dwb-justify");
+    n++;
+  });
+  return n;
+}
+
+// Wydruk (osobna kopia): ostatnia linijka wyjustowanego akapitu ma w Wordzie zwykłe spacje, a
+// ściśnięte tylko wtedy, gdy inaczej by się nie zmieściła (wyrocznia: jednolinijkowe akapity
+// output/word-oracle/jl-last.docx — ta sama granica ¼ spacji). <dwb-last> ze zwykłym odstępem,
+// a gdy linijka by się przez to złamała — z powrotem ściśnięta.
+function relaxJustifyLastLines(host) {
+  const range = document.createRange();
+  host.querySelectorAll("p.dwb-justify").forEach((p) => {
+    range.selectNodeContents(p);
+    const rects = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+    if (rects.length < 2) return;
+    const lastTop = Math.max(...rects.map((r) => r.top));
+    // pierwszy znak ostatniej linijki
+    const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+    let at = null;
+    for (let t = walker.nextNode(); t && !at; t = walker.nextNode()) {
+      for (let i = 0; i < t.data.length; i++) {
+        range.setStart(t, i);
+        range.setEnd(t, i + 1);
+        const r = range.getBoundingClientRect();
+        if (r.height && r.top >= lastTop - 1) { at = { t, i }; break; }
+      }
+    }
+    if (!at) return;
+    const h0 = p.getBoundingClientRect().height;
+    // każdy kawałek tekstu w osobnym znaczniku WEWNĄTRZ swojego fragmentu (ten sam krój — wspólny
+    // span na całą linijkę miałby krój akapitu i podnosiłby ją)
+    const first = at.i > 0 ? at.t.splitText(at.i) : at.t;
+    const texts = [];
+    const w2 = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+    w2.currentNode = first;
+    for (let t = first; t; t = w2.nextNode()) if (t.data) texts.push(t);
+    const wraps = texts.map((t) => {
+      const w = document.createElement("dwb-last"); // nie <span>: reguły fragmentów (wysokość linijki) by go łapały
+      w.className = "dwb-justify-last";
+      t.before(w);
+      w.appendChild(t);
+      return w;
+    });
+    // bez ściskania się nie mieści — zostaje ściśnięta (Word ściska i ostatnią linijkę)
+    if (p.getBoundingClientRect().height > h0 + 0.5) wraps.forEach((w) => w.classList.add("dwb-justify-tight"));
+  });
+}
+
 function applyWordSuperscripts(host) {
   if (!host) return 0;
   let n = 0;
