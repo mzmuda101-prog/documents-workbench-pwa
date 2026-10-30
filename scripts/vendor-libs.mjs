@@ -280,6 +280,16 @@ function patchBundle() {
   if (!reRowH.test(src)) throw new Error("łatka hRule: wzorzec renderTableRow nie pasuje");
   src = src.replace(reRowH, (m0, _m, T, E) => `${m0}${T}.cssStyle?.["--dwb-hrule"]&&(${E}.dataset.dwbHrule=${T}.cssStyle["--dwb-hrule"],delete ${T}.cssStyle["--dwb-hrule"]);`);
   console.log("  ✅  łatka: rodzaj wysokości wiersza (w:hRule) w data-dwb-hrule");
+
+  // 20) Style powiązane (w:link: „Nagłówek 1” ↔ „Nagłówek 1 Znak”): docx-preview doklejał do reguł
+  //     stylu akapitu reguły powiązanego stylu znaków (i odwrotnie), a te — jako późniejsze — wygrywały.
+  //     Word bierze wygląd akapitu z jego stylu; styl znaków działa tylko na przebiegu z w:rStyle.
+  //     Sprawozdanie z Worda: Heading1 czarny 15 pt, Heading1Char niebieski 14 pt → u nas nagłówki
+  //     niebieskie i mniejsze, tytuł 26 pt granatowy zamiast 22 pt czarnego (word-render-playwright.js).
+  const reLinked = /if\((\w+)\.linked\)\{var (\w+)=\1\.linked&&\w+\[\1\.linked\];\2\?\w+=\w+\.concat\(\2\.styles\):this\.options\.debug&&console\.warn\(`[^`]*`\)\}/;
+  if (!reLinked.test(src)) throw new Error("łatka stylów powiązanych: wzorzec renderStyles nie pasuje (nowa wersja docx-preview?)");
+  src = src.replace(reLinked, "");
+  console.log("  ✅  łatka: styl powiązany (w:link) nie nadpisuje stylu akapitu");
   fs.writeFileSync(OUT, src);
 }
 

@@ -3,6 +3,7 @@
 //   npm run word:compare                       (pliki z docs/samples)
 //   node scripts/word-compare.js a.docx b.docx (własne pliki — zostają na komputerze)
 //   FRESH=1 — PDF-y z Worda od nowa (domyślnie z pamięci, dopóki plik się nie zmienił)
+//   SAVE_PAGES=1 — zapisz też nasze kartki (<plik>-app-sN.png)
 //
 // Wzorcem jest Word, nie poprzedni render aplikacji: porównanie z samą sobą pilnowałoby tylko,
 // żeby nic się nie zmieniło — także gdy wcześniej było źle. Word (Microsoft Word dla Maca,
@@ -131,6 +132,8 @@ async function run() {
     const sheets = await page.$$(".pp-sheet");
     const ours = [];
     for (const s of sheets) ours.push(`data:image/png;base64,${(await s.screenshot({ animations: "disabled" })).toString("base64")}`);
+    // SAVE_PAGES=1 — nasze kartki jako PNG obok nakładek (do porównania „na oko” z PDF-em Worda)
+    if (process.env.SAVE_PAGES) ours.forEach((u, i) => fs.writeFileSync(path.join(OUT, `${name}-app-s${i + 1}.png`), Buffer.from(u.split(",")[1], "base64")));
     if (process.env.DEBUG_SHEETS) console.log("   kartka 2:", JSON.stringify(await page.evaluate(() => { const p = [...document.querySelectorAll('.pp-sheet[data-page="2"] p')].find((x) => /Witanie/.test(x.textContent)); const b = getComputedStyle(p, "::before"); return { h: p.getBoundingClientRect().height, cls: p.className, st: p.getAttribute("style"), before: [b.content, b.fontFamily, b.fontSize, b.lineHeight, b.display, b.verticalAlign], spans: [...p.querySelectorAll("*")].map((x) => { const c = getComputedStyle(x); return [x.tagName, c.fontFamily, c.fontSize, c.lineHeight, c.verticalAlign, Math.round(x.getBoundingClientRect().height * 10) / 10]; }), body: document.body.className, root: document.documentElement.className }; })));
     await page.evaluate(() => dwbPrint.close());
     // strony Worda (pdf.js aplikacji) i porównanie — w przeglądarce, na kanwach

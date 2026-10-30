@@ -726,6 +726,9 @@ html.is-mobile .dwb-page-margin-guide { display: none; }
 /* punktor na początku wysunięcia (fixDocxBulletRendering → dwb-bullet-hang), nie tuż przed tekstem */
 .docx-preview-host p.docx-bullet-fixed.dwb-bullet-hang { list-style-type: none !important; position: relative; }
 .docx-preview-host p.docx-bullet-fixed.dwb-bullet-hang::before { content: "\2022" !important; display: inline !important; position: absolute; left: calc(-1 * var(--dwb-hang)); white-space: pre; font-family: Arial, Helvetica, sans-serif !important; }
+/* kropka z kroju Symbol (F0B7) w Wordzie ma ~0,36 em średnicy, „•” Ariala ~0,23 em — powiększona wokół
+   środka (transform nie rusza układu); kółko/kwadrat poziomów 1–2 bez zmian (word-compare: sprawozdanie L1) */
+.docx-preview-host p.docx-bullet-fixed.dwb-bullet-hang.docx-bullet-l0::before { transform: scale(1.4); transform-origin: .175em calc(50% + .04em); }
 .docx-preview-host p.docx-bullet-fixed.dwb-bullet-hang.docx-bullet-l1::before { content: "\25E6" !important; }
 .docx-preview-host p.docx-bullet-fixed.dwb-bullet-hang.docx-bullet-l2::before { content: "\25AA" !important; }
 

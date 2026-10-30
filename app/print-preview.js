@@ -47,6 +47,35 @@ const dwbPrint = (() => {
     });
   }
 
+  // Granice wierszy tabeli (do linii na podziale strony): góra wiersza i linia między nim a poprzednim —
+  // szersza z „dół poprzedniego” / „góra tego” (pierwsza komórka; tak rozstrzyga też collapse).
+  function tableRowEdges(table, base) {
+    const side = (td, s) => {
+      if (!td) return null;
+      const cs = getComputedStyle(td);
+      const w = parseFloat(cs[`border${s}Width`]) || 0;
+      const st = cs[`border${s}Style`];
+      return w && st !== "none" && st !== "hidden" ? { w, st, c: cs[`border${s}Color`] } : null;
+    };
+    const rows = [...table.rows];
+    return rows.map((r, i) => {
+      const a = side(rows[i - 1]?.cells[0], "Bottom"), b = side(r.cells[0], "Top");
+      return { top: rel(r, base).top, line: a && b ? (a.w >= b.w ? a : b) : a || b };
+    });
+  }
+
+  // Word dzieli tabelę na stronie i rysuje linię między wierszami PO OBU stronach podziału (dół strony
+  // i góra następnej); u nas linia leżała tylko na jednej z nich. Kreska na krawędzi okna strony.
+  function splitTableLine(sheet, b, cut, y, below) {
+    const e = b.rows?.find((r) => Math.abs(r.top - cut) < 1.5);
+    if (!e?.line) return;
+    const d = document.createElement("div");
+    d.className = "pp-split-line";
+    d.setAttribute("aria-hidden", "true");
+    Object.assign(d.style, { position: "absolute", left: `${b.box.left}px`, width: `${b.box.width}px`, top: `${below ? y : y - e.line.w}px`, borderTop: `${e.line.w}px ${e.line.st} ${e.line.c}`, pointerEvents: "none" });
+    sheet.appendChild(d);
+  }
+
   function placeAbs(el, box) {
     el.style.position = "absolute";
     el.style.top = `${box.top}px`;
@@ -69,7 +98,7 @@ const dwbPrint = (() => {
       const blocks = [];
       // wszystkie <article> kartki (sekcje ciągłe, np. fragment w 2 kolumnach) — bloki i tak stoją
       // bezwzględnie w zmierzonym miejscu, więc kolumny zostają, gdzie były
-      sec.querySelectorAll(":scope > article").forEach((article) => [...article.children].forEach((el) => blocks.push({ el, holder: "article", box: rel(el, base) })));
+      sec.querySelectorAll(":scope > article").forEach((article) => [...article.children].forEach((el) => blocks.push({ el, holder: "article", box: rel(el, base), rows: el.tagName === "TABLE" ? tableRowEdges(el, base) : null })));
       // przypisy dolne na dole swoich stron (page-breaks.js: S.pageNotes) — nie płyną z treścią
       const footOl = S.pageNotes ? sec.querySelector(":scope > ol.dwb-notes-footnote") : null;
       sec.querySelectorAll(":scope > ol").forEach((ol, oi) => { if (ol !== footOl) [...ol.children].forEach((el) => blocks.push({ el, holder: oi, box: rel(el, base) })); });
@@ -125,7 +154,9 @@ const dwbPrint = (() => {
         // z nagłówkiem okno strony zaczyna się pod nim (tabela to jeden blok — wiersze sprzed
         // granicy prześwitywałyby spod kopii nagłówka)
         clip.style.top = `${top + headH}px`;
-        clip.style.height = `${Math.max(0, (we === Infinity ? S.pageH - top - headH : we - ws))}px`;
+        // w dół do pełnego piksela: blok następnej strony zaczyna się często w ułamku piksela — jego
+        // górny skrawek (zdjęcie, linia tabeli) prześwitywał szarą kreską u dołu kartki
+        clip.style.height = `${Math.max(0, (we === Infinity ? S.pageH - top - headH : Math.floor(we - ws)))}px`;
         const shift = document.createElement("div");
         shift.className = "pp-shift";
         shift.style.top = `${-ws}px`;
@@ -158,6 +189,13 @@ const dwbPrint = (() => {
           sheet.appendChild(t);
         }
         sheet.appendChild(clip);
+        // tabela przecięta granicą strony: linia na dole tej kartki i (bez kopii nagłówka) u góry następnej
+        const clipH = parseFloat(clip.style.height);
+        P.blocks.forEach((b) => {
+          if (!b.rows) return;
+          if (we !== Infinity && b.box.top < we - 1 && b.box.bottom > we + 1) splitTableLine(sheet, b, we, top + headH + clipH, false);
+          if (j > 0 && !head && b.box.top < ws - 1 && b.box.bottom > ws + 1) splitTableLine(sheet, b, ws, top, true);
+        });
         P.boxes.forEach((b) => {
           if (b.page !== j) return;
           const y = b.flow ? b.box.top - ws + top + headH : b.box.top;
