@@ -197,14 +197,19 @@ function takeRenderScrollAnchor() {
 
 // Ciche przerysowanie (np. po kliknięciu pola formularza): nakładka „Renderowanie…” tylko,
 // gdy trwa to dłużej — przy małym dokumencie to ~10 ms i rozmyty ekran byłby samym mignięciem.
+// Tak samo każda zmiana w już pokazanym dokumencie (lista, styl, wyrównanie, „1.⇥”, Enter w
+// pustym punkcie — nagranie Mateusza 2026-10-30: ekran rozmywał się przy każdym kroku; Word nie
+// miga). Nakładka jest od razu (łapie kliknięcia w trakcie przerysowania, a „hidden” nadal
+// znaczy „gotowe”), ale przez pierwsze 0,4 s niewidoczna (.loading-quiet).
 let quietRenderOnce = false;
 
 async function renderCurrentDocument() {
   if (!originalFileBytes || currentFileType !== "docx") return;
-  const quiet = quietRenderOnce;
+  const quiet = quietRenderOnce || !!docCanvasEl?.querySelector(".docx-preview-host p");
   quietRenderOnce = false;
-  const overlayTimer = quiet ? setTimeout(() => setLoading(true, t("renderingDoc")), 400) : null;
-  if (!quiet) setLoading(true, t("renderingDoc"));
+  loadingOverlayEl.classList.toggle("loading-quiet", quiet);
+  setLoading(true, t("renderingDoc"));
+  const overlayTimer = quiet ? setTimeout(() => loadingOverlayEl.classList.remove("loading-quiet"), 400) : null;
   try {
     hideEmptyState();
     const [, headingStyles, composeStyles] = await Promise.all([
@@ -227,6 +232,7 @@ async function renderCurrentDocument() {
   } finally {
     clearTimeout(overlayTimer);
     setLoading(false);
+    loadingOverlayEl.classList.remove("loading-quiet");
     syncDocViewportHeight();
   }
 }

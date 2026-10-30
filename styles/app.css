@@ -987,6 +987,9 @@ html.is-mobile .dwb-page-margin-guide { display: none; }
   position: fixed; inset: 0; z-index: 10000; display: flex; align-items: center; justify-content: center;
   background: rgba(10, 16, 28, 0.32); backdrop-filter: blur(6px);
 }
+/* ciche przerysowanie: przez pierwsze 0,4 s nakładka łapie kliknięcia, ale jej nie widać */
+.loading-overlay.loading-quiet { background: transparent; backdrop-filter: none; cursor: progress; }
+.loading-overlay.loading-quiet .loading-card { visibility: hidden; }
 .loading-card {
   padding: 18px 22px; border-radius: var(--r-lg); background: var(--glass-bg-strong);
   border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow);
