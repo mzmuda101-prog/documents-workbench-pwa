@@ -1953,7 +1953,12 @@ html.is-pinching .doc-viewport { overflow: hidden; }
 .docx-preview-host span[style*="vertical-align: sub"], .docx-preview-host span[style*="vertical-align:sub"] { font-size: 66% !important; line-height: 0; }
 .marks-btn { font-family: Georgia, serif; font-size: 18px; font-weight: 700; }
 .marks-btn.is-on { color: var(--accent); background: var(--accent-light); border-color: var(--accent-border); }
-.doc-canvas.show-formatting-marks .docx-preview-host p::after { content: " ¶"; color: color-mix(in srgb, var(--accent) 58%, var(--muted)); font-family: var(--font-ui); font-size: .76em; font-weight: 600; text-decoration: none; white-space: pre; }
+/* ¶ tylko się dorysowuje (jak w Wordzie): poza przepływem, w miejscu za ostatnim znakiem — nie podnosi
+   linijki, nie zabiera miejsca w wierszu, spacje końcowe zostają „wiszące” (format-marks-layout-playwright.js) */
+.doc-canvas.show-formatting-marks .docx-preview-host p::after { content: "¶"; position: absolute; margin-inline-start: .2em; color: color-mix(in srgb, var(--accent) 58%, var(--muted)); font-family: var(--font-ui); font-size: .76em; font-weight: 600; text-decoration: none; white-space: pre; pointer-events: none; }
+/* akapit z wiszącymi spacjami (--dwb-trail): ten sam ::after skraca linijkę, więc zostaje w przepływie —
+   o zerowej szerokości i wysokości, ¶ wystaje poza niego */
+.doc-canvas.show-formatting-marks .docx-preview-host p[style*="--dwb-trail"]::after { position: static; display: inline-block; width: 0; line-height: 0; margin-inline-start: calc(-1 * var(--dwb-trail)); text-indent: calc(var(--dwb-trail) + .2em); }
 .doc-canvas.show-formatting-marks .docx-preview-host .docx-tab { position: relative; }
 .doc-canvas.show-formatting-marks .docx-preview-host .docx-tab::after { content: "→"; color: color-mix(in srgb, var(--accent) 58%, var(--muted)); font-size: .8em; position: absolute; left: 1px; top: 0; }
 @media print { .doc-canvas.show-formatting-marks .docx-preview-host p::after, .doc-canvas.show-formatting-marks .docx-preview-host .docx-tab::after { content: none !important; } }
