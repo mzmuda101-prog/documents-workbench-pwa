@@ -126,7 +126,7 @@
     "test:fonts": "node scripts/doc-fonts-playwright.js && ENGINE=webkit node scripts/doc-fonts-playwright.js",
     "test:pdf": "node scripts/pdf-import-playwright.js && ENGINE=webkit node scripts/pdf-import-playwright.js",
     "test:stress": "node scripts/test-runner.js",
-    "test:all": "npm test && npm run test:stress",
+    "test:all": "node scripts/run-tests.mjs --all && npm run test:stress",
     "bench": "node scripts/perf-bench.js"
   },
   "license": "MIT",

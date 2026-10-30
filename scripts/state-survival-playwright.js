@@ -137,9 +137,10 @@ async function run() {
   await verify("po anulowanej aktualizacji");
 
   // Cofnij / Ponów: po cofnięciu ostatniego kroku poprzednie zostają, Ponów przywraca ostatni
-  await page.waitForTimeout(1700); // pisanie bez przerwy = jeden krok Cofnij (jak w Wordzie) — oddziel
+  // pisanie bez przerwy = jeden krok Cofnij (jak w Wordzie) — oddziel; to samo co przerwa > 1,5 s
+  await page.evaluate(() => dwbUndo.breakTyping());
   await typeMarker();
-  await page.waitForTimeout(1700); // koniec kroku „pisanie”
+  await page.evaluate(() => dwbUndo.breakTyping()); // koniec kroku „pisanie”
   await page.evaluate(() => document.getElementById("undoBtn").click());
   await idle(page);
   const last = markers.pop();

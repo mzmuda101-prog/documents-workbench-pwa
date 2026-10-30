@@ -374,29 +374,62 @@
 
     // Powtarzające się nagłówki/stopki — wycinamy z treści, wstawiamy do nagłówka/stopki Worda.
     const running = NS.detectRunningText(raws);
-    const runningRows = raws.map(() => ({ top: [], bottom: [] }));
+    const runningRows = raws.map(() => ({ top: [], bottom: [], topImages: [], bottomImages: [] }));
     raws.forEach((raw, pi) => {
       if (!running.size) return;
       const H = raw.height;
       const rows = new Map();
       for (const g of raw.glyphs) {
         if (g.invisible) continue;
-        const zone = g.y < H * 0.1 ? "top" : g.y > H * 0.9 ? "bottom" : null;
+        const zone = NS.runningZone(g.y, H);
         if (!zone) continue;
-        const k = zone + ":" + Math.round(g.y);
-        if (!rows.has(k)) rows.set(k, []);
-        rows.get(k).push(g);
+        const k = zone.replace("+", "") + ":" + Math.round(g.y);
+        if (!rows.has(k)) rows.set(k, { gl: [], wide: zone.endsWith("+"), y: Math.round(g.y) });
+        rows.get(k).gl.push(g);
       }
-      for (const [k, gl] of rows) {
-        const text = gl.slice().sort((a, b) => a.x - b.x).map((g) => g.u).join("").replace(/\d+/g, "#").replace(/\s+/g, " ").trim();
-        const zone = k.split(":")[0];
-        if (running.has(zone + "|" + text)) {
-          for (const g of gl) g.running = true;
-          runningRows[pi][zone].push(gl);
+      // od krawędzi strony do środka: w strefie poszerzonej wiersz musi mieć same powtarzające się
+      // wiersze między sobą a krawędzią (tytuł dokumentu na tej samej wysokości co na innej stronie
+      // nie jest nagłówkiem)
+      for (const zone of ["top", "bottom"]) {
+        const list = [...rows.entries()].filter(([k]) => k.startsWith(zone + ":")).sort((a, b) => (zone === "top" ? a[1].y - b[1].y : b[1].y - a[1].y));
+        let contiguous = true;
+        for (const [, row] of list) {
+          const exact = row.gl.slice().sort((a, b) => a.x - b.x).map((g) => g.u).join("").replace(/\s+/g, " ").trim();
+          if (!exact) continue;
+          const isRunning = row.wide ? contiguous && running.has("=" + zone + "|" + exact) : running.has(zone + "|" + exact.replace(/\d+/g, "#"));
+          if (!isRunning) {
+            contiguous = false;
+            continue;
+          }
+          for (const g of row.gl) g.running = true;
+          runningRows[pi][zone].push(row.gl);
         }
       }
       raw.glyphs = raw.glyphs.filter((g) => !g.running);
     });
+    // Obrazy w nagłówku/stopce (logo firmy): to samo miejsce i rozmiar na co najmniej połowie stron,
+    // obok powtarzającego się tekstu (sięga ponad jego dolny brzeg) albo przy samej krawędzi strony.
+    if (n >= 2) {
+      const same = (a, b) => Math.abs(a.x0 - b.x0) < 1 && Math.abs(a.x1 - b.x1) < 1 && Math.abs(a.y0 - b.y0) < 1 && Math.abs(a.y1 - b.y1) < 1;
+      const need = Math.max(2, Math.ceil(n * 0.5));
+      raws.forEach((raw, pi) => {
+        const H = raw.height;
+        const rr = runningRows[pi];
+        const textTop = rr.top.length ? Math.max(...rr.top.flat().map((g) => g.y + (g.desc || g.size * 0.2))) : -Infinity;
+        const textBottom = rr.bottom.length ? Math.min(...rr.bottom.flat().map((g) => g.y - (g.asc || g.size * 0.8))) : Infinity;
+        raw.images = raw.images.filter((img) => {
+          if (img.kind !== "image") return true;
+          const zone = img.y1 <= H * 0.2 || (img.y0 < H * 0.12 && img.y1 <= H * 0.3) ? "top" : img.y0 >= H * 0.85 ? "bottom" : null;
+          if (!zone) return true;
+          const nearText = zone === "top" ? img.y0 < textTop - 1 || img.y1 <= H * 0.1 : img.y1 > textBottom + 1 || img.y0 >= H * 0.9;
+          if (!nearText) return true;
+          const pagesWith = raws.filter((r) => r.images.some((o) => o.kind === "image" && same(o, img)) || runningRows[raws.indexOf(r)][zone + "Images"].some((o) => same(o, img))).length;
+          if (pagesWith < need) return true;
+          rr[zone + "Images"].push(img);
+          return false;
+        });
+      });
+    }
 
     // Układ stron
     const t1 = Date.now();
@@ -465,19 +498,22 @@
     const listDefs = assignLists(pages);
 
     // Stopki/nagłówki z numerem strony → pole PAGE / NUMPAGES
-    if (running.size) {
+    if (running.size || runningRows.some((r) => r.topImages.length || r.bottomImages.length)) {
       for (const zone of ["bottom", "top"]) {
-        const first = runningRows.findIndex((r) => r[zone].length);
+        const first = runningRows.findIndex((r) => r[zone].length || r[zone + "Images"].length);
         if (first < 0) continue;
-        const xml = runningXml(runningRows[first][zone], first + 1, n, layouts[first], margins[first], zone);
+        const xml = runningXml(runningRows[first][zone], first + 1, n, layouts[first], margins[first], zone, raws[first].glyphFixes);
+        const pics = runningRows[first][zone + "Images"];
         for (const p of pages) {
           if (zone === "bottom") {
             p.footer = xml.xml;
             p.footerKey = "f";
+            p.footerImages = pics;
             p.margins = { ...p.margins, footerDist: xml.dist };
           } else {
             p.header = xml.xml;
             p.headerKey = "h";
+            p.headerImages = pics;
             p.margins = { ...p.margins, headerDist: xml.dist };
           }
         }
@@ -491,7 +527,8 @@
       const seen = new Map();
       for (let i = 0; i < pages.length; i++) {
         const raw = raws[i];
-        for (const img of raw.images) {
+        const own = [...(pages[i].headerImages || []), ...(pages[i].footerImages || [])].filter((im) => raw.images.includes(im) || runningRows[i].topImages.includes(im) || runningRows[i].bottomImages.includes(im));
+        for (const img of [...raw.images, ...own]) {
           if (env.signal?.cancelled) throw new CancelledError();
           const key = (img.objId || "") + "|" + [img.x0, img.y0, img.x1, img.y1].map((v) => Math.round(v)).join(",") + "|" + i;
           if (seen.has(key)) {
@@ -576,56 +613,100 @@
     return { bytes, report, pages };
   }
 
-  function runningXml(rowsGl, pageNo, total, L, m, zone) {
+  function runningXml(rowsGl, pageNo, total, L, m, zone, fixes) {
     // Każdy wiersz → akapit stopki; cyfry równe numerowi strony → pole PAGE, liczbie stron → NUMPAGES.
     const W = L.width, H = L.height;
     let xml = "";
     let dist = 18;
-    const rows = rowsGl.slice().sort((a, b) => a[0].y - b[0].y);
-    for (const gl of rows) {
-      const g0 = gl.slice().sort((a, b) => a.x - b.x);
+    // jak esc(clean()) w pdf-docx.js: nazwa kroju z PDF-a i tekst stopki mogą mieć „"”, „&”,
+    // znaki sterujące albo samotne surogaty — bez tego header1/footer1.xml był niepoprawny
+    const xmlSafe = (v) => String(v ?? "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g, "")
+      .replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, "")
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    // Znaki jak w treści (pdf-layout prepareGlyphs): poprawki kształtu ą/ę, punktory z krojów symboli
+    // (Wingdings U+F09F → „•” — w kroju tekstu, prywatny kod bez Wingdings był kwadracikiem).
+    const prep = (g0) => {
+      const g = { ...g0 };
+      const fix = fixes && fixes.get(g.fontRef + "|" + g.code);
+      if (fix) g.u = fix;
+      const sym = NS.mapSymbolChar ? NS.mapSymbolChar(g) : null;
+      if (sym) {
+        g.u = sym;
+        g.symbol = true;
+      }
+      return g;
+    };
+    // wiersze o różnych liniach bazowych (punktor z innego kroju 1–2 pt niżej) to jeden wiersz
+    const merged = [];
+    for (const gl of rowsGl.slice().sort((a, b) => a[0].y - b[0].y)) {
+      const y = gl[0].y, size = Math.max(...gl.map((g) => g.size));
+      const prev = merged[merged.length - 1];
+      if (prev && Math.abs(y - prev.y) < Math.min(size, prev.size) * 0.4) {
+        prev.gl.push(...gl);
+        if (gl.length > prev.main) { prev.y = y; prev.main = gl.length; }
+        prev.size = Math.max(prev.size, size);
+      } else merged.push({ gl: gl.slice(), y, size, main: gl.length });
+    }
+    let prevBase = null;
+    merged.forEach((row, ri) => {
+      // zdublowane znaki (pogrubienie przez kilkukrotny druk w tym samym miejscu) — jak w treści
+      const g0 = [];
+      for (const g of row.gl.map(prep).sort((a, b) => a.x - b.x)) {
+        const p = g0.findLast((o) => o.u === g.u);
+        if (p && g.x - p.x < g.size * 0.08 && Math.abs(p.y - g.y) < g.size * 0.08) continue;
+        g0.push(g);
+      }
       const x0 = g0[0].x, x1 = Math.max(...g0.map((g) => g.x1));
-      const size = Math.max(...g0.map((g) => g.size));
-      const text = joinGlyphs(g0);
+      const size = row.size;
       const center = (x0 + x1) / 2;
       const align = Math.abs(center - W / 2) < 12 ? "center" : x1 > W - m.mr - 8 && x0 > W / 2 ? "right" : "left";
-      // jak esc(clean()) w pdf-docx.js: nazwa kroju z PDF-a i tekst stopki mogą mieć „"”, „&”,
-      // znaki sterujące albo samotne surogaty — bez tego header1/footer1.xml był niepoprawny
-      const xmlSafe = (v) => String(v ?? "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\ufffe\uffff]/g, "")
-        .replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, "")
-        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-      const font = xmlSafe(g0[0].font.family);
-      const color = g0[0].color && g0[0].color !== "000000" ? g0[0].color : null;
-      const rPr = `<w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:cs="${font}"/>${color ? `<w:color w:val="${color.toUpperCase()}"/>` : ""}<w:sz w:val="${Math.round(size * 2)}"/><w:szCs w:val="${Math.round(size * 2)}"/></w:rPr>`;
-      let runs = "";
-      const parts = text.split(/(\d+)/);
-      for (const part of parts) {
-        if (!part) continue;
-        if (/^\d+$/.test(part) && (+part === pageNo || +part === total)) {
-          const field = +part === pageNo ? "PAGE" : "NUMPAGES";
-          runs += `<w:r>${rPr}<w:fldChar w:fldCharType="begin"/></w:r><w:r>${rPr}<w:instrText xml:space="preserve"> ${field} </w:instrText></w:r><w:r>${rPr}<w:fldChar w:fldCharType="separate"/></w:r><w:r>${rPr}<w:t>${part}</w:t></w:r><w:r>${rPr}<w:fldChar w:fldCharType="end"/></w:r>`;
-        } else {
-          runs += `<w:r>${rPr}<w:t xml:space="preserve">${xmlSafe(part)}</w:t></w:r>`;
-        }
+      // przebiegi według stylu znaków (krój, pogrubienie, kursywa, kolor, rozmiar)
+      const style = (g) => {
+        const sym = g.symbol || /symbol|wingding|webding|dingbat/i.test(g.font.family);
+        return [sym ? "" : g.font.family, !!g.font.bold, !!g.font.italic, g.color || "000000", Math.round(g.size * 2)].join("|");
+      };
+      const spans = [];
+      let prev = null;
+      for (const g of g0) {
+        const k = g.isSpace && spans.length ? spans[spans.length - 1].k : style(g);
+        let sp = spans[spans.length - 1];
+        if (!sp || sp.k !== k) spans.push((sp = { k, g, gl: [] }));
+        if (prev && !g.isSpace && !prev.isSpace && g.x - prev.x1 > g.size * 0.17) sp.gl.push({ isSpace: true });
+        sp.gl.push(g);
+        prev = g;
       }
+      const baseFont = (g0.find((g) => !g.symbol) || g0[0]).font.family;
+      let runs = "";
+      spans.forEach((sp, si) => {
+        let text = sp.gl.map((g) => (g.isSpace ? " " : g.u)).join("").replace(/ +/g, " ");
+        if (si === 0) text = text.replace(/^ +/, "");
+        if (si === spans.length - 1) text = text.replace(/ +$/, "");
+        if (!text) return;
+        const [fam, bold, italic, color, hp] = sp.k.split("|");
+        const font = xmlSafe(fam || baseFont);
+        const rPr = `<w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:cs="${font}"/>${bold === "true" ? "<w:b/><w:bCs/>" : ""}${italic === "true" ? "<w:i/><w:iCs/>" : ""}${color && color !== "000000" ? `<w:color w:val="${color.toUpperCase()}"/>` : ""}<w:sz w:val="${hp}"/><w:szCs w:val="${hp}"/></w:rPr>`;
+        for (const part of text.split(/(\d+)/)) {
+          if (!part) continue;
+          if (/^\d+$/.test(part) && (+part === pageNo || +part === total)) {
+            const field = +part === pageNo ? "PAGE" : "NUMPAGES";
+            runs += `<w:r>${rPr}<w:fldChar w:fldCharType="begin"/></w:r><w:r>${rPr}<w:instrText xml:space="preserve"> ${field} </w:instrText></w:r><w:r>${rPr}<w:fldChar w:fldCharType="separate"/></w:r><w:r>${rPr}<w:t>${part}</w:t></w:r><w:r>${rPr}<w:fldChar w:fldCharType="end"/></w:r>`;
+          } else {
+            runs += `<w:r>${rPr}<w:t xml:space="preserve">${xmlSafe(part)}</w:t></w:r>`;
+          }
+        }
+      });
       const L1 = size * 1.17;
+      // odstęp przed wierszem = przerwa między liniami bazowymi ponad wysokość wiersza
+      const before = prevBase != null ? Math.max(0, row.y - prevBase - L1) : 0;
+      prevBase = row.y;
       const ind = align === "left" ? `<w:ind w:left="${Math.round(Math.max(0, x0 - m.ml) * 20)}"/>` : "";
-      xml += `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="${Math.round(L1 * 20)}" w:lineRule="exact"/>${ind}<w:jc w:val="${align}"/></w:pPr>${runs}</w:p>`;
-      if (zone === "bottom") dist = Math.max(4, H - (g0[0].y + (1 - NS.DOCX_BASE) * L1));
-      else if (rows[0] === gl) dist = Math.max(4, g0[0].y - NS.DOCX_BASE * L1);
-    }
+      xml += `<w:p><w:pPr><w:spacing w:before="${before > 0.3 ? Math.round(before * 20) : 0}" w:after="0" w:line="${Math.round(L1 * 20)}" w:lineRule="exact"/>${ind}<w:jc w:val="${align}"/></w:pPr>${runs}</w:p>`;
+      if (zone === "bottom") dist = Math.max(4, H - (row.y + (1 - NS.DOCX_BASE) * L1));
+      else if (ri === 0) dist = Math.max(4, row.y - NS.DOCX_BASE * L1);
+    });
+    // sam obraz (logo bez tekstu) — nagłówek Worda musi mieć akapit, w nim kotwica obrazu
+    if (!xml) xml = `<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/><w:rPr><w:sz w:val="2"/><w:szCs w:val="2"/></w:rPr></w:pPr></w:p>`;
     return { xml, dist };
-  }
-
-  function joinGlyphs(gl) {
-    let s = "";
-    let prev = null;
-    for (const g of gl) {
-      if (prev && !g.isSpace && !prev.isSpace && g.x - prev.x1 > g.size * 0.17) s += " ";
-      s += g.isSpace ? " " : g.u;
-      prev = g;
-    }
-    return s.replace(/ +/g, " ").trim();
   }
 
   NS.convertPdf = convertPdf;

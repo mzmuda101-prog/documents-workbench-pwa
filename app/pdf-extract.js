@@ -18,6 +18,34 @@
   ];
   const apply = (m, x, y) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
 
+  // Paski obrazu leżące jeden pod drugim (albo obok siebie) w tej samej szerokości → jeden obraz
+  // złożony z części (encodeImage rysuje każdą swoją macierzą). Pojedyncze paski zostają pominięte
+  // jak dotąd (kreska 1 px to raczej ozdobnik niż treść).
+  function mergeStrips(strips) {
+    const out = [];
+    for (const vertical of [true, false]) {
+      const list = strips.filter((s) => (s.y1 - s.y0 < s.x1 - s.x0) === vertical).sort((a, b) => (vertical ? a.y0 - b.y0 : a.x0 - b.x0));
+      const groups = [];
+      for (const s of list) {
+        const g = groups.find((g) => {
+          const l = g[g.length - 1];
+          return vertical
+            ? Math.abs(l.x0 - s.x0) < 0.5 && Math.abs(l.x1 - s.x1) < 0.5 && s.y0 - l.y1 < 0.6 && s.y0 >= l.y0 - 0.01
+            : Math.abs(l.y0 - s.y0) < 0.5 && Math.abs(l.y1 - s.y1) < 0.5 && s.x0 - l.x1 < 0.6 && s.x0 >= l.x0 - 0.01;
+        });
+        if (g) g.push(s);
+        else groups.push([s]);
+      }
+      for (const g of groups) {
+        const b = { x0: Math.min(...g.map((s) => s.x0)), y0: Math.min(...g.map((s) => s.y0)), x1: Math.max(...g.map((s) => s.x1)), y1: Math.max(...g.map((s) => s.y1)) };
+        if (g.length < 3 || b.x1 - b.x0 < 1 || b.y1 - b.y0 < 1) continue;
+        const c = { x0: Math.min(...g.map((s) => s.clipped.x0)), y0: Math.min(...g.map((s) => s.clipped.y0)), x1: Math.max(...g.map((s) => s.clipped.x1)), y1: Math.max(...g.map((s) => s.clipped.y1)) };
+        out.push({ ...b, clipped: c, order: g[0].order, kind: "image", artifact: g.every((s) => s.artifact), parts: g });
+      }
+    }
+    return out;
+  }
+
   function bboxOf(points) {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const [x, y] of points) {
@@ -205,7 +233,7 @@
     const asc = Number.isFinite(fontObj?.ascent) && fontObj.ascent > 0.3 && fontObj.ascent < 1.6 ? fontObj.ascent : 0.86;
     let desc = Number.isFinite(fontObj?.descent) ? Math.abs(fontObj.descent) : 0.22;
     if (desc > 0.6 || desc < 0.05) desc = 0.22;
-    const out = { id, family, bold, italic, mono, serif, symbolic, asc, desc, raw: parsed.raw, type3: !!fontObj?.isType3Font, substituted };
+    const out = { id, family, bold, italic, mono, serif, symbolic, asc, desc, raw: parsed.raw, type3: !!fontObj?.isType3Font, substituted, ghostscript: !!parsed.ghostscript };
     cache.set(id, out);
     return out;
   }
@@ -250,6 +278,7 @@
     const lines = []; // odcinki rysowane obrysem
     const graphics = []; // inne kształty (krzywe) — tylko obwiednia
     const images = [];
+    const strips = []; // obraz pocięty na paski 1 px (PrimoPDF, stare sterowniki drukarek) — sklejane niżej
 
     let gs = {
       ctm: viewport.transform.slice(),
@@ -589,7 +618,13 @@
           const clipped = clipBox(b, gs.clip);
           if (!clipped) break;
           const w = b.x1 - b.x0, h = b.y1 - b.y0;
-          if (w < 1 || h < 1) break;
+          if (w < 1 || h < 1) {
+            // pasek obrazu (np. 645 × 1 px = 0,24 pt) — sam za mały, razem z sąsiednimi to logo
+            if (fn !== OPS.paintImageMaskXObject && fn !== OPS.paintSolidColorImageMask && Math.max(w, h) >= 4 && Math.min(w, h) > 0.01) {
+              strips.push({ ...b, clipped, order: order++, matrix: m.slice(), kind: "image", artifact: artifactDepth > 0, ...(fn === OPS.paintInlineImageXObject ? { inline: args[0] } : { objId: args[0] }) });
+            }
+            break;
+          }
           const img = {
             ...b, clipped, order: order++,
             matrix: m.slice(),
@@ -612,6 +647,8 @@
           break;
       }
     }
+
+    images.push(...mergeStrips(strips));
 
     // Adnotacje z tekstem (FreeText — „pole tekstowe” wpisane w czytniku PDF) i linki.
     const annotations = [];

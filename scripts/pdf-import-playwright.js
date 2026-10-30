@@ -113,6 +113,27 @@ async function makePdfs() {
     F1: "<< /Type /Font /Subtype /TrueType /BaseFont /TimesNewRomanPSMT /Encoding /WinAnsiEncoding >>",
     F2: "<< /Type /Font /Subtype /TrueType /BaseFont /TimesNewRomanPS-BoldMT /Encoding /WinAnsiEncoding >>",
   }));
+  // nagłówek firmowy (PrimoPDF ze starego .doc): logo + adres po prawej + hasło niżej (poza 10%
+  // strony) na każdej stronie, logo Wolframa z pasków 1 px, spacje ściśnięte przez TJ,
+  // „Rozdzial N” na górze stron (to treść, nie nagłówek)
+  fs.writeFileSync(path.join(TMP, "naglowek-firmowy.pdf"), handPdfPages([1, 2].map((n) => {
+    const top = (t) => (842 - t).toFixed(2);
+    const words = ["Program", "do", "obliczen", "symbolicznych", "oraz", "numerycznych", "z", "bogatymi", "mozliwosciami"];
+    const tj = (y) => `BT /F1 10 Tf 72 ${top(y)} Td [${words.map((w) => `(${w} ) 45`).join(" ")}] TJ ET`;
+    const strips = n === 2 ? Array.from({ length: 20 }, (_, k) => `q 120 0 0 0.3 300 ${top(400 + k * 0.3 + 0.3)} cm BI /W 40 /H 1 /CS /RGB /BPC 8 ID ${"\xc0\x30\x30".repeat(40)} EI Q`) : [];
+    return [
+      `q 100 0 0 50 40 ${top(62)} cm /Logo Do Q`,
+      ...["Firma Testowa Sp. z o.o.", "ul. Prosta 1, 00-001 Warszawa", "tel. 22 123 45 67", "www.firma.test"].map((t, i) => `BT /F1 8 Tf 400 ${top(22 + i * 10)} Td (${t}) Tj ET`),
+      `BT /F2 9 Tf 150 ${top(100)} Td (Szkolenia - Oprogramowanie - Portal edukacyjny) Tj ET`,
+      `BT /F2 14 Tf 72 ${top(140)} Td (Rozdzial ${n}) Tj ET`,
+      tj(170), tj(184), tj(198), tj(212),
+      ...strips,
+      `BT /F1 8 Tf 230 ${top(820)} Td (NIP 123-456-78-90) Tj ET`,
+    ];
+  }), {
+    F1: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+    F2: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
+  }, { Logo: { w: 8, h: 4, rgb: "\x20\x40\xa0".repeat(32) } }));
   // „skan”: zrzut strony z tekstem jako obraz, PDF z samym obrazem (bez warstwy tekstu)
   await page.setViewportSize({ width: 794, height: 1123 });
   await page.setContent(`<!doctype html><html lang="pl"><head><meta charset="utf-8"><style>body{margin:60px;font-family:Arial;font-size:22px;color:#111}h1{font-size:34px}.box{background:#f39a5b;padding:10px 16px}</style></head><body><div class="box"><b>KATEDRA AUTOMATYKI</b></div><h1>Lista obecności — lipiec</h1><p>Spóźnienia usprawiedliwione oraz nieusprawiedliwione.</p><p>Zażółć gęślą jaźń.</p></body></html>`, { waitUntil: "load" });
@@ -194,6 +215,33 @@ function handPdf(lines, fonts) {
   objs.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << ${fontRefs} >> >> /Contents 4 0 R >>`);
   objs.push(`<< /Length ${Buffer.byteLength(content, "latin1")} >>\nstream\n${content}\nendstream`);
   for (const n of names) objs.push(fonts[n]);
+  let out = "%PDF-1.4\n";
+  const offs = [];
+  objs.forEach((o, i) => { offs.push(Buffer.byteLength(out, "latin1")); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const xref = Buffer.byteLength(out, "latin1");
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + offs.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("");
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(out, "latin1");
+}
+
+// Wiele stron + obrazy (XObject) — zawartość stron jako tablice operatorów, bajty jako latin1
+function handPdfPages(pages, fonts, images = {}) {
+  const objs = [];
+  const n = pages.length, names = Object.keys(fonts), imgNames = Object.keys(images);
+  const pageId = (i) => 3 + i * 2, fontId = (k) => 3 + n * 2 + k, imgId = (k) => 3 + n * 2 + names.length + k;
+  objs.push("<< /Type /Catalog /Pages 2 0 R >>");
+  objs.push(`<< /Type /Pages /Kids [${pages.map((_, i) => `${pageId(i)} 0 R`).join(" ")}] /Count ${n} >>`);
+  const res = `/Font << ${names.map((f, k) => `/${f} ${fontId(k)} 0 R`).join(" ")} >> /XObject << ${imgNames.map((m, k) => `/${m} ${imgId(k)} 0 R`).join(" ")} >>`;
+  pages.forEach((lines, i) => {
+    const content = lines.join("\n");
+    objs.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << ${res} >> /Contents ${pageId(i) + 1} 0 R >>`);
+    objs.push(`<< /Length ${Buffer.byteLength(content, "latin1")} >>\nstream\n${content}\nendstream`);
+  });
+  for (const f of names) objs.push(fonts[f]);
+  for (const m of imgNames) {
+    const im = images[m];
+    objs.push(`<< /Type /XObject /Subtype /Image /Width ${im.w} /Height ${im.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length ${im.rgb.length} >>\nstream\n${im.rgb}\nendstream`);
+  }
   let out = "%PDF-1.4\n";
   const offs = [];
   objs.forEach((o, i) => { offs.push(Buffer.byteLength(out, "latin1")); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
@@ -439,6 +487,27 @@ async function run() {
   // nazwy z Ghostscripta: „Wt” + nazwa + losowy ogon; „Demi” = pogrubienie
   const gsn = await page.evaluate(() => ["ELELGP+WtKnollTextDemi01cPX6!Bw", "WtUtSansMediumcPX6!Bw", "WtTimesBold01jcnDxdw", "NotoSansCJK-DemiLight"].map((n) => DWPdf.parseFontName(n)));
   check("nazwy krojów z Ghostscripta: rodzina bez śmieci, „Demi” pogrubione, „DemiLight” nie", gsn[0].family === "Knoll Text" && gsn[0].bold && gsn[1].family === "Ut Sans" && !gsn[1].bold && gsn[2].bold && !gsn[3].bold, JSON.stringify(gsn.map((g) => [g.family, g.bold])));
+
+  // nagłówek firmowy z logo (PrimoPDF): logo i hasło w nagłówku Worda, treść od tytułu
+  await convert(page, path.join(TMP, "naglowek-firmowy.pdf"));
+  const hf = await page.evaluate(async () => {
+    const z = await JSZip.loadAsync(originalFileBytes);
+    const doc = await z.file("word/document.xml").async("string");
+    const hdrName = Object.keys(z.files).find((f) => /^word\/header\d+\.xml$/.test(f));
+    const hdr = hdrName ? await z.file(hdrName).async("string") : "";
+    const hdrRels = hdrName && z.file(hdrName.replace("word/", "word/_rels/") + ".rels") ? await z.file(hdrName.replace("word/", "word/_rels/") + ".rels").async("string") : "";
+    const txt = (x) => [...x.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map((m) => m[1]).join("");
+    const exts = [...doc.matchAll(/<wp:extent cx="(\d+)" cy="(\d+)"/g)].map((m) => [m[1] / 12700, m[2] / 12700]);
+    return {
+      hdrText: txt(hdr), bodyText: txt(doc), hdrLogo: /<wp:anchor /.test(hdr) && /relationships\/image/.test(hdrRels),
+      strip: exts.some(([w, h]) => Math.abs(w - 120) < 2 && Math.abs(h - 6) < 1),
+      spaceFit: /<w:spacing w:val="-\d+"\/>(?:(?!<\/w:r>).)*<w:t xml:space="preserve"> <\/w:t>/.test(doc),
+    };
+  });
+  check("nagłówek firmowy: logo, adres i hasło (poza 10% strony) w nagłówku Worda, nie w treści", hf.hdrLogo && /Firma Testowa/.test(hf.hdrText) && /Szkolenia/.test(hf.hdrText) && !/Firma Testowa|Szkolenia/.test(hf.bodyText), JSON.stringify({ logo: hf.hdrLogo, hdr: hf.hdrText.slice(0, 120) }));
+  check("nagłówek firmowy: „Rozdzial 1/2” na górze stron zostaje w treści", /Rozdzial 1/.test(hf.bodyText) && /Rozdzial 2/.test(hf.bodyText), hf.bodyText.slice(0, 80));
+  check("obraz z pasków 1 px (PrimoPDF) sklejony w jeden obraz 120 × 6 pt", hf.strip, "");
+  check("spacje ściśnięte w PDF → zagęszczone spacje w pliku (zawijanie jak w PDF)", hf.spaceFit, "");
 
   // --- 5. skan: pytanie o OCR, rozpoznanie na urządzeniu, tekst + obraz tła bez słów
   await page.evaluate(() => { setDirtyState(false); window.__conv = null; });

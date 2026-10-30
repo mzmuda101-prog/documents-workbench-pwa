@@ -87,11 +87,10 @@ async function run() {
   check("początek dokumentu (Ctrl+Home / ⌘↑)", w.i === 0 && w.o === 0, JSON.stringify(w));
 
   // znacznik bieżącego akapitu nie leży na tekście
-  const bar = await page.evaluate(() => {
-    const el = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[3];
-    el.focus();
-    return getComputedStyle(el).boxShadow;
-  });
+  await page.evaluate(() => collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[3].focus());
+  // znacznik pojawia się po fokusie z opóźnieniem (w tłoku odczyt od razu dawał „none”)
+  await page.waitForFunction(() => getComputedStyle(collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[3]).boxShadow !== "none", null, { timeout: 3000 }).catch(() => {});
+  const bar = await page.evaluate(() => getComputedStyle(collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[3]).boxShadow);
   check("pasek bieżącego akapitu jest poza tekstem (bez „inset”)", bar && bar !== "none" && !/inset/.test(bar), bar);
 
   if (errors.length) check("brak błędów strony", false, errors.slice(0, 3).join(" | "));

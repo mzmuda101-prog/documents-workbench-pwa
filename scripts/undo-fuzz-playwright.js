@@ -59,13 +59,17 @@ async function run() {
       check("…i Cofnij przywraca dokument dokładnie", (await docXml(page)) === x0, "");
     }
 
-    // akapit edytowalny z tekstem (losowy)
-    const target = () => page.evaluate((r) => {
+    // akapit edytowalny z tekstem (losowy). Najpierw czekamy, aż taki jest: po zmianie stylu/listy
+    // dokument się przerysowuje i (zwłaszcza w WebKit) chwilę nie jest edytowalny — dawniej
+    // przeczekiwała to sztywna pauza 1,7 s po każdej operacji.
+    const editableReady = () => page.waitForFunction(() => collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))
+      .some((p) => p.isContentEditable && !p.dataset.lock && p.textContent.trim().length > 25 && !p.closest("td")), null, { timeout: 15000 });
+    const target = async () => (await editableReady(), page.evaluate((r) => {
       const ps = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).filter((p) => p.isContentEditable && !p.dataset.lock && p.textContent.trim().length > 25 && !p.closest("td"));
       const p = ps[Math.floor(r * ps.length)];
       p.scrollIntoView({ block: "center" });
       return resolveParaIndex(p);
-    }, rnd());
+    }, rnd()));
     const caretAt = (i, where) => page.evaluate(([i, where]) => {
       const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[i];
       const n = p.textContent.length;
@@ -102,7 +106,9 @@ async function run() {
         const label = await ops[name]();
         if (!label) continue;
         await idle(page);
-        await page.waitForTimeout(1700); // przerwa > 1,5 s zamyka krok pisania
+        // koniec kroku pisania — jak przerwa > 1,5 s, ale bez czekania (przy pauzach ×0,5 te
+        // „1700 ms” trwały 850 ms i kolejne pisania zlewały się w jeden krok Cofnij)
+        await page.evaluate(() => dwbUndo.breakTyping());
         done.push(label);
         if (process.env.STEPCHECK) { // od razu Cofnij + Ponów — która operacja psuje
           const before = await docXml(page);

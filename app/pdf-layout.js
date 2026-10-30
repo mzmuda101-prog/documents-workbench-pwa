@@ -154,7 +154,41 @@
     composeAccents(out);
     const live = out.filter((g) => !g.dead);
     fitSubstitutedFonts(live);
+    fitWordSpaces(live);
     return live;
+  }
+
+  // Spacje węższe niż w kroju: Word drukujący przez sterownik (PrimoPDF, wydruk do PDF ze
+  // starego .doc) stawia słowo po spacji ~0,04 em wcześniej, niż wynika z szerokości spacji.
+  // Litery się zgadzają, ale wiersz z dziesięcioma spacjami wychodzi u nas ~4 pt szerszy
+  // i ostatnie słowo spada do następnego wiersza (cały akapit, a za nim strona, się rozjeżdża).
+  // Mierzymy typową przerwę między słowami dla każdego kroju (bez wyjustowanych — szersze od
+  // spacji pomijamy) i zagęszczamy same spacje (w:spacing na przebiegu spacji). Tylko kroje
+  // z prawdziwymi szerokościami (zastępniki ma fitSubstitutedFonts).
+  function fitWordSpaces(glyphs) {
+    const acc = new Map();
+    for (let k = 1; k + 1 < glyphs.length; k++) {
+      const g = glyphs[k], pv = glyphs[k - 1], nx = glyphs[k + 1];
+      if (!g.isSpace || pv.isSpace || nx.isSpace || !g.adv || !g.size || g.font?.substituted || g.ocrLayer) continue;
+      if (pv.fontRef !== g.fontRef || Math.abs(pv.y - g.y) > 0.2 || Math.abs(nx.y - g.y) > 0.2 || Math.abs(g.angle || 0) > 0.01) continue;
+      const gap = nx.x - pv.x1;
+      if (gap < g.adv * 0.3 || gap > g.adv * 1.05) continue;
+      const key = g.fontRef + "|" + (g.bold ? 1 : 0);
+      if (!acc.has(key)) acc.set(key, []);
+      acc.get(key).push((gap - g.adv) / g.size);
+    }
+    const perEm = new Map();
+    for (const [k, list] of acc) {
+      if (list.length < 8) continue;
+      const d = median(list);
+      if (d <= -0.012 && d > -0.25) perEm.set(k, d);
+    }
+    if (!perEm.size) return;
+    for (const g of glyphs) {
+      if (!g.isSpace || g.fitSpacing !== undefined) continue;
+      const d = perEm.get(g.fontRef + "|" + (g.bold ? 1 : 0));
+      if (d !== undefined) g.fitSpacing = Math.round(d * g.size * 20);
+    }
   }
 
   const BELOW_ACCENTS = new Set(["\u02db", "\u00b8"]);
@@ -1049,12 +1083,29 @@
     while (gl.length && gl[0].isSpace) gl.shift();
     while (gl.length && gl[gl.length - 1].isSpace) gl.pop();
     if (!gl.length) return l.x1 - l.x0;
-    let w = 0, prev = null;
+    let w = 0, prev = null, lastInk = null, spaced = 0;
+    // rozmiar w pliku idzie co pół punktu (9,96 pt z PDF → 10 pt): litery tyle szersze. W dół nie
+    // zwężamy — zapas zostaje (podgląd bywa minimalnie szerszy niż szerokości z PDF). Tylko krój
+    // z PDF = krój w pliku (zastępnik i krój Ghostscripta mają inne szerokości niż Arial/Times).
+    const k = (g) => (!g.size || g.font?.substituted || g.font?.ghostscript ? 1 : Math.max(1, Math.round(g.size * 2) / 2 / g.size));
     for (const g of gl) {
-      if (g.isSpace) w += g.adv;
-      else {
-        if (prev && !prev.isSpace && g.x - prev.x1 > g.size * 0.15) w += g.size * (g.font?.serif ? 0.25 : 0.278);
-        w += g.x1 - g.x;
+      if (g.isSpace) {
+        // spacja tak, jak ją złożymy (pdf-docx: zagęszczenie z fitWordSpaces)
+        const sw = g.adv * k(g) + (g.fitSpacing || 0) / 20;
+        w += sw;
+        spaced += sw;
+      } else {
+        if (prev && !prev.isSpace && g.x - prev.x1 > g.size * 0.15) {
+          const sw = g.size * (g.font?.serif ? 0.25 : 0.278);
+          w += sw;
+          spaced += sw;
+        }
+        // przerwa szersza niż kilka spacji (punktor listy → tekst, tabulator) zostaje jak w PDF —
+        // liczona jako jedna spacja zaniżała wiersz o ~20 pt i zapas na zawijanie wychodził za mały
+        if (lastInk && g.x - lastInk.x1 > g.size * 1.2) w += g.x - lastInk.x1 - spaced;
+        w += (g.x1 - g.x) * k(g);
+        lastInk = g;
+        spaced = 0;
       }
       prev = g;
     }
@@ -1660,6 +1711,15 @@
   // ---------------------------------------------------------------- dokument
   // Nagłówki/stopki: wiersze przy górnej/dolnej krawędzi powtarzające się na stronach (cyfry
   // mogą się różnić — numer strony) albo oznaczone w PDF jako „Artifact”.
+  // Strefa nagłówka/stopki: 10% od krawędzi zawsze; dalej (do 20% od góry, 15% od dołu — nagłówek
+  // firmowy z logo, adresem i hasłem) tylko wiersze, nad którymi (pod którymi) wszystko też się
+  // powtarza — pdf-convert sprawdza tę ciągłość od krawędzi strony.
+  function runningZone(y, H) {
+    if (y < H * 0.2) return y < H * 0.1 ? "top" : "top+";
+    if (y > H * 0.85) return y > H * 0.9 ? "bottom" : "bottom+";
+    return null;
+  }
+
   function detectRunningText(pagesRaw) {
     const sigs = new Map();
     const n = pagesRaw.length;
@@ -1669,18 +1729,21 @@
       const rows = new Map();
       for (const g of raw.glyphs) {
         if (g.invisible) continue;
-        const zone = g.y < H * 0.1 ? "top" : g.y > H * 0.9 ? "bottom" : null;
+        const zone = runningZone(g.y, H)?.replace("+", "");
         if (!zone) continue;
         const k = zone + ":" + Math.round(g.y);
         if (!rows.has(k)) rows.set(k, []);
         rows.get(k).push(g);
       }
       for (const [k, gl] of rows) {
-        const text = gl.sort((a, b) => a.x - b.x).map((g) => g.u).join("").replace(/\d+/g, "#").replace(/\s+/g, " ").trim();
-        if (!text) continue;
-        const sig = k.split(":")[0] + "|" + text;
-        if (!sigs.has(sig)) sigs.set(sig, new Set());
-        sigs.get(sig).add(pi);
+        const exact = gl.sort((a, b) => a.x - b.x).map((g) => g.u).join("").replace(/\s+/g, " ").trim();
+        if (!exact) continue;
+        // cyfry jako „#” — numer strony; dokładny tekst („=…”) dla strefy poszerzonej, gdzie
+        // „Rozdział 1”, „Rozdział 2”… na górze kolejnych stron to tytuły, nie nagłówek
+        for (const sig of [k.split(":")[0] + "|" + exact.replace(/\d+/g, "#"), "=" + k.split(":")[0] + "|" + exact]) {
+          if (!sigs.has(sig)) sigs.set(sig, new Set());
+          sigs.get(sig).add(pi);
+        }
       }
     });
     const running = new Set();
@@ -1691,5 +1754,7 @@
   NS.layoutPage = layoutPage;
   NS.treeToBlocks = treeToBlocks;
   NS.detectRunningText = detectRunningText;
+  NS.runningZone = runningZone;
+  NS.mapSymbolChar = mapSymbolChar;
   NS._internals = { prepareGlyphs, buildFragments, detectTables, xyCut, flowBlocks, linesFromFrags, lineTokens, finishParagraph, annotationFrags, median };
 })(typeof globalThis !== "undefined" ? globalThis : window);

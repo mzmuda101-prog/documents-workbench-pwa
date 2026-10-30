@@ -144,7 +144,14 @@ async function run() {
     return ["Miejscowość:", "Teren nr:", "Data wydania:"].map((t) => ps.findIndex((p) => p.textContent.startsWith(t) && p.querySelector(".docx-tab")));
   });
   await page.evaluate((i) => collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[i].scrollIntoView({ block: "center" }), card[0]);
-  await page.waitForTimeout(500);
+  // przewijanie bywa płynne — mierzymy dopiero, gdy położenie stoi przez 3 klatki (przy pauzach ×0,5
+  // stałe 500 ms wypadało w trakcie ruchu: klik w kropki trafiał obok i uchwyt się nie pokazywał)
+  await page.evaluate(() => new Promise((res) => {
+    const vp = document.getElementById("docViewport");
+    let last = -1, still = 0, n = 0;
+    const tick = () => { const y = vp ? vp.scrollTop : scrollY; still = y === last ? still + 1 : 0; last = y; if (still >= 3 || ++n > 180) res(); else requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  }));
   const tb = await page.evaluate((i) => {
     const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[i];
     const el = [...document.querySelectorAll(".dwb-tb")].find((x) => x.__tbAnchor === p);
@@ -157,7 +164,8 @@ async function run() {
   const goal = (await tabAt(card[0])).r; // koniec kropek „Miejscowość:”
   const dots = await tabAt(card[1]);
   await page.mouse.click(dots.x, dots.y);
-  await page.waitForTimeout(300);
+  // uchwyt kropek pokazuje się po kliknięciu z opóźnieniem — czekamy na niego (w tłoku 150 ms nie starczało)
+  await page.waitForFunction(() => { const e = document.querySelector(".dwb-tabstop-handle"); return e && e.style.visibility !== "hidden"; }, null, { timeout: 5000 }).catch(() => {});
   const hd = await page.evaluate(() => { const e = document.querySelector(".dwb-tabstop-handle"); if (!e || e.style.visibility === "hidden") return null; const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
   const mod = process.platform === "darwin" ? "Meta" : "Control";
   let snapped = null;

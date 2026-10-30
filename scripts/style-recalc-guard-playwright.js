@@ -13,6 +13,7 @@
 //  3) pasek: klasa szerokiego panelu przy ≥ 860 px treści panelu, bez niej poniżej.
 //
 //   node scripts/style-recalc-guard-playwright.js      ENGINE=webkit node scripts/…
+// test-impact: bez śledzenia CSS (mierzy koszt stylów — śledzenie reguł by go zawyżało)
 const playwright = require("playwright");
 const { APP_URL, loadBuiltinSample } = require("./docx-test-helpers");
 

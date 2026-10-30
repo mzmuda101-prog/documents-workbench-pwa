@@ -40,13 +40,23 @@ const MODES = {
       await page.evaluate(() => document.getElementById("heroSplash")?.remove());
       await page.evaluate(() => composeUi.createNew("blank"));
       await page.waitForSelector(".docx-preview-host p.docx-editable-p", { timeout: 20000 });
-      await page.waitForTimeout(300);
+      // gotowe do pisania: nakładka schowana, akapit edytowalny z fokusem, kolejka zmian pusta
+      // (zamiast stałych 300 ms; za wczesny start = brak tekstu = czerwony test, nie fałszywie zielony)
+      const ready = () => page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden")
+        && !inlineLocksPending && document.activeElement && document.activeElement.isContentEditable, null, { timeout: 20000 })
+        .then(() => page.evaluate(() => waitInlineStructuralIdle()));
+      await ready();
       await page.keyboard.type("Pierwszy akapit tekstu do testu.");
       await page.keyboard.press("Enter");
       await page.keyboard.type("Drugi akapit.");
       await page.keyboard.press("Enter");
       await page.keyboard.type("Trzeci.");
-      await page.waitForTimeout(400);
+      // trzy akapity z tekstem w podglądzie i Enter-y zapisane w pliku (zamiast stałych 400 ms)
+      await page.waitForFunction(() => {
+        const ps = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"));
+        return ps.length >= 3 && ps[2].textContent.includes("Trzeci.");
+      }, null, { timeout: 20000 });
+      await ready();
       await page.evaluate((m) => {
         const list = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"));
         const pt = (pi, off) => { const r = formDomRange(list[pi], off, off); return [r.startContainer, r.startOffset]; };

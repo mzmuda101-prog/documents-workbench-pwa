@@ -268,16 +268,25 @@
   const mul = (a, b) => [a[0] * b[0] + a[2] * b[1], a[1] * b[0] + a[3] * b[1], a[0] * b[2] + a[2] * b[3], a[1] * b[2] + a[3] * b[3], a[0] * b[4] + a[2] * b[5] + a[4], a[1] * b[4] + a[3] * b[5] + a[5]];
 
   async function encodeImage(page, img) {
-    let obj = null;
-    if (img.objId) obj = await getObj(page, img.objId);
-    else if (img.inline) obj = img.inline.data && typeof img.inline.data === "string" ? await getObj(page, img.inline.data) : img.inline;
-    const srcInfo = imageSource(obj, img.kind === "mask" ? img.color || "000000" : null);
-    if (!srcInfo) return null;
+    // obraz złożony z pasków (pdf-extract mergeStrips): każda część swoją macierzą na wspólnej kanwie
+    const parts = [];
+    for (const part of img.parts || [img]) {
+      let obj = null;
+      if (part.objId) obj = await getObj(page, part.objId);
+      else if (part.inline) obj = part.inline.data && typeof part.inline.data === "string" ? await getObj(page, part.inline.data) : part.inline;
+      const info = imageSource(obj, img.kind === "mask" ? img.color || "000000" : null);
+      if (info) parts.push({ part, info });
+    }
+    if (!parts.length) return null;
+    const srcInfo = parts[0].info;
     const box = img.clipped || img;
     const bw = box.x1 - box.x0, bh = box.y1 - box.y0;
     // rozdzielczość: natywna obrazu (ale nie więcej niż 4 px/pt i 3000 px bok)
-    const fullW = img.x1 - img.x0, fullH = img.y1 - img.y0;
-    let s = Math.max(srcInfo.w / Math.max(1, fullW), srcInfo.h / Math.max(1, fullH));
+    const p0 = parts[0].part;
+    const fullW = p0.x1 - p0.x0, fullH = p0.y1 - p0.y0;
+    let s = img.parts
+      ? Math.max(...parts.map(({ part, info }) => (part.x1 - part.x0 >= part.y1 - part.y0 ? info.w / Math.max(0.01, part.x1 - part.x0) : info.h / Math.max(0.01, part.y1 - part.y0))))
+      : Math.max(srcInfo.w / Math.max(1, fullW), srcInfo.h / Math.max(1, fullH));
     s = Math.max(1, Math.min(4, s));
     s = Math.min(s, 3000 / Math.max(bw, bh));
     const cw = Math.max(1, Math.round(bw * s)), ch = Math.max(1, Math.round(bh * s));
@@ -290,10 +299,12 @@
     ctx.imageSmoothingQuality = "high";
     // piksel obrazu (px, py) → jednostka (px/w, 1 − py/h) → strona (macierz z PDF) → kanwa
     // rotateM: skan wyprostowany przez OCR (pdf-convert straightenScanPage) — strona → strona prosta
-    const M = mul(img.rotateM || [1, 0, 0, 1, 0, 0], mul(img.matrix, [1 / srcInfo.w, 0, 0, -1 / srcInfo.h, 0, 1]));
-    const A = mul([s, 0, 0, s, -box.x0 * s, -box.y0 * s], M);
-    ctx.setTransform(A[0], A[1], A[2], A[3], A[4], A[5]);
-    ctx.drawImage(srcInfo.src, 0, 0);
+    for (const { part, info } of parts) {
+      const M = mul(img.rotateM || [1, 0, 0, 1, 0, 0], mul(part.matrix, [1 / info.w, 0, 0, -1 / info.h, 0, 1]));
+      const A = mul([s, 0, 0, s, -box.x0 * s, -box.y0 * s], M);
+      ctx.setTransform(A[0], A[1], A[2], A[3], A[4], A[5]);
+      ctx.drawImage(info.src, 0, 0);
+    }
     if (img.eraseBoxes) {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       eraseOnCanvas(ctx, img.eraseBoxes, s, box, cw, ch);

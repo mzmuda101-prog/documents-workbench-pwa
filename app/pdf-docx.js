@@ -512,11 +512,11 @@
 
     footerXml(parts) {
       return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${parts}</w:ftr>`;
+<w:ftr ${DOC_NS}>${parts}</w:ftr>`;
     }
     headerXml(parts) {
       return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${parts}</w:hdr>`;
+<w:hdr ${DOC_NS}>${parts}</w:hdr>`;
     }
   }
 
@@ -537,7 +537,7 @@
       const last = sections[sections.length - 1];
       const key = [Math.round(p.width), Math.round(p.height), Math.round(p.margins.ml), Math.round(p.margins.mr), Math.round(p.margins.mt), Math.round(p.margins.mb), p.footerKey || "", p.headerKey || ""].join("|");
       if (last && last.key === key) last.pages.push(p);
-      else sections.push({ key, pages: [p], width: p.width, height: p.height, ...p.margins, footer: p.footer, header: p.header });
+      else sections.push({ key, pages: [p], width: p.width, height: p.height, ...p.margins, footer: p.footer, header: p.header, footerImages: p.footerImages, headerImages: p.headerImages });
     }
     let z = 1;
     sections.forEach((sec, si) => {
@@ -574,6 +574,27 @@
     const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document ${DOC_NS}><w:body>${body}${finalSect}</w:body></w:document>`;
 
+    // nagłówki/stopki przed [Content_Types] — ich obrazy dochodzą do w.media
+    const partFiles = [];
+    for (const sec of sections) {
+      for (const [name, xml, pics, wrap] of [[sec.footerName, sec.footer, sec.footerImages, "footerXml"], [sec.headerName, sec.header, sec.headerImages, "headerXml"]]) {
+        if (!name) continue;
+        // logo w nagłówku/stopce: kotwica względem strony w pierwszym akapicie, relacje części osobno
+        const docRels = w.rels;
+        w.rels = [];
+        let anchors = "";
+        for (const im of pics || []) {
+          const enc = images.get(im);
+          if (enc) anchors += w.drawingAnchor(enc, { x0: im.x0, x1: im.x1, top: im.y0, bottom: im.y1, behind: true }, 1000 + z++);
+        }
+        const partRels = w.rels;
+        w.rels = docRels;
+        const body = anchors ? xml.replace(/(<w:p>(?:<w:pPr>.*?<\/w:pPr>)?)/, `$1${anchors}`) : xml;
+        partFiles.push(["word/" + name, w[wrap](body)]);
+        if (partRels.length) partFiles.push([`word/_rels/${name}.rels`, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${partRels.map((r) => `<Relationship Id="${r.id}" Type="${r.type}" Target="${esc(r.target)}"/>`).join("")}</Relationships>`]);
+      }
+    }
     const zip = new JSZipCtor();
     const hasPng = w.media.some((m) => m.ext === "png"), hasJpg = w.media.some((m) => m.ext === "jpeg");
     let overrides = `<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>`;
@@ -625,10 +646,7 @@
       settings = settings.replace("<w:zoom w:percent=\"100\"/>", "<w:zoom w:percent=\"100\"/><w:embedTrueTypeFonts/><w:saveSubsetFonts/>");
     }
     zip.file("word/settings.xml", settings);
-    for (const sec of sections) {
-      if (sec.footerName) zip.file("word/" + sec.footerName, w.footerXml(sec.footer));
-      if (sec.headerName) zip.file("word/" + sec.headerName, w.headerXml(sec.header));
-    }
+    for (const [name, data] of partFiles) zip.file(name, data);
     for (const m of w.media) zip.file("word/media/" + m.name, m.bytes);
     const now = new Date().toISOString().replace(/\.\d+Z$/, "Z");
     zip.file("docProps/core.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>

@@ -154,8 +154,10 @@ async function run() {
   // ── długi komentarz: „Więcej ↓” ─────────────────────────────────────────────
   await select(page, 6, 10);
   await page.keyboard.press(`${MOD}+Alt+KeyM`);
+  await page.waitForSelector(".compose-pop-comment .cf-rich", { timeout: 10000 }); // okienko otwiera się asynchronicznie (w tłoku test sięgał za wcześnie)
   await page.evaluate(() => { const ed = document.querySelector(".compose-pop-comment .cf-rich"); ed.innerHTML = Array.from({ length: 30 }, (_, i) => `<div>Wiersz ${i + 1} długiego komentarza, który nie mieści się w karcie.</div>`).join(""); });
-  await page.waitForTimeout(150);
+  // wygaszenie liczone raz na klatkę (attachOverflowFade) — czekamy na stan, nie na stałe 150 ms
+  await page.waitForFunction(() => document.querySelector(".compose-pop-comment .cf-rich")?.classList.contains("more-b"), null, { timeout: 3000 }).catch(() => {});
   check("edytor: długa treść — wygaszenie i „Więcej” także przy pisaniu", await page.evaluate(() => document.querySelector(".compose-pop-comment .cf-rich").classList.contains("more-b") && !document.querySelector(".compose-pop-comment .cc-more").hidden));
   await page.click(".compose-pop-form .lf-ok");
   await idle(page);
