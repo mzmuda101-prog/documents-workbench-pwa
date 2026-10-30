@@ -256,6 +256,11 @@ async function run() {
   check("plik: pole TOC (\\o 1-3 \\h) + style Spis treści 1/2 i Hiperłącze, Tekst zastępczy", /TOC \\o "1-3" \\h/.test(xml) && /w:name w:val="toc 1"/.test(styles) && /w:name w:val="Hyperlink"/.test(styles) && /w:name w:val="Placeholder Text"/.test(styles), "");
   check("plik: kolejne sklejenia nie zostawiają pustych <w:hyperlink>", !/<w:hyperlink[^>]*\/>|<w:hyperlink[^>]*><\/w:hyperlink>/.test(xml), "");
 
+  // DUMP_DIR=… — zapisany plik (do porównania z Wordem: npm run word:compare)
+  if (process.env.DUMP_DIR) {
+    const b64 = await page.evaluate(async () => { const bytes = await buildDocumentForSave(); let s = ""; bytes.forEach((x) => { s += String.fromCharCode(x); }); return btoa(s); });
+    require("fs").writeFileSync(require("path").join(process.env.DUMP_DIR, "compose2.docx"), Buffer.from(b64, "base64"));
+  }
   // ── dotyk (iPhone/iPad): tap w przyciski i pozycje okienek ──────────────────
   // Błąd z 2026-10-01: preventDefault na pointerdown w Safari kasował kliknięcie palcem.
   const touch = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 800 }, isMobile: ENGINE !== "firefox", hasTouch: true });

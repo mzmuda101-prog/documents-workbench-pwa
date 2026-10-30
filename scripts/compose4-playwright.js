@@ -210,6 +210,11 @@ async function run() {
   check("puste nagłówek/stopka: odwołania i części usunięte z pliku", !/headerReference|footerReference/.test(await zip.file("word/document.xml").async("string")) && !Object.keys(zip.files).some((f) => /word\/(header|footer)\d+\.xml/.test(f)), Object.keys(zip.files).join(","));
 
   // ── komentarz z pliku Worda: edycja akapitu go nie gubi ────────────────────
+  // DUMP_DIR=… — zapisany plik (do porównania z Wordem: npm run word:compare)
+  if (process.env.DUMP_DIR) {
+    const b64 = await page.evaluate(async () => { const bytes = await buildDocumentForSave(); let s = ""; bytes.forEach((x) => { s += String.fromCharCode(x); }); return btoa(s); });
+    require("fs").writeFileSync(require("path").join(process.env.DUMP_DIR, "compose4.docx"), Buffer.from(b64, "base64"));
+  }
   await page.evaluate(() => loadSampleDocument("review-sample"));
   await idle(page);
   await page.evaluate(() => appFrame.setReadOnly(false));

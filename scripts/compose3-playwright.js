@@ -163,6 +163,11 @@ async function run() {
   await page.evaluate(() => appFrame.setReadOnly(false));
   await idle(page);
 
+  // DUMP_DIR=… — zapisany plik (do porównania z Wordem: npm run word:compare)
+  if (process.env.DUMP_DIR) {
+    const b64 = await page.evaluate(async () => { const bytes = await buildDocumentForSave(); let s = ""; bytes.forEach((x) => { s += String.fromCharCode(x); }); return btoa(s); });
+    require("fs").writeFileSync(require("path").join(process.env.DUMP_DIR, "compose3.docx"), Buffer.from(b64, "base64"));
+  }
   // ── telefon z dotykiem ─────────────────────────────────────────────────────
   const touch = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 800 }, isMobile: true, hasTouch: true });
   await touch.addInitScript(() => sessionStorage.setItem("introPlayed", "true"));

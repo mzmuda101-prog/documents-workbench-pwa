@@ -212,6 +212,11 @@ async function run() {
   check("plik: jeden w:sectPr (sekcja nie zdublowana przy dzieleniu)", (xml.match(/<w:sectPr/g) || []).length === 1);
   check("plik: style.xml ma nazwy wbudowane (Word rozpozna „Nagłówek 1”)", /w:name w:val="heading 1"/.test(styles) && /w:name w:val="Title"/i.test(styles));
 
+  // DUMP_DIR=… — zapisany plik (do porównania z Wordem: npm run word:compare)
+  if (process.env.DUMP_DIR) {
+    const b64 = await page.evaluate(async () => { const bytes = await buildDocumentForSave(); let s = ""; bytes.forEach((x) => { s += String.fromCharCode(x); }); return btoa(s); });
+    require("fs").writeFileSync(require("path").join(process.env.DUMP_DIR, "compose.docx"), Buffer.from(b64, "base64"));
+  }
   // ── szablony ────────────────────────────────────────────────────────────────
   page.removeAllListeners("dialog");
   page.on("dialog", (d) => d.accept()); // „porzucić niezapisane zmiany?”
