@@ -10,7 +10,9 @@
 //   - "…" → „…” i '…' → ‘…’ (w tekście angielskim “…”), apostrof w słowie → ’,
 //   - „a--b” → „a—b”, „raz - dwa” / „raz -- dwa” → „raz – dwa”, „1/2” → „½”, „...” → „…”,
 //     „(c)” → „©”, „(r)” → „®”, „(tm)” → „™”, „(e)” → „€”,
-//   - „1. ” / „1) ” / „* ” / „- ” na początku akapitu → lista numerowana / punktowana,
+//   - na początku akapitu + spacja/Tab → lista (pisanie w Wordzie 2026-10-31): „1.” „1)” „a.”
+//     „a)” „A.” „I.” „i.” → numerowana w TYM formacie (1) 2)…, a. b.…, I. II.…), „*” → •, „>” → ➢;
+//     „-” i „2.” — NIE (zostaje tekst),
 //   - Ctrl/⌘+Z zaraz po poprawce cofa SAMĄ poprawkę (w Wordzie: „Cofnij Autokorekta”),
 //     kolejne — pisanie. Tu: poprawka = osobny krok cofania (dwbUndo.record / group).
 // Własna lista poprawek: brak polskich znaków w częstych słowach i pisownia łączna/rozdzielna —
@@ -171,7 +173,9 @@ const dwbAutoCorrect = (() => {
       if (/^\p{Lu}\p{Lu}\p{Ll}{2,}$/u.test(replacement)) replacement = replacement[0] + replacement.slice(1).toLocaleLowerCase("pl");
       // początek zdania / akapitu
       const ctx = before + node.data.slice(tokenStart, wordStart);
-      if (/^\p{Ll}/u.test(replacement) && !/\./u.test(word) && sentenceStart(ctx)) {
+      // pojedyncza litera z kropką / nawiasem („a.”, „i)”) to znacznik listy albo skrót — Word jej
+      // nie podnosi (inaczej „a. ” dawało listę „A., B.” zamiast „a., b.”)
+      if (/^\p{Ll}/u.test(replacement) && !/\./u.test(word) && !(word.length === 1 && /^[.)]$/.test(delim)) && sentenceStart(ctx)) {
         replacement = replacement[0].toLocaleUpperCase("pl") + replacement.slice(1);
       }
     }
@@ -259,11 +263,12 @@ const dwbAutoCorrect = (() => {
     }
     if (!DELIM_RE.test(ch) || LETTER_RE.test(after)) return void applyEdits(spot, edits);
 
-    // listy: „1. ” „1) ” „* ” „- ” na samym początku akapitu
+    // listy: „1. ” „a) ” „I. ” „* ” „> ”… na samym początku akapitu
     if (isOn("lists") && /^[\s ]$/u.test(ch) && !spot.p.dataset.noteKey && !isListParagraph(spot.p)) {
       const before = textBefore(spot.p, spot.node, spot.offset);
-      const m = before.match(/^(1[.)]|\*|-)[\s ]$/u);
-      if (m) { makeList(spot, m[1] === "*" || m[1] === "-" ? "bullet" : "number", before.length); return; }
+      const m = before.match(/^(.{1,2})[\s ]$/u);
+      const list = m && listMarker(m[1]);
+      if (list) { makeList(spot, list.kind, before.length, list.variant); return; }
     }
     edits.push(...planWord(spot, spot.offset - 1, ch, lang));
     applyEdits(spot, edits);
@@ -272,7 +277,17 @@ const dwbAutoCorrect = (() => {
   // Zamiana na listę idzie tą samą drogą co przycisk „Lista” (zmiana w pliku + przerysowanie —
   // numeracja to liczniki CSS z renderu). „1. ” pisze się w biegu, więc klawisze wciśnięte
   // w trakcie przerysowania trzyma holdTypingWhile (docx-inline-edit.js) i dopisuje potem.
-  async function makeList(spot, kind, markerLen) {
+  // Znacznik listy (jak w Wordzie): { kind, variant } albo null
+  const LIST_FMT = { 1: "decimal", a: "lowerLetter", A: "upperLetter", i: "lowerRoman", I: "upperRoman" };
+  function listMarker(s) {
+    const n = /^([1aAiI])([.)])$/.exec(s);
+    if (n) return { kind: "number", variant: n[1] === "1" && n[2] === "." ? null : { fmt: LIST_FMT[n[1]], punct: n[2] } };
+    if (s === "*") return { kind: "bullet", variant: null };
+    if (s === ">") return { kind: "bullet", variant: { char: "➢" } };
+    return null;
+  }
+
+  async function makeList(spot, kind, markerLen, variant = null) {
     const p = spot.p;
     const index = resolveParaIndex(p);
     if (index < 0 || typeof applyDocumentEdit !== "function" || typingHeld()) return;
@@ -284,7 +299,7 @@ const dwbAutoCorrect = (() => {
       r.deleteContents();
       if (typeof onInlineParagraphInput === "function") onInlineParagraphInput();
       pendingInlineCursor = { paraIndex: index, offset: 0 };
-      await applyDocumentEdit({ op: "list", indices: [index], kind, toggle: false });
+      await applyDocumentEdit({ op: "list", indices: [index], kind, toggle: false, variant });
     };
     try {
       await holdTypingWhile(() => (typeof dwbUndo !== "undefined" && dwbUndo.group ? dwbUndo.group("undoOpAutoList", run) : run()), index);
@@ -300,16 +315,16 @@ const dwbAutoCorrect = (() => {
     if (!docCaretParagraph(e.target)) return;
     const spot = caretSpot();
     if (!spot || LETTER_RE.test(charAfter(spot.p, spot.node, spot.offset))) return;
-    // „1.” / „1)” / „*” / „-” + Tab na samym początku akapitu → lista, jak ze spacją (Word 16.114,
+    // znacznik listy („1.”, „a)”, „*”…) + Tab na samym początku akapitu → lista, jak ze spacją (Word 16.114,
     // sprawdzone pisaniem: „1.⇥” = lista numerowana, tabulator nie zostaje w tekście). Dawniej
     // zostawał tekst „1.⇥”, a kolejne „1.⇥” w akapicie pod nim dawały dziwnie wciętą listę.
     if (e.key === "Tab" && !e.shiftKey && isOn("lists") && !spot.p.dataset.noteKey && !isListParagraph(spot.p)) {
       const before = textBefore(spot.p, spot.node, spot.offset);
-      const m = before.match(/^(1[.)]|\*|-)$/u);
-      if (m && !charAfter(spot.p, spot.node, spot.offset)) {
+      const list = listMarker(before);
+      if (list && !charAfter(spot.p, spot.node, spot.offset)) {
         e.preventDefault();
         e.stopPropagation();
-        makeList(spot, m[1] === "*" || m[1] === "-" ? "bullet" : "number", before.length);
+        makeList(spot, list.kind, before.length, list.variant);
         return;
       }
     }

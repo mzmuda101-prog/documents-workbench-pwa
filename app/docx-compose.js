@@ -923,19 +923,32 @@ const COMPOSE_LIST_NAMES = { bullet: "DWB Bullets", number: "DWB Numbering" };
 const COMPOSE_BULLETS = ["•", "◦", "▪"];
 const COMPOSE_NUMFMT = [["decimal", "%L."], ["lowerLetter", "%L."], ["lowerRoman", "%L."]];
 
-function composeAbstractNumXml(kind, id) {
+// Odmiana listy z autoformatowania (jak w Wordzie: „a) ” → a), b)…, „I. ” → I., II.…, „> ” → ➢):
+// { fmt, punct } dla numerowanej, { char } dla punktowanej. Pierwszy poziom w tym formacie,
+// głębsze — zwykły cykl. Każda odmiana to osobna definicja („DWB Numbering lowerLetter)”).
+function composeListName(kind, variant) {
+  if (!variant) return COMPOSE_LIST_NAMES[kind];
+  return `${COMPOSE_LIST_NAMES[kind]} ${kind === "bullet" ? variant.char : `${variant.fmt}${variant.punct}`}`;
+}
+
+function composeAbstractNumXml(kind, id, variant = null) {
   const nsid = Math.floor(Math.random() * 0xffffffff).toString(16).toUpperCase().padStart(8, "0");
   let lvls = "";
   for (let i = 0; i < 9; i++) {
     const ind = `<w:pPr><w:ind w:left="${720 * (i + 1)}" w:hanging="360"/></w:pPr>`;
     if (kind === "bullet") {
-      lvls += `<w:lvl w:ilvl="${i}"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="${COMPOSE_BULLETS[i % 3]}"/><w:lvlJc w:val="left"/>${ind}<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:hint="default"/></w:rPr></w:lvl>`;
+      const ch = i === 0 && variant?.char ? variant.char : COMPOSE_BULLETS[i % 3];
+      lvls += `<w:lvl w:ilvl="${i}"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="${ch}"/><w:lvlJc w:val="left"/>${ind}<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:hint="default"/></w:rPr></w:lvl>`;
     } else {
-      const [fmt, text] = COMPOSE_NUMFMT[i % 3];
+      let [fmt, text] = COMPOSE_NUMFMT[i % 3];
+      if (variant) {
+        if (i === 0) fmt = variant.fmt;
+        text = `%L${variant.punct}`;
+      }
       lvls += `<w:lvl w:ilvl="${i}"><w:start w:val="1"/><w:numFmt w:val="${fmt}"/><w:lvlText w:val="${text.replace("L", i + 1)}"/><w:lvlJc w:val="left"/>${ind}</w:lvl>`;
     }
   }
-  return `<w:abstractNum w:abstractNumId="${id}"><w:nsid w:val="${nsid}"/><w:multiLevelType w:val="hybridMultilevel"/><w:name w:val="${COMPOSE_LIST_NAMES[kind]}"/>${lvls}</w:abstractNum>`;
+  return `<w:abstractNum w:abstractNumId="${id}"><w:nsid w:val="${nsid}"/><w:multiLevelType w:val="hybridMultilevel"/><w:name w:val="${composeListName(kind, variant)}"/>${lvls}</w:abstractNum>`;
 }
 
 async function composeEnsurePart(zip, path, rootXml, contentType, relType) {
@@ -1026,11 +1039,13 @@ async function applyListInZip(zip, xml, edit) {
     return { xml: n ? composeSerialize(doc) : xml, count: n, kind };
   }
   // definicja (abstractNum) tego rodzaju
-  let absId = Array.from(idx.abstracts.entries()).find(([, a]) => a.name === COMPOSE_LIST_NAMES[kind])?.[0];
+  const variant = edit.variant && (kind === "bullet" ? edit.variant.char : edit.variant.fmt) ? edit.variant : null;
+  const listName = composeListName(kind, variant);
+  let absId = Array.from(idx.abstracts.entries()).find(([, a]) => a.name === listName)?.[0];
   const root = numDoc.documentElement;
   if (absId == null) {
     absId = String(Array.from(idx.abstracts.keys()).reduce((m, k) => Math.max(m, parseInt(k, 10) || 0), -1) + 1);
-    const frag = composeParse(`<w:numbering xmlns:w="${W_NS}">${composeAbstractNumXml(kind, absId)}</w:numbering>`);
+    const frag = composeParse(`<w:numbering xmlns:w="${W_NS}">${composeAbstractNumXml(kind, absId, variant)}</w:numbering>`);
     composeNumberingInsert(root, numDoc.importNode(frag.documentElement.firstChild, true)); // abstractNum przed num (schemat)
   }
   const newNum = (restart) => {

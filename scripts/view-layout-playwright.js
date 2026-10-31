@@ -128,7 +128,9 @@ async function run() {
     window.__vtSeen = false; window.__overlaySeen = false;
     window.__vtObs = new MutationObserver(() => {
       if (document.documentElement.classList.contains("dwb-vt")) window.__vtSeen = true;
-      if (!document.getElementById("loadingOverlay")?.classList.contains("hidden")) window.__overlaySeen = true;
+      // widoczna nakładka: nie „hidden” i nie w cichej fazie (.loading-quiet — przez 0,4 s niewidoczna)
+      const ov = document.getElementById("loadingOverlay");
+      if (ov && !ov.classList.contains("hidden") && !ov.classList.contains("loading-quiet")) window.__overlaySeen = true;
     });
     __vtObs.observe(document.documentElement, { attributes: true, subtree: true, attributeFilter: ["class"] });
   });
