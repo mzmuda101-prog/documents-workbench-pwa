@@ -961,6 +961,8 @@
     const gap = after.x - gl[k - 1].x1;
     // „o”, „-”, „*” jako punktor tylko z wyraźnym odstępem (inaczej to zwykłe słowo: „o tym”)
     const weak = /^[o\-*]$/.test(word);
+    // „§” z liczbą („§ 1.”, „§ 12a”) to numer paragrafu, nie punktor (kwadracik Wingdings bywa „§”)
+    if (word === "§" && /\d/.test(after.u)) return null;
     if (BULLET_RE.test(word) && gap > gl[0].size * (weak ? 0.45 : 0.2)) return { kind: "bullet", marker: word, textX: after.x, markerX: gl[0].x };
     if (NUMBER_RE.test(word) && gap > gl[0].size * 0.25) return { kind: "number", marker: word, textX: after.x, markerX: gl[0].x };
     return null;
@@ -1054,6 +1056,9 @@
     const leftRef = para.lines.length >= 2 ? prev.x0 : first.list ? first.list.textX : first.x0;
     const dx = Math.abs(l.x0 - leftRef);
     const centered = isCenteredLine(prev, box) && isCenteredLine(l, box);
+    // wyśrodkowane zawija się na szerokości obszaru: krótki wiersz, w którym zmieściłoby się
+    // pierwsze słowo następnego, kończy się ręcznie (tytuł „Zarządzenie Nr …” / „Rektora …” / „z dnia …”)
+    if (centered && prev.x1 - prev.x0 + size * 0.3 + fw < width - size * 0.5) return false;
     if (dx > size * 0.6 && !centered) {
       // wcięcie pierwszego wiersza: drugi wiersz bardziej na lewo niż pierwszy
       if (!(para.lines.length === 1 && l.x0 < first.x0 && first.x0 - l.x0 < size * 4)) return false;
