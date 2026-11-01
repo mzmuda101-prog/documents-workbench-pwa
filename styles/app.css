@@ -3296,3 +3296,16 @@ body.dwb-painting .docx-preview-host * {
 .mm-row-field { flex-direction: row; align-items: center; gap: 8px; margin: 0; flex: 0 0 auto; }
 .mm-row-field > span { margin: 0; }
 .mm-row-field input { width: 4.5em; }
+
+/* ===================================================
+   SZEROKIE MONITORY (2026-11-01): zamknięty uchwyt panelu stał przy lewej krawędzi
+   EKRANU — na 2560/3440/4K setki pikseli od dokumentu. Gdy z boku jest wolne tło,
+   uchwyt przylega do lewej krawędzi aplikacji (karta 1380 px). Poniżej 1600 px bez zmian.
+   =================================================== */
+@media (min-width: 1600px) {
+  :root.sidebar-docked:not(.sidebar-open) .sidebar-handle {
+    left: calc((100vw - 1380px) / 2 - 18px) !important;
+    border-left: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+    border-radius: 14px;
+  }
+}
