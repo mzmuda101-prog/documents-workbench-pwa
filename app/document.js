@@ -111,7 +111,7 @@ async function ingestFile(file, options = {}) {
     setFileUi(currentFileName, originalFileBytes.byteLength);
     setDirtyState(false);
 
-    await renderCurrentDocument();
+    await renderCurrentDocument({ newFile: true });
     // śledzenie zmian: stan z karty (open-docs) albo z ustawień pliku (Word ze śledzeniem).
     // Bez await: wczytanie nie może się wydłużać — kursor dla nowego dokumentu (createNew) jest
     // ustawiany tuż po powrocie i zużywany przez przygotowanie akapitów do edycji.
@@ -203,9 +203,11 @@ function takeRenderScrollAnchor() {
 // znaczy „gotowe”), ale przez pierwsze 0,4 s niewidoczna (.loading-quiet).
 let quietRenderOnce = false;
 
-async function renderCurrentDocument() {
+// opts.newFile — pierwszy render świeżo otwartego pliku: na ekranie jest jeszcze POPRZEDNI dokument,
+// więc nakładka „Wczytywanie…” ma być widoczna od razu (dawniej znikała na 0,4 s bez śladu).
+async function renderCurrentDocument(opts = {}) {
   if (!originalFileBytes || currentFileType !== "docx") return;
-  const quiet = quietRenderOnce || !!docCanvasEl?.querySelector(".docx-preview-host p");
+  const quiet = !opts.newFile && (quietRenderOnce || !!docCanvasEl?.querySelector(".docx-preview-host p"));
   quietRenderOnce = false;
   loadingOverlayEl.classList.toggle("loading-quiet", quiet);
   setLoading(true, t("renderingDoc"));

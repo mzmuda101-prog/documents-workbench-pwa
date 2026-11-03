@@ -318,7 +318,8 @@ const dwbAutoCorrect = (() => {
     // znacznik listy („1.”, „a)”, „*”…) + Tab na samym początku akapitu → lista, jak ze spacją (Word 16.114,
     // sprawdzone pisaniem: „1.⇥” = lista numerowana, tabulator nie zostaje w tekście). Dawniej
     // zostawał tekst „1.⇥”, a kolejne „1.⇥” w akapicie pod nim dawały dziwnie wciętą listę.
-    if (e.key === "Tab" && !e.shiftKey && isOn("lists") && !spot.p.dataset.noteKey && !isListParagraph(spot.p)) {
+    // (nie w komórce tabeli: tam Tab zawsze przechodzi do następnej komórki, jak w Wordzie)
+    if (e.key === "Tab" && !e.shiftKey && isOn("lists") && !spot.p.dataset.noteKey && !isListParagraph(spot.p) && !spot.p.closest("td, th")) {
       const before = textBefore(spot.p, spot.node, spot.offset);
       const list = listMarker(before);
       if (list && !charAfter(spot.p, spot.node, spot.offset)) {

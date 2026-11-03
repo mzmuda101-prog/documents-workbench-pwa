@@ -58,6 +58,34 @@ const CASES = [
     check(`${JSON.stringify(keys)} → ${want.join(" | ")}`, JSON.stringify(got) === JSON.stringify(want), JSON.stringify(got));
     await context.close();
   }
+  // „1.” + Tab w komórce tabeli = przejście do następnej komórki, nie lista (jak w Wordzie) (2026-11-03:
+  // autokorekta przechwytywała Tab przed obsługą tabeli — w tłoku testów zamiast przejścia była lista)
+  {
+    const context = await browser.newContext({ serviceWorkers: "block", viewport: { width: 1280, height: 860 } });
+    await context.addInitScript(() => { sessionStorage.setItem("introPlayed", "true"); localStorage.setItem("dwb-autocorrect-v1", JSON.stringify({ on: true })); });
+    const page = await context.newPage();
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.goto(APP_URL, { waitUntil: "load" });
+    await page.evaluate(() => document.getElementById("heroSplash")?.remove());
+    await page.evaluate(() => composeUi.createNew("blank"));
+    await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && document.querySelector(".docx-preview-host p.docx-editable-p"), null, { timeout: 20000 });
+    await page.waitForTimeout(400);
+    await page.evaluate(() => composeUi.insertTable(2, 2));
+    await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && document.querySelector(".docx-preview-host td p.docx-editable-p"), null, { timeout: 20000 });
+    await page.waitForTimeout(400);
+    await page.click(".docx-preview-host td p.docx-editable-p");
+    for (const k of ["1", ".", "Tab"]) { await page.keyboard.press(k); await page.waitForTimeout(60); }
+    await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && !inlineLocksPending, null, { timeout: 20000 });
+    await page.waitForTimeout(400);
+    const cell = await page.evaluate(() => {
+      const tds = [...document.querySelectorAll(".docx-preview-host td")];
+      const at = window.getSelection().anchorNode;
+      const el = at && (at.nodeType === 1 ? at : at.parentElement);
+      return { first: tds[0]?.textContent, list: !!tds[0]?.querySelector(".docx-editable-list"), caretCell: tds.indexOf(el?.closest("td")) };
+    });
+    check("„1.” + Tab w komórce → następna komórka, bez listy", cell.first === "1." && !cell.list && cell.caretCell === 1, JSON.stringify(cell));
+    await context.close();
+  }
   check("brak błędów strony", errors.length === 0, errors.join("\n"));
   await browser.close();
   const bad = results.filter((r) => !r.ok);

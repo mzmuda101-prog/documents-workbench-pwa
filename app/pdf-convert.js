@@ -503,7 +503,10 @@
         const first = runningRows.findIndex((r) => r[zone].length || r[zone + "Images"].length);
         if (first < 0) continue;
         const xml = runningXml(runningRows[first][zone], first + 1, n, layouts[first], margins[first], zone, raws[first].glyphFixes);
-        const pics = runningRows[first][zone + "Images"];
+        // logo z pierwszej strony, która je MA (pierwsza strona z samym tekstem nagłówka dawała pustą
+        // listę, a logo było już zdjęte z treści wszystkich stron — znikało z pliku)
+        const withPics = runningRows.findIndex((r) => r[zone + "Images"].length);
+        const pics = withPics >= 0 ? runningRows[withPics][zone + "Images"] : [];
         for (const p of pages) {
           if (zone === "bottom") {
             p.footer = xml.xml;

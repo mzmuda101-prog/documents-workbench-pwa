@@ -207,6 +207,32 @@ function mergeParagraphInXml(xml, index, mergedRuns) {
 // w podglądzie) i wszystko między nimi (tabele, obrazy) znikają, zostaje jeden akapit z treścią
 // mergedRuns — z właściwościami pierwszego (keep „first”) albo ostatniego (keep „last”: cały
 // pierwszy akapit był zaznaczony, jak usunięcie akapitu ze znacznikiem w Wordzie).
+// Zakładki przecięte edycją: koniec usunięty razem z zaznaczonym tekstem (np. ogon nagłówka
+// „_Guide17”) zostawiał w pliku sam początek — Word skraca wtedy zakładkę, a nie gubi jej końca.
+// Osierocony początek w akapicie dostaje koniec na końcu akapitu, osierocony koniec znika.
+// Liczone na całym dokumencie, PO zapisie wszystkich akapitów operacji (podział akapitu zapisuje
+// je po kolei — sprawdzanie w trakcie widziałoby fałszywe sieroty).
+function balanceBookmarksInParagraphs(doc, paras) {
+  const ids = (tag) => new Set(Array.from(doc.getElementsByTagNameNS(W_NS, tag)).map((n) => n.getAttributeNS(W_NS, "id")));
+  const starts = ids("bookmarkStart");
+  const ends = ids("bookmarkEnd");
+  paras.forEach((p) => {
+    if (!p || !p.parentNode) return;
+    Array.from(p.childNodes).forEach((n) => {
+      if (n.namespaceURI !== W_NS) return;
+      const id = n.getAttributeNS?.(W_NS, "id");
+      if (n.localName === "bookmarkStart" && !ends.has(id)) {
+        const end = doc.createElementNS(W_NS, "w:bookmarkEnd");
+        end.setAttributeNS(W_NS, "w:id", id);
+        p.appendChild(end);
+        ends.add(id);
+      } else if (n.localName === "bookmarkEnd" && !starts.has(id)) {
+        p.removeChild(n);
+      }
+    });
+  });
+}
+
 function deleteParagraphRangeInXml(xml, edit) {
   const doc = new DOMParser().parseFromString(xml, "application/xml");
   const paragraphs = collectParagraphElements(doc.documentElement, "all");
@@ -226,6 +252,7 @@ function deleteParagraphRangeInXml(xml, edit) {
     });
   }
   applyRunsToParagraphXml(keep, edit.mergedRuns || []);
+  balanceBookmarksInParagraphs(doc, [keep]);
   return { xml: new XMLSerializer().serializeToString(doc), count: 1 };
 }
 
@@ -713,9 +740,11 @@ function applyParagraphBatchInXml(xml, items) {
   const doc = parser.parseFromString(xml, "application/xml");
   const paragraphs = collectParagraphElements(doc.documentElement, "all");
   let count = 0;
+  const touched = [];
   (items || []).forEach(({ index, text, runs }) => {
     const p = paragraphs[index];
     if (!p) return;
+    touched.push(p);
     // Pusta lista fragmentów = akapit wyczyszczony (dawniej szła ścieżka „text”, a text był
     // pusty — do pliku trafiało dosłowne „undefined”)
     if (Array.isArray(runs)) {
@@ -734,6 +763,7 @@ function applyParagraphBatchInXml(xml, items) {
     count++;
   });
   if (!count) return { xml, count: 0 };
+  balanceBookmarksInParagraphs(doc, touched);
   return { xml: new XMLSerializer().serializeToString(doc), count };
 }
 

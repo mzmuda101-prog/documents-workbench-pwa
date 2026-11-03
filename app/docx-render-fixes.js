@@ -389,6 +389,9 @@ function spaceEm(family) {
     const c = (spaceEm.ctx ||= document.createElement("canvas").getContext("2d"));
     c.font = `100px ${family}`;
     em = c.measureText(" ").width / 100 || 0.25;
+    // krój osadzony w pliku jeszcze się wczytuje (docx-preview ładuje go później): pomiar jest dla
+    // kroju zastępczego — bez zapamiętania, ponowny przebieg po fonts.ready zmierzy właściwy
+    if (document.fonts && !document.fonts.check(c.font)) return em;
   } catch (_) { /* bez canvasa — przeciętna spacja */ }
   SPACE_EM.set(family, em);
   return em;
@@ -488,6 +491,9 @@ function wordJustifyBreaks(host) {
               fixed = true;
             } else {
               const tail = w.endT.splitText(w.endI);
+              // tylko ostatnia litera słowa — reszta węzła (podwójna spacja, „\n”, dalszy tekst) zostaje
+              // obok; inaczej margines stał za CAŁĄ resztą, słowo się nie ruszało, a pętla zagnieżdżała push
+              if (tail.data.length > 1) tail.splitText(1);
               const push = document.createElement("dwb-push");
               push.style.marginRight = `${Math.ceil(right - w.x) + 2}px`;
               tail.before(push);
