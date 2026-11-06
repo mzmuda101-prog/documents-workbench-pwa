@@ -191,9 +191,12 @@ function layoutTabStops(host) {
       if (hanging && indent > x + 0.5 && !stops.some((t) => t.pos > x + 0.5 && t.pos < indent)) stops.push({ pos: indent, leader: "none", style: "left" });
       stops.sort((a, b) => a.pos - b.pos);
       const dt = parseFloat(sp.dataset.dt) || 36;
+      // Domyślne tabulatory stoją co defaultTabStop OD MARGINESU (wyrocznia Worda 2026-11-06,
+      // tools/word-oracle/probe-tab-after-last.js: własny na 99,25 pt, odstęp 35,4 → za nim 141,5 =
+      // 4 × 35,4, nie 99,25 + 35,4). Dawniej liczone od ostatniego własnego tabulatora (lista 3.11).
       const nextDefault = (from) => {
-        let pos = Math.max(stops.length ? stops[stops.length - 1].pos : 0, 0);
-        while (pos <= from + 0.5) pos += dt;
+        let pos = (Math.floor((from + 0.5) / dt) + 1) * dt;
+        if (pos <= from + 0.5) pos += dt;
         return { pos, leader: "none", style: "left" };
       };
       let stop = stops.find((t) => t.pos > x + 0.5);
@@ -207,7 +210,24 @@ function layoutTabStops(host) {
         const right = (ml + p.offsetWidth - (parseFloat(cs.paddingRight) || 0)) * PX2PT;
         const x0 = indent;
         const again = stops.find((t) => t.pos > x0 + 0.5);
-        if (stop.pos > right + 0.5 && x > x0 + 0.5 && again && again.pos <= right + 0.5) { stop = again; wrapX = x0; }
+        // Word przenosi też wtedy, gdy domyślny tabulator jeszcze się mieści, ale słowo za nim już
+        // nie (wyrocznia 2026-11-06, tools/word-oracle/probe-tab-wrap.js: odstęp 36 pt → domyślny na
+        // 252 pt, prawa krawędź 253,6 pt, „X” za nim → kropki i „X” w nowej linijce)
+        const nextW = (() => {
+          const range = document.createRange();
+          const tw = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+          tw.currentNode = sp;
+          let w = 0;
+          for (let t = tw.nextNode(); t; t = tw.nextNode()) {
+            if (sp.contains(t)) continue;
+            if (t.parentElement.closest("span.docx-tab")) break;
+            const m = /^[^\s\u00a0]*/.exec(t.data)[0];
+            if (m) { range.setStart(t, 0); range.setEnd(t, m.length); w += range.getBoundingClientRect().width; }
+            if (m.length < t.data.length) break;
+          }
+          return (w / scale) * PX2PT;
+        })();
+        if (stop.pos + nextW > right + 0.5 && x > x0 + 0.5 && again && again.pos <= right + 0.5) { stop = again; wrapX = x0; }
       }
       let after = 0;
       if (stop.style === "right" || stop.style === "center" || stop.style === "decimal") {
@@ -359,6 +379,8 @@ function watchParagraphLayout(wrapper) {
       applyContextualSpacing(wrapper);
       fixEmptyParagraphHeights(wrapper);
       touched.forEach((p) => { if (p.isConnected) { zeroWhitespaceRun(p); hangTrailingSpace(p); addFallbackSymbolLine(p); } });
+      const just = [...touched].filter((p) => p.isConnected && p.classList.contains("dwb-justify"));
+      if (just.length) applyScreenLastLines(wrapper, just);
       touched.clear();
     });
   });
@@ -517,6 +539,8 @@ function wordJustifyBreaks(host) {
 function relaxJustifyLastLines(host) {
   const range = document.createRange();
   host.querySelectorAll("p.dwb-justify").forEach((p) => {
+    // wydruk ma własne <dwb-last> — dopełnienie z ekranu (screenLastLineFill) byłoby drugi raz
+    if (p.style.getPropertyValue("--dwb-last-fill")) p.style.removeProperty("--dwb-last-fill");
     range.selectNodeContents(p);
     const rects = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
     if (rects.length < 2) return;
@@ -551,6 +575,66 @@ function relaxJustifyLastLines(host) {
     // bez ściskania się nie mieści — zostaje ściśnięta (Word ściska i ostatnią linijkę)
     if (p.getBoundingClientRect().height > h0 + 0.5) wraps.forEach((w) => w.classList.add("dwb-justify-tight"));
   });
+}
+
+// Ekran (Edycja/Podgląd, DOM bez zmian): ostatnia linijka wyjustowanego akapitu ma w Wordzie
+// ZWYKŁE spacje (lista 3.11: u nas była ściśnięta o ¼ — CSS ściska wszystkie linijki, a wydruk
+// poprawia to znacznikami <dwb-last>, których w edytowanym akapicie być nie może). Liczymy, ile
+// miejsca zostaje w ostatniej linijce przy zwykłych spacjach → --dwb-last-fill; puste ::after
+// tej szerokości + text-align-last: justify rozciąga ściśnięte spacje dokładnie do zwykłych
+// (app.css). Gdy przy zwykłych spacjach linijka by się nie zmieściła — zostaje ściśnięta (Word
+// też ściska). Akapity z miękkim złamaniem (Shift+Enter) — bez zmian (justify-last rozciągnąłby
+// linijki przed złamaniem). Zwraca { p, fill } do zapisu albo null (pomiar osobno od zapisu).
+function screenLastLineFill(p) {
+  if (!p.classList.contains("dwb-justify") || p.querySelector("br") || p.closest(".dwb-print-host")) return null;
+  const range = document.createRange();
+  range.selectNodeContents(p);
+  const rects = [...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+  if (!rects.length) return null;
+  const lastTop = Math.max(...rects.map((r) => r.top));
+  // od końca: znaki ostatniej linijki (koniec ostatniej litery, spacje w linijce)
+  const texts = [];
+  const tw = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+  for (let t = tw.nextNode(); t; t = tw.nextNode()) if (t.data && !t.parentElement.closest("[contenteditable=false]")) texts.push(t);
+  const spw = parseFloat(p.style.getPropertyValue("--dwb-spw")) || 0.25;
+  let lastRight = null, extra = 0, trailing = 0, chars = 0;
+  outer: for (let k = texts.length - 1; k >= 0; k--) {
+    const t = texts[k];
+    const fs = parseFloat(getComputedStyle(t.parentElement).fontSize) || 0;
+    for (let i = t.data.length - 1; i >= 0; i--) {
+      range.setStart(t, i); range.setEnd(t, i + 1);
+      const r = range.getBoundingClientRect();
+      const ch = t.data[i];
+      if (r.height && r.top < lastTop - 2) break outer; // poprzednia linijka
+      if (++chars > 600) return null;
+      if (ch === " " || ch === "\u00a0") {
+        // ile spacja straciła na ściśnięciu: word-spacing jej fragmentu (prostokąty pojedynczych spacji
+        // w WebKit są zaokrąglone do pełnych pikseli — nie nadają się do pomiaru)
+        extra += Math.max(0, -parseFloat(getComputedStyle(t.parentElement).wordSpacing) || 0.25 * spw * fs);
+        if (lastRight == null) trailing += r.width; // spacje za ostatnią literą — przed ::after mają szerokość
+      } else if (/\S/.test(ch) && r.height && lastRight == null) lastRight = r.right;
+    }
+  }
+  if (lastRight == null || extra < 0.5) return null;
+  const cs = getComputedStyle(p);
+  const right = p.getBoundingClientRect().right - (parseFloat(cs.paddingRight) || 0) - (parseFloat(cs.borderRightWidth) || 0);
+  const fill = right - lastRight - trailing - extra - 1; // 1 px zapasu: nigdy nie złamać linijki
+  return { p, fill: fill > 1 ? Math.floor(fill * 10) / 10 : 0 };
+}
+function applyScreenLastLines(root, only) {
+  if (!root) return 0;
+  const list = only ? [...only] : [...root.querySelectorAll("section.docx p.dwb-justify")];
+  // 1. pomiar wszystkiego (bez dopełnienia — inaczej mierzylibyśmy już rozciągnięte spacje)
+  list.forEach((p) => { if (p.style.getPropertyValue("--dwb-last-fill")) p.style.removeProperty("--dwb-last-fill"); });
+  const plan = list.map((p) => ({ p, h: p.getBoundingClientRect().height, m: screenLastLineFill(p) }));
+  // 2. zapis; 3. bezpiecznik: akapit urósł (linijka się złamała) → bez dopełnienia
+  plan.forEach((x) => { if (x.m && x.m.fill > 0) x.p.style.setProperty("--dwb-last-fill", `${x.m.fill}px`); });
+  let n = 0;
+  plan.forEach((x) => {
+    if (!(x.m && x.m.fill > 0)) return;
+    if (x.p.getBoundingClientRect().height > x.h + 0.5) x.p.style.removeProperty("--dwb-last-fill"); else n++;
+  });
+  return n;
 }
 
 function applyWordSuperscripts(host) {

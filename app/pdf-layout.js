@@ -1055,10 +1055,21 @@
     const first = para.lines[0];
     const leftRef = para.lines.length >= 2 ? prev.x0 : first.list ? first.list.textX : first.x0;
     const dx = Math.abs(l.x0 - leftRef);
-    const centered = isCenteredLine(prev, box) && isCenteredLine(l, box);
+    // wyśrodkowane: oba wiersze na środku obszaru. Obszar bywa wyznaczony przez sam akapit (jego
+    // najszerszy wiersz = krawędzie obszaru), więc wiersz bez odsunięcia od lewej też się liczy,
+    // gdy środki się zgadzają, a lewe krawędzie nie (lista 3.11: inaczej akapit rozpadał się na wiersze)
+    const bc = (box.x0 + box.x1) / 2, ctol = Math.max(3, size * 0.4);
+    const nearC = (x) => Math.abs((x.x0 + x.x1) / 2 - bc) < ctol;
+    // obie krawędzie inne (symetrycznie): wyjustowane wiersze z wysunięciem pierwszego mają wspólną
+    // PRAWĄ krawędź i środek też blisko środka obszaru — to nie wyśrodkowanie (pdf:score „CO-23”)
+    const centered = (isCenteredLine(prev, box) && isCenteredLine(l, box)) || (nearC(prev) && nearC(l) && dx > size * 0.6 && Math.abs(l.x1 - prev.x1) > size * 0.6);
     // wyśrodkowane zawija się na szerokości obszaru: krótki wiersz, w którym zmieściłoby się
     // pierwsze słowo następnego, kończy się ręcznie (tytuł „Zarządzenie Nr …” / „Rektora …” / „z dnia …”)
-    if (centered && prev.x1 - prev.x0 + size * 0.3 + fw < width - size * 0.5) return false;
+    // Gdy akapit ma już ≥ 2 wiersze, zawija się na WŁASNEJ szerokości (wcięcia po bokach, węższy
+    // blok) — nie mniejszej niż jego najszerszy wiersz. Porównanie z całym obszarem odcinało
+    // kolejne, nieco krótsze wiersze wyśrodkowanego akapitu (lista 3.11; PDF z Worda, wcięcia 3 cm).
+    const wrapW = para.lines.length >= 2 ? Math.min(width, Math.max(...para.lines.map((x) => x.x1 - x.x0))) : width;
+    if (centered && prev.x1 - prev.x0 + size * 0.3 + fw < wrapW - size * 0.5) return false;
     if (dx > size * 0.6 && !centered) {
       // wcięcie pierwszego wiersza: drugi wiersz bardziej na lewo niż pierwszy
       if (!(para.lines.length === 1 && l.x0 < first.x0 && first.x0 - l.x0 < size * 4)) return false;

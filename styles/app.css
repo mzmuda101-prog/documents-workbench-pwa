@@ -731,6 +731,11 @@ html.is-mobile .dwb-page-margin-guide { display: none; }
 /* wyjustowany akapit łamie się jak w Wordzie: spacja może się ścisnąć o ¼ (applyJustifySpaceCompression) */
 .docx-preview-host p.dwb-justify, .docx-preview-host p.dwb-justify * { word-spacing: calc(-0.25em * var(--dwb-spw, 0.25)); }
 .docx-preview-host p.dwb-justify .dwb-justify-last:not(.dwb-justify-tight), .docx-preview-host p.dwb-justify .dwb-justify-last:not(.dwb-justify-tight) * { word-spacing: normal; }
+/* ekran: ostatnia linijka ze zwykłymi spacjami bez zmian w DOM — puste ::after zajmuje resztę linijki
+   (--dwb-last-fill, applyScreenLastLines), a justify-last rozciąga ściśnięte spacje do zwykłych.
+   Ze znakami formatowania ::after to „¶” — wtedy ostatnia linijka zostaje ściśnięta. */
+.doc-canvas:not(.show-formatting-marks) .docx-preview-host p.dwb-justify[style*="--dwb-last-fill"] { text-align-last: justify; }
+.doc-canvas:not(.show-formatting-marks) .docx-preview-host p.dwb-justify[style*="--dwb-last-fill"]::after { content: ""; display: inline-block; width: var(--dwb-last-fill); height: 0; }
 .docx-preview-host p.docx-bullet-fixed.dwb-bullet-hang.docx-bullet-l0::before { transform: scale(1.4); transform-origin: .175em calc(50% + .04em); }
 .docx-preview-host p.docx-bullet-fixed.dwb-bullet-hang.docx-bullet-l1::before { content: "\25E6" !important; }
 .docx-preview-host p.docx-bullet-fixed.dwb-bullet-hang.docx-bullet-l2::before { content: "\25AA" !important; }

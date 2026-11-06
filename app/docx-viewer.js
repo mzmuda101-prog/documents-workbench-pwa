@@ -97,6 +97,7 @@ async function renderDocxPreview(bytes, container, opts = {}) {
   addFallbackSymbolLines(wrapper); // ✓ ✗ ＋ — linijka w wysokości kroju zastępczego Worda (po zerowaniu spacji)
   hangTrailingSpaces(wrapper); // spacje na końcu akapitu do prawej/środka za marginesem (Word)
   if (!mobileReflow) {
+    applyScreenLastLines(wrapper); // ostatnia linijka wyjustowanego: zwykłe spacje (Word), bez zmian w DOM
     applyMergedCellFirstLine(wrapper); // scalenie w pionie: 1. wiersz ≥ pierwsza linijka (Word)
     addCellMarginsToRowMinimum(wrapper); // marginesy komórek ponad minimum wysokości wiersza (Word)
     addTableBorderHeights(wrapper); // linie tabeli ponad wysokość wiersza (Word)
@@ -107,7 +108,7 @@ async function renderDocxPreview(bytes, container, opts = {}) {
     // Czcionki osadzone w pliku (np. z PDF) docx-preview wczytuje z opóźnieniem — po ich
     // dojściu szerokości tekstu się zmieniają: liczymy tabulatory jeszcze raz.
     if (document.fonts) {
-      const again = () => { if (wrapper.isConnected) { applyJustifySpaceCompression(wrapper); layoutTabStops(wrapper); hangTrailingSpaces(wrapper); } };
+      const again = () => { if (wrapper.isConnected) { applyJustifySpaceCompression(wrapper); layoutTabStops(wrapper); hangTrailingSpaces(wrapper); applyScreenLastLines(wrapper); } };
       document.fonts.ready.then(again).catch(() => {});
       let t = 0;
       const onDone = () => { clearTimeout(t); t = setTimeout(again, 60); };
