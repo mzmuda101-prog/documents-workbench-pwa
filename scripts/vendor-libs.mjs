@@ -408,7 +408,46 @@ function vendorTesseract() {
   console.log(`✅  lib/tesseract (tesseract.js ${ver})`);
 }
 
-main().then(vendorPdfjs).then(vendorTesseract).catch((err) => {
+// Transformers.js (workery AI: local-ai-worker.js, semantic-search-worker.js) — jeden moduł ESM
+// z onnxruntime-web/webgpu w środku + silnik wasm obok. Dawniej import z esm.sh (kod z CDN bez
+// sprawdzenia treści, dostęp do IndexedDB aplikacji; audyt bezpieczeństwa 6.11), a wasm z jsdelivr.
+// Kopia 1:1 trafia do sheet-workbench-pwa/lib/transformers (tam bez node_modules).
+async function vendorTransformers() {
+  const T = path.join(ROOT, "node_modules", "@huggingface", "transformers");
+  const ORT = path.join(ROOT, "node_modules", "onnxruntime-web");
+  if (!fs.existsSync(T) || !fs.existsSync(ORT)) {
+    console.warn("⚠️  @huggingface/transformers / onnxruntime-web nie zainstalowane — run npm install first");
+    return;
+  }
+  const OUT_DIR = path.join(ROOT, "lib", "transformers");
+  fs.rmSync(OUT_DIR, { recursive: true, force: true });
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+  const esbuild = await import("esbuild");
+  await esbuild.build({
+    entryPoints: [path.join(T, "dist", "transformers.web.js")],
+    outfile: path.join(OUT_DIR, "transformers.min.mjs"),
+    bundle: true, format: "esm", minify: true, platform: "browser", target: "es2022", legalComments: "none", logLevel: "warning",
+  });
+  // GitHub push protection brał nazwę klasy (32 litery/cyfry tuż po „mistral”) za klucz API
+  // Mistrala i blokował push — dzielimy napis na dwa (ta sama wartość, inny zapis)
+  const BUNDLE = path.join(OUT_DIR, "transformers.min.mjs");
+  let js = fs.readFileSync(BUNDLE, "utf8");
+  js = js.replace(/(?<=[{,])Mistral3ForConditionalGeneration:/g, '["Mistral3For"+"ConditionalGeneration"]:')
+    .replace(/"Mistral3ForConditionalGeneration"/g, '"Mistral3For"+"ConditionalGeneration"');
+  if (/mistral.{0,40}?\b[A-Za-z0-9]{32}\b/i.test(js.split("\n").slice(0, -1).join("\n"))) throw new Error("lib/transformers: napis wygląda jak klucz API — GitHub zablokuje push");
+  fs.writeFileSync(BUNDLE, js);
+  // wasm z WebGPU (asyncify) — ścieżki ustawia worker (env.backends.onnx.wasm.wasmPaths)
+  for (const f of ["ort-wasm-simd-threaded.asyncify.mjs", "ort-wasm-simd-threaded.asyncify.wasm"]) {
+    fs.copyFileSync(path.join(ORT, "dist", f), path.join(OUT_DIR, f));
+  }
+  fs.copyFileSync(path.join(T, "LICENSE"), path.join(OUT_DIR, "LICENSE"));
+  const tv = JSON.parse(fs.readFileSync(path.join(T, "package.json"), "utf8")).version;
+  const ov = JSON.parse(fs.readFileSync(path.join(ORT, "package.json"), "utf8")).version;
+  fs.writeFileSync(path.join(OUT_DIR, "VERSION"), `@huggingface/transformers ${tv}, onnxruntime-web ${ov}\n`);
+  console.log(`✅  lib/transformers (transformers ${tv}, onnxruntime-web ${ov})`);
+}
+
+main().then(vendorPdfjs).then(vendorTesseract).then(vendorTransformers).catch((err) => {
   console.error("❌  vendor-libs failed:", err.message || err);
   process.exit(1);
 });

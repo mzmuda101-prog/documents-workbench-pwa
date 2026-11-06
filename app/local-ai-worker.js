@@ -2,10 +2,17 @@
 // KOPIA 1:1 w sheet-workbench-pwa/app i documents-workbench-pwa/app — zmieniaj oba pliki.
 //
 // Tworzony dopiero, gdy użytkownik uruchomi asystenta. Tekst pliku nie opuszcza urządzenia;
-// z sieci przychodzą wyłącznie wagi modelu (Hugging Face) i biblioteka (esm.sh).
+// z sieci przychodzą wyłącznie wagi modelu (Hugging Face); biblioteka leży w lib/transformers.
 // Pomiar modeli: documents-workbench-pwa/docs/llm-bench (Etap 0, 2026-10-16).
 
-const TRANSFORMERS_URL = "https://esm.sh/@huggingface/transformers@4.3.1";
+// Biblioteka z lib/transformers (documents-workbench-pwa/scripts/vendor-libs.mjs), nie z CDN:
+// kod workera nie może się zmienić bez wydania aplikacji (dawniej esm.sh + wasm z jsdelivr,
+// bez sprawdzenia treści, z dostępem do IndexedDB aplikacji — audyt bezpieczeństwa 2026-11-06).
+const TRANSFORMERS_URL = new URL("../lib/transformers/transformers.min.mjs?v=4.3.1", import.meta.url).href;
+const ORT_WASM_PATHS = {
+  mjs: new URL("../lib/transformers/ort-wasm-simd-threaded.asyncify.mjs?v=4.3.1", import.meta.url).href,
+  wasm: new URL("../lib/transformers/ort-wasm-simd-threaded.asyncify.wasm", import.meta.url).href,
+};
 
 let lib = null;
 let loaded = null; // { key, model, tokenizer }
@@ -15,6 +22,7 @@ const post = (type, payload = {}) => self.postMessage({ type, ...payload });
 
 async function loadLib(cacheKey) {
   lib ||= await import(TRANSFORMERS_URL);
+  lib.env.backends.onnx.wasm.wasmPaths = { ...ORT_WASM_PATHS };
   lib.env.useBrowserCache = true;
   lib.env.cacheKey = cacheKey;
   lib.env.allowLocalModels = false;

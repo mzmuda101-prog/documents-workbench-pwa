@@ -44,16 +44,24 @@ function truncateAndNormalize(values) {
   return out;
 }
 
+// Biblioteka z lib/transformers (documents-workbench-pwa/scripts/vendor-libs.mjs), nie z CDN:
+// kod workera nie może się zmienić bez wydania aplikacji (dawniej esm.sh + wasm z jsdelivr,
+// bez sprawdzenia treści, z dostępem do IndexedDB aplikacji — audyt bezpieczeństwa 2026-11-06).
+const TRANSFORMERS_URL = new URL("../lib/transformers/transformers.min.mjs?v=4.3.1", import.meta.url).href;
+const ORT_WASM_PATHS = {
+  mjs: new URL("../lib/transformers/ort-wasm-simd-threaded.asyncify.mjs?v=4.3.1", import.meta.url).href,
+  wasm: new URL("../lib/transformers/ort-wasm-simd-threaded.asyncify.wasm", import.meta.url).href,
+};
+
 async function getEmbedder() {
   if (embedder) return embedder;
   if (!navigator.gpu) throw new Error("WebGPU is unavailable");
   // Dynamic import means a load failure is reported back to the panel instead of killing the
   // module worker before it can explain what happened.
-  // Keep the optional runtime off the release payload. esm.sh resolves the browser bundle's
-  // `onnxruntime-web/webgpu` dependency to an ESM URL; the plain npm CDN file leaves that
-  // bare specifier unresolved in a static PWA.
-  runtime ||= import("https://esm.sh/@huggingface/transformers@4.3.1");
+  // Loaded only when the feature is used (not precached); onnxruntime-web/webgpu is bundled in.
+  runtime ||= import(TRANSFORMERS_URL);
   const { AutoTokenizer, EmbeddingGemma2Model, env, mean_pooling } = await runtime;
+  env.backends.onnx.wasm.wasmPaths = { ...ORT_WASM_PATHS };
   if (!textOnlyConfig) {
     const response = await fetch(`https://huggingface.co/${MODEL_ID}/raw/main/config.json`);
     if (!response.ok) throw new Error(`Could not load model configuration (${response.status})`);
