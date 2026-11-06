@@ -79,6 +79,8 @@ async function renderDocxPreview(bytes, container, opts = {}) {
     renderFooters: true, // Widok mobilny: schowana CSS-em, opcja w panelu Widok (syncReflowOptions)
     renderFootnotes: true,
     renderEndnotes: true,
+    // w:altChunk = HTML z pliku w ramce srcdoc (ten sam origin) — nie wykonujemy cudzego HTML (audyt 6.11)
+    renderAltChunks: false,
     dwbAltHeaderFooter: !!opts.altHeaderFooter, // wydruk: wszystkie wersje nagłówka/stopki (łatka 23)
   });
   addGenericFontFallbacks(wrapper); // brak kroju na urządzeniu → systemowy bezszeryfowy/szeryfowy z prawdziwym pogrubieniem

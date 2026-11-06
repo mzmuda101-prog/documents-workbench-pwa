@@ -935,7 +935,7 @@ function onDocPaste(e) {
       return;
     }
   }
-  const commentFragment = e.clipboardData?.getData("application/x-dwb-comment-fragment");
+  const commentFragment = dwbCommentFrags.get(e.clipboardData?.getData("application/x-dwb-comment-fragment") || "");
   if (commentFragment && insertInternalCommentFragment(commentFragment)) {
     e.preventDefault();
     onInlineParagraphInput();
@@ -987,6 +987,16 @@ const dwbClipComments = new Set();
 // wklejamy z formatowaniem tylko w tym samym dokumencie (obrazy i komentarze to jego części).
 const dwbClip = new Map();
 const dwbClipNotes = new Set(); // „footnote:N” wyciętych przypisów — jak dwbClipComments
+// Fragmenty z komentarzami (Kopiuj/Wytnij): HTML zostaje w pamięci, w schowku tylko losowy klucz.
+// Dawniej HTML szedł typem application/x-dwb-comment-fragment, a ten typ może ustawić dowolna
+// strona (Chromium) — wklejenie wstawiało jej surowy HTML do dokumentu (audyt bezpieczeństwa 6.11).
+const dwbCommentFrags = new Map();
+function rememberCommentFragment(html) {
+  const id = `cf-${crypto.getRandomValues(new Uint32Array(4)).join("-")}`;
+  dwbCommentFrags.set(id, html);
+  while (dwbCommentFrags.size > 20) dwbCommentFrags.delete(dwbCommentFrags.keys().next().value);
+  return id;
+}
 let dwbDocSerial = 0;
 
 // Własny fragment ze schowka po Wytnij: markerom komentarza odpowiada XML w docIslandXml,

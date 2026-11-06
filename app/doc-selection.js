@@ -417,7 +417,7 @@ const dwbSel = (() => {
     if (clipId) e.clipboardData?.setData("application/x-dwb-clip", clipId);
     if (box.querySelector(COMMENT_MARKS)) {
       // Typ działa tylko w naszej aplikacji; zewnętrzne programy dalej dostają zwykły HTML/tekst.
-      e.clipboardData?.setData("application/x-dwb-comment-fragment", fragmentHtml(box));
+      e.clipboardData?.setData("application/x-dwb-comment-fragment", rememberCommentFragment(fragmentHtml(box)));
       // treść komentarza czeka w pliku na wklejenie (docx-inline-edit.js, dwbClipComments)
       box.querySelectorAll("[data-cm-kind='ref']").forEach((ref) => dwbClipComments.add(ref.dataset.cmId));
     }
@@ -457,7 +457,7 @@ const dwbSel = (() => {
     e.clipboardData?.setData("text/plain", window.getSelection().toString());
     e.clipboardData?.setData("text/html", box.innerHTML);
     if (clipId) e.clipboardData?.setData("application/x-dwb-clip", clipId);
-    if (box.querySelector(COMMENT_MARKS)) e.clipboardData?.setData("application/x-dwb-comment-fragment", fragmentHtml(box));
+    if (box.querySelector(COMMENT_MARKS)) e.clipboardData?.setData("application/x-dwb-comment-fragment", rememberCommentFragment(fragmentHtml(box)));
   }
 
   // Rekord schowka: akapity zaznaczenia z formatowaniem. Jeden akapit bez jego znacznika (kawałek

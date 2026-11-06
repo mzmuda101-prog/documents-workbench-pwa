@@ -98,12 +98,16 @@ async function run() {
       return { redirected: res.redirected, url: res.url, ok: res.ok };
     }, Array.from(SAMPLE));
     check("Udostępnij: Service Worker przyjmuje plik i kieruje na ?open=shared", shared.redirected && /\?open=shared$/.test(shared.url) && shared.ok, JSON.stringify(shared));
+    // pytanie przed otwarciem (POST może wysłać też obca strona — audyt 6.11)
+    const asked = [];
+    p3.once("dialog", (d) => { asked.push(d.message()); d.accept(); });
     await p3.goto(`${APP_URL}?open=shared`, { waitUntil: "load" });
     await p3.waitForFunction(() => !!originalFileBytes, null, { timeout: 20000 });
     await idle(p3);
     st = await p3.evaluate(async () => ({ name: currentFileName, handle: !!fileHandle, search: location.search, left: !!(await (await caches.open("docs-wb-share")).match("./__shared-file")) }));
     check("Udostępnij: plik otwarty z nazwą, bez uchwytu (zapis = kopia), schowek po nim wyczyszczony",
       st.name === "Udostępniony wniosek.docx" && !st.handle && st.search === "" && !st.left, JSON.stringify(st));
+    check("Udostępnij: pytanie przed otwarciem z nazwą pliku", asked.length === 1 && asked[0].includes("Udostępniony wniosek.docx"), JSON.stringify(asked));
     await p3.reload({ waitUntil: "load" });
     await p3.waitForTimeout(1200);
     check("odświeżenie strony nie otwiera udostępnionego pliku drugi raz", await p3.evaluate(() => !originalFileBytes));

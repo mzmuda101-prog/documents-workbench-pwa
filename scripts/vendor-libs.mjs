@@ -348,6 +348,13 @@ function patchBundle() {
       + `__E&&(__E.dataset.dwbHf=__a.type,__E.classList.add("dwb-hf-alt"),__E.style.display="none",["marginTop","marginBottom","minHeight"].forEach(__s=>__E.style[__s]=${J}.style[__s]))}`;
   });
   console.log("  ✅  łatka: wersje nagłówka/stopki (pierwsza / parzysta / domyślna) dla wydruku");
+
+  // 24) w:altChunk (HTML z pliku) → <iframe srcdoc> w originie aplikacji: z sandbox, żeby skrypt
+  //     z pliku się nie wykonał, gdyby renderAltChunks wróciło do true (audyt bezpieczeństwa 6.11)
+  const reAlt = /renderAltChunk\((\w+)\)\{if\(!this\.options\.renderAltChunks\)return null;var (\w+)=this\.createElement\("iframe"\);/;
+  if (!reAlt.test(src)) throw new Error("łatka altChunk: wzorzec renderAltChunk nie pasuje (nowa wersja docx-preview?)");
+  src = src.replace(reAlt, (m, _t, e) => `${m}${e}.setAttribute("sandbox","");`);
+  console.log("  ✅  łatka: altChunk w ramce z sandbox");
   fs.writeFileSync(OUT, src);
 }
 
