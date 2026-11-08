@@ -431,6 +431,13 @@ async function applyParaFormatInZip(zip, xml, edit) {
       composeSetPPrChild(pPr, "outlineLvl", null);
     }
     if (edit.align && COMPOSE_ALIGNS.includes(edit.align)) composeSetPPrChild(pPr, "jc", { val: edit.align });
+    // linia pozioma pod tekstem (dolna krawędź akapitu) — zdjęta; pozostałe krawędzie ramki zostają
+    if (edit.clearRule) {
+      const bdr = composeDirectChild(pPr, "pBdr");
+      const bottom = bdr && composeDirectChild(bdr, "bottom");
+      if (bottom) bdr.removeChild(bottom);
+      if (bdr && !bdr.firstElementChild) pPr.removeChild(bdr);
+    }
     if (!pPr.firstChild) p.removeChild(pPr);
     count++;
   });

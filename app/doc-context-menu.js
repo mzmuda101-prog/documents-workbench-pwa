@@ -85,12 +85,17 @@ const dwbDocMenu = (() => {
     if (i < 0) return;
     const index = resolveParaIndex(p);
     const next = ps[i + 1];
-    // linia + następny akapit → zostaje następny ze swoim formatowaniem (mergeParagraphInXml);
-    // linia na końcu dokumentu → wsiąka w poprzedni akapit
-    if (next && !next.dataset.lock) {
+    const prev = ps[i - 1];
+    // linia + następny akapit z treścią → zostaje następny ze swoim formatowaniem (mergeParagraphInXml);
+    // za linią pusta linijka albo koniec dokumentu → linia wsiąka w poprzedni akapit (pusty doklejany
+    // akapit znika, poprzedni zostaje ze swoim formatowaniem)
+    const usable = (q) => q && !q.dataset.lock && (q.dataset.box || "") === (p.dataset.box || "");
+    if (usable(next) && next.textContent.replace(/\uFEFF/g, "")) {
       await applyDocumentEdit({ op: "mergeParagraph", index: index + 1, mergedRuns: extractRunsFromPreviewParagraph(next) });
-    } else if (i > 0) {
-      await applyDocumentEdit({ op: "mergeParagraph", index, mergedRuns: extractRunsFromPreviewParagraph(ps[i - 1]) });
+    } else if (usable(prev)) {
+      await applyDocumentEdit({ op: "mergeParagraph", index, mergedRuns: extractRunsFromPreviewParagraph(prev) });
+    } else {
+      await applyDocumentEdit({ op: "paraFormat", indices: [index], clearRule: true });
     }
   }
   function inlineFormat(cmd) { restoreRange(); if (typeof execInlineFormat === "function") execInlineFormat(cmd); }
@@ -110,6 +115,9 @@ const dwbDocMenu = (() => {
     }
     if (ctx.rule) {
       add("delRule", "ctxDeleteRule", () => deleteRule(ctx.rule), { danger: true });
+      sep();
+    } else if (ctx.textRule) { // linia pod tekstem — znika sama linia, tekst zostaje
+      add("delRule", "ctxDeleteRule", () => composeUi.clearRuleAt(ctx.textRule), { danger: true });
       sep();
     }
     if (ctx.hasSel) {
@@ -186,6 +194,7 @@ const dwbDocMenu = (() => {
       read: !!readOnlyMode,
       hasSel: !!r && !r.collapsed && !!String(r).trim(),
       rule: isRule(p) ? p : null,
+      textRule: composeUi.hasTextRule?.(p) ? p : null,
       cell: !!p?.closest("td, th"),
     };
   }

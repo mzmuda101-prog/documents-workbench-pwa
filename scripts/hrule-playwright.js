@@ -77,8 +77,9 @@ async function main() {
   await caretAt(page, li);
   await page.keyboard.press("Delete");
   await idle(page);
-  // po Enterze za linią jest pusty akapit — Delete skleja linię z nim; drugi Delete z akapitem z treścią
-  if ((await fileState(page, NEXT)).rules > base.rules) { await caretAt(page, await viewRuleIdx(page)); await page.keyboard.press("Delete"); await idle(page); }
+  // za linią są puste akapity (z wstawienia i z Entera) — Delete najpierw je zjada, linia zostaje
+  // (jak w Wordzie, hrule2-playwright.js); dopiero Delete przed akapitem z treścią usuwa linię
+  for (let k = 0; k < 4 && (await fileState(page, NEXT)).rules > base.rules; k++) { await caretAt(page, await viewRuleIdx(page)); await page.keyboard.press("Delete"); await idle(page); }
   f = await fileState(page, NEXT);
   check("Delete w linii: linia znika z pliku", f.rules === base.rules, JSON.stringify(f));
   check("…następny akapit bez krawędzi i z własnym stylem", !f.targetBorder && f.style === base.style, JSON.stringify({ f, base }));

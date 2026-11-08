@@ -1526,9 +1526,10 @@ function mergeParagraphDom(prev, curr) {
   // (akapit „⏎” sklejony z „Wstęp” był o linijkę wyższy niż w Wordzie, zgłoszenie 2026-10-09).
   const tail = curr.textContent.replace(/\uFEFF/g, "") || curr.querySelector("img, svg, canvas, br:not([data-dwb-ph]), [contenteditable=false]");
   // Pusty akapit (np. linia pozioma) + akapit z treścią: wynik ma formatowanie akapitu z treścią,
-  // tak samo jak w pliku (mergeParagraphInXml) — dawniej linia przeskakiwała pod doklejony akapit
+  // tak samo jak w pliku (mergeParagraphInXml) — dawniej linia przeskakiwała pod doklejony akapit.
+  // Oba puste — zostaje poprzedni ze swoim formatowaniem (Backspace w pustej linijce pod linią).
   const prevBare = !prev.textContent.replace(/\uFEFF/g, "") && !prev.querySelector("img, svg, canvas, [contenteditable=false]");
-  if (prevBare) {
+  if (prevBare && tail) {
     Array.from(prev.attributes).forEach((at) => prev.removeAttribute(at.name));
     Array.from(curr.attributes).forEach((at) => prev.setAttribute(at.name, at.value));
   }
@@ -1627,6 +1628,9 @@ async function handleInlineEnter(p, paraIndex, e) {
   // jak z listy); dawniej powstawał kolejny pusty w ramce i nie było jak z niej wyjść
   if (!previewRunsToPlainText(extractRunsFromPreviewParagraph(p)) && typeof composeUi !== "undefined" && composeUi.plainStyleAt?.(p)) return;
   restoreTinyParagraph(p); // Enter w akapicie 1 pt za tabelą — oba akapity w zwykłej wysokości
+  // format „dla dalszego pisania” (np. pogrubienie wyłączone ⌘/Ctrl+B tuż przed Enterem) przechodzi
+  // do nowego akapitu, jak w Wordzie; dawniej nowy kursor go porzucał i pisało się znów pogrubionym
+  const typing = window.getSelection()?.isCollapsed ? currentTypingStyle() : null;
   // linia pozioma (pusty akapit z krawędzią) — nowy akapit bez krawędzi, jak w pliku (splitParagraphInXml)
   const wasRule = !p.textContent.replace(/\uFEFF/g, "") && getComputedStyle(p).borderBottomStyle !== "none";
   const newP = splitParagraphDomAtCaret(p);
@@ -1636,6 +1640,7 @@ async function handleInlineEnter(p, paraIndex, e) {
   // Kursor w nowym akapicie OD RAZU — dawniej przeskakiwał dopiero po przebudowie pliku,
   // a wszystko wpisane w tym czasie trafiało do starego akapitu.
   placeCaret(newP, 0);
+  if (typing) setTypingStyle(typing);
   const beforeRuns = extractRunsFromPreviewParagraph(p);
   const afterRuns = extractRunsFromPreviewParagraph(newP);
   // Enter na końcu nagłówka → dalej zwykły tekst (docx-compose.js)
@@ -1715,6 +1720,11 @@ async function handleInlineBackspace(p, paraIndex, e) {
   if (sel?.isCollapsed && !e.fromDelete && !previewRunsToPlainText(extractRunsFromPreviewParagraph(p)) && typeof composeUi !== "undefined" && composeUi.isBoxParagraph?.(p)) {
     e.preventDefault();
     composeUi.plainStyleAt(p);
+    return;
+  }
+  // tekst z linią poziomą pod spodem (wpisany w akapicie linii) — najpierw zdejmuje linię, tekst zostaje
+  if (sel?.isCollapsed && !e.fromDelete && typeof composeUi !== "undefined" && composeUi.clearRuleAt?.(p)) {
+    e.preventDefault();
     return;
   }
   // wcięty akapit — najpierw wcięcie do zera (jak w Wordzie), kolejny Backspace skleja

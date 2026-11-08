@@ -172,6 +172,20 @@ const composeUi = (() => {
     return true;
   }
 
+  // Linia pozioma pod TEKSTEM: akapit linii (dolna krawędź z pliku, nie ze stylu), w którym ktoś
+  // pisał. Backspace na początku / menu „Usuń linię poziomą” zdejmuje samą linię, tekst zostaje;
+  // dawniej Backspace sklejał tekst z poprzednim akapitem i linii nie dało się zdjąć (2026-11-08).
+  function hasTextRule(p) {
+    const st = p?.style?.borderBottomStyle;
+    return !!st && st !== "none" && !!p.textContent.replace(/\uFEFF/g, "");
+  }
+  function clearRuleAt(p) {
+    const index = resolveParaIndex(p);
+    if (index < 0 || !hasTextRule(p)) return false;
+    holdTypingWhile(() => runFileEdit({ op: "paraFormat", indices: [index], clearRule: true }, caretState(p)), index);
+    return true;
+  }
+
   // ── spis treści ───────────────────────────────────────────────────────────
   // Numery stron z podglądu (strony = sekcje docx-preview; w trybie dopasowania do telefonu ich nie ma).
   function previewPages() {
@@ -3676,5 +3690,5 @@ const composeUi = (() => {
     document.getElementById(id)?.addEventListener("click", openNewDialog);
   });
 
-  return { openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, stampPageNumbers, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, clearIndentAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
+  return { openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, stampPageNumbers, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, clearIndentAt, hasTextRule, clearRuleAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
 })();

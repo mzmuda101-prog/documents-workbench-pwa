@@ -211,10 +211,12 @@ function mergeParagraphInXml(xml, index, mergedRuns) {
   const prev = paragraphs[index - 1];
   const curr = paragraphs[index];
   if (!prev || !curr) return { xml, count: 0 };
-  // Pusty akapit przed kolejnym (np. linia pozioma + Delete): znika pusty, następny akapit
-  // zostaje ze SWOIM formatowaniem — jak w Wordzie (także gdy następny też jest pusty). Dawniej treść wchodziła do pustego i brała jego
+  // Pusty akapit przed akapitem z treścią (np. linia pozioma + Delete): znika pusty, następny
+  // zostaje ze SWOIM formatowaniem — jak w Wordzie. Dawniej treść wchodziła do pustego i brała jego
   // właściwości, więc linii nie dało się usunąć: przeskakiwała pod następny akapit.
-  if (paragraphIsBare(prev)) {
+  // Doklejany akapit też pusty (Backspace w pustej linijce pod linią) — znika on, poprzedni zostaje
+  // ze swoim formatowaniem, jak w Wordzie; dawniej znikała linia, a pusta linijka zostawała (2026-11-08).
+  if (paragraphIsBare(prev) && !paragraphIsBare(curr)) {
     const at = Array.from(curr.childNodes).find((n) => n.localName !== "pPr") || null; // zakładki pustego akapitu — na początek
     Array.from(prev.childNodes).filter((n) => /^bookmark(Start|End)$/.test(n.localName))
       .forEach((n) => curr.insertBefore(n, at));
