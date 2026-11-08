@@ -249,6 +249,17 @@ const dwbPrint = (() => {
             if (!li) return;
             const c = li.cloneNode(true);
             if (li.classList.contains("dwb-note-native")) c.value = all.indexOf(li) + 1;
+            // numer na początku przypisu: w Edycji wstawia go doc-notes.js (sup.note-mark), a wydruk
+            // rysuje dokument od nowa i go nie miał — przypis na dole kartki był bez numeru.
+            // Numer z odnośnika w treści (ten sam format: 1, i, *…), awaryjnie z kolejności.
+            const p0 = c.querySelector("p");
+            if (p0 && !c.querySelector("sup.note-mark") && !li.classList.contains("dwb-note-native")) {
+              const ref = P.footOl.parentElement?.querySelector(`sup[data-dwb-note="${CSS.escape(id)}"]`);
+              const sup = document.createElement("sup");
+              sup.className = "note-mark";
+              sup.textContent = ref?.dataset.dwbNoteNum || ref?.textContent.trim() || String(all.indexOf(li) + 1);
+              p0.insertBefore(sup, p0.firstChild);
+            }
             ol.appendChild(c);
           });
           ol.style.position = "absolute";

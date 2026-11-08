@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v1.00.10";
+const CACHE_VERSION = "v1.00.11";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;

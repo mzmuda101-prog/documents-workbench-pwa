@@ -962,6 +962,23 @@ function dedupeDocPrIds(xml) {
   });
 }
 
+// Numer kontrolki (w:sdtPr/w:id) też musi być jedyny — Kopiuj/Wklej akapitu z polem formularza
+// dublował go (Word: plik do naprawy, a pola potrafiły wypełniać się razem). Kopia dostaje nowy
+// numer; nazwa i tag zostają, jak przy kopiowaniu kontrolki w Wordzie.
+const SDT_ID_RE = /(<w:sdtPr\b[^>]*>(?:(?!<\/w:sdtPr>)[\s\S])*?<w:id w:val=")(-?\d+)(")/g;
+function dedupeSdtIds(xml) {
+  const ids = [...String(xml).matchAll(SDT_ID_RE)].map((m) => m[2]);
+  if (ids.length === new Set(ids).size) return xml;
+  const taken = new Set(ids);
+  let next = Math.min(2147483000, Math.max(0, ...ids.map(Number)) + 1);
+  const fresh = () => { while (taken.has(String(next))) next++; taken.add(String(next)); return next; };
+  const seen = new Set();
+  return String(xml).replace(SDT_ID_RE, (m, a, id, b) => {
+    if (!seen.has(id)) { seen.add(id); return m; }
+    return `${a}${fresh()}${b}`;
+  });
+}
+
 function commentRefIds(xml) {
   return new Set([...String(xml).matchAll(/<w:commentReference\b[^>]*\bw:id="(-?\d+)"/g)].map((m) => m[1]));
 }
@@ -1168,6 +1185,8 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
   if (list.length && typeof dedupeNoteRefsInZip === "function") xml = await dedupeNoteRefsInZip(zip, xml);
   // ten sam numer obrazu (wp:docPr) dwa razy — kolejne dostają nowe (Word: plik do naprawy)
   if (list.length) xml = dedupeDocPrIds(xml);
+  if (list.length) xml = dedupeSdtIds(xml); // ten sam numer kontrolki (pole formularza) po Kopiuj/Wklej
+
   // przypis bez odnośnika w treści (odnośnik skasowany) znika z pliku — jak w Wordzie
   if (list.length && typeof pruneOrphanNotesInZip === "function") await pruneOrphanNotesInZip(zip, xml, { force: !!lastEditOpts?.forcePrune });
   // komentarz, któremu ta zmiana skasowała odwołanie w treści (np. zaznacz wszystko + Delete) — też
