@@ -81,6 +81,7 @@ async function run() {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("dialog", (d) => d.accept());
+  await page.addInitScript(() => { window.__dwbAutoDialog = "accept"; }); // własne okna apki jak systemowe
   await page.goto(APP_URL, { waitUntil: "load" });
   await page.evaluate(() => document.getElementById("heroSplash")?.remove());
   const file = require("path").join(require("os").tmpdir(), `dwb-pola-${process.pid}.docx`);
@@ -339,6 +340,85 @@ async function run() {
   // 10b. podgląd wydruku po zapisie: wszystkie pola na swoich kartkach (też to na 2. stronie)
   pp = await printBoxes(page);
   check("podgląd wydruku: wszystkie pola na swoich kartkach, w miejscach z Edycji", samePrint(pv2, pp) && pp.some((q) => q.page === 1), JSON.stringify({ pv2, pp }));
+
+  // 10c. przesunięcie bez przerysowania dokumentu: ta sama ramka w DOM, nowe miejsce w pliku
+  pv = await previewBoxes(page);
+  c = await boxCenter(page, 0);
+  await page.evaluate(() => { window.__tbNode = document.querySelectorAll(".docx-preview-host .dwb-tb")[0]; });
+  const q0 = (await savedBoxes(page)).boxes.find((b) => b.text.replace(/\s/g, "") === pv[0].text.replace(/\s/g, ""));
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  await page.mouse.move(c.x + 15, c.y + 15, { steps: 3 });
+  await page.mouse.move(c.x + 37, c.y + 29, { steps: 5 });
+  await page.mouse.up();
+  await idle(page);
+  const q1 = (await savedBoxes(page)).boxes.find((b) => b.text === q0?.text);
+  const sameNode = await page.evaluate(() => window.__tbNode?.isConnected && document.querySelectorAll(".docx-preview-host .dwb-tb")[0] === window.__tbNode);
+  check("przesunięcie przy tym samym akapicie: bez przerysowania (ta sama ramka w DOM)", sameNode);
+  check("przesunięcie bez przerysowania: nowe miejsce w pliku", q0 && q1 && Math.abs(q1.x - q0.x) > 20 && Math.abs(q1.y - q0.y) > 15, JSON.stringify({ q0, q1 }));
+
+  // 10d. świeżo wstawione pole (od razu w pisaniu): przeciągnięcie za brzeg działa od pierwszego razu
+  await page.evaluate(() => { dwbTextbox.deselect(); const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[3]; placeCaret(p, 0); });
+  await page.evaluate(() => dwbTextbox.insert());
+  await idle(page);
+  await page.waitForFunction(() => document.activeElement?.classList.contains("dwb-tb-editor"), null, { timeout: 5000 }).catch(() => {});
+  await page.keyboard.type("ab");
+  const er = await page.evaluate(() => { const r = document.querySelector(".dwb-tb.is-editing").getBoundingClientRect(); return { x: r.left + r.width * 0.3, y: r.top + 2, left: r.left, top: r.top }; });
+  await page.mouse.move(er.x, er.y);
+  await page.mouse.down();
+  await page.mouse.move(er.x + 20, er.y + 20, { steps: 3 });
+  await page.mouse.move(er.x + 60, er.y + 45, { steps: 5 });
+  await page.mouse.up();
+  await idle(page);
+  const stillEditing = await page.waitForFunction(() => document.activeElement?.classList.contains("dwb-tb-editor"), null, { timeout: 3000 }).then(() => true, () => false);
+  await page.keyboard.type("cd");
+  await page.keyboard.press("Escape");
+  await idle(page);
+  const nr = await page.evaluate(() => [...document.querySelectorAll(".docx-preview-host .dwb-tb")].map((el) => ({ text: el.textContent, ...(() => { const r = el.getBoundingClientRect(); return { left: r.left, top: r.top }; })() })).find((b) => /abcd/.test(b.text)));
+  check("nowe pole: przeciągnięcie za brzeg od razu w pisaniu przesuwa ramkę", nr && nr.left - er.left > 40 && nr.top - er.top > 30, JSON.stringify({ er, nr }));
+  check("nowe pole: po przeciągnięciu pisanie trwa dalej (tekst „abcd” w polu)", stillEditing && !!nr, JSON.stringify({ stillEditing, nr }));
+
+  // 10e. Duplikuj (Ctrl/⌘+D), Kopiuj + Wklej (Ctrl/⌘+C, V), przeciągnięcie z Ctrl/⌘ = kopia
+  const countBoxes = async () => (await savedBoxes(page)).boxes.length;
+  const n0 = await countBoxes();
+  pv = await previewBoxes(page);
+  const di = pv.findIndex((b) => /abcd/.test(b.text));
+  c = await boxCenter(page, di);
+  await page.evaluate(() => dwbTextbox.deselect()); // klik w zaznaczone pole = pisanie, a skrót ma iść do ramki
+  await page.mouse.click(c.x, c.y);
+  await page.keyboard.press(`${mod}+d`);
+  await idle(page);
+  const n1 = await countBoxes();
+  check("Ctrl/⌘+D: kopia pola w pliku (z tym samym tekstem)", n1 === n0 + 1 && (await savedBoxes(page)).boxes.filter((b) => b.text === "abcd").length === 2, `${n0} → ${n1}`);
+  pv = await previewBoxes(page);
+  c = await boxCenter(page, pv.findIndex((b) => /abcd/.test(b.text)));
+  await page.evaluate(() => dwbTextbox.deselect());
+  await page.mouse.click(c.x, c.y);
+  await page.keyboard.press(`${mod}+c`);
+  await page.keyboard.press(`${mod}+v`);
+  await idle(page);
+  const n2 = await countBoxes();
+  check("Ctrl/⌘+C, Ctrl/⌘+V: wklejona kopia pola", n2 === n1 + 1, `${n1} → ${n2}`);
+  const ids = await page.evaluate(async () => {
+    const zip = await JSZip.loadAsync(await buildDocumentForSave());
+    const xml = await zip.file("word/document.xml").async("string");
+    return [...xml.matchAll(/<wp:docPr\b[^>]*?\sid="(\d+)"/g)].map((m) => m[1]);
+  });
+  check("kopie mają jedyne numery kształtów (wp:docPr id)", ids.length >= n2 && new Set(ids).size === ids.length, JSON.stringify(ids));
+  pv = await previewBoxes(page);
+  c = await boxCenter(page, pv.findIndex((b) => /abcd/.test(b.text)));
+  await page.evaluate(() => dwbTextbox.deselect());
+  await page.keyboard.down(mod === "Meta" ? "Meta" : "Control");
+  await page.mouse.move(c.x, c.y);
+  await page.mouse.down();
+  await page.mouse.move(c.x + 20, c.y + 30, { steps: 3 });
+  await page.mouse.move(c.x + 50, c.y + 90, { steps: 5 });
+  await page.mouse.up();
+  await page.keyboard.up(mod === "Meta" ? "Meta" : "Control");
+  await idle(page);
+  const n3 = await countBoxes();
+  const pv3 = await previewBoxes(page);
+  check("przeciągnięcie z Ctrl/⌘: kopia w nowym miejscu, oryginał zostaje", n3 === n2 + 1 && pv3.some((b) => Math.abs(b.left - pv[pv.findIndex((q) => /abcd/.test(q.text))].left) < 1), `${n2} → ${n3}`);
 
   // 11. Czytanie: pola widoczne, bez uchwytów i bez reakcji na klik
   await page.evaluate(() => { readModeEl.checked = true; readModeEl.dispatchEvent(new Event("change")); });

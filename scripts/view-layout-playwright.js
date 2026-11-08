@@ -81,6 +81,7 @@ async function run() {
   const page = await phone.newPage();
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("dialog", (d) => d.accept());
+  await page.addInitScript(() => { window.__dwbAutoDialog = "accept"; }); // własne okna apki jak systemowe
   await openDoc(page, "przewodnik");
 
   const m0 = await look(page);

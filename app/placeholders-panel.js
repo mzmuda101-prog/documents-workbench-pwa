@@ -96,15 +96,14 @@ async function applyPlaceholderFill() {
     toast(t("placeholdersEmptyValues"), "error");
     return;
   }
-  if (!confirm(t("placeholdersFillConfirm", { count: keys.length }))) return;
-
+  // jeden krok Cofnij — bez pytania przed, „Cofnij” w dymku (kontrakt UX §3)
   const count = await applyDocumentEdit({
     op: "placeholderFill",
     values,
     scope: phScopeEl?.value || "all",
   });
   if (count > 0) {
-    toast(t("placeholdersApplied", { count }), "success");
+    toastUndoable(t("placeholdersApplied", { count }));
     await runPlaceholderScan();
     if (typeof closeMobileSidebarIfOpen === "function") closeMobileSidebarIfOpen();
   } else {

@@ -25,6 +25,7 @@ async function run() {
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   page.on("dialog", (d) => d.accept());
+  await page.addInitScript(() => { window.__dwbAutoDialog = "accept"; }); // własne okna apki jak systemowe
   await page.goto(APP_URL, { waitUntil: "load" });
   await page.evaluate(() => document.getElementById("heroSplash")?.remove());
   await page.evaluate(() => composeUi.createNew("blank"));

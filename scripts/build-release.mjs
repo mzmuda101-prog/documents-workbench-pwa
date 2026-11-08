@@ -12,7 +12,7 @@ const COPY_FILES = ["manifest.json", "index.html", "sw.js", "README.md", "LICENS
 
 function readVersion() {
   const sw = fs.readFileSync(path.join(ROOT, "sw.js"), "utf8");
-  const m = sw.match(/CACHE_VERSION\s*=\s*"(\d{8}-\d{2})"/);
+  const m = sw.match(/CACHE_VERSION\s*=\s*"(v\d+\.\d{2}\.\d{2}|\d{8}-\d{2})"/);
   if (!m) throw new Error("Brak CACHE_VERSION w sw.js");
   return m[1];
 }

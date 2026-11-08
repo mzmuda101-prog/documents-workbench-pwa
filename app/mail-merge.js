@@ -179,7 +179,7 @@ async function mmRun() {
   if (!mailMergeData || !originalFileBytes) return;
   const { map, missing } = await mmMatch();
   if (!Object.keys(map).length) { toast(t("mmNoMatch"), "error"); return; }
-  if (missing.length && !confirm(t("mmMissingConfirm", { list: missing.map((n) => `{{${n}}}`).join(", ") }))) return;
+  if (missing.length && !(await appConfirm(t("mmMissingConfirm", { list: missing.map((n) => `{{${n}}}`).join(", ") }), { title: t("mmMissingTitle"), ok: t("mmMissingOk") }))) return;
   const base = await buildDocumentForSave();
   const zip = new JSZip();
   const nameCol = mmNameColEl?.value === "" || mmNameColEl == null ? -1 : Number(mmNameColEl.value);

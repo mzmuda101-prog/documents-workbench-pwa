@@ -2998,10 +2998,20 @@ function wireFormatToolbar() {
     b?.addEventListener("mousedown", (e) => e.preventDefault()); // zaznaczenie w tekście zostaje
     b?.addEventListener("click", () => { if (!readOnlyMode) fn(); });
   });
-  const askOther = (sel, key, apply) => {
-    // „Inny…” — dowolna wartość jak w polu Worda (np. 10,5 pt albo krój spoza listy)
-    const v = window.prompt(t(key), "");
+  const askOther = async (sel, key, apply) => {
+    // „Inny…” — dowolna wartość jak w polu Worda (np. 10,5 pt albo krój spoza listy). Własne okienko
+    // zamiast prompt() (audyt D15): zabiera fokus, więc zaznaczenie w tekście zapamiętujemy i oddajemy.
+    const s = window.getSelection();
+    const range = s?.rangeCount && docCanvasEl?.contains(s.anchorNode) ? s.getRangeAt(0).cloneRange() : null;
     sel.blur();
+    const v = await appPrompt(t(key), "");
+    if (range) {
+      const host = range.startContainer.parentElement?.closest?.(".docx-editable-p, .docx-edit-root");
+      try { host?.focus({ preventScroll: true }); } catch (_) {}
+      const s2 = window.getSelection();
+      s2.removeAllRanges();
+      s2.addRange(range);
+    }
     if (v && v.trim()) apply(v.trim()); else syncFormatIndicators();
   };
   // A+ / A− — o stopień z listy Worda, każdy rozmiar w zaznaczeniu osobno (stepFontSize)

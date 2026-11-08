@@ -340,7 +340,10 @@ function applyDocumentEdit(edit, xmlOpts = {}) {
 }
 async function applyDocumentEditHeld(edit, xmlOpts) {
   const res = typeof withQuietFile === "function" ? await withQuietFile(() => applyDocumentEditNow(edit, xmlOpts)) : await applyDocumentEditNow(edit, xmlOpts);
-  if (!res.reload) return res.n;
+  if (!res.reload) {
+    if (res.quiet && res.n > 0) setDirtyState(true); // zmiana zapisana bez przerysowania (ekran już ją pokazuje)
+    return res.n;
+  }
   await reloadFromBytes(originalFileBytes);
   if (res.n > 0) setDirtyState(true);
   return res.n;
@@ -382,5 +385,7 @@ async function applyDocumentEditNow(edit, xmlOpts) {
   originalFileBytes = bytes;
   // Akceptuj/Odrzuć podczas śledzenia — to samo w pliku „przed” (bez nowych poprawek)
   if (normalized.op === "revisions" && typeof dwbTrack !== "undefined") await dwbTrack.mirrorRevisions(normalized);
+  // quiet: operacja, którą ekran już pokazuje (np. przesunięta ramka pola tekstowego) — bez przerysowania
+  if (normalized.quiet && changeCount > 0) return { n: changeCount, reload: false, quiet: true };
   return { n: changeCount, reload: true };
 }

@@ -18,11 +18,13 @@ const dwbTrack = (() => {
   const showBtn = () => document.getElementById("rvTrackShowBtn");
   const statusEl = () => document.getElementById("statusTrack");
 
-  function authorName() {
+  // Imię autora — raz, we własnym okienku (systemowy prompt() na iOS przykrywał klawiaturę, audyt D15);
+  // to samo imię podpisuje komentarze (pole „Autor” w okienku komentarza — tam też je zmienisz).
+  async function authorName() {
     let name = "";
     try { name = localStorage.getItem(AUTHOR_KEY) || ""; } catch (_) {}
     if (!name) {
-      name = (window.prompt(t("trackAuthorAsk"), "") || "").trim();
+      name = ((await appPrompt(t("trackAuthorAsk"), "", { title: t("trackAuthorTitle"), placeholder: t("trackAuthorDefault") })) || "").trim();
       if (name) try { localStorage.setItem(AUTHOR_KEY, name); } catch (_) {}
     }
     return name || t("trackAuthorDefault");
@@ -50,7 +52,7 @@ const dwbTrack = (() => {
       pendingDocEdits = [];
       originalFileBytes = bytes;
     }
-    state.author = authorName();
+    state.author = await authorName();
     state.baseline = originalFileBytes;
     state.baseKeys = await baselineKeys(state.baseline);
     state.on = true;

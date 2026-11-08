@@ -3314,3 +3314,151 @@ body.dwb-painting .docx-preview-host * {
     border-radius: 14px;
   }
 }
+
+/* ══ kontrakt UX Sheet + Docs (v1.00.05) ══════════════════════════════════════════════════
+   dymki z akcją / ✕, własne okna zamiast confirm()/prompt(), motyw 3-stanowy, lista skrótów,
+   podpowiedź w Czytaniu, strona X z Y, ostatnio otwierane. */
+
+/* dymek: tekst + „Cofnij” + ✕ w jednym rzędzie; przyjmuje dotyk */
+.toast { align-items: center; }
+.toast-msg { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.toast-action, .toast-close {
+  flex: none; border: 0; font: inherit; cursor: pointer; border-radius: var(--r-full);
+  -webkit-tap-highlight-color: transparent;
+}
+.toast-action {
+  padding: 6px 12px; font-size: 13px; font-weight: 700; color: var(--accent);
+  background: var(--accent-light);
+}
+.toast-close {
+  width: 28px; height: 28px; margin: -4px -6px -4px 0; padding: 0; background: none;
+  color: var(--muted); font-size: 13px; line-height: 1;
+}
+.toast-action:focus-visible, .toast-close:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+@media (hover: hover) {
+  .toast-action:hover { background: var(--accent); color: var(--on-accent); }
+  .toast-close:hover { background: var(--accent-light); color: var(--ink); }
+}
+@media (pointer: coarse) {
+  .toast-action { min-height: 36px; padding: 6px 14px; }
+  .toast-close { width: 36px; height: 36px; }
+}
+
+/* własne okno (appDialog) — wygląd jak „Nowy dokument” */
+.app-dialog {
+  position: fixed; inset: 0; margin: auto; height: fit-content;
+  width: min(440px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto;
+  border: 1px solid var(--border); border-radius: 18px; padding: 0;
+  background: var(--surface); color: var(--ink); box-shadow: 0 18px 48px rgba(8, 14, 28, 0.25);
+  overscroll-behavior: contain;
+}
+.app-dialog::backdrop { background: rgba(8, 14, 28, 0.38); }
+.app-dialog:focus { outline: none; }
+.app-dialog-inner { display: flex; flex-direction: column; gap: 12px; padding: 18px; margin: 0; }
+.app-dialog-title { margin: 0; font-size: 17px; line-height: 1.3; overflow-wrap: anywhere; }
+.app-dialog-msg { margin: 0; font-size: 14px; line-height: 1.45; color: var(--ink-2); white-space: pre-line; overflow-wrap: anywhere; }
+.app-dialog-field { margin: 0; }
+.app-dialog-field input { width: 100%; font-size: 16px; } /* 16 px — iOS nie powiększa strony przy fokusie */
+.app-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+.app-dialog-actions .btn { min-height: 38px; padding: 8px 16px; }
+/* trzy przyciski (Zapisz / Nie zapisuj / Anuluj): kolejność jak w Wordzie, główny pierwszy */
+.app-dialog-actions.is-three { justify-content: flex-start; }
+.app-dialog-actions.is-three .btn:last-child { margin-left: auto; }
+.btn.danger { background: var(--danger); color: #fff; border-color: transparent; }
+@media (hover: hover) { .btn.danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 86%, black); } }
+@media (max-width: 520px) {
+  .app-dialog-actions, .app-dialog-actions.is-three { flex-direction: column; align-items: stretch; }
+  .app-dialog-actions .btn, .app-dialog-actions.is-three .btn:last-child { margin-left: 0; min-height: 44px; }
+}
+
+/* okno „Skróty klawiszowe” */
+.shortcuts-dialog { width: min(760px, calc(100vw - 24px)); display: flex; flex-direction: column; }
+.shortcuts-dialog:not([open]) { display: none; }
+.shortcuts-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 16px 18px 8px; }
+.shortcuts-body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding: 4px 18px 8px; columns: 2 300px; column-gap: 28px;
+}
+.shortcuts-group { break-inside: avoid; margin: 0 0 14px; }
+.shortcuts-group h3 { margin: 0 0 6px; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.shortcuts-group dl { margin: 0; }
+.shortcuts-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--border-subtle); font-size: 13px; }
+.shortcuts-row dt { min-width: 0; color: var(--ink); }
+.shortcuts-row dd { margin: 0; flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: 55%; }
+.shortcuts-row kbd, .read-hint-kbd {
+  font: 600 11.5px/1 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  padding: 3px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--field); color: var(--ink-2); white-space: nowrap;
+}
+.shortcuts-or { color: var(--muted); font-size: 11px; }
+.shortcuts-foot { margin: 0; padding: 8px 18px 16px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border-subtle); }
+#shortcutsHelpBtn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+
+/* menu ⋯: motyw w trzech stanach, grupy, wersja */
+.app-menu-row-stack { flex-direction: column; align-items: stretch; gap: 6px; }
+.theme-seg button { padding: 6px 4px; white-space: nowrap; }
+.app-menu-item:disabled { opacity: .45; cursor: default; }
+.app-menu-build {
+  border: 0; background: none; font: inherit; font-size: 11.5px; color: var(--muted); padding: 4px 6px;
+  border-radius: 8px; cursor: pointer; font-variant-numeric: tabular-nums;
+}
+.app-menu-build:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent); }
+@media (hover: hover) { .app-menu-build:hover { color: var(--accent); background: var(--accent-light); } }
+
+/* podpowiedź „Tryb Czytanie — Edytuj” przy tekście (doc-comfort.js, audyt D1) */
+.read-hint {
+  position: fixed; z-index: 70; display: flex; align-items: center; gap: 8px; max-width: calc(100vw - 16px);
+  padding: 6px 6px 6px 12px; border-radius: var(--r-full); border: 1px solid var(--accent-border);
+  background: var(--surface); color: var(--ink); box-shadow: 0 10px 28px rgba(16, 32, 64, 0.22);
+  font-size: 13px; animation: toast-in .18s ease;
+}
+.read-hint-text { color: var(--muted-strong); white-space: nowrap; }
+.read-hint-btn {
+  display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: var(--r-full);
+  padding: 6px 12px; background: var(--accent); color: var(--on-accent); font: inherit; font-weight: 700; cursor: pointer;
+}
+.read-hint-btn .read-hint-kbd { background: rgba(255, 255, 255, 0.18); border-color: rgba(255, 255, 255, 0.35); color: var(--on-accent); }
+.read-hint-close { width: 28px; height: 28px; border: 0; border-radius: var(--r-full); background: none; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
+.read-hint-btn:focus-visible, .read-hint-close:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+@media (hover: hover) {
+  .read-hint-btn:hover { background: var(--accent-h); }
+  .read-hint-close:hover { background: var(--accent-light); color: var(--ink); }
+}
+@media (pointer: coarse) {
+  .read-hint-kbd { display: none; } /* skrót to szum na dotyku */
+  .read-hint-btn { min-height: 38px; }
+  .read-hint-close { width: 38px; height: 38px; }
+}
+
+/* pasek stanu: „Strona 3 z 12” (klik = Przejdź do strony) */
+.status-page {
+  border: 0; background: none; padding: 1px 6px; margin: 0 -2px; border-radius: 6px;
+  font: inherit; color: var(--muted); font-variant-numeric: tabular-nums; cursor: pointer;
+}
+.status-page[hidden] { display: none; }
+.status-page:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+@media (hover: hover) { .status-page:hover { color: var(--accent); background: var(--accent-light); } }
+
+/* ekran startowy: ostatnio otwierane */
+.recent-files { width: min(460px, 100%); margin: 14px auto 0; text-align: left; }
+.recent-files[hidden] { display: none; }
+.recent-title { margin: 0 0 6px; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.recent-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 248px; overflow-y: auto; overscroll-behavior: contain; }
+.recent-item { display: flex; align-items: stretch; gap: 4px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--panel); }
+.recent-open {
+  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  padding: 8px 12px; border: 0; background: none; border-radius: 12px; font: inherit; text-align: left; color: var(--ink); cursor: pointer;
+}
+.recent-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 600; }
+.recent-meta { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.recent-del { flex: none; width: 40px; border: 0; background: none; border-radius: 12px; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
+.recent-open:focus-visible, .recent-del:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent); }
+@media (hover: hover) {
+  .recent-open:hover { background: var(--accent-light); color: var(--accent); }
+  .recent-del:hover { background: var(--danger-bg); color: var(--danger); }
+}
+
+/* telefon z otwartym dokumentem: zamknięty uchwyt panelu zasłaniał pierwsze litery tekstu
+   w Widoku mobilnym (audyt D8) — panel otwiera 🔧 w wyspie, uchwyt wraca jako „Schowaj panel” */
+@media (max-width: 768px) {
+  :root:not(.sidebar-open) body.has-document .sidebar-handle { display: none; }
+}

@@ -29,6 +29,7 @@ async function run() {
   page.on("pageerror", (e) => problems.push({ at: current, msg: "WYJĄTEK " + e.message }));
   page.on("console", (m) => { if (m.type() === "error" && !/favicon|ResizeObserver|Failed to load resource/.test(m.text())) problems.push({ at: current, msg: m.text().slice(0, 300) }); });
   page.on("dialog", (d) => d.dismiss().catch(() => {}));
+  await page.addInitScript(() => { window.__dwbAutoDialog = "dismiss"; }); // własne okna apki jak systemowe
   await page.goto(APP_URL, { waitUntil: "load" });
   await page.evaluate(() => document.getElementById("heroSplash")?.remove());
   await page.evaluate(() => loadSampleDocument("przewodnik"));

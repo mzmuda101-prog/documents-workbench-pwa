@@ -275,13 +275,11 @@ async function replaceFrAll() {
   const other = edit.otherParts ? frOtherCount : 0;
   const hits = frMatches.length + other;
   if (!hits) { toast(t("searchNoMatches"), "info"); return; }
-  const paras = new Set(frMatches.map((m) => m.paraIndex)).size;
-  const msg = t("frReplaceAllConfirm", { hits: frMatches.length, paras }) + (other ? ` ${t("frReplaceAllOther", { count: other })}` : "");
-  if (!window.confirm(msg)) return;
+  // Zamień wszystkie = jeden krok Cofnij: bez pytania przed, „Cofnij” w dymku (kontrakt UX §3, audyt D14)
   const count = await applyDocumentEdit(edit);
   if (count > 0) {
     frRemember("replace", edit.replace);
-    toast(t("editApplied", { count }), "success");
+    toastUndoable(t("frReplacedAll", { count }));
   } else toast(t("editNothing"), "info");
   await runFindReplaceScan();
 }

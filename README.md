@@ -214,8 +214,9 @@ Runner nie zatrzymuje się na pierwszym błędzie; to, co padło, powtarza raz p
 ## Wydanie nowej wersji
 
 ```bash
-npm run release              # podbija wersję (YYYYMMDD-NN) w sw.js, core.js i ?v= w index.html
-npm run release 20261001-02  # albo konkretna wersja
+npm run release              # +1 do wersji vX.YY.ZZ w sw.js, core.js i ?v= w index.html (v1.00.03 → v1.00.04)
+npm run release -- skok      # większy etap: do okrągłej …0 / …5 (v1.00.03 → v1.00.05)
+npm run release -- minor     # duża nowa funkcja: v1.01.00 (też: major, albo konkretna np. v1.02.00)
 ```
 
 Bez tego telefon z zainstalowaną PWA nie dostanie zmian — pliki z `?v=` są brane

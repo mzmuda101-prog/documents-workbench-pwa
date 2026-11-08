@@ -86,10 +86,15 @@ function renderSnippetList() {
         if (snBodyEl) snBodyEl.value = sn.body;
         snBodyEl?.focus();
       });
+      // usunięcie snippetu: od razu, a w dymku „Cofnij” przywraca go (bez okna z pytaniem)
       const delBtn = mk("✕", "snippet-del-btn", () => {
-        if (!confirm(t("snippetsDeleteConfirm", { name: formatSnippetTrigger(sn.name) }))) return;
+        const kept = { name: sn.name, body: sn.body };
         deleteSnippet(sn.name);
         renderSnippetList();
+        toast(t("snippetsDeleted", { name: formatSnippetTrigger(kept.name) }), "success", {
+          action: t("undoAction"),
+          onAction: () => { upsertSnippet(kept.name, kept.body); renderSnippetList(); },
+        });
       });
       delBtn.setAttribute("aria-label", t("snippetsDelete"));
       const actions = document.createElement("div");
@@ -133,14 +138,14 @@ async function expandSnippetsInDocument() {
     toast(t("snippetsNothingToExpand"), "info");
     return;
   }
-  if (!confirm(t("snippetsExpandConfirm", { count: keys.length }))) return;
+  // jeden krok Cofnij — bez pytania przed, „Cofnij” w dymku (kontrakt UX §3)
   const count = await applyDocumentEdit({
     op: "snippetExpand",
     snippets: expandMap,
     scope: snScopeEl?.value || "all",
   });
   if (count > 0) {
-    toast(t("snippetsExpanded", { count }), "success");
+    toastUndoable(t("snippetsExpanded", { count }));
     await runSnippetScan();
     if (typeof closeMobileSidebarIfOpen === "function") closeMobileSidebarIfOpen();
   } else {

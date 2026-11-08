@@ -22,6 +22,7 @@ async function run() {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("dialog", (d) => d.accept(d.type() === "prompt" ? d.defaultValue() : undefined));
+  await page.addInitScript(() => { window.__dwbAutoDialog = "accept"; }); // własne okna apki jak systemowe
   const toasts = [];
   await page.exposeFunction("__toast", (m) => toasts.push(m));
 

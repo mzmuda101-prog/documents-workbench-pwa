@@ -74,7 +74,7 @@ async function run() {
     check("Otwórz za pomocą: plik otwarty, z uchwytem (zapis do oryginału), adres wyczyszczony",
       st.name === "Wniosek.docx" && st.handle && st.search === "", JSON.stringify(st));
     check("Otwórz za pomocą: moduły widzą plik (Formularz: 12 pól)", st.fields === 12, String(st.fields));
-    await p2.evaluate(() => { window.confirm = () => true; return applyDocumentEdit({ op: "affix", prefix: "", suffix: "!", scope: "all" }); });
+    await p2.evaluate(() => { window.confirm = () => true; window.__dwbAutoDialog = "accept"; return applyDocumentEdit({ op: "affix", prefix: "", suffix: "!", scope: "all" }); });
     await idle(p2);
     await p2.click("#heroSaveBtn");
     await p2.waitForTimeout(800);
@@ -101,6 +101,8 @@ async function run() {
     // pytanie przed otwarciem (POST może wysłać też obca strona — audyt 6.11)
     const asked = [];
     p3.once("dialog", (d) => { asked.push(d.message()); d.accept(); });
+    await p3.addInitScript(() => { window.__dwbAutoDialog = "accept"; }); // własne okno apki zamiast confirm()
+    await p3.exposeFunction("__dwbDialogSeen", (m) => asked.push(m));
     await p3.goto(`${APP_URL}?open=shared`, { waitUntil: "load" });
     await p3.waitForFunction(() => !!originalFileBytes, null, { timeout: 20000 });
     await idle(p3);

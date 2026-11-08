@@ -15,19 +15,59 @@ function syncLangSwitchPill() {
   switchEl.classList.add("is-ready");
 }
 
-function requestCloseDocument() {
-  if (!originalFileBytes) return;
-  if (hasUnsavedChanges && !window.confirm(t("closeDocWarn"))) return;
+// Zamykanie z niezapisanymi zmianami: Zapisz / Nie zapisuj / Anuluj — jak Word (audyt D13).
+// Zwraca true, gdy dokument zamknięto.
+async function requestCloseDocument() {
+  if (!originalFileBytes) return false;
+  if (hasUnsavedChanges) {
+    const answer = await askSaveChanges(currentFileName);
+    if (!answer) return false;
+    if (answer === "save") {
+      await saveDocument();
+      if (hasUnsavedChanges) return false; // zapis anulowany / nieudany — dokument zostaje
+    }
+  }
   clearDocumentState();
   setStatus(t("noFile"));
   toast(t("docClosed"), "info");
+  return true;
 }
 
+// ── motyw: Systemowy / Jasny / Ciemny (kontrakt UX §1) ─────────────────────────────────────
+// Systemowy = brak klucza + nasłuch prefers-color-scheme na żywo. Dawniej pierwsze kliknięcie
+// zapisywało motyw na stałe i apka przestawała iść za systemem (audyt D9).
+const themeMq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+function getThemePref() {
+  let v = null;
+  try { v = localStorage.getItem(THEME_KEY); } catch (_) {}
+  return v === "dark" || v === "light" ? v : "system";
+}
+function applyThemePref() {
+  const pref = getThemePref();
+  const dark = pref === "dark" || (pref === "system" && !!themeMq?.matches);
+  rootEl.setAttribute("data-theme", dark ? "dark" : "light");
+  document.querySelectorAll("#themeSeg [data-theme-pref]").forEach((b) => {
+    const on = b.dataset.themePref === pref;
+    b.classList.toggle("is-on", on);
+    b.setAttribute("aria-pressed", String(on));
+  });
+}
+function setThemePref(pref) {
+  try {
+    if (pref === "light" || pref === "dark") localStorage.setItem(THEME_KEY, pref);
+    else localStorage.removeItem(THEME_KEY);
+  } catch (_) {}
+  applyThemePref();
+}
 function initTheme() {
-  const saved = localStorage.getItem(THEME_KEY);
-  const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-  const theme = saved || (prefersDark ? "dark" : "light");
-  rootEl.setAttribute("data-theme", theme);
+  applyThemePref();
+  document.getElementById("themeSeg")?.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-theme-pref]");
+    if (b) setThemePref(b.dataset.themePref);
+  });
+  const onSys = () => { if (getThemePref() === "system") applyThemePref(); };
+  if (themeMq?.addEventListener) themeMq.addEventListener("change", onSys);
+  else if (themeMq?.addListener) themeMq.addListener(onSys);
 }
 
 function initIntroSplash() {
@@ -97,10 +137,9 @@ function initIntroSplash() {
   }
 }
 
+// szybkie przełączenie (np. z listy skrótów / testów) — zapisuje wybór jasny/ciemny
 function toggleTheme() {
-  const next = rootEl.getAttribute("data-theme") === "dark" ? "light" : "dark";
-  rootEl.setAttribute("data-theme", next);
-  localStorage.setItem(THEME_KEY, next);
+  setThemePref(rootEl.getAttribute("data-theme") === "dark" ? "light" : "dark");
 }
 
 function syncNetworkBadge() {
@@ -177,7 +216,8 @@ async function saveDocument() {
     return;
   }
   if (overwriteConfirmedFor !== handle) {
-    if (!window.confirm(t("saveInPlaceWarn", { name: handle.name || currentFileName || "" }))) return;
+    const ok = await appConfirm(t("saveInPlaceWarn", { name: handle.name || currentFileName || "" }), { title: t("saveInPlaceTitle"), ok: t("saveInPlaceOk") });
+    if (!ok) return;
     overwriteConfirmedFor = handle;
   }
   setLoading(true, t("savingFile"));
@@ -283,14 +323,14 @@ async function saveDocumentAs() {
     }
   }
 
-  let name = null;
+  // Bez okna zapisu (Safari, iPhone): nazwa we własnym okienku PRZED budową pliku — systemowy
+  // prompt() na iOS przykrywał klawiaturę i wyglądał obco (audyt D15).
+  const nameRaw = ((await appPrompt(t("saveAsPrompt"), suggested, { title: t("saveAsTitle"), ok: t("saveAsOk") })) || "").trim();
+  if (!nameRaw) return;
+  const name = nameRaw.toLowerCase().endsWith(".docx") ? nameRaw : `${nameRaw}.docx`;
   try {
     const ok = await withSavedFile(async (bytes) => {
-      const disk = await forDisk(bytes);
-      const nameRaw = window.prompt(t("saveAsPrompt"), suggested);
-      if (!nameRaw) return false;
-      name = nameRaw.toLowerCase().endsWith(".docx") ? nameRaw : `${nameRaw}.docx`;
-      await downloadBytes(disk, name);
+      await downloadBytes(await forDisk(bytes), name);
       return true;
     });
     if (!ok) return;
@@ -305,10 +345,10 @@ async function saveDocumentAs() {
   if (typeof closeMobileSidebarIfOpen === "function") closeMobileSidebarIfOpen();
 }
 
-// Nowy plik w miejsce dokumentu z niezapisanymi zmianami — zapytaj (jak przy zamykaniu
-// i upuszczaniu pliku). Dawniej „Otwórz” i „Przykładowy dokument” podmieniały bez słowa.
+// Nowy plik w miejsce dokumentu: z kartami (open-docs.js nadpisuje tę funkcję) bieżący dokument
+// zostaje w swojej karcie, więc nie ma czego porzucać — tu tylko zapas bez modułu kart.
 function confirmDiscardChanges() {
-  return !originalFileBytes || !hasUnsavedChanges || window.confirm(t("closeDocWarn"));
+  return true;
 }
 
 async function openFilePicker() {
@@ -384,19 +424,26 @@ async function ingestDroppedFile(file, handlePromise) {
   return ingestFile(file, handle?.kind === "file" ? { handle } : {});
 }
 
-// Przeładowanie (Aktualizuj / Odśwież aplikację) przy niezapisanych zmianach: najpierw pytamy.
-// Na iPhonie/iPadzie Safari NIE pokazuje „Opuścić stronę?” — praca przepadała bez słowa.
-// Po „OK” przeglądarka nie pyta drugi raz (beforeunload w bootstrap.js patrzy na tę flagę).
+// Przeładowanie (Aktualizuj / Odśwież aplikację) przy niezapisanych zmianach (audyt D12):
+// praca idzie do szkicu (drafts.js) i po starcie nowej wersji wraca SAMA — bez karty „Niezapisana
+// praca” i bez straszenia, że przepadnie. Pytamy tylko, gdy szkicu nie da się zapisać (PDF
+// w trakcie, tryb prywatny). Po zgodzie przeglądarka nie pyta drugi raz (beforeunload w bootstrap.js).
 let reloadConfirmed = false;
-function confirmReloadWithUnsaved() {
+async function confirmReloadWithUnsaved() {
   if (!hasUnsavedChanges || reloadConfirmed) return true;
-  if (!window.confirm(t("reloadUnsavedWarn"))) return false;
+  if (typeof dwbDrafts !== "undefined" && dwbDrafts.carryOverReload && (await dwbDrafts.carryOverReload())) {
+    reloadConfirmed = true;
+    toast(t("reloadCarry"), "info");
+    return true;
+  }
+  const ok = await appConfirm(t("reloadUnsavedWarn"), { title: t("reloadUnsavedTitle"), ok: t("reloadUnsavedOk"), danger: true });
+  if (!ok) return false;
   reloadConfirmed = true;
   return true;
 }
 
 async function hardRefreshApp() {
-  if (!confirmReloadWithUnsaved()) return;
+  if (!(await confirmReloadWithUnsaved())) return;
   // Sygnał NATYCHMIAST po kliknięciu — czyszczenie cache i update() potrafią na
   // telefonie trwać sekundę i dłużej, a bez toastu klik wyglądał na niezłapany.
   toast(t("cacheRefresh"), "info");
@@ -440,9 +487,9 @@ function registerServiceWorker() {
   };
 
   if (appUpdateBtn) {
-    appUpdateBtn.addEventListener("click", () => {
+    appUpdateBtn.addEventListener("click", async () => {
       if (appUpdateBtn.classList.contains("is-busy")) return;
-      if (!confirmReloadWithUnsaved()) return;
+      if (!(await confirmReloadWithUnsaved())) return;
       // Najpierw WIDOCZNA zmiana stanu, dopiero potem robota — aktywacja nowego workera
       // i przeładowanie trwają od kilkuset ms do paru sekund.
       appUpdateBtn.classList.add("is-busy");
@@ -507,7 +554,6 @@ function registerServiceWorker() {
   }).catch(() => {});
 }
 
-if (themeToggle) themeToggle.addEventListener("click", toggleTheme);
 if (brandRefresh) brandRefresh.addEventListener("click", hardRefreshApp);
 if (closeDocBtn) closeDocBtn.addEventListener("click", requestCloseDocument);
 const closeDocPanelBtn = document.getElementById("closeDocPanelBtn");

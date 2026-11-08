@@ -21,6 +21,7 @@ async function run() {
   page.on("pageerror", (e) => errors.push(e.message));
   const dialogs = [];
   page.on("dialog", (d) => { dialogs.push(`${d.type()}: ${d.message()}`); d.accept(d.type() === "prompt" ? d.defaultValue() : undefined); });
+  await page.addInitScript(() => { window.__dwbAutoDialog = "accept"; }); // własne okna apki jak systemowe
 
   await page.goto(`${APP_URL}?sample=headings-sample`, { waitUntil: "load" });
   await page.evaluate(() => document.getElementById("heroSplash")?.remove());
@@ -149,11 +150,11 @@ async function run() {
   // ── 5. zamknięcie z niezapisanymi zmianami pyta ─────────────────────────────
   const dirty = await page.evaluate(() => hasUnsavedChanges);
   dialogs.length = 0;
-  await page.evaluate(() => { window.__origConfirm = window.confirm; window.confirm = () => false; }); // „Anuluj”
+  await page.evaluate(() => { window.__origConfirm = window.confirm; window.confirm = () => false; window.__dwbAutoDialog = "dismiss"; }); // „Anuluj”
   await page.evaluate(() => document.getElementById("closeDocBtn").click());
   await page.waitForTimeout(300);
   const stillOpen = await page.evaluate(() => !!originalFileBytes);
-  await page.evaluate(() => { window.confirm = window.__origConfirm; });
+  await page.evaluate(() => { window.confirm = window.__origConfirm; window.__dwbAutoDialog = "accept"; });
   check("zamknięcie z niezapisanymi zmianami: pyta, „Anuluj” zostawia dokument", dirty && stillOpen, JSON.stringify({ dirty, stillOpen }));
   // Od kart dokumentów (open-docs.js) otwarcie NIE podmienia dokumentu: nowy wchodzi w nową
   // kartę bez pytania, praca zostaje w karcie obok (niezapisana).
@@ -193,7 +194,7 @@ async function run() {
   check("EN: nowe panele przetłumaczone", plLeft.join("|") === "Find & replace|Review|Statistics|Export", plLeft.join("|"));
 
   // ── 7. motyw, zoom, skupienie, skróty sekcji ────────────────────────────────
-  await page.evaluate(() => document.getElementById("themeToggle").click());
+  await page.evaluate(() => toggleTheme());
   await page.waitForTimeout(200);
   const theme = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
   check("motyw: przełącznik zmienia data-theme", !!theme, theme);

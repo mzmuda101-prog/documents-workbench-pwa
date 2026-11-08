@@ -49,6 +49,7 @@ async function run() {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("dialog", (d) => (d.type() === "prompt" ? d.accept("Jan Test") : d.accept()));
+  await page.addInitScript(() => { window.__dwbAutoDialog = (o) => (o.input ? "Jan Test" : true); }); // własne okna apki
   await page.goto(`${APP_URL}?sample=headings-sample`, { waitUntil: "load" });
   await page.waitForSelector(".docx-preview-host p", { timeout: 20000 });
   await page.evaluate(() => document.getElementById("heroSplash")?.remove());

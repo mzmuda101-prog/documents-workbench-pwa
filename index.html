@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pl" data-theme="light">
+<html lang="pl">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -16,7 +16,8 @@
     <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png" />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin.woff2" crossorigin />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin-ext.woff2" crossorigin />
-    <link rel="stylesheet" href="styles/app.css?v=20261106-03" />
+    <link rel="stylesheet" href="styles/app.css?v=v1.00.05" />
+    <script src="app/theme-boot.js?v=v1.00.05"></script>
   </head>
   <body>
     <!-- Pierwszy przystanek Tab: skok prosto do dokumentu (panel to kilkadziesiąt kontrolek). -->
@@ -49,7 +50,7 @@
             <svg class="hero-save-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>
             <span class="hero-save-label" data-i18n="save">Zapisz</span><span class="hero-save-count" id="heroSaveCount" hidden></span>
           </button>
-          <button class="app-menu-btn" id="appMenuBtn" data-hint data-hint-pl="Język, motyw, tryb skupienia, pełny ekran, odświeżenie" data-hint-en="Language, theme, focus mode, full screen, refresh" data-hint-delay="0.7" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="appMenu" data-i18n-aria="appMenuAria" aria-label="Menu aplikacji">
+          <button class="app-menu-btn" id="appMenuBtn" data-hint data-hint-pl="Plik, motyw, język, skróty klawiszowe, wersja" data-hint-en="File, theme, language, keyboard shortcuts, version" data-hint-delay="0.7" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="appMenu" data-i18n-aria="appMenuAria" aria-label="Menu aplikacji">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
           </button>
           <!-- Menu ⋯ — rzadko używane rzeczy, które dotąd stały na wierzchu (7 kontrolek).
@@ -64,12 +65,31 @@
                 <button class="lang-button" type="button" data-lang="en" aria-pressed="false">EN</button>
               </div>
             </div>
-            <div class="app-menu-row">
-              <span data-i18n="menuTheme">Motyw</span>
-              <button class="theme-toggle" id="themeToggle" type="button" data-i18n-aria="themeAria" aria-label="Zmień motyw"></button>
+            <!-- Motyw w trzech stanach (kontrakt UX §1): Systemowy = idzie za systemem na żywo. -->
+            <div class="app-menu-row app-menu-row-stack">
+              <span id="menuThemeLabel" data-i18n="menuTheme">Motyw</span>
+              <div class="seg theme-seg" id="themeSeg" role="group" aria-labelledby="menuThemeLabel">
+                <button type="button" class="seg-btn" data-theme-pref="system" aria-pressed="false" data-i18n="themeSystem">Systemowy</button>
+                <button type="button" class="seg-btn" data-theme-pref="light" aria-pressed="false" data-i18n="themeLight">Jasny</button>
+                <button type="button" class="seg-btn" data-theme-pref="dark" aria-pressed="false" data-i18n="themeDark">Ciemny</button>
+              </div>
             </div>
+            <div class="app-menu-sep" role="separator"></div>
+            <div class="app-menu-cap" data-i18n="menuFileCap">Plik</div>
             <button class="app-menu-item" id="newDocMenuItem" type="button">
-              <span class="app-menu-item-text" data-i18n="newDocMenu">Nowy dokument…</span><span class="app-menu-kbd">Ctrl/⌘+Alt+N</span>
+              <span class="app-menu-item-text" data-i18n="newDocMenu">Nowy dokument…</span><span class="app-menu-kbd" data-shortcut="newDoc">Ctrl/⌘+Alt+N</span>
+            </button>
+            <button class="app-menu-item" id="openMenuItem" type="button">
+              <span class="app-menu-item-text" data-i18n="openFileMenu">Otwórz plik…</span><span class="app-menu-kbd" data-shortcut="open">Ctrl/⌘+O</span>
+            </button>
+            <button class="app-menu-item" id="photoMenuItem" type="button">
+              <span class="app-menu-item-text" data-i18n="photoDoc">Zdjęcie dokumentu</span><span aria-hidden="true">◉</span>
+            </button>
+            <button class="app-menu-item needs-doc" id="saveAsMenuItem" type="button">
+              <span class="app-menu-item-text" data-i18n="saveAsMenu">Zapisz jako…</span><span class="app-menu-kbd" data-shortcut="saveAs">Ctrl/⌘+Shift+S</span>
+            </button>
+            <button class="app-menu-item needs-doc" id="exportMenuItem" type="button">
+              <span class="app-menu-item-text" data-i18n="exportMenu">Eksportuj (TXT, MD, HTML)…</span><span aria-hidden="true">⇩</span>
             </button>
             <button class="app-menu-item" id="aiMenuItem" type="button" data-local-ai-settings>
               <span class="app-menu-item-text" data-i18n="aiMenu">Asystent AI…</span><span aria-hidden="true">✦</span>
@@ -81,16 +101,24 @@
               <span class="app-menu-item-text" data-i18n="pageSetupMenu">Marginesy i układ strony…</span><span aria-hidden="true">▭</span>
             </button>
             <button class="app-menu-item" id="printPreviewMenuItem" type="button">
-              <span class="app-menu-item-text" data-i18n="ppMenu">Podgląd wydruku…</span><span class="app-menu-kbd">Ctrl/⌘+P</span>
+              <span class="app-menu-item-text" data-i18n="ppMenu">Podgląd wydruku…</span><span class="app-menu-kbd" data-shortcut="print">Ctrl/⌘+P</span>
             </button>
             <button class="app-menu-item" id="focusModeMenuItem" type="button">
-              <span class="app-menu-item-text" data-i18n="focusModeMenu">Tryb skupienia</span><span class="app-menu-kbd">Ctrl/⌘+Alt+F</span>
+              <span class="app-menu-item-text" data-i18n="focusModeMenu">Tryb skupienia</span><span class="app-menu-kbd" data-shortcut="focusMode">Ctrl/⌘+Alt+F</span>
             </button>
             <button class="app-menu-item" id="fullscreenMenuItem" type="button" hidden>
               <span class="app-menu-item-text" data-i18n="fullscreenMenu">Pełny ekran</span><span aria-hidden="true">⛶</span>
             </button>
             <button class="app-menu-item hidden" id="closeDocBtn" type="button">
               <span class="app-menu-item-text" data-i18n="closeDoc">Zamknij dokument</span><span aria-hidden="true">✕</span>
+            </button>
+            <div class="app-menu-sep" role="separator"></div>
+            <div class="app-menu-cap" data-i18n="menuHelpCap">Pomoc</div>
+            <button class="app-menu-item" id="shortcutsMenuItem" type="button">
+              <span class="app-menu-item-text" data-i18n="shortcutsMenu">Skróty klawiszowe</span><span class="app-menu-kbd" data-shortcut="shortcuts">Ctrl/⌘+/</span>
+            </button>
+            <button class="app-menu-item" id="guideMenuItem" type="button">
+              <span class="app-menu-item-text" data-i18n="guideMenu">Przewodnik po aplikacji</span><span aria-hidden="true">?</span>
             </button>
             <div class="app-menu-sep" role="separator"></div>
             <div class="app-menu-cap" data-i18n="menuOtherApps">Inne aplikacje</div>
@@ -102,7 +130,7 @@
             <div class="app-menu-state hero-badges">
               <span class="hero-badge pwa-badge">PWA</span>
               <span class="hero-badge network-badge" id="networkBadge">Online</span>
-              <span class="app-menu-build" id="appMenuBuild"></span>
+              <button type="button" class="app-menu-build" id="appMenuBuild" data-hint data-hint-pl="Kliknij, aby skopiować numer wersji (do zgłoszenia)" data-hint-en="Click to copy the version number (for a report)" data-hint-delay="0.6"></button>
             </div>
           </div>
         </div>
@@ -914,6 +942,7 @@
                   <h4 class="help-heading" data-i18n="helpEditTitle">Edycja w podglądzie</h4>
                   <p class="help-text" data-i18n="inlineEditHint">Enter — akapit · Shift+Enter — linia · Backspace — scal · Tab — lista · Ctrl+Tab — nagłówek · Ctrl+B/I/U — styl</p>
                 </section>
+                <button class="btn" id="shortcutsHelpBtn" type="button"><span data-i18n="shortcutsMenu">Skróty klawiszowe</span> <span class="app-menu-kbd" data-shortcut="shortcuts">Ctrl/⌘+/</span></button>
                 <section class="help-section">
                   <h4 class="help-heading" data-i18n="helpKeysTitle">Klawiatura</h4>
                   <p class="help-text" data-i18n="helpKeysText">Ctrl/⌘+F — szukaj · Enter / Shift+Enter (albo F3) — następne / poprzednie · Ctrl/⌘+S — zapisz · Ctrl/⌘+Shift+= / Ctrl/⌘+= — indeks górny / dolny · Ctrl/⌘+Enter — podział strony · Ctrl/⌘+Alt+N — nowy dokument · Ctrl/⌘+Alt+E — Czytanie ⇄ Edycja · Ctrl/⌘+Alt+F — tryb skupienia · Ctrl/⌘+Alt+1 / 2 / 3 — panel / pasek / dokument (F6 — po kolei) · Esc — krok wstecz</p>
@@ -1114,10 +1143,14 @@
                 <p class="empty-beta" id="emptyPdfBeta"><span class="beta-tag">beta</span> <span data-i18n="emptyPdfBeta">Zamiana PDF → .docx jest w wersji testowej — po konwersji sprawdź wynik.</span></p>
                 <div class="draft-recovery" id="draftRecovery" hidden aria-live="polite"></div>
                 <div class="empty-actions" id="emptyActions">
-                  <button class="btn primary" id="emptyOpenBtn" type="button" data-i18n="emptyOpen">Wybierz plik z dysku</button>
-                  <button class="btn" id="emptyNewBtn" type="button" data-i18n="emptyNew">Nowy dokument</button>
-                  <button class="btn" id="emptySampleBtn" type="button" data-i18n="emptySample">Wypróbuj na przykładowym dokumencie</button>
+                  <button class="btn primary" id="emptyOpenBtn" type="button" data-i18n="emptyOpen">Otwórz plik…</button>
+                  <button class="btn" id="emptyNewBtn" type="button" data-i18n="emptyNew">Nowy dokument…</button>
+                  <!-- tytuł obiecuje zdjęcie dokumentu — przycisk od razu tutaj (audyt D3) -->
+                  <button class="btn" id="emptyPhotoBtn" type="button" data-i18n="photoDoc">Zdjęcie dokumentu</button>
+                  <button class="btn" id="emptySampleBtn" type="button" data-i18n="emptySample">Przewodnik po aplikacji</button>
                 </div>
+                <!-- Ostatnio otwierane (doc-comfort.js): kopie na tym urządzeniu, „✕” usuwa z listy -->
+                <section class="recent-files" id="recentFiles" hidden aria-live="polite"></section>
                 <p class="empty-drop-hint" id="emptyDropHint" data-i18n="emptyDropHint">albo przeciągnij plik .docx lub .pdf w dowolne miejsce okna — PDF zamieni się w edytowalny .docx</p>
               </div>
               <div class="doc-zoom-shell" id="docZoomShell">
@@ -1142,6 +1175,7 @@
             <span class="status-dirty" id="statusDirty" hidden></span>
             <span id="status">Brak pliku</span>
             <button type="button" class="status-track" id="statusTrack" hidden data-i18n="statusTrack" data-hint data-hint-pl="Śledzenie zmian włączone — kliknij, aby zobaczyć Recenzję (Ctrl/⌘+Shift+E wyłącza)" data-hint-en="Track changes is on — click to open Review (Ctrl/⌘+Shift+E turns it off)" data-hint-delay="0.5">Śledzenie zmian</button>
+            <button type="button" class="status-page" id="statusPage" hidden data-hint data-hint-pl="Przejdź do strony… (Ctrl/⌘+Alt+G)" data-hint-en="Go to page… (Ctrl/⌘+Alt+G)" data-hint-delay="0.6"></button>
             <span class="status-words" id="statusWords"></span>
             <span class="status-font" id="statusFont" hidden data-hint data-hint-pl="Czcionka i rozmiar w miejscu kursora" data-hint-en="Font and size at the cursor" data-hint-delay="0.6"></span>
             <details class="log-panel">
@@ -1191,60 +1225,62 @@
         <p class="newdoc-foot" data-i18n="newDocFoot">Plik powstaje na tym urządzeniu. „Zapisz” zapyta, gdzie go zapisać.</p>
       </form>
     </dialog>
-    <script defer src="app/core.js?v=20261106-03"></script>
-    <script defer src="app/language.js?v=20261106-03"></script>
-    <script defer src="app/docx-metadata.js?v=20261106-03"></script>
-    <script defer src="app/docx-compare.js?v=20261106-03"></script>
-    <script defer src="app/docx-redline.js?v=20261106-03"></script>
-    <script defer src="app/track-changes.js?v=20261106-03"></script>
-    <script defer src="app/docx-revisions.js?v=20261106-03"></script>
-    <script defer src="app/docx-forms.js?v=20261106-03"></script>
-    <script defer src="app/doc-links.js?v=20261106-03"></script>
-    <script defer src="app/docx-patch.js?v=20261106-03"></script>
-    <script defer src="app/docx-compose.js?v=20261106-03"></script>
-    <script defer src="app/textboxes.js?v=20261106-03"></script>
-    <script defer src="app/tab-leaders.js?v=20261106-03"></script>
-    <script defer src="app/template-tokens.js?v=20261106-03"></script>
-    <script defer src="app/docx-run-styles.js?v=20261106-03"></script>
-    <script defer src="app/docx-inline-edit.js?v=20261106-03"></script>
-    <script defer src="app/doc-notes.js?v=20261106-03"></script>
-    <script defer src="app/paste-rich.js?v=20261106-03"></script>
-    <script defer src="app/document.js?v=20261106-03"></script>
-    <script defer src="app/docx-render-fixes.js?v=20261106-03"></script>
-    <script defer src="app/list-numbering.js?v=20261106-03"></script>
-    <script defer src="app/docx-viewer.js?v=20261106-03"></script>
-    <script defer src="app/analysis.js?v=20261106-03"></script>
-    <script defer src="app/structure-panel.js?v=20261106-03"></script>
-    <script defer src="app/semantic-search.js?v=20261106-03"></script>
-    <script defer src="app/local-ai.js?v=20261106-03"></script>
-    <script defer src="app/doc-ask.js?v=20261106-03"></script>
-    <script defer src="app/doc-rewrite.js?v=20261106-03"></script>
-    <script defer src="app/grammar-style.js?v=20261106-03"></script>
-    <script defer src="app/placeholders.js?v=20261106-03"></script>
-    <script defer src="app/snippets.js?v=20261106-03"></script>
-    <script defer src="app/snippet-suggest.js?v=20261106-03"></script>
-    <script defer src="app/doc-caret-nav.js?v=20261106-03"></script>
-    <script defer src="app/doc-selection.js?v=20261106-03"></script>
-    <script defer src="app/print-preview.js?v=20261106-03"></script>
-    <script defer src="app/edit-tools.js?v=20261106-03"></script>
-    <script defer src="app/mobile-doc-zoom.js?v=20261106-03"></script>
-    <script defer src="app/ui-controls.js?v=20261106-03"></script>
-    <script defer src="app/lazy-features.js?v=20261106-03"></script>
-    <script defer src="app/app-frame.js?v=20261106-03"></script>
-    <script defer src="app/touch.js?v=20261106-03"></script>
-    <script defer src="app/pinch-zoom.js?v=20261106-03"></script>
-    <script defer src="app/page-breaks.js?v=20261106-03"></script>
-    <script defer src="app/format-marks.js?v=20261106-03"></script>
-    <script defer src="app/undo.js?v=20261106-03"></script>
-    <script defer src="app/compose-ui.js?v=20261106-03"></script>
-    <script defer src="app/autocorrect.js?v=20261106-03"></script>
-    <script defer src="app/self-check.js?v=20261106-03"></script>
-    <script defer src="app/image-viewer.js?v=20261106-03"></script>
-    <script defer src="app/drafts.js?v=20261106-03"></script>
-    <script defer src="app/open-docs.js?v=20261106-03"></script>
-    <script defer src="app/view-mode.js?v=20261106-03"></script>
-    <script defer src="app/keyboard.js?v=20261106-03"></script>
-    <script defer src="app/launch-files.js?v=20261106-03"></script>
-    <script defer src="app/bootstrap.js?v=20261106-03"></script>
+    <script defer src="app/core.js?v=v1.00.05"></script>
+    <script defer src="app/language.js?v=v1.00.05"></script>
+    <script defer src="app/docx-metadata.js?v=v1.00.05"></script>
+    <script defer src="app/docx-compare.js?v=v1.00.05"></script>
+    <script defer src="app/docx-redline.js?v=v1.00.05"></script>
+    <script defer src="app/track-changes.js?v=v1.00.05"></script>
+    <script defer src="app/docx-revisions.js?v=v1.00.05"></script>
+    <script defer src="app/docx-forms.js?v=v1.00.05"></script>
+    <script defer src="app/doc-links.js?v=v1.00.05"></script>
+    <script defer src="app/docx-patch.js?v=v1.00.05"></script>
+    <script defer src="app/docx-compose.js?v=v1.00.05"></script>
+    <script defer src="app/textboxes.js?v=v1.00.05"></script>
+    <script defer src="app/tab-leaders.js?v=v1.00.05"></script>
+    <script defer src="app/template-tokens.js?v=v1.00.05"></script>
+    <script defer src="app/docx-run-styles.js?v=v1.00.05"></script>
+    <script defer src="app/docx-inline-edit.js?v=v1.00.05"></script>
+    <script defer src="app/doc-notes.js?v=v1.00.05"></script>
+    <script defer src="app/paste-rich.js?v=v1.00.05"></script>
+    <script defer src="app/document.js?v=v1.00.05"></script>
+    <script defer src="app/docx-render-fixes.js?v=v1.00.05"></script>
+    <script defer src="app/list-numbering.js?v=v1.00.05"></script>
+    <script defer src="app/docx-viewer.js?v=v1.00.05"></script>
+    <script defer src="app/analysis.js?v=v1.00.05"></script>
+    <script defer src="app/structure-panel.js?v=v1.00.05"></script>
+    <script defer src="app/semantic-search.js?v=v1.00.05"></script>
+    <script defer src="app/local-ai.js?v=v1.00.05"></script>
+    <script defer src="app/doc-ask.js?v=v1.00.05"></script>
+    <script defer src="app/doc-rewrite.js?v=v1.00.05"></script>
+    <script defer src="app/grammar-style.js?v=v1.00.05"></script>
+    <script defer src="app/placeholders.js?v=v1.00.05"></script>
+    <script defer src="app/snippets.js?v=v1.00.05"></script>
+    <script defer src="app/snippet-suggest.js?v=v1.00.05"></script>
+    <script defer src="app/doc-caret-nav.js?v=v1.00.05"></script>
+    <script defer src="app/doc-selection.js?v=v1.00.05"></script>
+    <script defer src="app/print-preview.js?v=v1.00.05"></script>
+    <script defer src="app/edit-tools.js?v=v1.00.05"></script>
+    <script defer src="app/mobile-doc-zoom.js?v=v1.00.05"></script>
+    <script defer src="app/ui-controls.js?v=v1.00.05"></script>
+    <script defer src="app/lazy-features.js?v=v1.00.05"></script>
+    <script defer src="app/app-frame.js?v=v1.00.05"></script>
+    <script defer src="app/touch.js?v=v1.00.05"></script>
+    <script defer src="app/pinch-zoom.js?v=v1.00.05"></script>
+    <script defer src="app/page-breaks.js?v=v1.00.05"></script>
+    <script defer src="app/format-marks.js?v=v1.00.05"></script>
+    <script defer src="app/undo.js?v=v1.00.05"></script>
+    <script defer src="app/compose-ui.js?v=v1.00.05"></script>
+    <script defer src="app/autocorrect.js?v=v1.00.05"></script>
+    <script defer src="app/self-check.js?v=v1.00.05"></script>
+    <script defer src="app/image-viewer.js?v=v1.00.05"></script>
+    <script defer src="app/drafts.js?v=v1.00.05"></script>
+    <script defer src="app/open-docs.js?v=v1.00.05"></script>
+    <script defer src="app/view-mode.js?v=v1.00.05"></script>
+    <script defer src="app/keyboard.js?v=v1.00.05"></script>
+    <script defer src="app/shortcuts.js?v=v1.00.05"></script>
+    <script defer src="app/doc-comfort.js?v=v1.00.05"></script>
+    <script defer src="app/launch-files.js?v=v1.00.05"></script>
+    <script defer src="app/bootstrap.js?v=v1.00.05"></script>
   </body>
 </html>

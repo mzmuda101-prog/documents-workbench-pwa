@@ -141,12 +141,20 @@ function runStep(step, sleepScale = SLEEP_SCALE) {
       if (step.args.some((a) => { try { return /test-impact: bez śledzenia CSS/.test(fs.readFileSync(path.join(ROOT, a), "utf8")); } catch { return false; } })) env.TEST_COV_CSS = "0";
       try { fs.rmSync(env.TEST_COV_OUT, { force: true }); } catch {}
     }
-    const child = spawn(step.cmd, step.args, { cwd: ROOT, env });
+    const child = spawn(step.cmd, step.args, { cwd: ROOT, env, detached: true }); // detached: grupa procesów — strażnik ubija też przeglądarki testu
     try { os.setPriority(child.pid, NICE); } catch {} // przeglądarki odpalone przez test dziedziczą priorytet
     let out = "";
     child.stdout.on("data", (d) => { out += d; });
     child.stderr.on("data", (d) => { out += d; });
-    child.on("close", (code) => resolve({ step, ok: code === 0, code, ms: Date.now() - t0, out }));
+    // Strażnik: zawieszony krok (np. test czekający na okno, którego nikt nie kliknie) wisiał
+    // godzinę i blokował cały przebieg. Limit = 3 × ostatni zielony czas, min. 4 min, max. 15 min;
+    // STEP_TIMEOUT_MS nadpisuje. Ubity krok = porażka z czytelnym powodem (i jedna powtórka).
+    const limit = Number(process.env.STEP_TIMEOUT_MS) || Math.min(15 * 60000, Math.max(4 * 60000, 3 * (timings[step.raw] || 0)));
+    const guard = setTimeout(() => {
+      out += `\n⏱ krok przerwany po ${Math.round(limit / 60000)} min (zawieszony?)\n`;
+      try { process.kill(-child.pid, "SIGKILL"); } catch { try { child.kill("SIGKILL"); } catch {} }
+    }, limit);
+    child.on("close", (code) => { clearTimeout(guard); resolve({ step, ok: code === 0, code, ms: Date.now() - t0, out }); });
   });
 }
 

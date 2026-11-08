@@ -199,7 +199,22 @@ const dwbOpenDocs = (() => {
       if (typeof requestCloseDocument === "function") requestCloseDocument();
       return;
     }
-    if (d.dirty && !window.confirm(t("closeDocWarn"))) return;
+    if (d.dirty) {
+      // karta w tle z niezapisanymi zmianami: Zapisz / Nie zapisuj / Anuluj (jak Word);
+      // „Zapisz” przenosi na tę kartę i zamyka ją po zapisie
+      askSaveChanges(d.name).then(async (answer) => {
+        if (!answer || !docs.includes(d)) return;
+        if (answer === "save") {
+          if (!(await switchTo(d.id))) return;
+          if (typeof requestCloseDocument === "function") await requestCloseDocument();
+          return;
+        }
+        if (typeof dwbDrafts !== "undefined") dwbDrafts.drop(d.draft);
+        docs.splice(docs.indexOf(d), 1);
+        render();
+      });
+      return;
+    }
     if (typeof dwbDrafts !== "undefined") dwbDrafts.drop(d.draft);
     docs.splice(docs.indexOf(d), 1);
     render();

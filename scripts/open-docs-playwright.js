@@ -29,6 +29,8 @@ async function openPage(context, url = APP_URL) {
   const page = await context.newPage();
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("dialog", (d) => { dialogs.push(d.message()); d.accept(); });
+  await page.exposeFunction("__dwbDialogSeen", (m) => dialogs.push(m)); // własne okna apki też liczą się jako pytanie
+  await page.addInitScript(() => { window.__dwbAutoDialog = "accept"; }); // własne okna apki jak systemowe
   await page.goto(url, { waitUntil: "load" });
   await page.evaluate(() => document.getElementById("heroSplash")?.remove());
   await sleep(300);

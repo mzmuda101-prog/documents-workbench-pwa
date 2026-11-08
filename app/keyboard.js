@@ -167,6 +167,7 @@
     }
     if (e.key === "Escape") {
       if (document.querySelector(".app-menu:not([hidden])")) return; // menu ⋯ ma własne Esc
+      if (document.querySelector("dialog[open]")) return; // okno na wierzchu (appDialog, skróty…) — Esc należy do niego
       if (typeof clearSemanticHighlights === "function" && clearSemanticHighlights()) { e.preventDefault(); return; }
       if (a?.closest?.(".docx-editable-p, .docx-edit-root")) {
         e.preventDefault();

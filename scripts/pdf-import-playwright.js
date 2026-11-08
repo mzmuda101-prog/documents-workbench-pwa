@@ -538,6 +538,7 @@ async function run() {
 
   // --- 5b. skan tabeli do góry nogami i krzywo: strona wyprostowana, tabela Worda z komórkami
   page.on("dialog", (d) => d.accept().catch(() => {}));
+  await page.addInitScript(() => { window.__dwbAutoDialog = "accept"; }); // własne okna apki jak systemowe
   const closeTabs = () => page.evaluate(() => { for (const d of dwbOpenDocs.list()) if (!d.active) dwbOpenDocs.closeTab(d.id); });
   await page.evaluate(() => { setDirtyState(false); window.__conv = null; });
   await closeTabs();

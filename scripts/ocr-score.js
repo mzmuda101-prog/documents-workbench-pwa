@@ -274,6 +274,7 @@ async function run() {
   await context.addInitScript(() => sessionStorage.setItem("introPlayed", "true"));
   const page = await context.newPage();
   page.on("dialog", (d) => d.accept().catch(() => {})); // „zamknąć niezapisany?” przy sprzątaniu kart
+  await page.addInitScript(() => { window.__dwbAutoDialog = "accept"; }); // własne okna apki jak systemowe
   page.on("pageerror", (e) => console.log("BŁĄD STRONY:", e.message));
   page.on("console", (m) => { if (m.type() === "error") console.log("KONSOLA:", m.text().slice(0, 300)); });
   await page.goto(APP_URL, { waitUntil: "load" });

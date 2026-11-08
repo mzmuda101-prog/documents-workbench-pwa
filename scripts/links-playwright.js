@@ -40,6 +40,7 @@ async function run() {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("dialog", (d) => { errors.push(`dialog: ${d.message()}`); d.dismiss(); });
+  await page.addInitScript(() => { window.__dwbAutoDialog = "dismiss"; }); // własne okna apki jak systemowe
   await page.goto(`${APP_URL}?sample=links-sample`, { waitUntil: "load" });
   await page.waitForSelector(".docx-preview-host a[href]", { timeout: 20000 });
   await page.evaluate(() => document.getElementById("heroSplash")?.remove());

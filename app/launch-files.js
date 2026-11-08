@@ -58,7 +58,7 @@ async function openSharedFile() {
     // Udostępnienie przychodzi POST-em, który może wysłać też dowolna strona (formularz z plikiem),
     // a service worker nie odróżni go od systemowego „Udostępnij” — bez pytania obca strona
     // otwierała w aplikacji swój plik pod dowolną nazwą (audyt bezpieczeństwa 6.11).
-    if (!window.confirm(t("openSharedConfirm", { name: items.map((x) => x.file.name).join("”, „") }))) return;
+    if (!(await appConfirm(t("openSharedConfirm", { name: items.map((x) => x.file.name).join("”, „") }), { title: t("openSharedTitle"), ok: t("openSharedOk") }))) return;
     if (typeof confirmDiscardChanges === "function" && !confirmDiscardChanges()) return;
     if (typeof openDocumentFiles === "function") await openDocumentFiles(items);
     else await ingestFile(items[0].file);

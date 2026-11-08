@@ -109,6 +109,7 @@ async function run() {
     await context.addInitScript(() => sessionStorage.setItem("introPlayed", "true"));
     const page = await context.newPage();
     page.on("dialog", (d) => d.accept().catch(() => {}));
+    await page.addInitScript(() => { window.__dwbAutoDialog = "accept"; }); // własne okna apki jak systemowe
     await page.goto(APP_URL, { waitUntil: "load" });
     await page.evaluate(() => document.getElementById("heroSplash")?.remove());
     await page.setInputFiles("#fileInput", file);

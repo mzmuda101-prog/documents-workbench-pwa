@@ -24,6 +24,7 @@ async function run() {
   await page.goto(APP_URL, { waitUntil: "load" });
   await page.evaluate(() => document.getElementById("heroSplash")?.remove());
   page.on("dialog", (d) => d.accept());
+  await page.addInitScript(() => { window.__dwbAutoDialog = "accept"; }); // własne okna apki jak systemowe
 
   // ── dokument testowy ───────────────────────────────────────────────────────
   await page.evaluate(async () => {

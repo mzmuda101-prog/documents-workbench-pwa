@@ -165,7 +165,7 @@ async function desktop(browser) {
   await page.click("#appMenuBtn");
   const menu = await page.evaluate(() => {
     const m = document.getElementById("appMenu");
-    return { open: !m.hidden, lang: m.contains(document.getElementById("langSwitch")), theme: m.contains(document.getElementById("themeToggle")), close: !document.getElementById("closeDocBtn").classList.contains("hidden"), inBody: m.parentElement === document.body };
+    return { open: !m.hidden, lang: m.contains(document.getElementById("langSwitch")), theme: m.contains(document.getElementById("themeSeg")), close: !document.getElementById("closeDocBtn").classList.contains("hidden"), inBody: m.parentElement === document.body };
   });
   await page.keyboard.press("Escape");
   const menuClosed = await page.evaluate(() => document.getElementById("appMenu").hidden);

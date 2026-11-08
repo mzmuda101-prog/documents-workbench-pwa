@@ -402,7 +402,7 @@ function tbNextIds(doc) {
   return { id, name: `Pole tekstowe ${n}`, z: Math.max(251659264, ...zs) + 1024 };
 }
 
-// op "textbox": { action: "insert" | "geometry" | "text" | "format" | "delete", index, nth, … }
+// op "textbox": { action: "insert" | "paste" | "geometry" | "text" | "format" | "delete", index, nth, … }
 function applyTextboxInXml(xml, edit) {
   const doc = composeParse(xml);
   const paragraphs = collectParagraphElements(doc.documentElement, "all");
@@ -414,6 +414,25 @@ function applyTextboxInXml(xml, edit) {
     const paraXml = String(edit.text || "").split("\n").map((line) => tbParaXml(line, { jc: edit.jc, sz: edit.sz })).join("");
     const run = doc.importNode(composeParse(tbRunXml({ id, name, z, x: edit.x, y: edit.y, w: edit.w, h: edit.h, paraXml: paraXml.replace(/<w:p>/g, `<w:p xmlns:w="${W_NS}">`), border: !!edit.border, fill: !!edit.fill })).documentElement, true);
     p.appendChild(run);
+    return { xml: composeSerialize(doc), count: 1 };
+  }
+  if (edit.action === "paste") {
+    // kopia pola (Kopiuj/Wklej, Duplikuj, przeciąganie z Ctrl/⌘): ten sam kształt z nowymi numerami
+    // — wp:docPr id i nazwa oraz id kształtu VML muszą być jedyne (walidator Office), a w14:paraId
+    // akapitów w środku też (Word zgłaszał „nieczytelną zawartość” przy powtórce)
+    tbEnsureNamespaces(doc);
+    const { id, name, z } = tbNextIds(doc);
+    const run = doc.importNode(composeParse(edit.runXml).documentElement, true);
+    Array.from(run.getElementsByTagNameNS(TB_NS.wp, "docPr")).forEach((d) => { d.setAttribute("id", String(id)); d.setAttribute("name", name); });
+    Array.from(run.getElementsByTagNameNS(TB_NS.v, "*")).forEach((v) => { if (v.hasAttribute("id")) v.setAttribute("id", name); });
+    Array.from(run.getElementsByTagNameNS(TB_NS.wp, "anchor")).forEach((a) => a.setAttribute("relativeHeight", String(z)));
+    Array.from(run.getElementsByTagNameNS(W_NS, "p")).forEach((wp) => {
+      Array.from(wp.attributes).filter((at) => /^(paraId|textId)$/.test(at.localName)).forEach((at) => wp.removeAttributeNode(at));
+    });
+    const copy = tbBoxOfRun(run);
+    if (!copy) return { xml, count: 0 };
+    p.appendChild(run);
+    tbSetGeometry(copy, { x: edit.x, y: edit.y, w: edit.w, h: edit.h, fixedH: edit.fixedH });
     return { xml: composeSerialize(doc), count: 1 };
   }
   const box = tbBoxesOfParagraph(p)[edit.nth | 0];
@@ -455,7 +474,8 @@ const dwbTextbox = (() => {
         const boxes = [];
         collectParagraphElements(doc.documentElement, "all").forEach((p, index) => {
           tbBoxesOfParagraph(p).forEach((box, nth) => {
-            boxes.push({ index, nth, ...tbDescribe(box) });
+            // runXml: cały kształt z pliku — źródło kopii przy Kopiuj/Duplikuj (także do innej karty)
+            boxes.push({ index, nth, runXml: new XMLSerializer().serializeToString(box.run), ...tbDescribe(box) });
             box.run.parentNode.removeChild(box.run);
           });
         });
@@ -786,6 +806,10 @@ const dwbTextbox = (() => {
         '<span class="tb-sep" aria-hidden="true"></span>',
         btn(`tbc-border${b.line ? " is-on" : ""}`, "textboxBorder", ICON('<rect x="4" y="4" width="16" height="16" rx="1"/>'), !!b.line),
         btn(`tbc-fill${b.fill ? " is-on" : ""}`, "textboxFill", ICON('<rect x="4" y="4" width="16" height="16" rx="1" fill="currentColor" fill-opacity=".25"/>'), !!b.fill),
+        '<span class="tb-sep" aria-hidden="true"></span>',
+        btn("tbc-copy", "textboxCopy", ICON('<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>')),
+        btn("tbc-dup", "textboxDuplicate", ICON('<rect x="3" y="3" width="13" height="13" rx="2"/><path d="M8 21h11a2 2 0 0 0 2-2V8"/><path d="M9.5 9.5h0M12 7v5M9.5 9.5h5"/>')),
+        clip ? btn("tbc-paste", "textboxPaste", ICON('<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>')) : "",
         btn("tbc-del", "textboxDelete", ICON('<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>')),
       ].join("");
       el.querySelectorAll("button[data-key]").forEach((bt) => {
@@ -804,6 +828,9 @@ const dwbTextbox = (() => {
         const target = sel.el;
         if (bt.classList.contains("tbc-edit")) { startEdit(target); return; }
         if (bt.classList.contains("tbc-del")) { removeBox(target); return; }
+        if (bt.classList.contains("tbc-copy")) { copyBox(target); return; }
+        if (bt.classList.contains("tbc-dup")) { duplicateBox(target); return; }
+        if (bt.classList.contains("tbc-paste")) { pasteNear(target); return; }
         const f = {};
         if (bt.classList.contains("tbc-smaller") || bt.classList.contains("tbc-bigger")) {
           const sizes = typeof WORD_FONT_SIZES !== "undefined" ? WORD_FONT_SIZES : [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48, 72];
@@ -996,28 +1023,59 @@ const dwbTextbox = (() => {
     }
 
     let drag = null;
+    // Strefa ramki pod wskaźnikiem: uchwyt („nw”, „e”…), „move” (brzeg ramki) albo null (środek).
+    // Liczona z geometrii, nie z elementów uchwytów — działa od pierwszego kliknięcia (uchwyty
+    // powstają dopiero przy zaznaczeniu) i nad polem do pisania, które przykrywa całą ramkę.
+    function frameZone(el, x, y, touch) {
+      const r = el.getBoundingClientRect();
+      const tol = touch ? 16 : 8;
+      if (x < r.left - tol || x > r.right + tol || y < r.top - tol || y > r.bottom + tol) return null;
+      const mx = (r.left + r.right) / 2, my = (r.top + r.bottom) / 2;
+      const pts = { nw: [r.left, r.top], n: [mx, r.top], ne: [r.right, r.top], e: [r.right, my], se: [r.right, r.bottom], s: [mx, r.bottom], sw: [r.left, r.bottom], w: [r.left, my] };
+      for (const h of Object.keys(pts)) {
+        if (el.__tb?.autoFit && (h === "n" || h === "s")) continue; // wysokość z tekstu — bez uchwytów góra/dół
+        if (Math.hypot(x - pts[h][0], y - pts[h][1]) <= tol * 1.4) return h;
+      }
+      const edge = x - r.left < tol || r.right - x < tol || y - r.top < tol || r.bottom - y < tol;
+      return edge ? "move" : null;
+    }
+
     function onPointerDown(e) {
-      const el = e.target.closest?.(".dwb-tb");
+      // Pole do pisania wisi nad ramką (w body) — jego brzeg i rogi dalej przesuwają i rozciągają
+      // ramkę, jak w Wordzie; środek zostaje dla zaznaczania tekstu. Wcześniej świeżo wstawione pole
+      // (od razu w pisaniu) trzeba było najpierw kliknąć obok, żeby dało się je przeciągnąć.
+      const onEditor = !!editor && e.target === editor.ta;
+      const el = onEditor ? editor.el : e.target.closest?.(".dwb-tb");
       if (!el || !inDoc(el)) {
         if (sel && !e.target.closest?.(".dwb-tb-card, .dwb-tb-editor, .compose-pop")) deselect();
         return;
       }
       if (!editable() || e.button !== 0) return;
+      const touch = e.pointerType === "touch";
+      let handle = e.target.closest?.(".dwb-tb-h")?.dataset.h || null;
+      if (onEditor) {
+        const zone = frameZone(el, e.clientX, e.clientY, touch);
+        if (!zone) return; // środek pola — zwykłe pisanie i zaznaczanie tekstu
+        handle = zone === "move" ? null : zone;
+      } else if (!handle && !el.classList.contains("dwb-tb-flow")) {
+        const zone = frameZone(el, e.clientX, e.clientY, touch);
+        if (zone && zone !== "move") handle = zone;
+      }
       e.preventDefault();
       e.stopPropagation();
       const wasSelected = sel?.el === el;
-      if (editor?.el === el && e.target.closest(".dwb-tb-editor")) return;
-      if (editor) editor.finish();
+      const keepEditing = editor?.el === el; // pisanie zostaje otwarte w trakcie przeciągania
+      if (editor && !keepEditing) editor.finish();
       select(el);
-      if (el.classList.contains("dwb-tb-flow")) { if (wasSelected) startEdit(el); return; }
+      if (el.classList.contains("dwb-tb-flow")) { if (wasSelected && !keepEditing) startEdit(el); return; }
       const section = el.parentElement;
       const s = scaleOf(section);
-      const handle = e.target.closest(".dwb-tb-h")?.dataset.h || null;
       drag = {
-        el, handle, wasSelected, pointerId: e.pointerId, sx: e.clientX, sy: e.clientY, moved: false, s,
+        el, handle, wasSelected, keepEditing, pointerId: e.pointerId, sx: e.clientX, sy: e.clientY, moved: false, s,
         x0: parseFloat(el.style.left) || 0, y0: parseFloat(el.style.top) || 0, w0: el.offsetWidth, h0: el.offsetHeight,
         grabX: (e.clientX - el.getBoundingClientRect().left) / s, grabY: (e.clientY - el.getBoundingClientRect().top) / s,
         section, targets: null, fixedH: false, touch: e.pointerType === "touch", lock: {},
+        copy: !handle && (e.ctrlKey || e.metaKey), // przeciągnięcie z Ctrl/⌘ = kopia (Alt dalej wyłącza przyciąganie)
       };
       try { el.setPointerCapture(e.pointerId); } catch (_) { /* już puszczony */ }
     }
@@ -1029,6 +1087,8 @@ const dwbTextbox = (() => {
       if (!drag.moved) {
         drag.moved = true;
         drag.el.classList.add("is-dragging");
+        // nie wisi w starym miejscu; opacity, nie visibility — ukryte pole traci fokus i pisanie by się skończyło
+        if (drag.keepEditing && editor) editor.ta.style.opacity = "0";
         hideCard();
       }
       const el = drag.el;
@@ -1112,9 +1172,37 @@ const dwbTextbox = (() => {
       drag = null;
       clearGuides();
       d.el.classList.remove("is-dragging");
+      if (d.keepEditing && editor?.el === d.el) {
+        const ed = editor;
+        if (!d.moved) { ed.ta.focus({ preventScroll: true }); return; }
+        if (geometryKeepsAnchor(d.el)) {
+          // zapis bez przerysowania — ramka zostaje tym samym elementem, pisanie trwa dalej
+          commitGeometry(d.el, d.fixedH).then(() => {
+            if (editor !== ed) return;
+            ed.place();
+            ed.ta.style.opacity = "";
+            ed.ta.focus({ preventScroll: true });
+          });
+        } else {
+          // inna strona = nowa kotwica i przerysowanie: najpierw tekst do pliku, potem położenie
+          ed.ta.style.opacity = "";
+          ed.finish().then(() => commitGeometry(d.el, d.fixedH));
+        }
+        return;
+      }
       if (!d.moved) {
         if (d.wasSelected && !d.handle) startEdit(d.el);
         else placeCard();
+        return;
+      }
+      if (d.copy && !d.keepEditing) {
+        // oryginał wraca na miejsce, kopia staje tam, gdzie puszczono
+        const sec = d.el.parentElement;
+        const x = parseFloat(d.el.style.left) || 0, y = parseFloat(d.el.style.top) || 0;
+        if (sec !== d.section) d.section.insertBefore(d.el, d.section.firstChild);
+        d.el.style.left = `${d.x0}px`;
+        d.el.style.top = `${d.y0}px`;
+        pasteBoxAt(sec, x, y, boxClip(d.el));
         return;
       }
       commitGeometry(d.el, d.fixedH);
@@ -1138,7 +1226,29 @@ const dwbTextbox = (() => {
         }
       }
       const geo = { x: parseFloat(el.style.left) || 0, y: top - (sheet?.top || 0), w: el.offsetWidth, h: el.offsetHeight, fixedH: fixedH || !b.autoFit };
+      if (toIndex === id.index && nth === id.nth) {
+        // Ta sama kotwica: ekran już pokazuje wynik, więc tylko zapis do pliku — bez przerysowania
+        // całego dokumentu (mrugnięcie i utrata zaznaczenia przy każdym przesunięciu). Model pola
+        // dostaje to samo, co zapisał tbSetGeometry (położenie od strony), żeby przeliczenie stron
+        // (relayout) nie cofnęło ramki na stare miejsce.
+        b.h = { rel: "page", off: geo.x, align: null };
+        b.v = { rel: "page", off: geo.y, align: null };
+        b.w = geo.w;
+        if (geo.fixedH) b.hgt = geo.h;
+        await edit({ action: "geometry", ...id, toIndex, ...geo, quiet: true }, null);
+        if (sel?.el === el && !editor) showCard(); // karta znikła na czas przeciągania — przy przerysowaniu wracała sama
+        return;
+      }
       await edit({ action: "geometry", ...id, toIndex, ...geo }, { index: toIndex, nth });
+    }
+    // Czy przesunięcie zostawia pole przy tym samym akapicie kotwicy (ta sama kartka)?
+    function geometryKeepsAnchor(el) {
+      const sec = el.parentElement;
+      const top = parseFloat(el.style.top) || 0;
+      const sheet = sheetAt(sec, top);
+      if (el.__tbAnchor?.closest("section.docx") !== sec) return false;
+      const anchorSheet = sheetAt(sec, sectionY(sec, el.__tbAnchor));
+      return (anchorSheet?.top ?? 0) === (sheet?.top ?? 0);
     }
     // Akapit kotwicy na danej kartce: akapit poza tabelą najbliżej nad polem (Word kotwiczy do
     // akapitu w pobliżu); w tabeli Word liczyłby położenie od komórki
@@ -1235,7 +1345,7 @@ const dwbTextbox = (() => {
         done.finally(() => { if (committing === done) committing = null; });
         return done;
       };
-      editor = { ta, el, finish };
+      editor = { ta, el, finish, place };
     }
 
     // ── klawiatura przy zaznaczonym polu (przed obsługą dokumentu) ──
@@ -1249,6 +1359,15 @@ const dwbTextbox = (() => {
       if (k === "Escape") { e.preventDefault(); e.stopPropagation(); deselect(); return; }
       if (k === "Delete" || k === "Backspace") { e.preventDefault(); e.stopPropagation(); removeBox(el); return; }
       if (k === "Enter" || k === "F2") { e.preventDefault(); e.stopPropagation(); startEdit(el); return; }
+      if (mod && !e.altKey && !e.shiftKey && /^Key[CXDV]$/.test(e.code)) { // po e.code — działa w każdym układzie
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.code === "KeyC") copyBox(el);
+        else if (e.code === "KeyX") copyBox(el, true);
+        else if (e.code === "KeyD") duplicateBox(el);
+        else pasteNear(el);
+        return;
+      }
       if (/^Arrow/.test(k) && !mod && !el.classList.contains("dwb-tb-flow")) {
         e.preventDefault();
         e.stopPropagation();
@@ -1267,6 +1386,74 @@ const dwbTextbox = (() => {
     }
 
     // ── Wstaw → Pole tekstowe ──
+    // ── Kopiuj / Wytnij / Duplikuj / Wklej ────────────────────────────────────
+    // Schowek pól jest wewnętrzny (kształt Worda nie przejdzie przez schowek systemu); do systemu
+    // idzie sam tekst pola — wklejony w Wiadomościach czy Wordzie daje treść, nie pusty schowek.
+    let clip = null;
+    function boxClip(el) {
+      const b = el?.__tb;
+      if (!b?.runXml || b.complex) return null;
+      return { runXml: b.runXml, w: el.offsetWidth, h: el.offsetHeight, fixedH: !b.autoFit, text: b.text || "" };
+    }
+    function copyBox(el, cut = false) {
+      const c = boxClip(el);
+      if (!c) { toast?.(t("textboxCopyNo"), "info"); return; }
+      clip = c;
+      try { navigator.clipboard?.writeText?.(c.text)?.catch?.(() => {}); } catch (_) { /* bez uprawnień — schowek pól i tak działa */ }
+      if (cut) removeBox(el);
+      else { toast?.(t("textboxCopied"), "success"); showCard(); }
+    }
+    // x, y — położenie w punktach sekcji (jak style.left/top pola)
+    async function pasteBoxAt(section, x, y, data = clip) {
+      if (!data || !editable() || !section) return;
+      const m = sectionMetrics(section);
+      x = Math.max(0, Math.min(m.W - Math.min(data.w, m.W), x));
+      const anchor = anchorParagraphIn(section, y);
+      const index = anchor ? resolveParaIndex(anchor) : -1;
+      if (index < 0) return;
+      const nth = boxEls().filter((o) => o.__tbAnchor === anchor).length;
+      const sheetTop = sheetAt(section, y)?.top || 0; // plik: położenie względem strony
+      await edit({ action: "paste", index, runXml: data.runXml, x, y: y - sheetTop, w: data.w, h: data.h, fixedH: data.fixedH }, { index, nth });
+    }
+    const PASTE_STEP = 16; // 12 pt — kopia lekko przesunięta, żeby było widać, że są dwie
+    function pasteNear(el, data = clip) {
+      if (!data) return;
+      pasteBoxAt(el.parentElement, (parseFloat(el.style.left) || 0) + PASTE_STEP, (parseFloat(el.style.top) || 0) + PASTE_STEP, data);
+    }
+    function duplicateBox(el) { // jak Ctrl+D w Wordzie/PowerPoincie: schowek zostaje nietknięty
+      const c = boxClip(el);
+      if (!c) { toast?.(t("textboxCopyNo"), "info"); return; }
+      pasteNear(el, c);
+    }
+    // Ctrl/⌘+V w tekście dokumentu, gdy w schowku systemu dalej jest tekst skopiowanego pola —
+    // wklejamy pole przy kursorze (jak kształt w Wordzie). Inny tekst w schowku = zwykłe wklejanie.
+    function caretSpot() {
+      const host = docCanvasEl?.querySelector(".docx-preview-host");
+      const p = typeof restoreDocCaret === "function" ? restoreDocCaret() : null;
+      const section = p?.closest("section.docx") || host?.querySelector("section.docx");
+      if (!section) return null;
+      const s = scaleOf(section);
+      const sr = section.getBoundingClientRect();
+      const m = sectionMetrics(section);
+      let cx = m.pl, cy = m.pt;
+      const range = window.getSelection?.()?.rangeCount ? window.getSelection().getRangeAt(0) : null;
+      const rr = range && section.contains(range.startContainer) ? range.getBoundingClientRect() : null;
+      if (rr && (rr.width || rr.height)) { cx = (rr.left - sr.left) / s; cy = (rr.top - sr.top) / s; }
+      else if (p) { const pr = p.getBoundingClientRect(); cx = (pr.left - sr.left) / s; cy = (pr.top - sr.top) / s; }
+      return { section, p, m, cx, cy };
+    }
+    function onDocPaste(e) {
+      if (!clip || !editable() || editor || sel) return;
+      if (!e.target?.closest?.("section.docx")) return;
+      const txt = e.clipboardData?.getData("text/plain") ?? "";
+      if (txt.replace(/\r\n?/g, "\n") !== clip.text) return;
+      const spot = caretSpot();
+      if (!spot) return;
+      e.preventDefault();
+      e.stopPropagation();
+      pasteBoxAt(spot.section, spot.cx - 9.6, spot.cy - 4.8);
+    }
+
     async function insertAtCaret() {
       if (!editable()) return;
       const host = docCanvasEl?.querySelector(".docx-preview-host");
@@ -1302,6 +1489,7 @@ const dwbTextbox = (() => {
       window.addEventListener("pointerup", onPointerUp, true);
       window.addEventListener("pointercancel", onPointerUp, true);
       window.addEventListener("keydown", onKeyDown, true);
+      window.addEventListener("paste", onDocPaste, true);
       // klik/dotyk w polu nie stawia kursora w tekście pod spodem
       ["mousedown", "click", "dblclick", "touchstart", "contextmenu"].forEach((ev) => window.addEventListener(ev, (e) => {
         const el = e.target.closest?.(".dwb-tb");

@@ -36,6 +36,7 @@ async function run() {
     page.on("pageerror", (e) => errs.push("WYJĄTEK " + e.message));
     page.on("console", (m) => { if (m.type() === "error" && !/favicon|ResizeObserver|Failed to load resource/.test(m.text())) errs.push(m.text().slice(0, 200)); });
     page.on("dialog", (d) => d.accept().catch(() => {}));
+    await page.addInitScript(() => { window.__dwbAutoDialog = "accept"; }); // własne okna apki jak systemowe
     const r = { name, problems: [] };
     try {
       await page.goto(APP_URL, { waitUntil: "load" });

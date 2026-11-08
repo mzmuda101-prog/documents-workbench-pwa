@@ -65,6 +65,7 @@ async function run() {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("dialog", (d) => { errors.push(`dialog: ${d.message()}`); d.dismiss(); });
+  await page.addInitScript(() => { window.__dwbAutoDialog = "dismiss"; }); // własne okna apki jak systemowe
   await page.goto(APP_URL, { waitUntil: "load" });
   await page.evaluate(() => document.getElementById("heroSplash")?.remove());
   await page.waitForTimeout(400);
@@ -220,6 +221,7 @@ async function run() {
   // ── szablony ────────────────────────────────────────────────────────────────
   page.removeAllListeners("dialog");
   page.on("dialog", (d) => d.accept()); // „porzucić niezapisane zmiany?”
+  await page.addInitScript(() => { window.__dwbAutoDialog = "accept"; }); // własne okna apki jak systemowe
   await page.keyboard.press(`${MOD}+Alt+KeyN`);
   check("Ctrl/⌘+Alt+N otwiera okno szablonów", await page.evaluate(() => document.getElementById("newDocDialog").open));
   await page.click('.newdoc-card[data-template="note"]');

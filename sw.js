@@ -1,4 +1,4 @@
-const CACHE_VERSION = "20261106-03";
+const CACHE_VERSION = "v1.00.05";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
@@ -27,6 +27,7 @@ const SHELL_ASSETS = [
   `./styles/app.css?v=${ASSET_V}`,
   "./assets/fonts/space-grotesk-latin.woff2",
   "./assets/fonts/space-grotesk-latin-ext.woff2",
+  `./app/theme-boot.js?v=${ASSET_V}`,
   `./app/core.js?v=${ASSET_V}`,
   `./app/language.js?v=${ASSET_V}`,
   `./app/docx-metadata.js?v=${ASSET_V}`,
@@ -77,6 +78,8 @@ const SHELL_ASSETS = [
   `./app/open-docs.js?v=${ASSET_V}`,
   `./app/view-mode.js?v=${ASSET_V}`,
   `./app/keyboard.js?v=${ASSET_V}`,
+  `./app/shortcuts.js?v=${ASSET_V}`,
+  `./app/doc-comfort.js?v=${ASSET_V}`,
   `./app/cursor-hint.js?v=${ASSET_V}`,
   `./app/launch-files.js?v=${ASSET_V}`,
   `./app/local-ai.js?v=${ASSET_V}`,

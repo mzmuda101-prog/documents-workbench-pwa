@@ -200,14 +200,16 @@ const dwbDrafts = (() => {
       .sort((a, b) => b.savedAt - a.savedAt);
   }
 
-  async function restore(id) {
+  async function restore(id, { auto = false } = {}) {
     const rec = await getRec(id);
-    if (!rec?.bytes) { toast(t("draftGone"), "info"); renderRecovery(); return false; }
-    // uchwyt oryginału: zgoda (to kliknięcie „Przywróć” = gest użytkownika) + czy plik się nie zmienił
+    if (!rec?.bytes) { if (!auto) toast(t("draftGone"), "info"); renderRecovery(); return false; }
+    // uchwyt oryginału: zgoda (to kliknięcie „Przywróć” = gest użytkownika) + czy plik się nie zmienił.
+    // Bez gestu (powrót po aktualizacji) tylko sprawdzamy, czy zgoda jeszcze trwa — prośba bez
+    // kliknięcia i tak zostałaby odrzucona.
     let handle = null;
     if (rec.handle && typeof rec.handle.requestPermission === "function") {
       try {
-        const perm = await rec.handle.requestPermission({ mode: "readwrite" });
+        const perm = auto ? await rec.handle.queryPermission({ mode: "readwrite" }) : await rec.handle.requestPermission({ mode: "readwrite" });
         if (perm === "granted") {
           const f = await rec.handle.getFile();
           if (rec.stamp && (f.size !== rec.stamp.size || f.lastModified !== rec.stamp.lastModified)) toast(t("draftOriginalChanged", { name: rec.fileName }), "warning");
@@ -231,16 +233,42 @@ const dwbDrafts = (() => {
     storedBytes = null;
     stamp = handle ? rec.stamp : null;
     setDirtyState(true);
-    toast(t("draftRestored", { name: rec.fileName }), "success");
+    toast(t(auto ? "draftRestoredAfterUpdate" : "draftRestored", { name: rec.fileName }), "success");
     saveImmediately();
     renderRecovery();
     return true;
   }
 
   async function discard(id, name) {
-    if (!window.confirm(t("draftDiscardConfirm", { name }))) return;
+    if (!(await appConfirm(t("draftDiscardConfirm", { name }), { title: t("draftDiscardTitle"), ok: t("draftDiscard"), danger: true }))) return;
     await delRec(id);
     renderRecovery();
+  }
+
+  // ── aktualizacja aplikacji z niezapisaną pracą (audyt D12) ─────────────────
+  // Przed przeładowaniem: szkic zapisany TERAZ + jego id w sessionStorage (przeżywa przeładowanie
+  // tej karty, nie wycieka do innych okien). Po starcie nowej wersji szkic wraca sam.
+  const CARRY_KEY = "dwb-carry-draft-v1";
+  async function carryOverReload() {
+    if (!originalFileBytes || currentFileType !== "docx" || !hasUnsavedChanges) return false;
+    try {
+      clearTimeout(timer);
+      timer = 0;
+      if (saving) await saving.catch(() => {});
+      await writeNow();
+      const rec = await getRec(sessionId);
+      if (!rec?.bytes) return false;
+      sessionStorage.setItem(CARRY_KEY, sessionId);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+  async function resumeCarried() {
+    let id = null;
+    try { id = sessionStorage.getItem(CARRY_KEY); sessionStorage.removeItem(CARRY_KEY); } catch (_) {}
+    if (!id || originalFileBytes) return false;
+    try { return await restore(id, { auto: true }); } catch (e) { log(String(e?.message || e), "error"); return false; }
   }
 
   // ── karta na ekranie startowym ─────────────────────────────────────────────
@@ -341,11 +369,11 @@ const dwbDrafts = (() => {
     // ostatnia chwila przed ewentualnym zabiciem karty przez system
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") saveImmediately(); });
     window.addEventListener("pagehide", saveImmediately);
-    renderRecovery();
+    resumeCarried().then((ok) => { if (!ok) renderRecovery(); });
   }
 
   return {
-    init, save, saveImmediately, renderRecovery, restore, recoverable, park, unpark, drop,
+    init, save, saveImmediately, renderRecovery, restore, recoverable, park, unpark, drop, carryOverReload,
     setHeldIds(fn) { heldIds = typeof fn === "function" ? fn : () => []; },
     _id: () => sessionId, _flush: () => (saving || Promise.resolve()),
   };

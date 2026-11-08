@@ -26,6 +26,7 @@ async function run() {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("dialog", (d) => d.dismiss());
+  await page.addInitScript(() => { window.__dwbAutoDialog = "dismiss"; }); // własne okna apki jak systemowe
   await page.goto(`${APP_URL}?sample=selection-sample`, { waitUntil: "load" });
   await page.evaluate(() => document.getElementById("heroSplash")?.remove());
   await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && document.querySelector(".docx-preview-host p"), null, { timeout: 30000 });
@@ -306,6 +307,7 @@ async function run() {
   // ── akapit z samym podziałem strony: podpis i usuwanie jak w Wordzie ──
   page.removeAllListeners("dialog");
   page.on("dialog", (d) => (d.type() === "beforeunload" ? d.accept() : d.dismiss())); // niezapisane zmiany z testów wyżej
+  await page.addInitScript(() => { window.__dwbAutoDialog = "dismiss"; }); // własne okna apki jak systemowe
   await page.reload();
   await page.evaluate(() => document.getElementById("heroSplash")?.remove());
   await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && document.querySelector(".docx-preview-host p"), null, { timeout: 30000 });

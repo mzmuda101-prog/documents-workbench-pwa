@@ -229,7 +229,7 @@ const appFrame = (() => {
       placeMenu();
       // wskaźnik PL/EN liczy się z rozmiarów przycisków — w ukrytym menu było 0
       if (typeof syncLangSwitchPill === "function") syncLangSwitchPill();
-      if (buildEl && typeof APP_BUILD_VERSION !== "undefined") buildEl.textContent = APP_BUILD_VERSION;
+      if (buildEl && typeof APP_BUILD_VERSION !== "undefined") buildEl.textContent = t("versionLabel", { v: APP_BUILD_VERSION });
       if (opts.focusFirst) { const first = menuItems()[0]; if (first) first.focus(); }
     } else if (opts.returnFocus) {
       menuBtn.focus();
@@ -927,8 +927,14 @@ const appFrame = (() => {
       })();
       return;
     }
-    if (hasUnsavedChanges && !window.confirm(t("closeDocWarn"))) return;
-    ingestDroppedFile(file, handle);
+    (async () => {
+      if (hasUnsavedChanges) {
+        const answer = await askSaveChanges(currentFileName);
+        if (!answer) return;
+        if (answer === "save") { await saveDocument(); if (hasUnsavedChanges) return; }
+      }
+      ingestDroppedFile(file, handle);
+    })();
   });
 
   // ── pusty start ────────────────────────────────────────────────────────────

@@ -84,13 +84,14 @@ async function applyMetadataEdit() {
 // „Usuń dane osobowe”: autor, ostatnio zmieniający, opis, temat — przed wysłaniem pliku dalej.
 async function scrubPersonalMetadata() {
   if (!originalFileBytes) { toast(t("noFileToSave"), "warning"); return; }
-  if (!confirm(t("metadataScrubConfirm"))) return;
+  // operacja jest jednym krokiem Cofnij — bez pytania przed, „Cofnij” w dymku (kontrakt UX §3)
   const count = await applyDocumentEdit({
     op: "coreMetadata",
     fields: { creator: "", lastModifiedBy: "", description: "", subject: "" },
   });
   await loadMetadataFromDocument();
-  toast(count > 0 ? t("metadataScrubbed") : t("metadataScrubNothing"), count > 0 ? "success" : "info");
+  if (count > 0) toastUndoable(t("metadataScrubbed"));
+  else toast(t("metadataScrubNothing"), "info");
 }
 
 function wireMetadataPanel() {

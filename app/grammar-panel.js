@@ -312,12 +312,9 @@ async function applyGrammarBatch(filterRuleId = null) {
     toast(t("editNothing"), "info");
     return;
   }
-  if (!filterRuleId) {
-    const msg = t("grammarApplyAllConfirm", { count: items.length });
-    if (!window.confirm(msg)) return;
-  }
+  // jeden krok Cofnij — bez pytania przed, „Cofnij” w dymku (kontrakt UX §3)
   const count = await applyDocumentEdit({ op: "paragraphBatch", items });
-  if (count > 0) toast(t("editApplied", { count }), "success");
+  if (count > 0) toastUndoable(t("editApplied", { count }));
   else toast(t("editNothing"), "info");
   await runGrammarScan();
 }

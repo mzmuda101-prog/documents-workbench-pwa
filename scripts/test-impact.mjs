@@ -22,7 +22,7 @@ import os from "node:os";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
 
-const VERSION_RE = /\d{8}-\d{2}/g;
+const VERSION_RE = /v\d+\.\d{2}\.\d{2}|\d{8}-\d{2}/g; // nowy schemat vX.YY.ZZ + stary datowy
 // ta sama długość (przesunięcia w pliku z nagrania zostają ważne)
 export const normalizeVersions = (text) => text.replace(VERSION_RE, "00000000-00");
 const sha1 = (s) => crypto.createHash("sha1").update(s).digest("hex");

@@ -388,5 +388,5 @@ const dwbUndo = (() => {
   sync();
   // breakTyping: koniec bieżącego kroku „Pisanie” — to samo, co przerwa dłuższa niż
   // UNDO_TYPING_PAUSE_MS (testy rozdzielają kroki bez czekania 1,5 s; dla użytkownika bez zmian)
-  return { record, group, undo: () => step("undo"), redo: () => step("redo"), clear, changesSinceSave, sync, breakTyping: endBurst, canUndo: () => undoStack.length > 0, canRedo: () => redoStack.length > 0, _debug: () => ({ undo: undoStack.map((e) => e.label), redo: redoStack.map((e) => e.label), savedPos }) };
+  return { record, group, undo: () => step("undo"), redo: () => step("redo"), clear, changesSinceSave, sync, breakTyping: endBurst, canUndo: () => undoStack.length > 0, top: () => undoStack[undoStack.length - 1] || null, canRedo: () => redoStack.length > 0, _debug: () => ({ undo: undoStack.map((e) => e.label), redo: redoStack.map((e) => e.label), savedPos }) };
 })();

@@ -51,6 +51,7 @@ async function main() {
   page.on("pageerror", (e) => record("pageerror", (e.stack || e.message).split("\n").slice(0, 4).join(" | ")));
   page.on("console", (m) => { if (m.type() === "error") record("console", m.text().slice(0, 400)); });
   page.on("dialog", (d) => d.dismiss().catch(() => {}));
+  await page.addInitScript(() => { window.__dwbAutoDialog = "dismiss"; }); // własne okna apki jak systemowe
   page.on("download", (d) => d.cancel().catch(() => {}));
 
   await page.goto(APP_URL, { waitUntil: "load" });

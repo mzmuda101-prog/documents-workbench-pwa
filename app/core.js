@@ -21,7 +21,7 @@
   }
 })();
 
-const APP_BUILD_VERSION = "20261106-03";
+const APP_BUILD_VERSION = "v1.00.05";
 
 const IS_LOW_POWER = (() => {
   try {
@@ -118,21 +118,298 @@ function log(msg, type = "info") {
   logEl.prepend(line);
 }
 
-function toast(msg, type = "info") {
+// ── dymki: toast(message, type, opts) — wspólny kontrakt UX Sheet + Docs (2026-11-07) ──────────
+// type: info | success | warning | error. info/success 2,8 s, warning/error 5 s (dłuższy tekst — dłużej).
+// opts.action + opts.onAction → przycisk w dymku (np. „Cofnij”); taki dymek wisi ≥ 5 s.
+// ✕ przy ostrzeżeniach, błędach i dymkach z akcją. Kolejne info/success tuż po sobie (np. trzy
+// „Cofnięto…” pod rząd) PODMIENIAJĄ treść poprzedniego zamiast się piętrzyć — na telefonie stos
+// dymków u góry zasłaniał pasek (audyt D2; wzór: Sheet app/core.js). Ostrzeżenia i błędy zostają
+// osobno — każde niesie inną informację. Najechanie myszą wstrzymuje znikanie.
+const TOAST_MERGE_TYPES = new Set(["success", "info"]);
+const TOAST_MERGE_MS = 2000;
+let _lastMergeToast = null; // { el, label, type, timer, at }
+
+function toastDuration(type, msg, hasAction) {
+  const base = type === "error" || type === "warning" ? 5000 : 2800;
+  const extra = Math.max(0, String(msg || "").length - 70) * 35; // długi komunikat — czas na przeczytanie
+  return Math.min(10000, Math.max(hasAction ? 5000 : 0, base + extra));
+}
+
+function scheduleToastOut(toastEl, ms) {
+  toastEl._dwbMs = ms;
+  return setTimeout(() => dismissToast(toastEl), ms);
+}
+
+function dismissToast(toastEl) {
+  if (!toastEl || toastEl.classList.contains("out")) return;
+  clearTimeout(toastEl._dwbTimer);
+  toastEl.classList.add("out");
+  if (_lastMergeToast?.el === toastEl) _lastMergeToast = null;
+  setTimeout(() => toastEl.remove(), 200);
+}
+
+function toast(msg, type = "info", opts = {}) {
+  const hasAction = !!(opts && opts.action && typeof opts.onAction === "function");
+  const last = _lastMergeToast;
+  if (!hasAction && TOAST_MERGE_TYPES.has(type) && last && last.type === type && last.el.isConnected
+    && !last.el.classList.contains("out") && performance.now() - last.at < TOAST_MERGE_MS) {
+    last.label.textContent = msg;
+    last.at = performance.now();
+    clearTimeout(last.el._dwbTimer);
+    last.el._dwbTimer = scheduleToastOut(last.el, toastDuration(type, msg, false));
+    return last.el;
+  }
   const toastEl = document.createElement("div");
   toastEl.className = `toast ${type}`;
+  // błąd — od razu (alert); reszta grzecznie w kolejce czytnika ekranu
+  toastEl.setAttribute("role", type === "error" ? "alert" : "status");
   const icon = document.createElement("div");
   icon.className = "toast-icon";
+  icon.setAttribute("aria-hidden", "true");
   icon.textContent = type === "success" ? "✓" : type === "error" ? "!" : type === "warning" ? "!" : "i";
   const label = document.createElement("div");
+  label.className = "toast-msg";
   label.textContent = msg;
-  toastEl.appendChild(icon);
-  toastEl.appendChild(label);
+  toastEl.append(icon, label);
+  if (hasAction) {
+    const act = document.createElement("button");
+    act.type = "button";
+    act.className = "toast-action";
+    act.textContent = opts.action;
+    act.addEventListener("click", (e) => {
+      e.stopPropagation();
+      dismissToast(toastEl);
+      opts.onAction();
+    }, { once: true });
+    toastEl.append(act);
+    toastEl.classList.add("has-action");
+  }
+  if (hasAction || type === "warning" || type === "error") {
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "toast-close";
+    close.textContent = "✕";
+    close.setAttribute("aria-label", typeof t === "function" ? t("toastClose") : "Zamknij");
+    close.addEventListener("click", (e) => { e.stopPropagation(); dismissToast(toastEl); });
+    toastEl.append(close);
+  }
+  // mysz nad dymkiem = czytam / sięgam po „Cofnij” — nie znikaj spod kursora
+  toastEl.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") clearTimeout(toastEl._dwbTimer); });
+  toastEl.addEventListener("pointerleave", (e) => {
+    if (e.pointerType !== "mouse" || toastEl.classList.contains("out")) return;
+    toastEl._dwbTimer = scheduleToastOut(toastEl, 1600);
+  });
   toastContainerEl.appendChild(toastEl);
-  setTimeout(() => {
-    toastEl.classList.add("out");
-    setTimeout(() => toastEl.remove(), 200);
-  }, 2800);
+  toastEl._dwbTimer = scheduleToastOut(toastEl, opts.duration || toastDuration(type, msg, hasAction));
+  _lastMergeToast = !hasAction && TOAST_MERGE_TYPES.has(type) ? { el: toastEl, label, type, at: performance.now() } : null;
+  return toastEl;
+}
+
+// Operacja z jednym krokiem Cofnij (Zamień wszystkie, Akceptuj wszystkie, Wypełnij pola…): bez
+// pytania przed — dymek z „Cofnij” po (kontrakt UX §3). „Cofnij” cofa tylko TĘ operację: gdy
+// od tamtej pory doszedł inny krok, nie cofamy cudzego, tylko mówimy, gdzie jest Cofnij.
+function toastUndoable(msg, type = "success") {
+  const mark = typeof dwbUndo !== "undefined" && dwbUndo.top ? dwbUndo.top() : null;
+  if (!mark) return toast(msg, type);
+  return toast(msg, type, {
+    action: t("undoAction"),
+    onAction: () => {
+      if (dwbUndo.top() === mark) dwbUndo.undo();
+      else toast(t("undoStale"), "info");
+    },
+  });
+}
+
+// ── własne okna zamiast confirm() / prompt() (kontrakt UX §3) ─────────────────────────────────
+// appDialog({ title, message, actions: [{ label, value, kind }], input }) → Promise<value | null>
+//   kind: primary | danger | secondary; Esc / tło / ✕ = null (Anuluj).
+//   Z polem (input: { value, placeholder, label }) — wynik to wpisany tekst (albo null).
+// Fokus: TYLKO przy obsłudze klawiaturą trafia do pola albo na bezpieczną akcję (na iPhonie fokus
+// w polu wysunąłby klawiaturę); Tab krąży w oknie; po zamknięciu fokus wraca, skąd przyszedł.
+let lastInputModality = "pointer";
+document.addEventListener("keydown", (e) => { if (!["Shift", "Control", "Alt", "Meta"].includes(e.key)) lastInputModality = "keyboard"; }, true);
+document.addEventListener("pointerdown", () => { lastInputModality = "pointer"; }, true);
+
+const appDialogQueue = [];
+let appDialogBusy = false;
+
+function appDialog(opts = {}) {
+  // Testy (scripts/*-playwright.js) dawniej zatwierdzały systemowe confirm()/prompt() przez
+  // page.on("dialog") — window.__dwbAutoDialog daje to samo dla własnych okien: „accept” = pierwsza
+  // główna akcja (z wartością pola), „dismiss” = Anuluj. Użytkownik nigdy tego nie ustawia.
+  const auto = typeof window !== "undefined" && window.__dwbAutoDialog;
+  // test może zbierać treść pytań po stronie Node (page.exposeFunction) — jak dawniej page.on("dialog")
+  if (auto) { try { window.__dwbDialogSeen?.(`${opts.title ? `${opts.title} ` : ""}${opts.message || ""}`.trim()); } catch (_) { /* test bez zbierania */ } }
+  // funkcja = odpowiedź testu na konkretne okno (jak dawne podmienione window.confirm(msg)):
+  // true → główna akcja, false/null → Anuluj, inna wartość → ta wartość
+  if (typeof auto === "function") {
+    const ans = auto({ title: opts.title || "", message: opts.message || "", actions: opts.actions || null, input: !!opts.input });
+    if (ans === true) {
+      const acts = opts.actions || [{ value: true, kind: "primary" }];
+      const main = acts.find((x) => x.value === "discard") || acts.find((x) => x.kind === "primary" || x.kind === "danger") || acts[0];
+      return Promise.resolve(opts.input ? (opts.input.value ?? "") : main.value);
+    }
+    return Promise.resolve(ans === false ? null : ans);
+  }
+  if (auto === "accept" || auto === "dismiss") {
+    if (auto === "dismiss") return Promise.resolve(null);
+    const acts = opts.actions || [{ value: true, kind: "primary" }];
+    // niezapisana praca: dawne systemowe „OK” znaczyło „kontynuuj bez zapisywania” = Nie zapisuj
+    const main = acts.find((x) => x.value === "discard") || acts.find((x) => x.kind === "primary") || acts[0];
+    return Promise.resolve(opts.input ? (opts.input.value ?? "") : main.value);
+  }
+  return new Promise((resolve) => {
+    appDialogQueue.push({ opts, resolve });
+    if (!appDialogBusy) runNextAppDialog();
+  });
+}
+
+function runNextAppDialog() {
+  const job = appDialogQueue.shift();
+  if (!job) { appDialogBusy = false; return; }
+  appDialogBusy = true;
+  const { opts, resolve } = job;
+  const returnTo = document.activeElement;
+  const keyboard = lastInputModality === "keyboard";
+  const dlg = document.createElement("dialog");
+  dlg.className = "app-dialog";
+  dlg.setAttribute("aria-modal", "true");
+  const titleId = `appDlgT${Date.now().toString(36)}`;
+  const box = document.createElement("form");
+  box.method = "dialog";
+  box.className = "app-dialog-inner";
+  if (opts.title) {
+    const h = document.createElement("h2");
+    h.id = titleId;
+    h.className = "app-dialog-title";
+    h.textContent = opts.title;
+    box.append(h);
+    dlg.setAttribute("aria-labelledby", titleId);
+  }
+  if (opts.message) {
+    const p = document.createElement("p");
+    p.className = "app-dialog-msg";
+    p.textContent = opts.message;
+    box.append(p);
+  }
+  let inputEl = null;
+  if (opts.input) {
+    const lab = document.createElement("label");
+    lab.className = "field app-dialog-field";
+    if (opts.input.label) {
+      const s = document.createElement("span");
+      s.textContent = opts.input.label;
+      lab.append(s);
+    }
+    inputEl = document.createElement("input");
+    inputEl.type = "text";
+    inputEl.autocomplete = "off";
+    inputEl.enterKeyHint = "done";
+    inputEl.value = opts.input.value || "";
+    if (opts.input.placeholder) inputEl.placeholder = opts.input.placeholder;
+    if (!opts.input.label && opts.title) inputEl.setAttribute("aria-labelledby", titleId);
+    lab.append(inputEl);
+    box.append(lab);
+  }
+  const actions = Array.isArray(opts.actions) && opts.actions.length ? opts.actions
+    : [{ label: t("dlgOk"), value: true, kind: "primary" }, { label: t("dlgCancel"), value: null, kind: "secondary" }];
+  const row = document.createElement("div");
+  row.className = "app-dialog-actions";
+  if (actions.length > 2) row.classList.add("is-three");
+  let done = false;
+  const finish = (value) => {
+    if (done) return;
+    done = true;
+    document.removeEventListener("keydown", trapTab, true);
+    try { dlg.close(); } catch (_) {}
+    dlg.remove();
+    // fokus wraca tylko przy klawiaturze (na dotyku powrót do akapitu wysunąłby klawiaturę bez potrzeby)
+    if (lastInputModality === "keyboard" && returnTo?.isConnected && typeof returnTo.focus === "function") {
+      try { returnTo.focus({ preventScroll: true }); } catch (_) {}
+    }
+    resolve(value);
+    setTimeout(runNextAppDialog, 0);
+  };
+  const btns = actions.map((a) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = `btn app-dialog-btn${a.kind === "primary" ? " primary" : a.kind === "danger" ? " danger" : ""}`;
+    b.textContent = a.label;
+    b.addEventListener("click", () => {
+      if (a.value === null || a.value === undefined) { finish(null); return; }
+      finish(inputEl ? inputEl.value : a.value);
+    });
+    row.append(b);
+    return { a, b };
+  });
+  box.append(row);
+  // Enter w polu = główna akcja
+  box.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const main = btns.find((x) => x.a.kind === "primary") || btns[0];
+    main?.b.click();
+  });
+  dlg.append(box);
+  dlg.addEventListener("cancel", (e) => { e.preventDefault(); finish(null); }); // Esc
+  // Esc także wtedy, gdy obsługa Esc dokumentu (keyboard.js) zablokuje domyślne „cancel” okna
+  dlg.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finish(null); } });
+  dlg.addEventListener("click", (e) => { if (e.target === dlg) finish(null); }); // stuknięcie w tło
+  // bezpieczna akcja: przy groźnej (danger) — Anuluj; inaczej główna
+  const hasDanger = actions.some((a) => a.kind === "danger");
+  const safe = (hasDanger ? btns.find((x) => x.a.value == null) : btns.find((x) => x.a.kind === "primary")) || btns[0];
+  const initial = inputEl || safe?.b;
+  if (keyboard && initial) initial.setAttribute("autofocus", "");
+  else { dlg.tabIndex = -1; dlg.setAttribute("autofocus", ""); } // fokus na samym oknie — bez klawiatury ekranowej
+  const trapTab = (e) => {
+    if (e.key !== "Tab" || !dlg.open) return;
+    const list = [...dlg.querySelectorAll("button, input")].filter((x) => !x.disabled);
+    if (!list.length) return;
+    const first = list[0];
+    const lastEl = list[list.length - 1];
+    if (!dlg.contains(document.activeElement) || document.activeElement === dlg) { e.preventDefault(); (e.shiftKey ? lastEl : first).focus(); }
+    else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); lastEl.focus(); }
+    else if (!e.shiftKey && document.activeElement === lastEl) { e.preventDefault(); first.focus(); }
+  };
+  document.addEventListener("keydown", trapTab, true);
+  document.body.append(dlg);
+  if (typeof dlg.showModal === "function") dlg.showModal();
+  else dlg.setAttribute("open", "");
+  if (keyboard && inputEl) inputEl.select();
+}
+
+function appConfirm(message, { title = "", ok, cancel, danger = false } = {}) {
+  return appDialog({
+    title, message,
+    actions: [
+      { label: ok || t("dlgOk"), value: true, kind: danger ? "danger" : "primary" },
+      { label: cancel || t("dlgCancel"), value: null, kind: "secondary" },
+    ],
+  }).then((v) => v === true);
+}
+
+function appPrompt(message, value = "", { title = "", placeholder = "", ok } = {}) {
+  return appDialog({
+    title: title || message,
+    message: title ? message : "",
+    input: { value, placeholder },
+    actions: [
+      { label: ok || t("dlgOk"), value: true, kind: "primary" },
+      { label: t("dlgCancel"), value: null, kind: "secondary" },
+    ],
+  });
+}
+
+// Niezapisana praca — zawsze Zapisz / Nie zapisuj / Anuluj (jak Word). → "save" | "discard" | null
+function askSaveChanges(name) {
+  return appDialog({
+    title: t("dlgSaveTitle", { name: name || currentFileName || t("dlgThisDoc") }),
+    message: t("dlgSaveMsg"),
+    actions: [
+      { label: t("save"), value: "save", kind: "primary" },
+      { label: t("dlgDontSave"), value: "discard", kind: "secondary" },
+      { label: t("dlgCancel"), value: null, kind: "secondary" },
+    ],
+  });
 }
 
 function setLoading(isLoading, text) {

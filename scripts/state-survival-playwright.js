@@ -25,6 +25,7 @@ async function run() {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("dialog", (d) => d.accept());
+  await page.addInitScript(() => { window.__dwbAutoDialog = "accept"; }); // własne okna apki jak systemowe
   await page.goto(`${APP_URL}?sample=headings-sample`, { waitUntil: "load" });
   await page.waitForSelector(".docx-preview-host p", { timeout: 20000 });
   await page.evaluate(() => document.getElementById("heroSplash")?.remove());
@@ -84,7 +85,7 @@ async function run() {
     await page.setViewportSize({ width: 1280, height: 800 });
   });
   await step("język PL → EN → PL", async () => { await page.evaluate(() => { setLanguage("en"); setLanguage("pl"); }); });
-  await step("motyw jasny ⇄ ciemny", async () => { await page.evaluate(() => { document.getElementById("themeToggle").click(); document.getElementById("themeToggle").click(); }); });
+  await step("motyw jasny ⇄ ciemny", async () => { await page.evaluate(() => { toggleTheme(); toggleTheme(); }); });
   await step("Czytanie → Edycja", async () => { await page.click('.mode-btn[data-mode="read"]'); await page.waitForTimeout(200); await page.click('.mode-btn[data-mode="edit"]'); });
   await step("zoom +, −, Dopasuj (komputer)", async () => { await page.click("#zoomInBtn"); await page.click("#zoomOutBtn"); await page.evaluate(() => applyFitToWidth()); });
   await step("pinch (zatwierdzenie zoomu)", async () => { await page.evaluate(() => { commitDocZoom(1.4); commitDocZoom(1); }); });
@@ -123,17 +124,21 @@ async function run() {
     window.__stay = "ta sama strona";
     let asked = "";
     window.confirm = (msg) => { asked = msg; return false; };
+    window.__dwbAutoDialog = (o) => { asked = `${o.title} ${o.message}`; return false; }; // własne okno apki
+    // D12: zwykle praca idzie do szkicu i przeładowanie leci bez pytania — tu sprawdzamy drogę
+    // zapasową (szkic niedostępny), w której apka pyta
+    if (typeof dwbDrafts !== "undefined") dwbDrafts.carryOverReload = async () => false;
     await hardRefreshApp();
     const btn = document.getElementById("appUpdateBtn");
     btn.classList.remove("hidden");
     btn.click();
     await new Promise((r) => setTimeout(r, 300));
-    return { asked: /niezapisane zmiany/.test(asked), busy: btn.classList.contains("is-busy") };
+    return { asked: /niezapisan/.test(asked), busy: btn.classList.contains("is-busy") };
   });
   await page.waitForTimeout(800);
   const still = await page.evaluate(() => window.__stay);
   check("„Aktualizuj” przy niezapisanych zmianach pyta, „Anuluj” nie przeładowuje", upd.asked && !upd.busy && still === "ta sama strona", JSON.stringify({ ...upd, still }));
-  await page.evaluate(() => { window.confirm = () => true; document.getElementById("appUpdateBtn").classList.add("hidden"); });
+  await page.evaluate(() => { window.confirm = () => true; window.__dwbAutoDialog = "accept"; document.getElementById("appUpdateBtn").classList.add("hidden"); });
   await verify("po anulowanej aktualizacji");
 
   // Cofnij / Ponów: po cofnięciu ostatniego kroku poprzednie zostają, Ponów przywraca ostatni

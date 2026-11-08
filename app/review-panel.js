@@ -54,11 +54,13 @@ function rvJump(paraIndex) {
   if (typeof closeMobileSidebarIfOpen === "function") closeMobileSidebarIfOpen();
 }
 
-async function rvApply(edit, confirmKey, vars) {
+// Akceptuj/Odrzuć wszystkie, Usuń komentarze — jeden krok Cofnij: bez pytania przed, „Cofnij”
+// w dymku (kontrakt UX §3, audyt D14).
+async function rvApply(edit) {
   if (!originalFileBytes) return;
-  if (confirmKey && !confirm(t(confirmKey, vars))) return;
   const n = await applyDocumentEdit({ op: "revisions", ...edit });
-  toast(n > 0 ? t(edit.action === "removeComments" ? "reviewCommentsRemoved" : edit.action === "accept" ? "reviewAccepted" : "reviewRejected", { count: n }) : t("editNothing"), n > 0 ? "success" : "info");
+  if (n > 0) toastUndoable(t(edit.action === "removeComments" ? "reviewCommentsRemoved" : edit.action === "accept" ? "reviewAccepted" : "reviewRejected", { count: n }));
+  else toast(t("editNothing"), "info");
   await runReviewScan();
 }
 
@@ -204,13 +206,13 @@ function rvBulk(action) {
   const list = rvFilteredChanges();
   if (!list.length) return;
   const ids = author ? list.map((c) => c.id) : null;
-  rvApply({ action, ids }, action === "accept" ? "reviewAcceptConfirm" : "reviewRejectConfirm", { count: list.length });
+  rvApply({ action, ids });
 }
 
 rvAcceptAllBtn?.addEventListener("click", () => rvBulk("accept"));
 rvRejectAllBtn?.addEventListener("click", () => rvBulk("reject"));
 rvRemoveCommentsBtn?.addEventListener("click", () => {
   const n = (reviewScan?.comments || []).reduce((s, c) => s + 1 + c.replies.length, 0);
-  rvApply({ action: "removeComments" }, "reviewRemoveCommentsConfirm", { count: n });
+  rvApply({ action: "removeComments" });
 });
 rvAuthorEl?.addEventListener("change", renderReviewPanel);
