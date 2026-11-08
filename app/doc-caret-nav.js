@@ -659,6 +659,8 @@
       const target = next && all.indexOf(next) === all.indexOf(p) + 1 ? next
         : after?.classList.contains("docx-editable-p") && !after.dataset.lock && !after.dataset.dwbCont ? after : null;
       if (!target || typeof handleInlineBackspace !== "function") return;
+      // przed tabelą / na końcu komórki — Word nic nie robi, kursor zostaje (dawniej skakał dalej)
+      if ((target.dataset.box || "") !== (p.dataset.box || "")) { toast(t("mergeAcross"), "info"); return; }
       placeAt(target, 0);
       handleInlineBackspace(target, all.indexOf(target), { preventDefault() {}, key: "Backspace", fromDelete: true });
     }

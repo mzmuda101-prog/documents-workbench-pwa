@@ -237,18 +237,6 @@ const dwbSel = (() => {
     return true;
   }
 
-  // Pusty akapit za tabelą (Backspace, docx-inline-edit.js): znika, następny zostaje bez zmian,
-  // kursor na końcu ostatniej komórki tabeli — jak w Wordzie.
-  function removeEmptyParagraph(index, p, next, caretAt) {
-    p.remove();
-    pristineParas.delete(next);
-    placeCaret(caretAt, Number.MAX_SAFE_INTEGER);
-    const mergedRuns = extractRunsFromPreviewParagraph(next);
-    mirrorBaseline(index, 2, mergedRuns);
-    queue({ op: "deleteRange", from: index, to: index + 1, keep: "last", mergedRuns }, true);
-    return true;
-  }
-
   function insertAfterDelete(info, text) {
     const style = styleOfFirst(info);
     const p = deleteSpan(info);
@@ -369,6 +357,8 @@ const dwbSel = (() => {
       const next = list[index + 1];
       if (next?.dataset.lock === "lockPageBreakOnly") { removeBreakParagraph(index + 1, p, "before"); return true; }
       if (!next || !next.classList.contains("docx-editable-p")) return true;
+      // za tabelą / w komórce przed resztą tekstu — Word nic nie robi, kursor zostaje (dawniej skakał)
+      if ((next.dataset.box || "") !== (p.dataset.box || "")) { toast(t("mergeAcross"), "info"); return true; }
       placeCaret(next, 0);
       handleInlineBackspace(next, index + 1, { preventDefault() {}, key: "Backspace", fromDelete: true });
       return true;
@@ -650,5 +640,5 @@ const dwbSel = (() => {
     if (range && !range.collapsed && analyze(range)?.rawCross) e.preventDefault();
   });
 
-  return { keydown, beforeInput, collapseForInsert, selectAll, removeBreakParagraph, removeEmptyParagraph, analyze: () => analyze(selRange()) };
+  return { keydown, beforeInput, collapseForInsert, selectAll, removeBreakParagraph, analyze: () => analyze(selRange()) };
 })();

@@ -13,41 +13,29 @@ const path = require("path");
 const pw = require("playwright");
 const { APP_URL } = require("./docx-test-helpers");
 const { contexts, expect } = require("./keys-table");
+const { keysStateIn } = require("./keys-state");
+const { buildDocx } = require("../tools/word-oracle/build-docx");
+const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 const ENGINE = process.env.ENGINE === "webkit" ? "webkit" : "chromium";
 const ONLY = process.env.ONLY || "";
 const KEYS = { bs: ["Backspace", false], del: ["Delete", true], enterStart: ["Enter", false], enterEnd: ["Enter", true], enter: ["Enter", false] };
 const idle = (page) => page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 20000 }).then(() => page.waitForTimeout(350));
 
-// stan dokumentu w zapisie tabeli: rodzaje z pliku, kursor z ekranu
-const readState = (page, withCaret = true) => page.evaluate(async (caret) => {
-  const zip = await JSZip.loadAsync(await buildDocumentForSave());
-  const doc = new DOMParser().parseFromString(await zip.file("word/document.xml").async("string"), "application/xml");
-  const kid = (el, name) => el && Array.from(el.childNodes).find((n) => n.localName === name && n.namespaceURI === W_NS);
-  const val = (el, name) => el && (el.getAttributeNS(W_NS, name) ?? el.getAttribute(`w:${name}`));
-  const paras = collectParagraphElements(doc.documentElement, "all").map((p) => {
-    const text = getParagraphText(p);
-    const pPr = kid(p, "pPr");
-    const style = val(kid(pPr, "pStyle"), "val") || "";
-    const ind = kid(pPr, "ind");
-    let kind = "";
-    if (kid(pPr, "numPr")) kind = "list";
-    else if (kid(kid(pPr, "pBdr"), "bottom")) kind = text ? "line" : "rule";
-    else if (/heading ?1|nagwek1/i.test(style)) kind = "h1";
-    else if (/quote|cytat/i.test(style)) kind = "quote";
-    else if (parseInt(val(ind, "left") ?? val(ind, "start") ?? "0", 10) > 0) kind = "ind";
-    const t = text || "∅";
-    return kind ? `${kind}:${t}` : t;
-  });
-  let out = paras.join(" ¶ ");
-  if (caret) {
+// stan dokumentu w zapisie tabeli: rodzaje z pliku (scripts/keys-state.js — ten sam odczyt co
+// wyrocznia Worda), kursor z ekranu
+async function readState(page, withCaret = true) {
+  const r = await page.evaluate(async (caret) => {
+    const zip = await JSZip.loadAsync(await buildDocumentForSave());
+    const xml = await zip.file("word/document.xml").async("string");
+    if (!caret) return { xml };
     const sel = getSelection();
     const els = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"));
     const i = sel?.rangeCount ? els.findIndex((p) => p.contains(sel.anchorNode)) : -1;
-    out += ` @${i}:${i >= 0 ? getCaretOffset(els[i]) : "?"}`;
-  }
-  return out;
-}, withCaret);
+    return { xml, at: `${i}:${i >= 0 ? getCaretOffset(els[i]) : "?"}` };
+  }, withCaret);
+  return (await keysStateIn(page, r.xml)) + (r.at ? ` @${r.at}` : "");
+}
 
 const caretAt = (page, i, end) => page.evaluate(([idx, e]) => {
   const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[idx];
@@ -56,6 +44,15 @@ const caretAt = (page, i, end) => page.evaluate(([idx, e]) => {
 }, [i, end]);
 
 async function build(page, name) {
+  const ctx = contexts[name];
+  if (ctx.body) { // gotowy plik — ten sam, który dostaje wyrocznia Worda
+    await page.locator("#fileInput").setInputFiles({ name: `${name}.docx`, mimeType: DOCX_MIME, buffer: await buildDocx({ body: ctx.body }) });
+    await page.waitForSelector(".docx-preview-host p", { timeout: 20000 });
+    await idle(page);
+    await page.evaluate(() => { if (readOnlyMode) { readModeEl.checked = false; readModeEl.dispatchEvent(new Event("change")); } });
+    await idle(page);
+    return;
+  }
   await page.evaluate(() => composeUi.createNew("blank"));
   await page.waitForSelector(".docx-preview-host p.docx-editable-p", { timeout: 20000 });
   await idle(page);

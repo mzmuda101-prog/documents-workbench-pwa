@@ -76,8 +76,13 @@ w aplikacji „zgłoś błąd” zapisujący ostatnie akcje + stan → plik, z k
 - tabela klawiszy — `scripts/keys-table.js` (dane) + `scripts/keys-table-playwright.js`
 - wyrocznia Word — `tools/word-oracle/` (AppleScript; `probe-keys.js` dla klawiszy)
 
+- tabela klawiszy z tabelą i podziałem strony (51 komórek) + `tools/word-oracle/run-keys.js` —
+  ten sam plik i ten sam odczyt stanu w prawdziwym Wordzie (wynik wprost do tabeli)
+
 **Dalej:**
-1. Tabela klawiszy: tabela, podział strony, pole formularza, przypis, zaznaczenie przez akapity.
+1. Edycja akapitu z podziałem strony w środku (dziś tylko do odczytu) — warunek zachowania
+   „jak w Wordzie” przy Backspace za podziałem (odstępstwo opisane w `scripts/keys-table.js`).
+   Tabela klawiszy: pole formularza, przypis, zaznaczenie przez akapity.
 2. Niezmiennik „Cofnij wszystko = plik początkowy” w korpusie.
 3. Korpus z `OCR=1` raz w tygodniu (skany PDF).
 4. „Zgłoś błąd” jednym skrótem → plik akcji → przypadek w `scripts/chaos-cases`.

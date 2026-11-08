@@ -15,6 +15,12 @@
 //  - Enter na końcu nagłówka → następny akapit Normalny; w środku/na początku — ten sam styl
 //  - Backspace na początku punktu listy / wciętego / pustej ramki najpierw zdejmuje tę cechę
 
+// Konteksty z `body` budowane wprost jako .docx (tools/word-oracle/build-docx.js) — ten sam plik
+// otwiera aplikacja i prawdziwy Word (tools/word-oracle/run-keys.js), więc wynik Worda jest wprost
+// porównywalny. Rodzaje: cell (komórka tabeli), pb (sam podział strony) — scripts/keys-state.js.
+const TABLE = '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/></w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w="4000" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>T</w:t></w:r></w:p></w:tc></w:tr></w:tbl>';
+const PB = '<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
+
 module.exports = {
   contexts: {
     normal: { start: "Alfa ¶ Beta ¶ Gamma", at: 1 },
@@ -28,6 +34,12 @@ module.exports = {
     rule: { start: "Alfa ¶ rule:∅ ¶ ∅ ¶ Gamma", at: 1 },
     underRule: { start: "Alfa ¶ rule:∅ ¶ ∅ ¶ Gamma", at: 2 },
     line: { start: "Alfa ¶ line:Beta ¶ ∅ ¶ Gamma", at: 1 },
+    afterTable: { body: ["Alfa", TABLE, "Beta", "Gamma"], start: "Alfa ¶ cell:T ¶ Beta ¶ Gamma", at: 2 },
+    emptyAfterTable: { body: ["Alfa", TABLE, "", "Gamma"], start: "Alfa ¶ cell:T ¶ ∅ ¶ Gamma", at: 2 },
+    beforeTable: { body: ["Alfa", TABLE, "Gamma"], start: "Alfa ¶ cell:T ¶ Gamma", at: 0 },
+    cell: { body: ["Alfa", TABLE, "Gamma"], start: "Alfa ¶ cell:T ¶ Gamma", at: 1 },
+    afterBreak: { body: ["Alfa", PB, "Beta", "Gamma"], start: "Alfa ¶ pb:∅ ¶ Beta ¶ Gamma", at: 2 },
+    beforeBreak: { body: ["Alfa", PB, "Beta"], start: "Alfa ¶ pb:∅ ¶ Beta", at: 0 },
   },
   expect: {
     normal: {
@@ -94,5 +106,29 @@ module.exports = {
       enterStart: "Alfa ¶ ∅ ¶ line:Beta ¶ ∅ ¶ Gamma @2:0",
       enterEnd: "Alfa ¶ line:Beta ¶ ∅ ¶ ∅ ¶ Gamma @2:0",
     },
+    // tabela i podział strony — wyniki prawdziwego Worda (tools/word-oracle/run-keys.js, 2026-11-08)
+    afterTable: {
+      bs: "Alfa ¶ cell:T ¶ Beta ¶ Gamma @2:0", // nie skleja z komórką
+      enterStart: "Alfa ¶ cell:T ¶ ∅ ¶ Beta ¶ Gamma @3:0",
+    },
+    emptyAfterTable: {
+      bs: "Alfa ¶ cell:T ¶ ∅ ¶ Gamma @2:0", // jak Word: nic (decyzja 2026-11-09)
+      del: "Alfa ¶ cell:T ¶ Gamma @2:0",
+      enter: "Alfa ¶ cell:T ¶ ∅ ¶ ∅ ¶ Gamma @3:0",
+    },
+    beforeTable: { del: "Alfa ¶ cell:T ¶ Gamma @0:4" }, // jak Word: nic, kursor zostaje
+    cell: {
+      bs: "Alfa ¶ cell:T ¶ Gamma @1:0", // nie skleja z akapitem przed tabelą
+      del: "Alfa ¶ cell:T ¶ Gamma @1:1", // jak Word: nic, kursor zostaje (wyrocznia przez AppleScript tu zawodzi)
+      enterEnd: "Alfa ¶ cell:T ¶ cell:∅ ¶ Gamma @2:0",
+    },
+    afterBreak: {
+      // ODSTĘPSTWO: Word — „Alfa ¶ ⤓Beta” (podział zostaje, 2. Backspace go usuwa); decyzja „jak w
+      // Wordzie” (2026-11-09) czeka na edycję akapitu z podziałem w środku — dziś taki akapit jest
+      // tylko do odczytu (lockPageBreak), więc tekst za podziałem przestałby się dać edytować
+      bs: "Alfa ¶ Beta ¶ Gamma @1:0",
+      enterStart: "Alfa ¶ pb:∅ ¶ ∅ ¶ Beta ¶ Gamma @3:0",
+    },
+    beforeBreak: { del: "Alfa ¶ Beta @0:4" }, // ODSTĘPSTWO jak afterBreak.bs — Word: „Alfa⤓ ¶ Beta”
   },
 };
