@@ -8,8 +8,8 @@
 //  1. Backspace w pustej linijce POD linią usuwał linię, a pusta linijka zostawała. Word: znika
 //     pusta linijka (pusty akapit), linia zostaje — kolejny Backspace usuwa dopiero linię.
 //  2. Tekst wpisany w akapicie linii (linia „pod napisem”) — linii nie dało się zdjąć bez
-//     kasowania tekstu. Teraz: Backspace na początku takiego akapitu zdejmuje linię (jak
-//     wcięcie), menu kontekstowe ma „Usuń linię poziomą”.
+//     kasowania tekstu. Teraz menu kontekstowe ma „Usuń linię poziomą”; Backspace na początku
+//     skleja akapity jak w Wordzie (linii nie zdejmuje).
 //  3. Pogrubienie wyłączone (⌘/Ctrl+B) na końcu pogrubionego tekstu, potem Enter — w nowej
 //     linijce pisało się znów pogrubionym. Wyłączenie obowiązuje też w nowym akapicie (Word).
 const fs = require("fs");
@@ -87,7 +87,7 @@ async function main() {
   f = await fileState(page);
   check("kolejny Backspace usuwa linię", f.rules.length === base.rules.length && f.n === base.n, JSON.stringify({ rules: f.rules, n: f.n }));
 
-  // ── 2. tekst w akapicie linii — Backspace na jego początku zdejmuje linię, tekst zostaje
+  // ── 2. tekst w akapicie linii — Backspace na początku skleja jak w Wordzie, menu zdejmuje linię
   await caretAt(page, 1, true);
   await page.evaluate(() => composeUi.insertHrule());
   await idle(page);
@@ -96,13 +96,12 @@ async function main() {
   await idle(page);
   f = await fileState(page);
   check("tekst wpisany w linii: akapit z tekstem i krawędzią", f.rules.includes("Podpis"), JSON.stringify(f.rules));
+  await page.waitForTimeout(1700); // przerwa ≥ 1,5 s zamyka krok pisania (undo.js) — sklejenie osobno
   await caretAt(page, 2);
   await page.keyboard.press("Backspace");
   await idle(page);
   f = await fileState(page);
-  v = await viewParas(page);
-  check("Backspace na początku tekstu z linią: linia znika, tekst zostaje", !f.rules.includes("Podpis") && f.texts.includes("Podpis") && !v[2]?.rule && v[2]?.t === "Podpis", JSON.stringify({ rules: f.rules, v: v[2] }));
-  // menu kontekstowe: „Usuń linię poziomą” przy tekście z linią
+  check("Backspace na początku tekstu z linią: skleja z akapitem wyżej (jak w Wordzie)", !f.texts.includes("Podpis") && f.texts.some((x) => x.endsWith("Podpis")), JSON.stringify(f.texts.slice(0, 4)));
   await page.click("#undoBtn");
   await idle(page);
   f = await fileState(page);

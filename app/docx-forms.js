@@ -824,6 +824,25 @@ function paintFormFields() {
   });
 }
 
+// Osobny render wydruku (print-preview.js): znaczki, które rysuje aplikacja, a nie plik — stare
+// pole wyboru (☐/☒) i wybrana pozycja starej listy. Dawniej wydruk miał sam podpis pola bez
+// kwadracika (korpus niezmienników, 2026-11-08). Pola z treścią w pliku drukują się same.
+async function paintFormGlyphsForPrint(host, bytes) {
+  const scan = await scanFormFields(bytes);
+  if (!scan.fields.length) return;
+  const previews = collectPreviewParagraphElements(host);
+  if (Number.isFinite(scan.paraCount) && previews.length !== scan.paraCount) return;
+  scan.fields.forEach((f) => {
+    const p = Number.isFinite(f.paraIndex) ? previews[f.paraIndex] : null;
+    if (!p) return;
+    const w = formWrap(p, f);
+    if (!w.classList.contains("ff-glyph")) { w.replaceWith(...w.childNodes); return; } // treść z pliku — bez opakowania
+    w.className = "ff-print-glyph";
+    w.textContent = f.kind === "checkbox" ? (f.value ? f.on.char : f.off.char) : f.kind === "dropdown" && f.value ? f.value : "";
+    if (!w.textContent) w.remove();
+  });
+}
+
 // Dotyk: palec trafia obok małego pola (☐) — liczymy też kilka px wokół.
 function formFieldAt(p, x, y) {
   const list = formUi.byPara.get(p);

@@ -109,25 +109,19 @@ const dwbNotes = (() => {
     return runsList.map((runs) => previewRunsToPlainText(runs)).join("\n").replace(/[ \t]+/g, " ").trim();
   }
 
-  // ── 1) przed oznaczaniem akapitów: pliki, numery, treść dymków ─────────────
-  async function prepare(bytes) {
-    notes = new Map();
-    labels = new Map();
-    nums = new Map();
-    texts = new Map();
-    parts = null;
-    const host = hostEl();
-    const sups = host ? Array.from(host.querySelectorAll("sup[data-dwb-note]")) : [];
-    if (!sups.length && !host?.querySelector("ol.dwb-notes")) return;
-    parts = await readParts(bytes);
-    const { sects, refSect } = refSections(parts.document);
+  // Numery odnośników w renderze `host` (podgląd albo osobny render wydruku) — wpisane w <sup>
+  // i w data-dwb-note-num; docx-preview daje same 1, 2, 3 bez formatu i restartów z pliku.
+  function numberRefs(host, documentDoc) {
+    const labelsOut = new Map();
+    const numsOut = new Map();
+    const { sects, refSect } = refSections(documentDoc);
     const props = { footnote: [], endnote: [] };
     const propsOf = (kind, si) => props[kind][si] || (props[kind][si] = sectNoteProps(sects[si], kind));
     const pages = Array.from(host.querySelectorAll("section.docx"));
     const count = { footnote: { all: 0, sect: new Map(), page: new Map() }, endnote: { all: 0, sect: new Map(), page: new Map() } };
-    sups.forEach((sup) => {
+    host.querySelectorAll("sup[data-dwb-note]").forEach((sup) => {
       const key = sup.dataset.dwbNote;
-      if (labels.has(key)) { sup.textContent = labels.get(key); return; } // ten sam przypis drugi raz
+      if (labelsOut.has(key)) { sup.textContent = labelsOut.get(key); sup.dataset.dwbNoteNum = labelsOut.get(key); return; } // ten sam przypis drugi raz
       const kind = key.split(":")[0] === "endnote" ? "endnote" : "footnote";
       const si = refSect.has(key) ? refSect.get(key) : Math.max(0, sects.length - 1);
       const f = propsOf(kind, si);
@@ -140,9 +134,56 @@ const dwbNotes = (() => {
       const n = f.start + before;
       const label = formatNum(n, f.fmt);
       sup.textContent = label;
-      labels.set(key, label);
-      nums.set(key, { n, fmt: f.fmt });
+      sup.dataset.dwbNoteNum = label;
+      labelsOut.set(key, label);
+      numsOut.set(key, { n, fmt: f.fmt });
     });
+    return { labels: labelsOut, nums: numsOut };
+  }
+
+  // Osobny render wydruku (print-preview.js): numery odnośników jak w Edycji, numer na początku
+  // treści przypisu (z <w:footnoteRef/> — docx-preview go nie rysuje), a przypis bez numeru
+  // w treści — numer listy w formacie z pliku. Dawniej wydruk miał surowe 1, 2, 3: przypisy
+  // końcowe „1” zamiast „i”, przypis dolny na 2. stronie „1” zamiast „3” (korpus, 2026-11-08).
+  async function numberRender(host, bytes) {
+    if (!host?.querySelector("sup[data-dwb-note], ol.dwb-notes")) return;
+    const own = await readParts(bytes);
+    const { labels: lab, nums: num } = numberRefs(host, own.document);
+    const xmlOf = (kind, id) => own[kind] && Array.from(own[kind].getElementsByTagNameNS(W_NS, kind)).find((n) => n.getAttributeNS(W_NS, "id") === id);
+    host.querySelectorAll("ol.dwb-notes > li[data-dwb-note]").forEach((li) => {
+      const key = li.dataset.dwbNote;
+      const label = lab.get(key);
+      const [kind, id] = key.split(":");
+      const el = xmlOf(kind, id);
+      const first = noteParas(li)[0];
+      if (!label || !first || first.querySelector("sup.note-mark")) return;
+      if (el && el.getElementsByTagNameNS(W_NS, `${kind}Ref`).length) {
+        const sup = document.createElement("sup");
+        sup.className = "note-mark";
+        sup.textContent = label;
+        first.insertBefore(sup, first.firstChild);
+        return;
+      }
+      li.classList.add("dwb-note-native");
+      const nm = num.get(key);
+      li.value = nm?.n || 1;
+      const css = { lowerRoman: "lower-roman", upperRoman: "upper-roman", lowerLetter: "lower-alpha", upperLetter: "upper-alpha" }[nm?.fmt];
+      if (css) li.style.listStyleType = css;
+    });
+  }
+
+  // ── 1) przed oznaczaniem akapitów: pliki, numery, treść dymków ─────────────
+  async function prepare(bytes) {
+    notes = new Map();
+    labels = new Map();
+    nums = new Map();
+    texts = new Map();
+    parts = null;
+    const host = hostEl();
+    const sups = host ? Array.from(host.querySelectorAll("sup[data-dwb-note]")) : [];
+    if (!sups.length && !host?.querySelector("ol.dwb-notes")) return;
+    parts = await readParts(bytes);
+    ({ labels, nums } = numberRefs(host, parts.document));
     parts.document = null; // duży DOM treści niepotrzebny po policzeniu numerów
     labels.forEach((_, key) => {
       const [kind, id] = key.split(":");
@@ -526,7 +567,7 @@ const dwbNotes = (() => {
     docCanvasEl?.addEventListener("dblclick", onDblClick);
   });
 
-  return { watchRefs, prepare, stampRefs, refLabelLengths, setupList, sync, collectEdits, rebase, keydown, hasEditable: () => [...notes.values()].some((n) => !n.lock && !n.extra) };
+  return { watchRefs, prepare, numberRender, stampRefs, refLabelLengths, setupList, sync, collectEdits, rebase, keydown, hasEditable: () => [...notes.values()].some((n) => !n.lock && !n.extra) };
 })();
 
 // ── zapis: zmiany przypisów do footnotes.xml / endnotes.xml (buildPatchedDocx) ──

@@ -1722,11 +1722,6 @@ async function handleInlineBackspace(p, paraIndex, e) {
     composeUi.plainStyleAt(p);
     return;
   }
-  // tekst z linią poziomą pod spodem (wpisany w akapicie linii) — najpierw zdejmuje linię, tekst zostaje
-  if (sel?.isCollapsed && !e.fromDelete && typeof composeUi !== "undefined" && composeUi.clearRuleAt?.(p)) {
-    e.preventDefault();
-    return;
-  }
   // wcięty akapit — najpierw wcięcie do zera (jak w Wordzie), kolejny Backspace skleja
   if (sel?.isCollapsed && !e.fromDelete && typeof composeUi !== "undefined" && composeUi.clearIndentAt?.(p)) {
     e.preventDefault();

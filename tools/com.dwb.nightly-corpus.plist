@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Nocny przebieg niezmienników (tools/nightly-corpus.sh). Instalacja:
+       cp tools/com.dwb.nightly-corpus.plist ~/Library/LaunchAgents/
+       launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.dwb.nightly-corpus.plist
+     Wyłączenie: launchctl bootout gui/$(id -u)/com.dwb.nightly-corpus -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.dwb.nightly-corpus</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>/Users/mateuszuser/Programistyka/documents-workbench-pwa/tools/nightly-corpus.sh</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>3</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/mateuszuser/Programistyka/documents-workbench-pwa/output/corpus/launchd.out</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/mateuszuser/Programistyka/documents-workbench-pwa/output/corpus/launchd.err</string>
+</dict>
+</plist>

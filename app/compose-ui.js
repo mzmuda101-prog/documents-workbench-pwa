@@ -173,8 +173,8 @@ const composeUi = (() => {
   }
 
   // Linia pozioma pod TEKSTEM: akapit linii (dolna krawędź z pliku, nie ze stylu), w którym ktoś
-  // pisał. Backspace na początku / menu „Usuń linię poziomą” zdejmuje samą linię, tekst zostaje;
-  // dawniej Backspace sklejał tekst z poprzednim akapitem i linii nie dało się zdjąć (2026-11-08).
+  // pisał. Menu kontekstowe „Usuń linię poziomą” zdejmuje samą linię, tekst zostaje (2026-11-08).
+  // Backspace na początku skleja akapity jak w Wordzie — nie zdejmuje linii (decyzja 2026-11-08).
   function hasTextRule(p) {
     const st = p?.style?.borderBottomStyle;
     return !!st && st !== "none" && !!p.textContent.replace(/\uFEFF/g, "");

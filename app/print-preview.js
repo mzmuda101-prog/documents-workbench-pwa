@@ -476,6 +476,8 @@ const dwbPrint = (() => {
       await frame();
       const host = src.querySelector(".docx-preview-host");
       if (!host) throw new Error("render");
+      if (typeof dwbNotes !== "undefined") await dwbNotes.numberRender(host, bytes); // numery przypisów jak w Edycji
+      if (typeof paintFormGlyphsForPrint === "function") await paintFormGlyphsForPrint(host, bytes); // ☐ starych pól wyboru
       // Przypisy dolne stoją na dole swoich stron (page-breaks.js: pageNotes) — ich lista na końcu
       // sekcji nie może spychać przypisów końcowych pod sobą (Word: końcowe zaraz za treścią).
       // Wyjęta z przepływu, z tą samą szerokością (wysokości przypisów dalej mierzalne).
