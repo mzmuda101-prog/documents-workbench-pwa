@@ -136,6 +136,7 @@ function fixPageAnchoredDrawings(host) {
       if (d.style.position !== "absolute" || d.parentElement === section) return;
       if (!d.querySelector("img")) return;
       d.classList.add("dwb-page-anchor");
+      d.__dwbAnchorP = d.closest("p") || d.parentElement; // akapit kotwicy — strona obrazu w druku (print-preview.js)
       section.insertBefore(d, section.firstChild);
       moved++;
     });

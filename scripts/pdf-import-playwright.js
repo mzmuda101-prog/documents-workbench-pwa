@@ -472,6 +472,21 @@ async function run() {
   });
   check("tekst jako krzywe: dziury w „o” puste (nonzero i evenodd), obrys widoczny", curves.media && curves.holeNonzero && curves.ringNonzero && curves.holeEvenOdd && curves.ringEvenOdd, JSON.stringify(curves));
   check("tekst jako krzywe: kropka nad „i”, kropka i kropka w ścieżce z krzywą nie giną", curves.iDot && curves.iStem && curves.period && curves.curveDot && curves.curve, JSON.stringify(curves));
+  // grafika spod tekstu (obraz zakotwiczony do strony) jest też na wydruku — dawniej druk ją
+  // pomijał i znikały np. znaczniki cięcia z PDF (zgłoszenie 2026-11-08, karty z mapą terenu)
+  const editArt = await page.evaluate(() => document.querySelectorAll(".docx-preview-host .dwb-page-anchor img").length);
+  await page.evaluate(() => dwbPrint.open());
+  await page.waitForFunction(() => dwbPrint.isOpen() && document.querySelector(".pp-sheet"), null, { timeout: 20000 });
+  const printArt = await page.evaluate(() => {
+    const sh = document.querySelector(".pp-sheet");
+    const img = sh?.querySelector(".dwb-page-anchor img");
+    if (!img) return null;
+    const a = sh.getBoundingClientRect();
+    const b = img.getBoundingClientRect();
+    return { n: sh.querySelectorAll(".dwb-page-anchor img").length, dx: Math.round(b.left - a.left), dy: Math.round(b.top - a.top), w: Math.round(b.width), sw: Math.round(a.width) };
+  });
+  await page.evaluate(() => dwbPrint.close());
+  check("grafika spod tekstu (z PDF) jest na wydruku, w rogu kartki i na całą szerokość", editArt > 0 && printArt?.n === editArt && printArt.dx === 0 && printArt.dy === 0 && Math.abs(printArt.w - printArt.sw) <= 2, JSON.stringify({ editArt, printArt }));
 
   // --- 4d. nieosadzone Times zwykły + pogrubiony: pogrubienie dokładnie tam, gdzie w PDF
   await page.evaluate(() => { setDirtyState(false); });

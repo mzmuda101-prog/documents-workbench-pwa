@@ -152,6 +152,15 @@ const dwbPrint = (() => {
         starts.forEach((s, j) => { if (s <= at + 1) page = j; });
         return { el, box: rel(el, base), flow, page };
       });
+      // obrazy zakotwiczone do strony (docx-render-fixes.js: .dwb-page-anchor) — np. grafika z PDF
+      // spod tekstu ze znacznikami cięcia; stoją w swoim miejscu kartki na stronie akapitu kotwicy.
+      // Dawniej druk ich nie przenosił i znikały z wydruku (2026-11-08).
+      sec.querySelectorAll(":scope > .dwb-page-anchor").forEach((el) => {
+        const at = el.__dwbAnchorP?.isConnected ? rel(el.__dwbAnchorP, base).top : 0;
+        let page = 0;
+        starts.forEach((s, j) => { if (s <= at + 1) page = j; });
+        boxes.push({ el, box: rel(el, base), flow: false, page, art: true });
+      });
       plan.push({
         S, sec, secH, blocks, heads, footOl, boxes,
         headerV, footerV,
@@ -236,7 +245,7 @@ const dwbPrint = (() => {
           b.el.style.top = `${y}px`;
           b.el.style.left = `${b.box.left}px`;
           sheet.appendChild(b.el);
-          if (b.el.textContent.trim() && (b.box.left < zone || b.box.right > S.pageW - zone || y < zone || y + b.box.height > S.pageH - zone)) near = true;
+          if (!b.art && b.el.textContent.trim() && (b.box.left < zone || b.box.right > S.pageW - zone || y < zone || y + b.box.height > S.pageH - zone)) near = true;
         });
         const notes = P.footOl && S.pageNotes?.[j];
         if (notes?.length) {
