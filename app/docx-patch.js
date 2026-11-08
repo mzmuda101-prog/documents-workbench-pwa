@@ -146,6 +146,9 @@ function splitParagraphInXml(xml, index, beforeText, afterText, beforeRuns, afte
   const nPr = newP.getElementsByTagNameNS(W_NS, "pPr")[0];
   if (nPr) {
     const drop = nextNormal ? ["pStyle", "pageBreakBefore", "outlineLvl", "keepNext"] : ["pageBreakBefore"];
+    // Linia pozioma (pusty akapit z krawędzią): Enter w niej nie robi drugiej linii — nowy akapit
+    // bez krawędzi (dawniej każdy Enter w linii dokładał kolejną, a podgląd rysował je osobno)
+    if (paragraphIsRule(p)) drop.push("pBdr");
     Array.from(nPr.childNodes).filter((n) => drop.includes(n.localName)).forEach((n) => nPr.removeChild(n));
     if (!nPr.firstChild) newP.removeChild(nPr);
   }
@@ -187,6 +190,19 @@ function carrySectPr(fromP, toP) {
   toPr.insertBefore(sect, change || null);
 }
 
+// Pusty akapit bez obiektów (obraz, pole, kontrolka, przypis) — przy scalaniu znika cały,
+// razem ze swoim formatowaniem.
+function paragraphIsBare(p) {
+  if (getParagraphText(p)) return false;
+  return !["drawing", "pict", "object", "sdt", "fldSimple", "fldChar", "footnoteReference", "endnoteReference", "br"]
+    .some((tag) => p.getElementsByTagNameNS(W_NS, tag).length);
+}
+// Linia pozioma = pusty akapit z krawędzią (op "hrule" i „---” + Enter w Wordzie)
+function paragraphIsRule(p) {
+  const pPr = Array.from(p.childNodes).find((n) => n.localName === "pPr" && n.namespaceURI === W_NS);
+  return !!pPr && Array.from(pPr.childNodes).some((n) => n.localName === "pBdr") && paragraphIsBare(p);
+}
+
 function mergeParagraphInXml(xml, index, mergedRuns) {
   if (index <= 0) return { xml, count: 0 };
   const parser = new DOMParser();
@@ -195,6 +211,18 @@ function mergeParagraphInXml(xml, index, mergedRuns) {
   const prev = paragraphs[index - 1];
   const curr = paragraphs[index];
   if (!prev || !curr) return { xml, count: 0 };
+  // Pusty akapit przed kolejnym (np. linia pozioma + Delete): znika pusty, następny akapit
+  // zostaje ze SWOIM formatowaniem — jak w Wordzie (także gdy następny też jest pusty). Dawniej treść wchodziła do pustego i brała jego
+  // właściwości, więc linii nie dało się usunąć: przeskakiwała pod następny akapit.
+  if (paragraphIsBare(prev)) {
+    const at = Array.from(curr.childNodes).find((n) => n.localName !== "pPr") || null; // zakładki pustego akapitu — na początek
+    Array.from(prev.childNodes).filter((n) => /^bookmark(Start|End)$/.test(n.localName))
+      .forEach((n) => curr.insertBefore(n, at));
+    if (mergedRuns?.length) applyRunsToParagraphXml(curr, mergedRuns);
+    carrySectPr(prev, curr);
+    prev.parentNode.removeChild(prev);
+    return { xml: new XMLSerializer().serializeToString(doc), count: 1, joinAt: 0 };
+  }
   const joinAt = getParagraphText(prev).length;
   if (mergedRuns?.length) applyRunsToParagraphXml(prev, mergedRuns);
   else setParagraphText(prev, getParagraphText(prev) + getParagraphText(curr));

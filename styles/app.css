@@ -3462,3 +3462,82 @@ body.dwb-painting .docx-preview-host * {
 @media (max-width: 768px) {
   :root:not(.sidebar-open) body.has-document .sidebar-handle { display: none; }
 }
+
+/* ── Menu kontekstowe dokumentu (doc-context-menu.js) — jak menu komórki w Sheet ── */
+.doc-menu {
+  position: fixed;
+  z-index: 10002; /* nad dymkami (10001) — na telefonie dymek u góry zasłaniał B/I/U */
+  min-width: 230px;
+  max-width: min(320px, calc(100vw - 16px));
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--surface);
+  box-shadow: 0 10px 30px rgba(20, 30, 20, 0.16), 0 2px 6px rgba(20, 30, 20, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.doc-menu.hidden { display: none; }
+.doc-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: calc(var(--r) - 4px);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.doc-menu-item kbd { font: inherit; font-size: 11.5px; color: var(--muted); background: none; border: 0; padding: 0; }
+.doc-menu-item:focus-visible { outline: none; background: var(--accent-light); }
+@media (hover: hover) { .doc-menu-item:hover { background: var(--accent-light); } }
+.doc-menu-item.is-danger { color: var(--danger); }
+.doc-menu-item.is-primary { color: var(--accent); font-weight: 600; }
+.doc-menu-sep { height: 1px; margin: 4px 6px; background: var(--border); flex-shrink: 0; }
+.doc-menu-row { display: flex; gap: 4px; padding: 2px 2px 6px; margin-bottom: 2px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.doc-menu-fmt {
+  flex: 1;
+  min-height: 32px;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--r) - 4px);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.doc-menu-fmt.dmf-bold { font-weight: 700; }
+.doc-menu-fmt.dmf-italic { font-style: italic; font-family: Georgia, serif; }
+.doc-menu-fmt.dmf-underline { text-decoration: underline; }
+.doc-menu-fmt:focus-visible { outline: none; background: var(--accent-light); }
+@media (hover: hover) { .doc-menu-fmt:hover { background: var(--accent-light); } }
+@media (pointer: coarse) {
+  .doc-menu-item { min-height: 44px; font-size: 15px; }
+  .doc-menu-item kbd { display: none; } /* na dotyku skróty nic nie mówią */
+  .doc-menu-fmt { min-height: 44px; }
+}
+/* „⋯” przy zaznaczeniu na dotyku */
+.doc-menu-chip {
+  position: fixed;
+  z-index: 515;
+  width: 40px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1;
+  box-shadow: 0 4px 14px rgba(20, 30, 20, 0.16);
+}
+.doc-menu-chip[hidden] { display: none; }

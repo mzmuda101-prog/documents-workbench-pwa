@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v1.00.05";
+const CACHE_VERSION = "v1.00.10";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
@@ -79,6 +79,7 @@ const SHELL_ASSETS = [
   `./app/view-mode.js?v=${ASSET_V}`,
   `./app/keyboard.js?v=${ASSET_V}`,
   `./app/shortcuts.js?v=${ASSET_V}`,
+  `./app/doc-context-menu.js?v=${ASSET_V}`,
   `./app/doc-comfort.js?v=${ASSET_V}`,
   `./app/cursor-hint.js?v=${ASSET_V}`,
   `./app/launch-files.js?v=${ASSET_V}`,

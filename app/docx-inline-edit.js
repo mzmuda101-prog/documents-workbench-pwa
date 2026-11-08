@@ -1525,6 +1525,13 @@ function mergeParagraphDom(prev, curr) {
   // dochodzi teraz treść — w środku akapitu rysowałaby drugą, nieistniejącą w pliku linijkę
   // (akapit „⏎” sklejony z „Wstęp” był o linijkę wyższy niż w Wordzie, zgłoszenie 2026-10-09).
   const tail = curr.textContent.replace(/\uFEFF/g, "") || curr.querySelector("img, svg, canvas, br:not([data-dwb-ph]), [contenteditable=false]");
+  // Pusty akapit (np. linia pozioma) + akapit z treścią: wynik ma formatowanie akapitu z treścią,
+  // tak samo jak w pliku (mergeParagraphInXml) — dawniej linia przeskakiwała pod doklejony akapit
+  const prevBare = !prev.textContent.replace(/\uFEFF/g, "") && !prev.querySelector("img, svg, canvas, [contenteditable=false]");
+  if (prevBare) {
+    Array.from(prev.attributes).forEach((at) => prev.removeAttribute(at.name));
+    Array.from(curr.attributes).forEach((at) => prev.setAttribute(at.name, at.value));
+  }
   if (tail) prev.querySelectorAll("br[data-dwb-ph]").forEach((ph) => ph.remove());
   while (curr.firstChild) prev.appendChild(curr.firstChild);
   curr.remove();
@@ -1620,8 +1627,11 @@ async function handleInlineEnter(p, paraIndex, e) {
   // jak z listy); dawniej powstawał kolejny pusty w ramce i nie było jak z niej wyjść
   if (!previewRunsToPlainText(extractRunsFromPreviewParagraph(p)) && typeof composeUi !== "undefined" && composeUi.plainStyleAt?.(p)) return;
   restoreTinyParagraph(p); // Enter w akapicie 1 pt za tabelą — oba akapity w zwykłej wysokości
+  // linia pozioma (pusty akapit z krawędzią) — nowy akapit bez krawędzi, jak w pliku (splitParagraphInXml)
+  const wasRule = !p.textContent.replace(/\uFEFF/g, "") && getComputedStyle(p).borderBottomStyle !== "none";
   const newP = splitParagraphDomAtCaret(p);
   if (!newP) return;
+  if (wasRule) newP.style.border = "none";
   prepareEditableParagraph(newP);
   // Kursor w nowym akapicie OD RAZU — dawniej przeskakiwał dopiero po przebudowie pliku,
   // a wszystko wpisane w tym czasie trafiało do starego akapitu.
