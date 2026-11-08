@@ -161,7 +161,11 @@ const composeUi = (() => {
   // „Tabulatory i Backspace ustawiają lewe wcięcie”, sprawdzone 2026-10-17: jedno i podwójne
   // wcięcie → od razu margines). Dopiero następny Backspace skleja z poprzednim akapitem.
   // Akapit z wysunięciem (bibliografia, numeracja ręczna) — bez zmian, skleja jak dawniej.
+  // Tylko wcięcie wpisane w akapit (styl inline z pliku/apki) — wcięcie ze stylu (Cytat) jest częścią
+  // jego wyglądu: Word skleja wtedy od razu (tools/word-oracle/probe-keys.js, 2026-11-08)
   function hasLeftIndent(p) {
+    const st = p.style;
+    if (!st.marginLeft && !st.marginInlineStart && !st.paddingLeft && !st.paddingInlineStart) return false;
     const cs = getComputedStyle(p);
     return (parseFloat(cs.marginLeft) || 0) + (parseFloat(cs.paddingLeft) || 0) > 1 && (parseFloat(cs.textIndent) || 0) >= -0.5;
   }

@@ -1631,11 +1631,14 @@ async function handleInlineEnter(p, paraIndex, e) {
   // format „dla dalszego pisania” (np. pogrubienie wyłączone ⌘/Ctrl+B tuż przed Enterem) przechodzi
   // do nowego akapitu, jak w Wordzie; dawniej nowy kursor go porzucał i pisało się znów pogrubionym
   const typing = window.getSelection()?.isCollapsed ? currentTypingStyle() : null;
-  // linia pozioma (pusty akapit z krawędzią) — nowy akapit bez krawędzi, jak w pliku (splitParagraphInXml)
+  // linia (sama dolna krawędź z pliku) — po podziale tylko przy części z tekstem, jak w pliku
+  // (splitParagraphInXml); pusta ramka (kilka krawędzi) — nowy akapit bez niej
   const wasRule = !p.textContent.replace(/\uFEFF/g, "") && getComputedStyle(p).borderBottomStyle !== "none";
+  const lineOnly = !!p.style.borderBottomStyle && p.style.borderBottomStyle !== "none" && !p.style.borderTopStyle && !p.style.borderLeftStyle && !p.style.borderRightStyle;
   const newP = splitParagraphDomAtCaret(p);
   if (!newP) return;
-  if (wasRule) newP.style.border = "none";
+  if (lineOnly && newP.textContent.replace(/\uFEFF/g, "")) p.style.borderBottom = "none";
+  else if (lineOnly || wasRule) newP.style.border = "none";
   prepareEditableParagraph(newP);
   // Kursor w nowym akapicie OD RAZU — dawniej przeskakiwał dopiero po przebudowie pliku,
   // a wszystko wpisane w tym czasie trafiało do starego akapitu.

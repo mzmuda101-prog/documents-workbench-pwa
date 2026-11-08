@@ -96,7 +96,9 @@ async function main() {
   await idle(page);
   f = await fileState(page);
   check("tekst wpisany w linii: akapit z tekstem i krawędzią", f.rules.includes("Podpis"), JSON.stringify(f.rules));
-  await page.waitForTimeout(1700); // przerwa ≥ 1,5 s zamyka krok pisania (undo.js) — sklejenie osobno
+  // kliknięcie w dokument zamyka krok pisania (undo.js) — sklejenie to osobny krok; dawniej pauza
+  // 1,7 s, którą runner skracał o połowę (SLEEP_SCALE=0.5) poniżej progu 1,5 s
+  await page.locator(".docx-preview-host p", { hasText: "Podpis" }).first().click();
   await caretAt(page, 2);
   await page.keyboard.press("Backspace");
   await idle(page);

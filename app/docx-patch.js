@@ -137,7 +137,7 @@ function splitParagraphInXml(xml, index, beforeText, afterText, beforeRuns, afte
   else p.parentNode.appendChild(newP);
   // Znacznik końca sekcji zostaje tylko na drugim (ostatnim) akapicie — dawniej klon
   // dostawał kopię i sekcja (marginesy, orientacja) kończyła się o akapit za wcześnie.
-  const pPr = p.getElementsByTagNameNS(W_NS, "pPr")[0];
+  const pPr = Array.from(p.childNodes).find((n) => n.localName === "pPr" && n.namespaceURI === W_NS);
   const sect = pPr && Array.from(pPr.childNodes).find((n) => n.localName === "sectPr");
   if (sect) pPr.removeChild(sect);
   // Enter na końcu nagłówka/tytułu — dalej pisze się zwykłym tekstem (jak „styl następnego
@@ -146,9 +146,17 @@ function splitParagraphInXml(xml, index, beforeText, afterText, beforeRuns, afte
   const nPr = newP.getElementsByTagNameNS(W_NS, "pPr")[0];
   if (nPr) {
     const drop = nextNormal ? ["pStyle", "pageBreakBefore", "outlineLvl", "keepNext"] : ["pageBreakBefore"];
-    // Linia pozioma (pusty akapit z krawędzią): Enter w niej nie robi drugiej linii — nowy akapit
-    // bez krawędzi (dawniej każdy Enter w linii dokładał kolejną, a podgląd rysował je osobno)
-    if (paragraphIsRule(p)) drop.push("pBdr");
+    // Linia (sama dolna krawędź — linia pozioma albo tekst z linią pod spodem): po podziale linia
+    // jest tylko przy części z tekstem, pod nim — jak WIDAĆ w Wordzie (oba akapity z krawędzią
+    // rysuje jako grupę z jedną linią na dole, tools/word-oracle/probe-keys.js). Dolna część pusta
+    // (Enter na końcu / w samej linii) — bez linii; dolna z tekstem (Enter na początku / w środku)
+    // — linia przechodzi na nią. Dawniej linia skakała nad tekst albo rysowały się dwie.
+    const pBdr = pPr && Array.from(pPr.childNodes).find((n) => n.localName === "pBdr" && n.namespaceURI === W_NS);
+    const lineOnly = pBdr && Array.from(pBdr.childNodes).filter((n) => n.nodeType === 1).every((n) => n.localName === "bottom");
+    if (lineOnly) {
+      if (paragraphIsBare(newP)) drop.push("pBdr");
+      else pPr.removeChild(pBdr);
+    } else if (paragraphIsRule(p)) drop.push("pBdr"); // pusta ramka (kilka krawędzi) — nowy akapit bez niej
     Array.from(nPr.childNodes).filter((n) => drop.includes(n.localName)).forEach((n) => nPr.removeChild(n));
     if (!nPr.firstChild) newP.removeChild(nPr);
   }
