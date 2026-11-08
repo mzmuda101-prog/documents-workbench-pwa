@@ -80,6 +80,15 @@ w aplikacji „zgłoś błąd” zapisujący ostatnie akcje + stan → plik, z k
   ten sam plik i ten sam odczyt stanu w prawdziwym Wordzie (wynik wprost do tabeli)
 
 **Dalej:**
+0. **(następny etap, 2026-11-10) Przeładowania dokumentu.** Gdzie przerysowanie CAŁEGO dokumentu
+   jest niepotrzebne albo da się je zastąpić czymś lepszym (zmiana tylko dotkniętych akapitów,
+   jak przy Enter/Backspace). Punkt wyjścia (spis 2026-11-09): każda operacja z paska/menu idzie
+   przez `applyDocumentEdit` → `reloadFromBytes` (`app/document.js:347`) — w `compose-ui.js` 38
+   wywołań (styl, wyrównanie, lista, tabela, linia…); do tego ~10 miejsc z `reloadFromBytes`
+   wprost (`undo.js`, `doc-selection.js`, `doc-notes.js`, `docx-forms.js`, `docx-inline-edit.js`).
+   Najpierw pomiar (`npm run bench`: czas, przeskok przewinięcia, utrata kursora/zaznaczenia),
+   potem lista „niepotrzebne / do zastąpienia / musi zostać” z uzasadnieniem, potem zmiany od
+   największego zysku — z niezmiennikiem „podgląd = plik” po każdej (korpus, tabela klawiszy).
 1. Edycja akapitu z podziałem strony w środku (dziś tylko do odczytu) — warunek zachowania
    „jak w Wordzie” przy Backspace za podziałem (odstępstwo opisane w `scripts/keys-table.js`).
    Tabela klawiszy: pole formularza, przypis, zaznaczenie przez akapity.

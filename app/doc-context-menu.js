@@ -98,6 +98,24 @@ const dwbDocMenu = (() => {
       await applyDocumentEdit({ op: "paraFormat", indices: [index], clearRule: true });
     }
   }
+  // Pusta strona za tabelą na końcu dokumentu: Word MUSI mieć akapit za tabelą, a gdy tabela kończy
+  // stronę, ten akapit spada na nową kartkę. Sposób z porad Microsoftu — akapit 1 pt bez odstępów.
+  // Dawniej robił to Backspace (zgłoszenie 2026-10-11); od 2026-11-09 Backspace jak w Wordzie (nic),
+  // a ten sposób jest tutaj, w menu.
+  function blankAfterTable(p) {
+    if (!p || p.classList.contains("dwb-tiny-para") || p.textContent.replace(/\uFEFF/g, "") || p.querySelector("img, svg, canvas, [contenteditable=false]")) return null;
+    let prev = p.previousElementSibling;
+    while (prev?.matches?.(".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-break")) prev = prev.previousElementSibling;
+    if (prev?.tagName !== "TABLE") return null;
+    const ps = collectPreviewParagraphElements(host());
+    return ps.indexOf(p) === ps.length - 1 ? p : null;
+  }
+  async function removeBlankPage(p) {
+    const index = resolveParaIndex(p);
+    if (index < 0) return;
+    await applyDocumentEdit({ op: "paraFormat", indices: [index], spacing: { before: 0, after: 0, line: 20, lineRule: "exact" } });
+    toast(t("blankPageRemoved"), "info");
+  }
   function inlineFormat(cmd) { restoreRange(); if (typeof execInlineFormat === "function") execInlineFormat(cmd); }
 
   // ── pozycje menu wg miejsca ──────────────────────────────────────────────────
@@ -118,6 +136,10 @@ const dwbDocMenu = (() => {
       sep();
     } else if (ctx.textRule) { // linia pod tekstem — znika sama linia, tekst zostaje
       add("delRule", "ctxDeleteRule", () => composeUi.clearRuleAt(ctx.textRule), { danger: true });
+      sep();
+    }
+    if (ctx.blankPage) {
+      add("blankPage", "ctxRemoveBlankPage", () => removeBlankPage(ctx.blankPage));
       sep();
     }
     if (ctx.hasSel) {
@@ -195,6 +217,7 @@ const dwbDocMenu = (() => {
       hasSel: !!r && !r.collapsed && !!String(r).trim(),
       rule: isRule(p) ? p : null,
       textRule: composeUi.hasTextRule?.(p) ? p : null,
+      blankPage: blankAfterTable(p),
       cell: !!p?.closest("td, th"),
     };
   }

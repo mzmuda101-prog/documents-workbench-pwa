@@ -3,8 +3,8 @@
 // Klawisze jak w Wordzie (decyzja 2026-11-09, tools/word-oracle/run-keys.js):
 //   • Backspace w pustym akapicie za tabelą — nic (dawniej zmniejszał go do 1 pt / usuwał)
 //   • Delete w nim, gdy dalej jest tekst — akapit znika
-// Akapit 1 pt z pliku (sposób Worda na pustą stronę) zostaje obsłużony: klik pod tabelą trafia
-// w niego, pisanie przywraca zwykłą wysokość, Cofnij wraca.
+//   • menu kontekstowe „Usuń pustą stronę za tabelą” (ostatni akapit) — akapit 1 pt (porada
+//     Microsoftu); klik pod tabelą trafia w niego, pisanie przywraca zwykłą wysokość, Cofnij wraca
 
 const fs = require("fs");
 const os = require("os");
@@ -99,11 +99,31 @@ async function run() {
   await backspaceAt(-1);
   const kept = await state();
   check("Backspace w ostatnim pustym akapicie za tabelą: nic się nie zmienia (jak Word)", kept.paras === before.paras && !/w:lineRule="exact"/.test(kept.afterTable) && kept.gaps > 0, JSON.stringify(kept));
-  // akapit 1 pt jak z pliku Worda (porada Microsoftu na pustą stronę po tabeli)
-  await page.evaluate((i) => applyDocumentEdit({ op: "paraFormat", indices: [i], spacing: { before: 0, after: 0, line: 20, lineRule: "exact" } }), before.paras - 1);
+  // menu kontekstowe „Usuń pustą stronę za tabelą” — akapit 1 pt (porada Microsoftu)
+  const menuHas = () => page.evaluate(() => [...document.querySelectorAll("[role=menuitem]")].some((b) => /Usuń pustą stronę|Remove blank page/.test(b.textContent)));
+  const rightClickLast = async (fromEnd) => {
+    await page.keyboard.press("Escape");
+    const at = await page.evaluate((i) => {
+      const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).at(i);
+      p.scrollIntoView({ block: "center" });
+      placeCaret(p, 0);
+      const r = p.getBoundingClientRect();
+      return { x: r.left + 20, y: r.top + Math.min(8, r.height / 2) };
+    }, fromEnd);
+    await page.waitForTimeout(200);
+    await page.mouse.click(at.x, at.y, { button: "right" });
+    await page.waitForTimeout(200);
+  };
+  await rightClickLast(-1);
+  check("menu kontekstowe w pustym akapicie za tabelą na końcu: „Usuń pustą stronę za tabelą”", await menuHas());
+  await page.evaluate(() => [...document.querySelectorAll("[role=menuitem]")].find((b) => /Usuń pustą stronę|Remove blank page/.test(b.textContent))?.click());
   await page.waitForTimeout(1500);
   const shrunk = await state();
-  check("akapit 1 pt: pusta strona znika (bez granicy przed nim), akapit zostaje", shrunk.gaps === 0 && shrunk.lastH < 4 && shrunk.paras === before.paras, JSON.stringify(shrunk));
+  check("…akapit 1 pt bez odstępów w pliku", /<w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"\/>/.test(shrunk.afterTable), shrunk.afterTable);
+  check("…pusta strona znika (bez granicy przed nim), akapit zostaje", shrunk.gaps === 0 && shrunk.lastH < 4 && shrunk.paras === before.paras, JSON.stringify(shrunk));
+  await rightClickLast(-1);
+  check("…zmniejszony akapit — pozycji już nie ma", !(await menuHas()));
+  await page.keyboard.press("Escape");
   // Zmniejszony akapit ma 1 pt — kliknięcie pod tabelą musi w niego trafić, a pisanie przywraca
   // mu zwykłą wysokość (zgłoszenie: „ciężko by było w to trafić palcem, kursorem”).
   const below = await page.evaluate(() => {
@@ -136,6 +156,9 @@ async function run() {
   file = await buildDocx(30, true);
   await open(file);
   const midBefore = await state();
+  await rightClickLast(-2);
+  check("pusty akapit za tabelą, a dalej tekst: bez „Usuń pustą stronę” (to nie pusta strona)", !(await menuHas()));
+  await page.keyboard.press("Escape");
   await backspaceAt(-2);
   const midKept = await state();
   check("Backspace w pustym akapicie za tabelą (dalej tekst): nic się nie zmienia (jak Word)", midKept.paras === midBefore.paras, JSON.stringify(midKept));
