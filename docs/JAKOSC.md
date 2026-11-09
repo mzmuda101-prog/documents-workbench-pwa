@@ -91,10 +91,15 @@ w aplikacji „zgłoś błąd” zapisujący ostatnie akcje + stan → plik, z k
    największego zysku — z niezmiennikiem „podgląd = plik” po każdej (korpus, tabela klawiszy).
    - pomiar: `npm run bench:reload` (`scripts/reload-bench.js`) — każda operacja z paska 0,6–0,8 s
      (8 stron) / 1,5–1,8 s (100 stron) przy CPU ×4, chwilowy przeskok widoku do ~7500 px
-   - A „niepotrzebne” ✅ (v1.00.18): edycja/odpowiedź/zamknięcie komentarza, metadane — bez
-     przerysowania (`QUIET_DOC_OPS` w `app/document.js`, test `scripts/quiet-edits-playwright.js`)
-   - B „do zastąpienia łatką akapitu”: wyrównanie, wcięcie, odstępy, dodanie komentarza, Cofnij
-     pisania — warunek: niezmiennik „łatka = pełny render” (porównanie z renderem w tle)
+   - A „niepotrzebne” ✅ (v1.00.18–19): edycja i zamknięcie komentarza, metadane — bez
+     przerysowania (`QUIET_DOC_OPS` w `app/document.js`, test `scripts/quiet-edits-playwright.js`);
+     bezpiecznik: cicho tylko, gdy `word/document.xml` się nie zmienił (odpowiedź na komentarz ma
+     znaczniki w treści — przerysowuje; lekcja: „podgląd = plik” porównywał tylko tekst, nie wyspy)
+   - B ✅ wyrównanie, wcięcie, odstępy (v1.00.19): render w tle samych akapitów (z sąsiadami) i
+     przeniesienie wyglądu na żywy akapit (`patchParagraphsInPlace`); niezmiennik „łatka = pełny
+     render” — `scripts/para-patch-playwright.js`. Wyrównanie 1,8 → 0,6 s, wcięcie 1,6 → 0,5 s
+     (100 stron, CPU ×4), bez mignięcia. Zostało w B: dodanie komentarza, Cofnij pisania;
+     Widok mobilny (wcięcia skalowane osobno) — dziś pełny render
    - C „musi zostać”: ustawienia strony, przyjmij/odrzuć wszystko, spis treści, przypis,
      nagłówek/stopka — do usunięcia tylko chwilowy przeskok widoku
 1. Edycja akapitu z podziałem strony w środku (dziś tylko do odczytu) — warunek zachowania

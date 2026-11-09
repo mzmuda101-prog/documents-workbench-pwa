@@ -1,7 +1,9 @@
 // quiet-edits-playwright.js — operacje, po których strona wygląda tak samo, NIE przerysowują
 // dokumentu (etap „przeładowania”, 2026-11-10; pomiar scripts/reload-bench.js):
-// edycja / odpowiedź / zamknięcie komentarza i metadane. Musi być prawdą: bez pełnego renderu,
-// kursor zostaje, nowe dane widać (karty, licznik), podgląd = plik, Cofnij przywraca.
+// edycja / zamknięcie komentarza i metadane. Musi być prawdą: bez pełnego renderu, kursor zostaje,
+// nowe dane widać (karty, licznik), podgląd = plik, pisanie w akapicie z komentarzem nie gubi
+// znaczników, Cofnij przywraca. Odpowiedź na komentarz MA przerysować — ma własne znaczniki
+// w treści (bez nich pisanie w akapicie je gubiło; compose4, 2026-11-10).
 //
 //   node scripts/quiet-edits-playwright.js               (Chromium)
 //   ENGINE=webkit node scripts/quiet-edits-playwright.js
@@ -62,7 +64,7 @@ async function main() {
   check("plik ma komentarz do edycji", !!first, JSON.stringify(await comments()));
   const ops = [
     { name: "edycja komentarza", edit: { op: "commentEdit", id: first.id, rich: [[{ text: "Nowa treść komentarza" }]] }, ok: (cs) => cs.some((c) => c.id === first.id && c.text === "Nowa treść komentarza") },
-    { name: "odpowiedź na komentarz", edit: { op: "commentReply", id: first.id, rich: [[{ text: "Odpowiedź testowa" }]], author: "Test", initials: "T" }, ok: (cs) => cs.some((c) => c.id === first.id && c.replies.includes("Odpowiedź testowa")) },
+    { name: "odpowiedź na komentarz", render: true, edit: { op: "commentReply", id: first.id, rich: [[{ text: "Odpowiedź testowa" }]], author: "Test", initials: "T" }, ok: (cs) => cs.some((c) => c.id === first.id && c.replies.includes("Odpowiedź testowa")) },
     { name: "zamknięcie komentarza", edit: { op: "commentDone", id: first.id, done: true }, ok: (cs) => cs.some((c) => c.id === first.id && c.done) },
     { name: "metadane: tytuł", edit: { op: "coreMetadata", fields: { title: "Tytuł bez przerysowania" } }, ok: null },
   ];
@@ -76,11 +78,24 @@ async function main() {
     await idle(page);
     const after = await caretSpot();
     const renders = await page.evaluate(() => window.__renders);
-    check(`${op.name}: zmiana w pliku, bez przerysowania dokumentu`, n > 0 && renders === 0, `zmian ${n}, renderów ${renders}`);
-    check(`…kursor zostaje (akapit i miejsce)`, after.i === before.i && after.off === before.off, JSON.stringify({ before, after }));
+    if (op.render) check(`${op.name}: zmiana w pliku, PRZERYSOWANIE (nowe znaczniki w treści)`, n > 0 && renders > 0, `zmian ${n}, renderów ${renders}`);
+    else {
+      check(`${op.name}: zmiana w pliku, bez przerysowania dokumentu`, n > 0 && renders === 0, `zmian ${n}, renderów ${renders}`);
+      check(`…kursor zostaje (akapit i miejsce)`, after.i === before.i && after.off === before.off, JSON.stringify({ before, after }));
+    }
     if (op.ok) check(`…nowe dane komentarza w pliku`, op.ok(await comments()), JSON.stringify((await comments()).slice(0, 4)));
     else check(`…tytuł w pliku`, /Tytuł bez przerysowania/.test(await coreXml()), (await coreXml()).slice(0, 200));
     check(`…podgląd = plik`, await previewIsFile());
+    // pisanie + Enter w akapicie z komentarzem — znaczniki komentarzy (też odpowiedzi) zostają w pliku
+    const marks = () => page.evaluate(async () => { const x = await (await JSZip.loadAsync(await buildDocumentForSave())).file("word/document.xml").async("string"); return [(x.match(/<w:commentRangeStart/g) || []).length, (x.match(/<w:commentReference/g) || []).length].join("/"); });
+    const m0 = await marks();
+    await page.evaluate(() => { const p = document.querySelector('.docx-preview-host span[data-cm-kind="start"]')?.closest("p"); p.closest(".docx-edit-root")?.focus(); placeCaret(p, 0); });
+    await page.keyboard.type("Ab ");
+    await page.keyboard.press("Enter");
+    await idle(page);
+    check(`…pisanie i Enter w akapicie z komentarzem: znaczniki zostają`, (await marks()) === m0, `${m0} → ${await marks()}`);
+    await page.click("#undoBtn");
+    await idle(page);
     // Cofnij — przywraca stan sprzed operacji
     await page.waitForTimeout(300);
     await page.click("#undoBtn");

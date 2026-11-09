@@ -350,16 +350,110 @@ async function applyDocumentEditHeld(edit, xmlOpts) {
     }
     return res.n;
   }
+  if (res.n > 0 && paraPatchable(edit) && await patchParagraphsInPlace(edit.indices).catch(() => false)) {
+    setDirtyState(true);
+    if (typeof pendingInlineCursor !== "undefined") pendingInlineCursor = null; // kursor nietknięty
+    return res.n;
+  }
   await reloadFromBytes(originalFileBytes);
   if (res.n > 0) setDirtyState(true);
   return res.n;
+}
+
+// ── przerysowanie tylko zmienionych akapitów ─────────────────────────────────
+// Wyrównanie, wcięcie, odstępy nie zmieniają TREŚCI akapitu, tylko jego wygląd. Dawniej każda taka
+// zmiana przerysowywała cały dokument (0,6 s / 8 stron, 1,6 s / 100 stron przy CPU ×4; chwilowy
+// przeskok widoku — scripts/reload-bench.js). Teraz: te akapity (z sąsiadami — odstępy zależą od
+// sąsiadów) jako mały plik, render w tle TYM SAMYM torem (docx-preview + poprawki), a do żywego
+// akapitu przechodzi tylko wygląd: styl, klasy z renderu, atrybuty data-dwb-*. Treść akapitu
+// zostaje nietknięta — kursor, zaznaczenie, pola, komentarze i przypisy nie mają jak zginąć.
+// Pomiary zależne od miejsca (spacje na końcu, justowanie, ostatnia linijka) — od nowa na miejscu.
+// Wszystko inne (styl akapitu — nowe reguły CSS, listy, tabele, kolumny, Widok mobilny) — pełne
+// przerysowanie. Pilnuje test scripts/para-patch-playwright.js (łatka = pełny render).
+const PARA_PATCH_KEYS = new Set(["op", "indices", "align", "ind", "indentDelta", "spacing"]);
+function paraPatchable(edit) {
+  return edit?.op === "paraFormat" && Array.isArray(edit.indices) && edit.indices.length > 0 && edit.indices.length <= 50
+    && Object.keys(edit).every((k) => PARA_PATCH_KEYS.has(k));
+}
+// klasy, które dokłada Edycja (nie render) — zostają na żywym akapicie
+const PARA_APP_CLASSES = new Set(["docx-editable-p", "dwb-caret-p", "ff-para", "docx-locked-p", "dwb-tiny-active"]);
+
+async function patchParagraphsInPlace(indices) {
+  if (typeof shouldUseMobileReflow === "function" && shouldUseMobileReflow()) return false; // wcięcia skalowane osobno
+  const host = docCanvasEl?.querySelector(".docx-preview-host");
+  if (!host) return false;
+  const previews = collectPreviewParagraphElements(host);
+  const sorted = [...new Set(indices)].sort((a, b) => a - b);
+  const live = sorted.map((i) => previews[i]);
+  if (live.some((p) => !p || p.dataset.lock || p.dataset.dwbCont || p.nextElementSibling?.dataset?.dwbCont
+    || p.closest("td, th, .dwb-tb, header, footer") || isListParagraph(p) || p.classList.contains("dwb-tiny-para"))) return false;
+  // akapity w pliku: wprost w treści, jedna sekcja, kolejne po sobie
+  const doc = new DOMParser().parseFromString(await getDocumentXmlString(originalFileBytes), "application/xml");
+  const body = doc.getElementsByTagNameNS(W_NS, "body")[0];
+  const all = collectParagraphElements(doc.documentElement, "all");
+  const xps = sorted.map((i) => all[i]);
+  if (!body || xps.some((x) => !x || x.parentNode !== body)) return false;
+  if (body.getElementsByTagNameNS(W_NS, "sectPr").length !== 1) return false; // kilka sekcji (kolumny, strony)
+  const kids = [...body.childNodes].filter((n) => n.nodeType === 1);
+  const lo = kids.indexOf(xps[0]);
+  const hi = kids.indexOf(xps[xps.length - 1]);
+  if (hi - lo !== xps.length - 1) return false; // nie po kolei (między nimi tabela albo inny akapit)
+  const isP = (n) => n?.localName === "p" && n.namespaceURI === W_NS;
+  const prev = isP(kids[lo - 1]) ? kids[lo - 1] : null;
+  const next = isP(kids[hi + 1]) ? kids[hi + 1] : null;
+  const sect = kids.find((n) => n.localName === "sectPr");
+  const ser = new XMLSerializer();
+  const part = [prev, ...xps, next].filter(Boolean).map((n) => ser.serializeToString(n)).join("") + (sect ? ser.serializeToString(sect) : "");
+  const xml = await getDocumentXmlString(originalFileBytes);
+  const open = xml.indexOf(">", xml.indexOf("<w:body")) + 1;
+  const close = xml.lastIndexOf("</w:body>");
+  if (open <= 0 || close < open) return false;
+  const zip = await JSZip.loadAsync(originalFileBytes);
+  zip.file("word/document.xml", xml.slice(0, open) + part + xml.slice(close));
+  const mini = new Uint8Array(await zip.generateAsync({ type: "uint8array" }));
+  // render w tle: te same klasy płótna (tryb, zoom), ta sama szerokość
+  const src = document.createElement("div");
+  src.className = `${docCanvasEl.className} dwb-pp-src`;
+  src.style.width = `${docCanvasEl.clientWidth}px`;
+  src.setAttribute("aria-hidden", "true");
+  document.body.appendChild(src);
+  try {
+    await renderDocxPreview(mini, src);
+    const rendered = collectPreviewParagraphElements(src.querySelector(".docx-preview-host"));
+    const off = prev ? 1 : 0;
+    if (rendered.length !== xps.length + off + (next ? 1 : 0)) return false;
+    live.forEach((p, k) => copyParagraphLook(p, rendered[off + k]));
+  } finally {
+    src.remove();
+  }
+  // poprawki zależne od sąsiadów i od miejsca — na żywym dokumencie
+  if (typeof applyContextualSpacing === "function") applyContextualSpacing(host);
+  if (typeof applyJustifySpaceCompression === "function") applyJustifySpaceCompression(host);
+  live.forEach((p) => { if (typeof hangTrailingSpace === "function") hangTrailingSpace(p); });
+  if (typeof applyScreenLastLines === "function") applyScreenLastLines(host, live.filter((p) => p.classList.contains("dwb-justify")));
+  if (typeof dwbPageBreaks !== "undefined") dwbPageBreaks.schedule(0); // wysokość akapitu mogła się zmienić
+  if (typeof composeUi !== "undefined") composeUi.syncState?.(); // przyciski wyrównania / wcięcia
+  return true;
+}
+
+function copyParagraphLook(p, from) {
+  p.setAttribute("style", from.getAttribute("style") || "");
+  [...p.classList].forEach((c) => { if (!PARA_APP_CLASSES.has(c)) p.classList.remove(c); });
+  from.classList.forEach((c) => { if (!PARA_APP_CLASSES.has(c)) p.classList.add(c); });
+  Object.keys(p.dataset).forEach((k) => { if (k.startsWith("dwb") && !(k in from.dataset)) delete p.dataset[k]; });
+  Object.keys(from.dataset).forEach((k) => { if (k.startsWith("dwb")) p.dataset[k] = from.dataset[k]; });
+  delete p.dataset.hang; // wysunięcie (fixHangingBox) policzy się od nowa przy najechaniu
 }
 
 // Operacje, po których STRONA wygląda tak samo — zmieniają tylko części pliku poza treścią
 // (komentarze: comments.xml, metadane: docProps/core.xml). Dawniej każda przerysowywała cały
 // dokument: 0,6 s na 8 stronach, 1,6 s na 100 (CPU ×4), mignięcie i zgubiony kursor (pomiar
 // scripts/reload-bench.js, 2026-11-10). Teraz: zapis do pliku + odświeżenie tego, co od nich zależy.
-const QUIET_DOC_OPS = new Set(["commentEdit", "commentReply", "commentDone"]);
+// Bez odpowiedzi na komentarz: odpowiedź ma w treści WŁASNE znaczniki (commentRangeStart,
+// commentReference) — bez przerysowania widok ich nie miał i pisanie w akapicie je gubiło
+// (compose4: „pisanie i Enter w akapicie z komentarzem”). Bezpiecznik niżej: cicho tylko wtedy,
+// gdy word/document.xml się nie zmienił — każda operacja, która jednak dotknie treści, przerysowuje.
+const QUIET_DOC_OPS = new Set(["commentEdit", "commentDone"]);
 function docEditIsQuiet(edit) {
   if (QUIET_DOC_OPS.has(edit.op)) return true;
   // metadane — chyba że pole formularza w treści jest powiązane z nimi (pokazuje np. tytuł)
@@ -407,12 +501,15 @@ async function applyDocumentEditNow(edit, xmlOpts) {
     return { n, reload: true };
   }
   recordPendingEdit(normalized);
+  const beforeEdit = originalFileBytes;
   const { bytes, changeCount } = await buildPatchedDocx(originalFileBytes, pendingDocEdits, xmlOpts);
   pendingDocEdits = [];
   originalFileBytes = bytes;
   // Akceptuj/Odrzuć podczas śledzenia — to samo w pliku „przed” (bez nowych poprawek)
   if (normalized.op === "revisions" && typeof dwbTrack !== "undefined") await dwbTrack.mirrorRevisions(normalized);
   // quiet: operacja, którą ekran już pokazuje (np. przesunięta ramka pola tekstowego) — bez przerysowania
-  if ((normalized.quiet || docEditIsQuiet(normalized)) && changeCount > 0) return { n: changeCount, reload: false, quiet: true };
+  if (normalized.quiet && changeCount > 0) return { n: changeCount, reload: false, quiet: true };
+  if (docEditIsQuiet(normalized) && changeCount > 0
+    && (await getDocumentXmlString(beforeEdit)) === (await getDocumentXmlString(bytes))) return { n: changeCount, reload: false, quiet: true };
   return { n: changeCount, reload: true };
 }
