@@ -6,6 +6,7 @@
 //
 //   node scripts/para-patch-playwright.js               (Chromium)
 //   ENGINE=webkit node scripts/para-patch-playwright.js
+//   MOBILE=1 node scripts/para-patch-playwright.js        (telefon: Widok mobilny)
 const fs = require("fs");
 const path = require("path");
 const pw = require("playwright");
@@ -48,7 +49,10 @@ const compareWithFullRender = (page, idx) => page.evaluate(async (indices) => {
 
 async function main() {
   const browser = await pw[ENGINE].launch({ headless: true });
-  const context = await browser.newContext({ serviceWorkers: "block", viewport: { width: 1280, height: 900 } });
+  // MOBILE=1 — telefon (Widok mobilny: tekst zawinięty do ekranu, wcięcia skalowane)
+  const context = await browser.newContext(process.env.MOBILE
+    ? { serviceWorkers: "block", viewport: { width: 390, height: 844 }, hasTouch: true, ...(ENGINE === "chromium" ? { isMobile: true } : {}) }
+    : { serviceWorkers: "block", viewport: { width: 1280, height: 900 } });
   await context.addInitScript(() => sessionStorage.setItem("introPlayed", "true"));
   const page = await context.newPage();
   const errors = [];
@@ -64,6 +68,20 @@ async function main() {
     const orig = window.renderCurrentDocument;
     window.renderCurrentDocument = function counted(...a) { window.__renders++; return orig.apply(this, a); };
   });
+
+  // otwarty, nietknięty dokument (z polem tekstowym) — zero „zmian”; pisanie + Cofnij bez przerysowania
+  check("bez edycji: brak fantomowych zmian akapitów (pole tekstowe w akapicie)", (await page.evaluate(() => collectInlineParagraphEdits().length)) === 0, JSON.stringify(await page.evaluate(() => collectInlineParagraphEdits().map((e) => e.index))));
+  await page.evaluate(() => {
+    const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).find((x) => !x.dataset.lock && x.textContent.length > 40);
+    p.closest(".docx-edit-root")?.focus();
+    placeCaret(p, 5);
+  });
+  await page.keyboard.type("xyz");
+  await page.waitForTimeout(400);
+  await page.evaluate(() => { window.__renders = 0; });
+  await page.click("#undoBtn");
+  await idle(page);
+  check("pisanie → Cofnij: bez przerysowania dokumentu", (await page.evaluate(() => window.__renders)) === 0 && (await page.evaluate(() => collectInlineParagraphEdits().length)) === 0, String(await page.evaluate(() => window.__renders)));
 
   // akapity do zmian: zwykłe akapity treści (różne: z komentarzem/przypisem/tabulatorem, jeśli są)
   const targets = await page.evaluate(() => {
@@ -150,7 +168,7 @@ async function main() {
   await browser.close();
   const failed = results.filter((r) => !r.ok);
   for (const r of results) console.log(`${r.ok ? "✅" : "❌"} ${r.name}${r.ok ? "" : ` — ${r.detail || ""}`}`);
-  console.log(`\n[${ENGINE}] ${results.length - failed.length}/${results.length} OK`);
+  console.log(`\n[${ENGINE}${process.env.MOBILE ? ", telefon" : ""}] ${results.length - failed.length}/${results.length} OK`);
   process.exit(failed.length ? 1 : 0);
 }
 

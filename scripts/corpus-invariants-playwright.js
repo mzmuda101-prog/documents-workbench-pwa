@@ -54,7 +54,24 @@ const previewVsFile = (page) => page.evaluate(async () => {
   const xml = (await extractParagraphTextsFromDocx(bytes)).map(norm);
   let at = -1;
   for (let i = 0; i < Math.max(dom.length, xml.length); i++) if (i >= dom.length || i >= xml.length || (dom[i] !== null && dom[i] !== xml[i])) { at = i; break; }
+  // wyspy (komentarze, przypisy, pola, rysunki — fragmenty z pliku przenoszone w całości): te same
+  // w tej samej kolejności. Porównanie z PLIKIEM W PAMIĘCI (to, co ekran ma pokazywać), dla
+  // akapitów nieedytowanych — z zapisem nie: zapis bierze akapit z ekranu, więc brak na ekranie
+  // przechodzi do zapisu i oba się „zgadzają”. Tak przeszedł brak znaczników odpowiedzi na
+  // komentarz (2026-11-10). Pola tekstowe (w:txbxContent) rysuje osobna warstwa — pomijamy.
+  let islandAt = -1, islandDom = "", islandXml = "";
+  if (at < 0) {
+    const fileRuns = await extractParagraphRunsFromDocx(originalFileBytes);
+    const edited = new Set(collectInlineParagraphEdits().map((e) => e.index));
+    const isl = (runs) => (runs || []).filter((r) => r.island && !r.island.includes("txbxContent")).map((r) => r.island);
+    for (let i = 0; i < els.length; i++) {
+      if (els[i].dataset.lock || edited.has(i)) continue;
+      const a = isl(extractRunsFromPreviewParagraph(els[i])), b = isl(fileRuns[i]);
+      if (a.length !== b.length || a.some((x, k) => x !== b[k])) { islandAt = i; islandDom = `${a.length}: ${a.join(" ").slice(0, 120)}`; islandXml = `${b.length}: ${b.join(" ").slice(0, 120)}`; break; }
+    }
+  }
   const html = at < 0 ? undefined : els[at]?.innerHTML.slice(0, 300);
+  if (islandAt >= 0) return { ok: false, wyspy: true, at: islandAt, dom: islandDom, xml: islandXml };
   return { ok: at < 0, nDom: dom.length, nXml: xml.length, at, dom: dom[at]?.slice(0, 60), xml: xml[at]?.slice(0, 60), html };
 });
 

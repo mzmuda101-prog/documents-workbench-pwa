@@ -5,6 +5,7 @@
 //
 //   node scripts/reload-bench.js                 (przewodnik.docx + ~100 stron, CPU ×4)
 //   CPU=1 PARAS=4500 node scripts/reload-bench.js
+//   MOBILE=1 node scripts/reload-bench.js        (telefon: Widok mobilny)
 //
 // Wymaga serwera testowego (python3 scripts/test-server.py 7823).
 const fs = require("fs");
@@ -53,7 +54,10 @@ const OPS = [
 ];
 
 async function measureDoc(browser, file, label) {
-  const context = await browser.newContext({ serviceWorkers: "block", viewport: { width: 1280, height: 900 } });
+  // MOBILE=1 — telefon (Widok mobilny)
+  const context = await browser.newContext(process.env.MOBILE
+    ? { serviceWorkers: "block", viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true }
+    : { serviceWorkers: "block", viewport: { width: 1280, height: 900 } });
   await context.addInitScript(() => { sessionStorage.setItem("introPlayed", "true"); window.__dwbAutoDialog = "accept"; });
   const page = await context.newPage();
   const errors = [];
@@ -88,9 +92,11 @@ async function measureDoc(browser, file, label) {
       p.closest(".docx-edit-root")?.focus();
       if (sel) { const r = document.createRange(); const tn = p.querySelector("span")?.firstChild || p.firstChild; r.setStart(tn, 3); r.setEnd(tn, 12); getSelection().removeAllRanges(); getSelection().addRange(r); }
       else placeCaret(p, 10);
-      window.__renders = 0;
-      return { top: p.getBoundingClientRect().top, text: p.textContent.slice(0, 30) };
+      return { text: p.textContent.slice(0, 30) };
     }, [target, !!op.select]);
+    // fokus na telefonie przewija widok chwilę później — pozycja „przed” po ustabilizowaniu
+    await page.waitForTimeout(500);
+    before.top = await page.evaluate((i) => { window.__renders = 0; return collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[i].getBoundingClientRect().top; }, target);
     let t0;
     if (op.typeUndo) {
       await page.keyboard.type("xyz");

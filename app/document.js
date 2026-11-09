@@ -368,8 +368,10 @@ async function applyDocumentEditHeld(edit, xmlOpts) {
 // akapitu przechodzi tylko wygląd: styl, klasy z renderu, atrybuty data-dwb-*. Treść akapitu
 // zostaje nietknięta — kursor, zaznaczenie, pola, komentarze i przypisy nie mają jak zginąć.
 // Pomiary zależne od miejsca (spacje na końcu, justowanie, ostatnia linijka) — od nowa na miejscu.
-// Wszystko inne (styl akapitu — nowe reguły CSS, listy, tabele, kolumny, Widok mobilny) — pełne
-// przerysowanie. Pilnuje test scripts/para-patch-playwright.js (łatka = pełny render).
+// Wszystko inne (styl akapitu — nowe reguły CSS, listy, tabele, kolumny) — pełne przerysowanie.
+// Widok mobilny też szybko: jego poprawki (applyMobileReflowLayout, skalowanie wcięć) działają
+// wewnątrz renderDocxPreview, więc render w tle ma je tak samo. Pilnuje test
+// scripts/para-patch-playwright.js (łatka = pełny render; MOBILE=1 — telefon).
 const PARA_PATCH_KEYS = new Set(["op", "indices", "align", "ind", "indentDelta", "spacing"]);
 function paraPatchable(edit) {
   return edit?.op === "paraFormat" && Array.isArray(edit.indices) && edit.indices.length > 0 && edit.indices.length <= 50
@@ -379,7 +381,6 @@ function paraPatchable(edit) {
 const PARA_APP_CLASSES = new Set(["docx-editable-p", "dwb-caret-p", "ff-para", "docx-locked-p", "dwb-tiny-active"]);
 
 async function patchParagraphsInPlace(indices) {
-  if (typeof shouldUseMobileReflow === "function" && shouldUseMobileReflow()) return false; // wcięcia skalowane osobno
   const host = docCanvasEl?.querySelector(".docx-preview-host");
   if (!host) return false;
   const previews = collectPreviewParagraphElements(host);

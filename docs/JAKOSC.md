@@ -98,8 +98,16 @@ w aplikacji „zgłoś błąd” zapisujący ostatnie akcje + stan → plik, z k
    - B ✅ wyrównanie, wcięcie, odstępy (v1.00.19): render w tle samych akapitów (z sąsiadami) i
      przeniesienie wyglądu na żywy akapit (`patchParagraphsInPlace`); niezmiennik „łatka = pełny
      render” — `scripts/para-patch-playwright.js`. Wyrównanie 1,8 → 0,6 s, wcięcie 1,6 → 0,5 s
-     (100 stron, CPU ×4), bez mignięcia. Zostało w B: dodanie komentarza, Cofnij pisania;
-     Widok mobilny (wcięcia skalowane osobno) — dziś pełny render
+     (100 stron, CPU ×4), bez mignięcia.
+   - v1.00.20: także Widok mobilny (jego poprawki działają wewnątrz renderDocxPreview — test
+     MOBILE=1, telefon: wyrównanie 1,7 → 0,5 s na 100 stronach); Cofnij pisania bez
+     przerysowania — przyczyną była „fantomowa zmiana” akapitu z polem tekstowym (porównanie
+     z plikiem widziało kształt, którego ekran nie rysuje); sprawdzenie korpusu „podgląd = plik”
+     porównuje też WYSPY z plikiem w pamięci (sprawdzone: łapie błąd odpowiedzi z v1.00.18)
+   - świadomie NIE: dodanie komentarza bez przerysowania — rzadkie, a wymagałoby ręcznego
+     wstawiania znaczników-wysp (ryzyko większe niż zysk, decyzja 2026-11-10)
+   - C: chwilowy przeskok widoku zniknął razem z szybkimi ścieżkami (wyrównanie, Cofnij);
+     zostały pojedyncze px przy liście — bez dalszych zmian
    - C „musi zostać”: ustawienia strony, przyjmij/odrzuć wszystko, spis treści, przypis,
      nagłówek/stopka — do usunięcia tylko chwilowy przeskok widoku
 1. Edycja akapitu z podziałem strony w środku (dziś tylko do odczytu) — warunek zachowania

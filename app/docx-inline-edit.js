@@ -459,6 +459,16 @@ function collectInlineParagraphEdits() {
   return notes.length ? [...body, ...notes] : body;
 }
 
+// Akapit z pliku tak, jak go RYSUJE podgląd: pola tekstowe (kształt z w:txbxContent) wycina warstwa
+// textboxes.js przed renderem — w akapicie na ekranie ich nie ma. Porównanie z pełnym akapitem
+// z pliku widziało więc „zmianę” w nietkniętym akapicie z polem tekstowym (przewodnik: „Miejscowość”),
+// a przez nią Cofnij pisania zawsze przerysowywał cały dokument (szybka ścieżka odmawiała).
+// Zapis i tak zostawia kształt w akapicie (applyRunsToParagraphXml) — to tylko porównanie.
+function shownBaselineRuns(i) {
+  const runs = baselineParagraphRuns[i];
+  return runs?.some((r) => r.island && r.island.includes("txbxContent")) ? runs.filter((r) => !(r.island && r.island.includes("txbxContent"))) : runs;
+}
+
 function collectBodyParagraphEdits() {
   const host = docCanvasEl?.querySelector(".docx-preview-host");
   if (!host || !baselineParagraphRuns.length || inlineLocksPending) return [];
@@ -472,7 +482,7 @@ function collectBodyParagraphEdits() {
       if (i === undefined) { inlineDirtyParas.delete(p); return; } // odłączony (np. scalony)
       if (p.dataset.lock) { inlineDirtyParas.delete(p); return; } // tylko do odczytu (znaczek pola itp.)
       const domRuns = extractRunsFromPreviewParagraph(p);
-      if (runsEqual(domRuns, baselineParagraphRuns[i])) inlineDirtyParas.delete(p); // wrócił do stanu z pliku
+      if (runsEqual(domRuns, shownBaselineRuns(i))) inlineDirtyParas.delete(p); // wrócił do stanu z pliku
       else edits.push({ index: i, runs: domRuns });
     });
     return edits.sort((a, b) => a.index - b.index);
@@ -483,7 +493,7 @@ function collectBodyParagraphEdits() {
     // formularza), więc porównanie z bazą zawsze wyszłoby „zmieniony” — i zapis by go rozbił.
     if (previews[i].dataset.lock) continue;
     const domRuns = extractRunsFromPreviewParagraph(previews[i]);
-    if (!runsEqual(domRuns, baselineParagraphRuns[i])) edits.push({ index: i, runs: domRuns });
+    if (!runsEqual(domRuns, shownBaselineRuns(i))) edits.push({ index: i, runs: domRuns });
   }
   return edits;
 }
