@@ -89,6 +89,14 @@ w aplikacji „zgłoś błąd” zapisujący ostatnie akcje + stan → plik, z k
    Najpierw pomiar (`npm run bench`: czas, przeskok przewinięcia, utrata kursora/zaznaczenia),
    potem lista „niepotrzebne / do zastąpienia / musi zostać” z uzasadnieniem, potem zmiany od
    największego zysku — z niezmiennikiem „podgląd = plik” po każdej (korpus, tabela klawiszy).
+   - pomiar: `npm run bench:reload` (`scripts/reload-bench.js`) — każda operacja z paska 0,6–0,8 s
+     (8 stron) / 1,5–1,8 s (100 stron) przy CPU ×4, chwilowy przeskok widoku do ~7500 px
+   - A „niepotrzebne” ✅ (v1.00.18): edycja/odpowiedź/zamknięcie komentarza, metadane — bez
+     przerysowania (`QUIET_DOC_OPS` w `app/document.js`, test `scripts/quiet-edits-playwright.js`)
+   - B „do zastąpienia łatką akapitu”: wyrównanie, wcięcie, odstępy, dodanie komentarza, Cofnij
+     pisania — warunek: niezmiennik „łatka = pełny render” (porównanie z renderem w tle)
+   - C „musi zostać”: ustawienia strony, przyjmij/odrzuć wszystko, spis treści, przypis,
+     nagłówek/stopka — do usunięcia tylko chwilowy przeskok widoku
 1. Edycja akapitu z podziałem strony w środku (dziś tylko do odczytu) — warunek zachowania
    „jak w Wordzie” przy Backspace za podziałem (odstępstwo opisane w `scripts/keys-table.js`).
    Tabela klawiszy: pole formularza, przypis, zaznaczenie przez akapity.

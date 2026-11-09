@@ -341,12 +341,39 @@ function applyDocumentEdit(edit, xmlOpts = {}) {
 async function applyDocumentEditHeld(edit, xmlOpts) {
   const res = typeof withQuietFile === "function" ? await withQuietFile(() => applyDocumentEditNow(edit, xmlOpts)) : await applyDocumentEditNow(edit, xmlOpts);
   if (!res.reload) {
-    if (res.quiet && res.n > 0) setDirtyState(true); // zmiana zapisana bez przerysowania (ekran już ją pokazuje)
+    if (res.quiet && res.n > 0) {
+      setDirtyState(true); // zmiana zapisana bez przerysowania (ekran już ją pokazuje)
+      // miejsce kursora dla przerysowania (runFileEdit) — przerysowania nie było, kursor stoi, gdzie stał;
+      // zostawione czekałoby i przestawiło kursor przy następnym, niezwiązanym przerysowaniu
+      if (typeof pendingInlineCursor !== "undefined") pendingInlineCursor = null;
+      afterQuietDocumentEdit(edit);
+    }
     return res.n;
   }
   await reloadFromBytes(originalFileBytes);
   if (res.n > 0) setDirtyState(true);
   return res.n;
+}
+
+// Operacje, po których STRONA wygląda tak samo — zmieniają tylko części pliku poza treścią
+// (komentarze: comments.xml, metadane: docProps/core.xml). Dawniej każda przerysowywała cały
+// dokument: 0,6 s na 8 stronach, 1,6 s na 100 (CPU ×4), mignięcie i zgubiony kursor (pomiar
+// scripts/reload-bench.js, 2026-11-10). Teraz: zapis do pliku + odświeżenie tego, co od nich zależy.
+const QUIET_DOC_OPS = new Set(["commentEdit", "commentReply", "commentDone"]);
+function docEditIsQuiet(edit) {
+  if (QUIET_DOC_OPS.has(edit.op)) return true;
+  // metadane — chyba że pole formularza w treści jest powiązane z nimi (pokazuje np. tytuł)
+  if (edit.op === "coreMetadata") {
+    const core = typeof FORM_STORE_CORE !== "undefined" ? FORM_STORE_CORE.toUpperCase() : null;
+    return !(typeof formScan !== "undefined" && formScan?.fields?.some((f) => String(f.binding?.store || "").toUpperCase() === core));
+  }
+  return false;
+}
+function afterQuietDocumentEdit(edit) {
+  if (QUIET_DOC_OPS.has(edit.op)) {
+    if (typeof composeUi !== "undefined") composeUi.paintCommentHighlights?.(); // nowe dane komentarzy → podświetlenia i karty
+    if (typeof refreshReviewCounts === "function") refreshReviewCounts(); // licznik i otwarty panel Recenzja
+  }
 }
 
 async function applyDocumentEditNow(edit, xmlOpts) {
@@ -386,6 +413,6 @@ async function applyDocumentEditNow(edit, xmlOpts) {
   // Akceptuj/Odrzuć podczas śledzenia — to samo w pliku „przed” (bez nowych poprawek)
   if (normalized.op === "revisions" && typeof dwbTrack !== "undefined") await dwbTrack.mirrorRevisions(normalized);
   // quiet: operacja, którą ekran już pokazuje (np. przesunięta ramka pola tekstowego) — bez przerysowania
-  if (normalized.quiet && changeCount > 0) return { n: changeCount, reload: false, quiet: true };
+  if ((normalized.quiet || docEditIsQuiet(normalized)) && changeCount > 0) return { n: changeCount, reload: false, quiet: true };
   return { n: changeCount, reload: true };
 }
