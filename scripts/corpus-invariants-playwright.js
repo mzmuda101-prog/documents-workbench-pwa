@@ -13,6 +13,7 @@
 //   I3  wydruk = Edycja: każdy tekst, obraz i pole tekstowe z kartek Edycji jest na kartkach wydruku
 //   I4  zapis → ponowne otwarcie: te same akapity
 //   I5  po losowych edycjach (pisanie, Enter, Backspace, Delete; ziarno SEED) dalej I1, I2, I3
+//   I6  Cofnij do skutku = dokument z otwarcia (tekst i wyspy każdego akapitu)
 //
 // Korpus domyślnie: docs/samples/*.docx + „../pdfy do polepszania pdf to docx” (*.pdf, *.docx) —
 // pliki użytkownika poza repo. Nowy dziwny plik = wrzucić do folderu, od tej nocy jest testowany.
@@ -115,6 +116,27 @@ const saveReload = (page) => page.evaluate(async () => {
   return { ok: at < 0 && before.length === after.length, n: `${before.length} → ${after.length}`, at, was: before[at]?.slice(0, 60), now: after[at]?.slice(0, 60) };
 });
 
+// I6: stan dokumentu do porównania — tekst i wyspy (komentarze, przypisy, pola) każdego akapitu
+// zapisanego pliku
+const docSnapshot = (page) => page.evaluate(async () => {
+  const bytes = await buildDocumentForSave();
+  const runs = await extractParagraphRunsFromDocx(bytes);
+  return runs.map((rs) => (rs || []).map((r) => (r.island ? `[${r.island.length}]` : r.text || "")).join(""));
+});
+// Cofnij do skutku; jeśli stos był obcięty limitem (undo.js: limit()) — porównanie nie ma sensu
+async function undoAll(page, start) {
+  const depth = await page.evaluate(() => dwbUndo._debug().undo.length);
+  const cap = await page.evaluate(() => { const n = originalFileBytes?.byteLength || 0; return n > 20 * 1024 * 1024 ? 10 : n > 5 * 1024 * 1024 ? 25 : 60; });
+  for (let k = 0; k < 200 && (await page.evaluate(() => dwbUndo.canUndo())); k++) {
+    await page.evaluate(() => dwbUndo.undo());
+    await idle(page).catch(() => {});
+  }
+  const now = await docSnapshot(page);
+  if (depth >= cap) return { ok: true, pominięte: `stos Cofnij obcięty (${depth}/${cap})` };
+  const at = Math.max(start.length, now.length) === 0 ? -1 : [...Array(Math.max(start.length, now.length)).keys()].find((i) => start[i] !== now[i]);
+  return { ok: at === undefined || at < 0, kroków: depth, akapitów: `${start.length} → ${now.length}`, at, było: start[at]?.slice(0, 60), jest: now[at]?.slice(0, 60) };
+}
+
 async function openFile(page, file) {
   const ext = path.extname(file).toLowerCase();
   await page.evaluate(() => {
@@ -156,6 +178,9 @@ async function randomEdits(page, rand, log) {
     else if (op === "backspace") await page.keyboard.press("Backspace");
     else await page.keyboard.press("Delete");
     await idle(page).catch(() => {});
+    // przerwa w pisaniu (jak użytkownik) — osobny krok Cofnij; I6 przechodzi wtedy przez wiele
+    // kroków (też szybką ścieżkę Cofnij), a nie jeden wielki (dawniej 25 edycji = 1 krok)
+    if (rand() < 0.3) await page.evaluate(() => dwbUndo.breakTyping());
   }
 }
 
@@ -178,11 +203,19 @@ async function runFile(browser, file) {
     await idle(page);
     check("I4", "zapis → ponowne otwarcie bez zmian", await saveReload(page));
     await idle(page); // przerysowanie kończy oznaczanie (przypisy, pola) po powrocie reloadFromBytes
+    const start = await docSnapshot(page);
     const log = [];
     await randomEdits(page, rng(SEED ^ hash(name)), log);
     out.edits = log.join(" ");
+    // odroczone porządki aplikacji po pisaniu (doc-notes.js watchRefs: usunięty odnośnik przypisu →
+    // przerysowanie 450 ms po ostatnim klawiszu) — sprawdzamy stan jak po przerwie w pisaniu,
+    // nie w jej trakcie (przy szybszym tempie testu przypis-widmo był jeszcze na ekranie)
+    await page.evaluate(() => new Promise((r) => setTimeout(r, 700))); // zegar strony — runner go nie skraca (SLEEP_SCALE)
+    await idle(page);
     check("I2", `podgląd = plik (po ${STEPS} losowych edycjach)`, await previewVsFile(page));
     check("I3", "wydruk = Edycja (po edycjach)", await editVsPrint(page));
+    await idle(page);
+    check("I6", "Cofnij wszystko = dokument z otwarcia", await undoAll(page, start));
   } catch (e) {
     out.checks.push({ id: "–", label: "sesja przerwana", ok: false, detail: { error: String(e.message || e).split("\n")[0] } });
   }

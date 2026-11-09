@@ -195,6 +195,8 @@ const dwbUndo = (() => {
       return false;
     }
     endBurst();
+    // „Zgłoś błąd” (bug-report.js): każdy krok Cofnij/Ponów — przycisk, skrót, menu — w dzienniku
+    document.dispatchEvent(new CustomEvent("dwb:undo-step", { detail: { direction } }));
     const entry = from.pop();
     // stan „teraz” — trafia na drugi stos, żeby dało się wrócić
     const now = { state: captureState(), label: entry.label };

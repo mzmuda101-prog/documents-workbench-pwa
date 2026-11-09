@@ -21,7 +21,7 @@
   }
 })();
 
-const APP_BUILD_VERSION = "v1.00.20";
+const APP_BUILD_VERSION = "v1.00.21";
 
 const IS_LOW_POWER = (() => {
   try {

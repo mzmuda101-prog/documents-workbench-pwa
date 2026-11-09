@@ -56,6 +56,7 @@ const DWB_SHORTCUTS = [
   { group: "view", id: "back", keys: ["Alt+←"], pl: "Wróć po kliknięciu linku", en: "Back after following a link" },
   { group: "view", id: "goToPage", keys: ["Mod+Alt+G"], pl: "Przejdź do strony…", en: "Go to page…" },
   { group: "view", id: "shortcuts", keys: ["Mod+/"], pl: "Ta lista skrótów", en: "This shortcut list" },
+  { group: "view", id: "bugReport", keys: ["Mod+Alt+Shift+B"], pl: "Zgłoś błąd (zapisz dziennik)", en: "Report a bug (save log)" },
   { group: "view", id: "escape", keys: ["Esc"], pl: "Krok wstecz (pisanie → panel → podświetlenia → skupienie)", en: "Step back (typing → panel → highlights → focus)" },
 ];
 

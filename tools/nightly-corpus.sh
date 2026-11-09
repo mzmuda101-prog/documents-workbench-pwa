@@ -2,7 +2,8 @@
 # nightly-corpus.sh — nocny przebieg niezmienników na korpusie (scripts/corpus-invariants-playwright.js).
 #
 # Uruchamiany przez launchd (tools/com.dwb.nightly-corpus.plist, codziennie 3:00; przegapiony —
-# po wybudzeniu Maca). Ziarno losowych edycji = data, więc co noc inne ścieżki, a raport podaje
+# po wybudzeniu Maca). Ziarno losowych edycji = data, więc co noc inne ścieżki (w niedzielę
+# skany PDF z rozpoznawaniem tekstu — OCR=1), a raport podaje
 # polecenie do powtórzenia. Raporty: output/corpus/<data>-<silnik>.md, log: output/corpus/nightly.log.
 #
 #   ręcznie:   zsh tools/nightly-corpus.sh
@@ -24,9 +25,14 @@ if ! curl -s -o /dev/null http://127.0.0.1:7823/; then
   sleep 2
 fi
 
+# niedziela: skany PDF także z rozpoznawaniem tekstu (OCR=1 — wolniej, sprawdza ścieżkę OCR)
+OCR=0
+[ "$(date +%u)" = "7" ] && OCR=1
+echo "OCR=$OCR" >> "$LOG"
+
 STATUS=0
 for ENGINE in chromium webkit; do
-  ENGINE=$ENGINE SEED=$SEED STEPS=40 node scripts/corpus-invariants-playwright.js >> "$LOG" 2>&1 || STATUS=1
+  OCR=$OCR ENGINE=$ENGINE SEED=$SEED STEPS=40 node scripts/corpus-invariants-playwright.js >> "$LOG" 2>&1 || STATUS=1
 done
 [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null
 

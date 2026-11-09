@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v1.00.20";
+const CACHE_VERSION = "v1.00.21";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
@@ -58,6 +58,7 @@ const SHELL_ASSETS = [
   `./app/doc-caret-nav.js?v=${ASSET_V}`,
   `./app/doc-selection.js?v=${ASSET_V}`,
   `./app/print-preview.js?v=${ASSET_V}`,
+  `./app/bug-report.js?v=${ASSET_V}`,
   `./app/edit-tools.js?v=${ASSET_V}`,
   `./app/mobile-doc-zoom.js?v=${ASSET_V}`,
   `./app/ui-controls.js?v=${ASSET_V}`,

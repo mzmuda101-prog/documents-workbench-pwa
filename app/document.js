@@ -112,6 +112,7 @@ async function ingestFile(file, options = {}) {
     setDirtyState(false);
 
     await renderCurrentDocument({ newFile: true });
+    if (typeof dwbBugReport !== "undefined") dwbBugReport.startSession(originalFileBytes, currentFileName); // „Zgłoś błąd”: początek sesji
     // śledzenie zmian: stan z karty (open-docs) albo z ustawień pliku (Word ze śledzeniem).
     // Bez await: wczytanie nie może się wydłużać — kursor dla nowego dokumentu (createNew) jest
     // ustawiany tuż po powrocie i zużywany przez przygotowanie akapitów do edycji.

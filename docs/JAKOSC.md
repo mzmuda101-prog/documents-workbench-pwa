@@ -110,9 +110,16 @@ w aplikacji „zgłoś błąd” zapisujący ostatnie akcje + stan → plik, z k
      zostały pojedyncze px przy liście — bez dalszych zmian
    - C „musi zostać”: ustawienia strony, przyjmij/odrzuć wszystko, spis treści, przypis,
      nagłówek/stopka — do usunięcia tylko chwilowy przeskok widoku
-1. Edycja akapitu z podziałem strony w środku (dziś tylko do odczytu) — warunek zachowania
-   „jak w Wordzie” przy Backspace za podziałem (odstępstwo opisane w `scripts/keys-table.js`).
+1. ~~Edycja akapitu z podziałem strony w środku~~ — świadomie NIE (2026-11-10): w 11 plikach
+   Worda na dysku (590 akapitów) taki akapit występuje raz, w pliku testowym; ryzyko duże
+   (założenie „akapit na ekranie = akapit w pliku”). Wrócić przy prawdziwym pliku z problemem.
    Tabela klawiszy: pole formularza, przypis, zaznaczenie przez akapity.
-2. Niezmiennik „Cofnij wszystko = plik początkowy” w korpusie.
-3. Korpus z `OCR=1` raz w tygodniu (skany PDF).
-4. „Zgłoś błąd” jednym skrótem → plik akcji → przypadek w `scripts/chaos-cases`.
+2. ✅ Niezmiennik I6 „Cofnij do skutku = dokument z otwarcia” w korpusie (tekst i wyspy;
+   losowe edycje z przerwami — 5–18 kroków Cofnij na plik; sprawdzone na zepsutym Cofnij).
+3. ✅ Korpus z `OCR=1` w niedzielę (`tools/nightly-corpus.sh`).
+4. ✅ „Zgłoś błąd” (v1.00.21): menu ⋯ → Pomoc albo Ctrl/⌘+Alt+Shift+B → plik `.dwbbug.json`
+   (dokument z początku sesji, dziennik: klawisze z miejscem kursora, kliki, wklejenia, operacje,
+   Cofnij/Ponów, tryb; stan końcowy) → `REPORT=plik npm run replay` odtwarza krok po kroku
+   i sprawdza wynik + niezmienniki. Test `scripts/bug-report-playwright.js`.
+   Lekcja z budowy: „skutki” (operacja wywołana klawiszem, pisanie wstawione przy wklejaniu)
+   nie mogą trafić do dziennika jako osobne działania — odtworzenie zrobiłoby je dwa razy.
