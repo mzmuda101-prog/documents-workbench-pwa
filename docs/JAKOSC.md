@@ -123,3 +123,23 @@ w aplikacji „zgłoś błąd” zapisujący ostatnie akcje + stan → plik, z k
    i sprawdza wynik + niezmienniki. Test `scripts/bug-report-playwright.js`.
    Lekcja z budowy: „skutki” (operacja wywołana klawiszem, pisanie wstawione przy wklejaniu)
    nie mogą trafić do dziennika jako osobne działania — odtworzenie zrobiłoby je dwa razy.
+5. ✅ OCR i „PDF jako obraz” (2026-11-11). Miernik `npm run ocr:score` mierzy też fałszywe
+   podkreślenia, rozdzielczość obrazu w pliku, liczbę i wysokość stron; nowe strony wzorcowe:
+   infografika (ramki, kreski pod tekstem), paragon 80 × 400 mm, długi zrzut (PDF i PNG).
+   Strażnik `npm run test:ocr` (`scripts/ocr-layout-playwright.js`, w `test:serial`; na starym
+   kodzie pada 7 z 11 sprawdzeń). Poprawki: kreska dłuższa od tekstu ≠ podkreślenie; ramki obok
+   dużego tytułu nie są jego indeksami (przeplatane litery); ten sam napis czytany 2× przez
+   tesseract — zostaje pewniejszy; „towar … cena” = wiersz z tabulatorem; strona bokiem
+   sprawdzana też bez ćwierćobrotu; limity rozdzielczości wg powierzchni, nie boku; strona
+   > 22″ i wąski pasek obrazu (eksport z Notatek) → strony A4 cięte w pustych pasach; strona
+   pisana ręcznie zostaje w całości obrazem; litery OCR w Wordzie szerokością jak na skanie.
+   **Korpus prawdziwych plików:** `npm run korpus` — każdy PDF/zdjęcie z `~/DWB-korpus`
+   (albo `$DWB_KORPUS`) przez konwersję w aplikacji (lokalnie), porównanie z poprzednim
+   przebiegiem pliku (`~/.dwb-korpus-scores.json`): ❗ = mniej słów, fałszywe podkreślenia,
+   niższa rozdzielczość, inna liczba stron, strona > 22″, błędy strony. Zamierzona zmiana:
+   kolejny przebieg przyjmuje nowy stan. `npm run korpus:word` — do tego porównanie
+   z prawdziwym Wordem (raport `output/word-compare/raport.html`). Nocny przebieg
+   (`tools/nightly-corpus.sh`) puszcza korpus co noc. `<nazwa>.txt` obok pliku = wzorzec
+   tekstu (wtedy też F1).
+   Zostało: gęsta infografika po OCR w Wordzie bywa o 2–3 wiersze dłuższa niż strona (tak było
+   i wcześniej); kolejność czytania w ramkach infografiki.

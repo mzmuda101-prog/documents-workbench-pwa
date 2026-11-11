@@ -281,14 +281,15 @@
     const srcInfo = parts[0].info;
     const box = img.clipped || img;
     const bw = box.x1 - box.x0, bh = box.y1 - box.y0;
-    // rozdzielczość: natywna obrazu (ale nie więcej niż 4 px/pt i 3000 px bok)
+    // rozdzielczość: natywna obrazu (ale nie więcej niż 4 px/pt i ~6,4 mln pikseli — tyle co
+    // dawniej 3000 px boku na A4; limit powierzchni, bo wąski długi obraz tracił szerokość)
     const p0 = parts[0].part;
     const fullW = p0.x1 - p0.x0, fullH = p0.y1 - p0.y0;
     let s = img.parts
       ? Math.max(...parts.map(({ part, info }) => (part.x1 - part.x0 >= part.y1 - part.y0 ? info.w / Math.max(0.01, part.x1 - part.x0) : info.h / Math.max(0.01, part.y1 - part.y0))))
       : Math.max(srcInfo.w / Math.max(1, fullW), srcInfo.h / Math.max(1, fullH));
     s = Math.max(1, Math.min(4, s));
-    s = Math.min(s, 3000 / Math.max(bw, bh));
+    s = Math.min(s, Math.sqrt(6.4e6 / Math.max(1, bw * bh)), 16000 / Math.max(bw, bh));
     const cw = Math.max(1, Math.round(bw * s)), ch = Math.max(1, Math.round(bh * s));
     const c = OffscreenCanvasOr(cw, ch);
     const ctx = c.getContext("2d");
@@ -300,7 +301,9 @@
     // piksel obrazu (px, py) → jednostka (px/w, 1 − py/h) → strona (macierz z PDF) → kanwa
     // rotateM: skan wyprostowany przez OCR (pdf-convert straightenScanPage) — strona → strona prosta
     for (const { part, info } of parts) {
-      const M = mul(img.rotateM || [1, 0, 0, 1, 0, 0], mul(part.matrix, [1 / info.w, 0, 0, -1 / info.h, 0, 1]));
+      // shiftY: wycinek długiej strony (pdf-convert splitTallPages) — strona → wycinek
+      // normM: wąski pasek powiększony do szerokości A4 (pdf-convert tallStripNorm) — oryginał → strona
+      const M = mul([1, 0, 0, 1, 0, -(img.shiftY || 0)], mul(img.rotateM || [1, 0, 0, 1, 0, 0], mul(img.normM || [1, 0, 0, 1, 0, 0], mul(part.matrix, [1 / info.w, 0, 0, -1 / info.h, 0, 1]))));
       const A = mul([s, 0, 0, s, -box.x0 * s, -box.y0 * s], M);
       ctx.setTransform(A[0], A[1], A[2], A[3], A[4], A[5]);
       ctx.drawImage(info.src, 0, 0);
@@ -314,10 +317,40 @@
     return { bytes, ext: photo ? "jpeg" : "png" };
   }
 
+  // Profil „zajętości” wierszy strony (1 wpis na punkt wysokości): ile pikseli rzędu odstaje od
+  // jego typowego koloru. Równe tło (białe albo kolorowe) = 0, wiersz tekstu, zdjęcie = dużo.
+  // Do cięcia długiej strony w pustym pasie (pdf-convert splitTallPages).
+  async function rowProfile(page, norm) {
+    // norm: strona = wycinek oryginału powiększony k razy (pdf-convert tallStripNorm)
+    const vp1 = norm ? { width: norm.w, height: norm.h } : page.getViewport({ scale: 1 });
+    const s = Math.min(1, 600 / vp1.width, 12000 / vp1.height);
+    const vp = norm ? Object.assign(page.getViewport({ scale: s * norm.k, offsetX: -norm.x0 * s * norm.k, offsetY: -norm.y0 * s * norm.k }), { width: norm.w * s, height: norm.h * s }) : page.getViewport({ scale: s });
+    const c = document.createElement("canvas");
+    c.width = Math.max(1, Math.ceil(vp.width));
+    c.height = Math.max(1, Math.ceil(vp.height));
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, c.width, c.height);
+    await page.render({ canvasContext: ctx, viewport: vp, annotationMode: 0 }).promise;
+    const { data } = ctx.getImageData(0, 0, c.width, c.height);
+    const W = c.width, rows = new Float32Array(c.height), hist = new Uint32Array(64);
+    for (let y = 0; y < c.height; y++) {
+      hist.fill(0);
+      for (let x = 0, o = y * W * 4; x < W; x++, o += 4) hist[((data[o] >> 4) << 2 | data[o + 1] >> 6) & 63]++;
+      let mode = 0;
+      for (let k = 1; k < 64; k++) if (hist[k] > hist[mode]) mode = k;
+      rows[y] = 1 - hist[mode] / W;
+    }
+    c.width = c.height = 0;
+    const out = new Float32Array(Math.ceil(vp1.height));
+    for (let y = 0; y < out.length; y++) out[y] = rows[Math.min(rows.length - 1, Math.floor(y * s))];
+    return out;
+  }
+
   // ------------------------------------------------------------------ grafika wektorowa
   async function renderVectors(items, W, H) {
     if (!items.length) return null;
-    const s = Math.min(3, 2400 / Math.max(W, H));
+    const s = Math.min(3, Math.sqrt((2400 * 1697) / Math.max(1, W * H)), 16000 / Math.max(W, H)); // A4 jak dawniej 2400 px boku
     // znaki-rysunki rysujemy czcionkami pdf.js z document.fonts — kanwa „poza ekranem” w Safari
     // potrafi ich nie widzieć, więc wtedy zwykła kanwa
     const hasGlyphs = items.some((v) => v.type === "glyph");
@@ -657,6 +690,7 @@
         JSZip: window.JSZip,
         encodeImage,
         renderVectors,
+        rowProfile,
         glyphFixes,
         askOcr: (kind) => askOcr(options.photo && kind !== "curves" ? "photo" : kind),
         formFields: typeof pdfFormFieldsOn === "function" ? pdfFormFieldsOn() : true, // panel Widok (mobile-doc-zoom.js)

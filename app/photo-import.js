@@ -9,7 +9,11 @@
 (function () {
   "use strict";
 
-  const MAX_SIDE = 3200; // px — więcej nie poprawia OCR, a zjada pamięć (telefon)
+  // Limit POWIERZCHNI (zdjęcie 4:3 → 3200 × 2400 jak dawniej), nie dłuższego boku: długi zrzut
+  // ekranu 1080 × 6600 px był zmniejszany do 523 px szerokości i tekst się rozmywał.
+  const MAX_PX = 3200 * 2400;
+  const MAX_SIDE = 16000; // kanwa: do 16384 px boku
+  const fitScale = (w, h) => Math.min(1, Math.sqrt(MAX_PX / (w * h)), MAX_SIDE / Math.max(w, h));
   const A4 = 841.89 / 595.28;
 
   async function decode(file) {
@@ -190,7 +194,7 @@
     const len = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
     let ow = Math.max(len(quad[0], quad[1]), len(quad[3], quad[2]));
     let oh = Math.max(len(quad[0], quad[3]), len(quad[1], quad[2]));
-    const s = Math.min(1, MAX_SIDE / Math.max(ow, oh));
+    const s = fitScale(ow, oh);
     ow = Math.round(ow * s);
     oh = Math.round(oh * s);
     // proporcje prawie jak A4 → dokładnie A4 (perspektywa i tak je trochę przekłamuje)
@@ -228,7 +232,7 @@
   }
 
   function scaled(src, W, H) {
-    const s = Math.min(1, MAX_SIDE / Math.max(W, H));
+    const s = fitScale(W, H);
     const c = canvasOf(Math.round(W * s), Math.round(H * s));
     const x = c.getContext("2d", { willReadFrequently: true });
     x.imageSmoothingQuality = "high";

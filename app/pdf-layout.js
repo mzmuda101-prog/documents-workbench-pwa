@@ -261,30 +261,48 @@
       if (g.size > row.size && !g.isSpace) row.size = g.size;
     }
     // indeksy górne/dolne: mały znak przesunięty względem sąsiedniego wiersza dołączamy do niego
+    // Pas wiersza biegnie przez całą stronę, więc rozpatrujemy osobno każdą grupę znaków pasa
+    // (przerwa > ~1 em dzieli grupy): ramki „LEGENDA” i „OZNACZENIA” po bokach dużego tytułu na
+    // środku infografiki stawały się w całości jego indeksem górnym, a wiersz pod nimi — dolnym.
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       const nonSpace = r.glyphs.filter((g) => !g.isSpace);
       if (!nonSpace.length) continue;
-      const maxSize = Math.max(...nonSpace.map((g) => g.size));
-      for (const j of [i - 1, i + 1]) {
-        const o = rows[j];
-        if (!o || o === r || !o.glyphs.length) continue;
-        // Rozmiar porównujemy tylko ze znakami OBOK (w poziomie): pas wiersza biegnie przez całą
-        // stronę i duży tekst w innej kolumnie na tej samej wysokości (etykieta formularza DC-85)
-        // robił z drobnego, ciasno złożonego napisu w trójkącie „indeks dolny” sąsiedniego wiersza.
-        const rx0 = Math.min(...r.glyphs.map((g) => g.x)), rx1 = Math.max(...r.glyphs.map((g) => g.x1));
-        const reach = maxSize * 1.2;
-        const nearG = o.glyphs.filter((g) => !g.isSpace && g.x1 >= rx0 - reach && g.x <= rx1 + reach);
-        if (!nearG.length) continue;
-        const oMax = Math.max(...nearG.map((g) => g.size));
-        if (maxSize > oMax * 0.88) continue;
-        const dy = r.y - o.y;
-        if (Math.abs(dy) > oMax * 0.55) continue;
-        for (const g of r.glyphs) g.vert = dy < 0 ? "superscript" : "subscript";
-        o.glyphs.push(...r.glyphs);
-        r.glyphs = [];
-        break;
+      const reach = Math.max(...nonSpace.map((g) => g.size)) * 1.2;
+      const groups = [];
+      for (const g of r.glyphs.slice().sort((a, b) => a.x - b.x)) {
+        const last = groups[groups.length - 1];
+        if (last && g.x - last.x1 <= reach) {
+          last.glyphs.push(g);
+          last.x1 = Math.max(last.x1, g.x1);
+        } else groups.push({ glyphs: [g], x0: g.x, x1: g.x1 });
       }
+      const moved = new Set();
+      for (const grp of groups) {
+        const ns = grp.glyphs.filter((g) => !g.isSpace);
+        if (!ns.length) continue;
+        const maxSize = Math.max(...ns.map((g) => g.size));
+        for (const j of [i - 1, i + 1]) {
+          const o = rows[j];
+          if (!o || o === r || !o.glyphs.length) continue;
+          // Rozmiar porównujemy tylko ze znakami OBOK (w poziomie): duży tekst w innej kolumnie na
+          // tej samej wysokości (etykieta formularza DC-85) robił z drobnego, ciasno złożonego
+          // napisu w trójkącie „indeks dolny” sąsiedniego wiersza.
+          const nearG = o.glyphs.filter((g) => !g.isSpace && g.x1 >= grp.x0 - reach && g.x <= grp.x1 + reach);
+          if (!nearG.length) continue;
+          const oMax = Math.max(...nearG.map((g) => g.size));
+          if (maxSize > oMax * 0.88) continue;
+          const dy = r.y - o.y;
+          if (Math.abs(dy) > oMax * 0.55) continue;
+          for (const g of grp.glyphs) {
+            g.vert = dy < 0 ? "superscript" : "subscript";
+            moved.add(g);
+          }
+          o.glyphs.push(...grp.glyphs);
+          break;
+        }
+      }
+      if (moved.size) r.glyphs = r.glyphs.filter((g) => !moved.has(g));
     }
     // indeks górny/dolny w tym samym pasie: mniejszy znak z linią bazową wyraźnie wyżej/niżej
     for (const r of rows) {
@@ -749,6 +767,7 @@
       const okL = rowsCount(left) >= 2 || (rObj && left.length > 0) || lObj;
       const okR = rowsCount(right) >= 2 || (lObj && right.length > 0) || rObj;
       if (!okL || !okR) continue;
+      if (labelValueRows(left, right, ms)) continue;
       if (!bestV || g.size > bestV.size) bestV = { ...g, left, right };
     }
     const hGaps = projectionGaps(atoms, "y");
@@ -764,6 +783,25 @@
       if (top.length && bottom.length) return { type: "stack", children: [xyCut(top, depth + 1), xyCut(bottom, depth + 1)] };
     }
     return { type: "flow", atoms };
+  }
+
+  // Lista „etykieta … wartość” (paragon: towar … cena, infografika: model … rok): po obu stronach
+  // przerwy te same linie bazowe, a jedna strona dużo węższa. To wiersze z tabulatorem, nie dwie
+  // kolumny — cięcie dawało najpierw wszystkie nazwy, potem wszystkie ceny. Dwie kolumny
+  // artykułu (nawet z liniami bazowymi na jednej siatce) mają podobne szerokości — zostają.
+  function labelValueRows(left, right, ms) {
+    if (left.some((a) => a.type !== "text") || right.some((a) => a.type !== "text")) return false;
+    const tol = Math.max(1, ms * 0.35);
+    const rowsOf = (side) => clusterValues(side.map((a) => a.y), tol).map((y) => {
+      const on = side.filter((a) => Math.abs(a.y - y) <= tol);
+      return { y, w: Math.max(...on.map((a) => a.x1)) - Math.min(...on.map((a) => a.x0)) };
+    });
+    const L = rowsOf(left), R = rowsOf(right);
+    if (L.length < 2 || R.length < 2) return false;
+    const paired = (a, b) => a.filter((r) => b.some((o) => Math.abs(o.y - r.y) <= tol)).length / a.length;
+    if (paired(L, R) < 0.8 || paired(R, L) < 0.8) return false;
+    const wl = median(L.map((r) => r.w)), wr = median(R.map((r) => r.w));
+    return Math.min(wl, wr) <= 0.6 * Math.max(wl, wr);
   }
 
   // Szybkie sprawdzenie, czy gdziekolwiek w tym zbiorze jest sens szukać kolumn (oszczędza
@@ -1438,41 +1476,70 @@
     return frags.concat(rest);
   }
 
+  // Linia „pasuje do tekstu”: zaczyna się i kończy przy literach nad nią (najwyżej ~1 em dalej)
+  // i nie ma pod sobą dużej dziury bez liter. Kreska pod tytułem ramki, krawędź wiersza tabeli
+  // czy separator „Model … 2001” są dłuższe od tekstu albo mają w środku pustkę — to nie
+  // podkreślenie (infografiki i skany: dziesiątki słów podkreślonych bez powodu).
+  function lineFitsText(s, hits) {
+    const gl = hits.filter((g) => !g.isSpace && g.u.trim()).sort((p, q) => p.x - q.x);
+    if (!gl.length) return false;
+    const em = Math.max(...gl.map((g) => g.size || 10));
+    if (gl[0].x - s.x0 > em || s.x1 - gl[gl.length - 1].x1 > em) return false;
+    let end = Math.max(s.x0, gl[0].x);
+    for (const g of gl) {
+      if (g.x - end > em * 1.5) return false;
+      end = Math.max(end, g.x1);
+    }
+    return true;
+  }
+
   function applyUnderlines(frags, hSegs) {
     // cienka pozioma linia tuż pod linią bazową, pod tekstem = podkreślenie (nie tabela)
     const used = new Set();
+    // litery wszystkich fragmentów nad linią (wiersz bywa podzielony na kilka fragmentów)
+    const under = (s, lo, hi, below) => {
+      const hits = [];
+      for (const f of frags) {
+        if (f.type !== "text") continue;
+        const dy = below ? s.y - f.y : f.y - s.y;
+        if (dy < f.size * lo || dy > f.size * hi) continue;
+        if (overlap1d(s.x0, s.x1, f.x0, f.x1) < 2) continue;
+        for (const g of f.glyphs) {
+          const cx = (g.x + g.x1) / 2;
+          if (cx >= s.x0 - 0.5 && cx <= s.x1 + 0.5) hits.push(g);
+        }
+      }
+      return hits;
+    };
     for (const s of hSegs) {
       if (s.w > 2.2) continue;
-      for (const f of frags) {
-        if (f.type !== "text") continue;
-        const dy = s.y - f.y;
-        if (dy < -f.size * 0.05 || dy > f.size * 0.35) continue;
-        if (overlap1d(s.x0, s.x1, f.x0, f.x1) < 2) continue;
-        let hit = false;
-        for (const g of f.glyphs) {
-          const cx = (g.x + g.x1) / 2;
-          if (cx >= s.x0 - 0.5 && cx <= s.x1 + 0.5) {
-            g.underline = true;
-            hit = true;
-          }
-        }
-        // przekreślenie: linia w okolicy połowy wysokości x
-        if (hit) used.add(s);
-      }
+      const hits = under(s, -0.05, 0.35, true);
+      if (!lineFitsText(s, hits)) continue;
+      for (const g of hits) g.underline = true;
+      used.add(s);
     }
+    // Skan: podkreślenie przerwane pod ogonkiem („serię”: przeglądarka i drukarki omijają „ę”)
+    // nie obejmuje ostatniej litery — słowo podkreślone w większości jest podkreślone całe.
+    for (const f of frags) {
+      if (f.type !== "text" || !f.glyphs.some((g) => g.ocr && g.underline)) continue;
+      let word = [];
+      const flush = () => {
+        if (word.length && word.filter((g) => g.underline).length >= word.length * 0.6) for (const g of word) g.underline = true;
+        word = [];
+      };
+      for (const g of f.glyphs) {
+        if (g.isSpace) flush();
+        else word.push(g);
+      }
+      flush();
+    }
+    // przekreślenie: linia w okolicy połowy wysokości x
     for (const s of hSegs) {
       if (used.has(s) || s.w > 2.2) continue;
-      for (const f of frags) {
-        if (f.type !== "text") continue;
-        const dy = f.y - s.y;
-        if (dy < f.size * 0.15 || dy > f.size * 0.4) continue;
-        if (overlap1d(s.x0, s.x1, f.x0, f.x1) < 2) continue;
-        for (const g of f.glyphs) {
-          const cx = (g.x + g.x1) / 2;
-          if (cx >= s.x0 - 0.5 && cx <= s.x1 + 0.5) g.strike = true;
-        }
-        used.add(s);
-      }
+      const hits = under(s, 0.15, 0.4, false);
+      if (!lineFitsText(s, hits)) continue;
+      for (const g of hits) g.strike = true;
+      used.add(s);
     }
     return hSegs.filter((s) => !used.has(s));
   }

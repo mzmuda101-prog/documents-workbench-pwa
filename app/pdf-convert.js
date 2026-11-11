@@ -278,6 +278,156 @@
     return false;
   }
 
+  // ── długie strony ─────────────────────────────────────────────────────────────────
+  // Word nie zna stron wyższych niż 22 cale (1584 pt). Długi zrzut ekranu, wydruk strony
+  // internetowej „w jednym kawałku” czy infografika szły do pliku jako jedna strona za wysoka
+  // dla Worda, a obraz tła był przez to mocno zmniejszany. Taką stronę tniemy na kilka stron
+  // o tej samej szerokości (wysokość ≈ A4 w proporcji, nie mniej niż 842 pt), zawsze w pustym
+  // pasie: nie przez wiersz tekstu, obrazek ani pionową linię.
+  const WORD_MAX_H = 1584;
+  const shiftClip = (c, a) => (c ? { ...c, y0: c.y0 - a, y1: c.y1 - a } : c);
+  const sliceClip = (c, a, b) => {
+    const r = c ? { ...c, y0: Math.max(c.y0, a), y1: Math.min(c.y1, b) } : { x0: -1e6, x1: 1e6, y0: a, y1: b };
+    return r.y1 > r.y0 ? shiftClip(r, a) : null;
+  };
+  const shiftCmds = (cmds, a) => cmds && cmds.map((cmd) => cmd.map((p, k) => (k && Array.isArray(p) ? [p[0], p[1] - a] : p)));
+
+  function sliceRaw(raw, a, b, extra = 0) {
+    const inBand = (cy) => cy >= a && cy < b;
+    const overlaps = (o) => o.y1 > a && o.y0 < b;
+    const glyph = (g) => ({ ...g, y: g.y - a, clip: shiftClip(g.clip, a), paint: g.paint ? { ...g.paint, y: g.paint.y - a, clip: shiftClip(g.paint.clip, a) } : g.paint });
+    const box = (o) => ({ ...o, y0: Math.max(o.y0, a) - a, y1: Math.min(o.y1, b) - a });
+    const out = { ...raw, height: b - a + extra, sliceOf: { y0: a, y1: b } };
+    out.glyphs = raw.glyphs.filter((g) => inBand(g.y - (g.size || 0) * 0.3)).map(glyph);
+    out.lines = raw.lines.filter(overlaps).map(box);
+    out.rects = raw.rects.filter(overlaps).map(box);
+    out.graphics = raw.graphics.filter(overlaps).map((g) => {
+      const clip = sliceClip(g.clip, a, b);
+      return clip ? { ...box(g), cmds: shiftCmds(g.cmds, a), clip } : null;
+    }).filter(Boolean);
+    out.images = raw.images.filter((im) => overlaps(im.clipped || im)).map((im) => {
+      const c = im.clipped || im;
+      return {
+        ...box(im),
+        clipped: { x0: c.x0, x1: c.x1, y0: Math.max(c.y0, a) - a, y1: Math.min(c.y1, b) - a },
+        shiftY: (im.shiftY || 0) + a,
+        eraseBoxes: im.eraseBoxes && im.eraseBoxes.filter(overlaps).map((e) => ({ ...e, y0: e.y0 - a, y1: e.y1 - a })),
+      };
+    });
+    out.annotations = (raw.annotations || []).filter((an) => inBand((an.y0 + an.y1) / 2)).map((an) => ({ ...box(an), glyphs: (an.glyphs || []).map(glyph) }));
+    if (raw.glyphFixes) out.glyphFixes = raw.glyphFixes;
+    return out;
+  }
+
+  // Miejsca cięcia: w oknie [60%, 100%] docelowej wysokości szukamy rzędu najmniej zajętego.
+  // Kara: przecięty znak (dużo), pionowa linia, obrazek niebędący tłem, zajętość z profilu.
+  function cutPositions(raw, profile) {
+    const H = raw.height, W = raw.width;
+    const target = Math.min(WORD_MAX_H, Math.max(842, W * Math.SQRT2));
+    const n = Math.ceil(H) + 1;
+    const cost = new Float32Array(n);
+    const add = (y0, y1, v) => { for (let y = Math.max(0, Math.floor(y0)); y <= Math.min(n - 1, Math.ceil(y1)); y++) cost[y] += v; };
+    for (const g of raw.glyphs) if (!g.invisible && g.u && g.u.trim()) add(g.y - (g.asc || g.size * 0.8) - 1, g.y + (g.desc || g.size * 0.2) + 1, 100);
+    for (const l of raw.lines) if (l.y1 - l.y0 > 4) add(l.y0, l.y1, 20);
+    for (const im of raw.images) {
+      const c = im.clipped || im;
+      if ((c.x1 - c.x0) * (c.y1 - c.y0) < W * H * 0.4) add(c.y0, c.y1, 30);
+    }
+    if (profile) for (let y = 0; y < n && y < profile.length; y++) {
+      let m = 0;
+      // ±4 pt zapasu; pismo odręczne ma w rzędzie ~1% tuszu — i tak ma kosztować (dawniej
+      // ×50 i próg +2: cięcie szło przez wiersz notatek, kreski zostawały na dole strony)
+      for (let k = -4; k <= 4; k++) m = Math.max(m, profile[Math.max(0, Math.min(profile.length - 1, y + k))]);
+      cost[y] += m * 400;
+    }
+    const cuts = [];
+    let a = 0;
+    // Najszersza pusta przerwa w oknie (między akapitami, nie między wierszami akapitu), cięcie
+    // w jej środku: Word składa tekst odrobinę niżej niż oryginał i wiersz tuż nad cięciem
+    // przelewał się na osobną, prawie pustą stronę.
+    while (H - a > target) { // ostatnia strona też ≤ docelowej (równe kartki A4)
+      const lo = Math.ceil(a + target * 0.6), hi = Math.floor(a + target);
+      let m = Infinity;
+      for (let y = lo; y <= hi; y++) m = Math.min(m, cost[y]);
+      let best = hi, bestLen = -1;
+      for (let y = lo; y <= hi; ) {
+        if (cost[y] > m + 0.5) { y++; continue; }
+        let e = y;
+        while (e + 1 <= hi && cost[e + 1] <= m + 0.5) e++;
+        if (e - y >= bestLen) { bestLen = e - y; best = Math.round((y + e) / 2); }
+        y = e + 1;
+      }
+      cuts.push(best);
+      a = best;
+    }
+    return { cuts, target };
+  }
+
+  // Wąski, długi pasek obrazu na stronie (eksport z Notatek: strona 149 × 502 pt albo A4,
+  // a na niej obraz 1536 × 10 000 px w pasku szerokim na 77–130 pt). Wysokość strony mieści się
+  // w Wordzie, więc dzielenie się nie włączało: w dokumencie była maleńka kartka z paskiem, a OCR
+  // widział 3,5 px na punkt zamiast natywnych ~20. Strona = sam pasek powiększony do szerokości
+  // A4 (piksele obrazu bez zmian) — dalej dzieli ją splitTallPages. norm: oryginał → nowa strona.
+  const A4_W = 595.28;
+  function tallStripNorm(raw, scanImg) {
+    const b = scanImg.clipped || scanImg;
+    const bw = b.x1 - b.x0, bh = b.y1 - b.y0;
+    if (bw < 20 || bh / bw < 1.9) return null;
+    // obraz wypełnia swoją stronę (paragon 80 × 400 mm, długi zrzut) — strona zostaje, jaka jest
+    if (bw * bh >= raw.width * raw.height * 0.7) return null;
+    const k = A4_W / bw;
+    return { x0: b.x0, y0: b.y0, k, w: A4_W, h: bh * k };
+  }
+  function normalizeRaw(raw, n) {
+    const X = (x) => (x - n.x0) * n.k, Y = (y) => (y - n.y0) * n.k;
+    const box = (o) => (o ? { ...o, x0: X(o.x0), x1: X(o.x1), y0: Y(o.y0), y1: Y(o.y1) } : o);
+    raw.glyphs = raw.glyphs.map((g) => ({ ...g, x: X(g.x), x1: X(g.x1), y: Y(g.y), adv: g.adv * n.k, size: g.size * n.k, asc: g.asc * n.k, desc: g.desc * n.k, clip: box(g.clip), paint: null }));
+    for (const key of ["lines", "rects"]) raw[key] = raw[key].map((o) => ({ ...box(o), width: o.width != null ? o.width * n.k : o.width }));
+    // ścieżki wektorowe przy samym obrazie-pasku to drobiazgi — bez przeliczania punktów
+    raw.graphics = [];
+    raw.annotations = [];
+    raw.images = raw.images.map((im) => ({ ...box(im), clipped: box(im.clipped), parts: im.parts && im.parts.map(box), normM: [n.k, 0, 0, n.k, -n.x0 * n.k, -n.y0 * n.k] }));
+    raw.width = n.w;
+    raw.height = n.h;
+    raw.norm = n;
+  }
+
+  async function splitTallPages(raws, pageObjs, env, report) {
+    for (let i = raws.length - 1; i >= 0; i--) {
+      const raw = raws[i];
+      if (raw.height <= WORD_MAX_H) continue;
+      // profil liczony z niewyprostowanej strony — po prostowaniu (OCR obrócił skan) się nie zgadza
+      const straightened = raw.images.some((im) => im.rotateM);
+      let profile = null;
+      if (env.rowProfile && !straightened) {
+        try { profile = await env.rowProfile(pageObjs[i], raw.norm); } catch (_) { /* bez profilu: same znaki */ }
+      }
+      const { cuts, target } = cutPositions(raw, profile);
+      if (!cuts.length) continue;
+      const edges = [0, ...cuts, raw.height];
+      // pusty wycinek (biały dół długiego zrzutu) — bez strony: same tło, zero tekstu i grafiki
+      const blank = (a, b) => profile && !raw.glyphs.some((g) => g.u?.trim() && !g.invisible && g.y > a && g.y - g.size * 0.8 < b) &&
+        ![...raw.lines, ...raw.rects, ...raw.graphics].some((o) => o.y1 > a && o.y0 < b) &&
+        !raw.images.some((im) => { const c = im.clipped || im; return c.y1 > a && c.y0 < b && (c.x1 - c.x0) * (c.y1 - c.y0) < raw.width * raw.height * 0.4; }) &&
+        Array.prototype.every.call(profile.subarray(Math.floor(a), Math.ceil(b)), (v) => v < 0.02);
+      // Każda strona ma pełną wysokość docelową (A4 przy wąskich stronach): równe kartki do druku,
+      // jedna sekcja Worda, a krótszy wycinek nie wychodzi „poziomy”. Pusto pod treścią to zarazem
+      // zapas — Word łamie wiersze odrobinę inaczej i ostatni akapit bez zapasu przelewał się na
+      // osobną stronę (wycinek dłuższy niż docelowy, ostatni: zapas 24–72 pt).
+      const parts = edges.slice(1).map((b, k) => {
+        if (blank(edges[k], b)) return null;
+        const h = b - edges[k];
+        const extra = Math.max(target - h, Math.max(24, Math.min(72, h * 0.06)));
+        return sliceRaw(raw, edges[k], b, Math.max(0, Math.min(WORD_MAX_H - h, extra)));
+      }).filter(Boolean);
+      if (!parts.length) continue;
+      raws.splice(i, 1, ...parts);
+      pageObjs.splice(i, 1, ...parts.map(() => pageObjs[i]));
+      report.splitPages = (report.splitPages || 0) + 1;
+      report.pages += parts.length - 1;
+    }
+  }
+
   async function convertPdf(pdfDoc, env) {
     const n = Math.min(pdfDoc.numPages, env.maxPages || Infinity);
     const fontCache = new Map();
@@ -308,8 +458,17 @@
       // W obu przypadkach słowa „wymazujemy” z obrazu, który zostaje tłem strony.
       const area = (b) => Math.max(0, b.x1 - b.x0) * Math.max(0, b.y1 - b.y0);
       const pageArea = raw.width * raw.height;
-      const scanImg = raw.images.filter((im) => im.kind === "image" && area(im.clipped || im) >= pageArea * 0.4).sort((a, b) => area(b.clipped || b) - area(a.clipped || a))[0];
+      let scanImg = raw.images.filter((im) => im.kind === "image" && area(im.clipped || im) >= pageArea * 0.4).sort((a, b) => area(b.clipped || b) - area(a.clipped || a))[0];
       const visible = raw.glyphs.filter((g) => !g.invisible && g.u.trim()).length;
+      // wąski pasek obrazu (Notatki): jedyny obraz strony, choć zajmuje mniej niż 40% jej powierzchni
+      const strip = !scanImg && visible < 3 && raw.images.length === 1 && raw.images[0].kind === "image" ? raw.images[0] : null;
+      const norm = (scanImg || strip) && visible < 3 ? tallStripNorm(raw, scanImg || strip) : null;
+      if (norm) {
+        const idx = raw.images.indexOf(scanImg || strip);
+        normalizeRaw(raw, norm);
+        scanImg = raw.images[idx];
+        report.stripPages = (report.stripPages || 0) + 1;
+      }
       if (scanImg && visible < 3) {
         const hidden = raw.glyphs.filter((g) => g.invisible && g.u.trim());
         if (hidden.length >= 3) {
@@ -321,7 +480,7 @@
           if (ocrChoice) {
             env.onProgress?.(i, n, "ocr");
             await queueOcr(async () => {
-            const res = await env.ocrPage(page, raw, (status, p) => env.onProgress?.(i, n, "ocr", p));
+            const res = await env.ocrPage(page, raw, (status, p) => env.onProgress?.(i, n, "ocr", p), norm ? { norm } : undefined);
             if (res && res.glyphs.length) {
               if (res.rotate) straightenScanPage(raw, scanImg, res.rotate);
               raw.glyphs.push(...res.glyphs);
@@ -370,13 +529,16 @@
     }
     while (inflight.length) await inflight.shift();
     if (env.signal?.cancelled) throw new CancelledError();
+    await splitTallPages(raws, pageObjs, env, report);
     report.timings.read = Date.now() - t0;
 
     // Powtarzające się nagłówki/stopki — wycinamy z treści, wstawiamy do nagłówka/stopki Worda.
-    const running = NS.detectRunningText(raws);
+    // wycinki jednej długiej strony to nie osobne strony — bez nagłówków/stopek (zdanie
+    // powtarzające się w długim zrzucie ekranu trafiłoby do stopki)
+    const running = NS.detectRunningText(raws.filter((r) => !r.sliceOf));
     const runningRows = raws.map(() => ({ top: [], bottom: [], topImages: [], bottomImages: [] }));
     raws.forEach((raw, pi) => {
-      if (!running.size) return;
+      if (!running.size || raw.sliceOf) return;
       const H = raw.height;
       const rows = new Map();
       for (const g of raw.glyphs) {
@@ -418,7 +580,7 @@
         const textTop = rr.top.length ? Math.max(...rr.top.flat().map((g) => g.y + (g.desc || g.size * 0.2))) : -Infinity;
         const textBottom = rr.bottom.length ? Math.min(...rr.bottom.flat().map((g) => g.y - (g.asc || g.size * 0.8))) : Infinity;
         raw.images = raw.images.filter((img) => {
-          if (img.kind !== "image") return true;
+          if (img.kind !== "image" || raw.sliceOf) return true;
           const zone = img.y1 <= H * 0.2 || (img.y0 < H * 0.12 && img.y1 <= H * 0.3) ? "top" : img.y0 >= H * 0.85 ? "bottom" : null;
           if (!zone) return true;
           const nearText = zone === "top" ? img.y0 < textTop - 1 || img.y1 <= H * 0.1 : img.y1 > textBottom + 1 || img.y0 >= H * 0.9;

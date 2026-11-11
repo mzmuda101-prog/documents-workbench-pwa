@@ -34,10 +34,19 @@ STATUS=0
 for ENGINE in chromium webkit; do
   OCR=$OCR ENGINE=$ENGINE SEED=$SEED STEPS=40 node scripts/corpus-invariants-playwright.js >> "$LOG" 2>&1 || STATUS=1
 done
+# korpus PDF/zdjęć (npm run korpus): każdy plik z ~/DWB-korpus (albo $DWB_KORPUS) przez konwersję
+# z OCR, porównanie z poprzednią nocą — pogorszenie (mniej słów, fałszywe podkreślenia, niższa
+# rozdzielczość obrazu, inna liczba stron, błędy strony) = status 1 i powiadomienie
+KORPUS_DIR="${DWB_KORPUS:-$HOME/DWB-korpus}"
+if [ -d "$KORPUS_DIR" ] && [ -n "$(ls "$KORPUS_DIR" 2>/dev/null)" ]; then
+  echo "--- korpus OCR: $KORPUS_DIR" >> "$LOG"
+  KORPUS="$KORPUS_DIR" KORPUS_ONLY=1 node scripts/ocr-score.js 2>&1 | grep -v '^KONSOLA' >> "$LOG"
+  [ "${pipestatus[1]}" != "0" ] && STATUS=1
+fi
 [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null
 
 if [ $STATUS -ne 0 ]; then
-  osascript -e "display notification \"Niezmienniki: są błędy — output/corpus/$(date +%Y-%m-%d)-*.md\" with title \"Documents Workbench\"" 2>/dev/null
+  osascript -e "display notification \"Niezmienniki lub korpus OCR: są błędy — output/corpus/$(date +%Y-%m-%d)-*.md\" with title \"Documents Workbench\"" 2>/dev/null
 fi
 echo "=== koniec, status $STATUS" >> "$LOG"
 exit $STATUS

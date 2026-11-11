@@ -135,6 +135,8 @@
     return s[s.length >> 1];
   }
 
+  const OCR_MAX_PX = 9e6;
+  const MAX_CANVAS_SIDE = 16000; // Safari/Chrome: kanwa do 16384 px boku
   const OCR_FONT = { id: "ocr", family: "Arial", bold: false, italic: false, mono: false, serif: false, symbolic: false, asc: 0.72, desc: 0.21 };
 
   // ── przygotowanie obrazu (przed tesseractem) ───────────────────────────────────
@@ -182,8 +184,10 @@
     };
   }
 
-  function grayOf(canvas, maxSide) {
-    const f = Math.min(1, maxSide / Math.max(canvas.width, canvas.height));
+  // maxPx: limit liczby pikseli (nie dłuższego boku — wąski, długi paragon dostawał ~280 px
+  // szerokości i litery za małe na szukanie kąta: wychodził „obrócony o 90°”)
+  function grayOf(canvas, maxPx) {
+    const f = Math.min(1, Math.sqrt(maxPx / (canvas.width * canvas.height)));
     const w = Math.max(1, Math.round(canvas.width * f)), h = Math.max(1, Math.round(canvas.height * f));
     let src = canvas;
     if (f < 1) {
@@ -408,7 +412,7 @@
     // liter, bo liczą się tylko DŁUGIE ciągi; pas linii jest wybielany cały (z jasnymi brzegami)
     const ink = (v) => v < 170; // 165–175 OK na obu skanach testu; 190 brał krawędź kolorowej ramki za linię
     const maxThick = Math.max(8, Math.round(textPx * 0.45)); // po obrocie i rozmyciu kreska grubieje (WebKit: inne wygładzanie)
-    let segs = [];
+    let segs = [], shortH = [];
     if (!window.__dwbOcrNoLines) {
       const hs = findSegs(g, w, h, true, Math.max(30, Math.round(textPx * 1.5)), maxThick, ink);
       const vs = findSegs(g, w, h, false, Math.max(24, Math.round(textPx * 1.3)), maxThick, ink);
@@ -419,6 +423,9 @@
         ...hs.filter((sg) => sg.x1 - sg.x0 + 1 >= textPx * 4 || vs.some((v) => touch(sg, v))),
         ...vs.filter((sg) => sg.y1 - sg.y0 + 1 >= textPx * 3 || hs.some((hh) => hh.x1 - hh.x0 + 1 >= textPx * 4 && touch(sg, hh))),
       ];
+      // krótkie cienkie kreski poziome — może podkreślenie słowa (przerwane pod ogonkami „ą”, „ę”,
+      // „g”); zostają na obrazie dla OCR, a liniami stają się dopiero pod rozpoznanym słowem
+      shortH = hs.filter((sg) => !segs.includes(sg) && sg.y1 - sg.y0 + 1 <= Math.max(3, textPx * 0.15));
     }
     if (Array.isArray(window.__dwbOcrTrace)) window.__dwbOcrTrace.push({ segsKept: segs.map((q) => [q.x0, q.y0, q.x1 - q.x0 + 1, q.y1 - q.y0 + 1]) });
     if (Array.isArray(window.__dwbOcrTrace)) window.__dwbOcrTrace.push({ timing: { normalize: Ti - T0i, sharpen: Ts - Ti, segs: performance.now() - Ts } });
@@ -434,7 +441,7 @@
     out.width = w;
     out.height = h;
     out.getContext("2d").putImageData(id, 0, 0);
-    return { canvas: out, segs };
+    return { canvas: out, segs, shortH };
   }
 
   // Odcinki z ciągów tuszu: ciągi ≥ minLen w kolejnych rzędach (poziome) / kolumnach (pionowe),
@@ -538,7 +545,7 @@
   // Cała obróbka: kąt + góra/dół → obraz wyprostowany (tło dokumentu) + kopia dla OCR.
   function prepare(canvas, opts = {}) {
     const T = [performance.now()];
-    const a = grayOf(canvas, 1400);
+    const a = grayOf(canvas, 1400 * 990); // A4: jak dawniej 1400 px dłuższego boku
     T.push(performance.now());
     const pts = inkPoints(a);
     T.push(performance.now());
@@ -557,7 +564,7 @@
     const inp = ocrInput(upright, letterH);
     T.push(performance.now());
     if (Array.isArray(window.__dwbOcrTrace)) window.__dwbOcrTrace.push({ timing: { gray: T[1] - T[0], ink: T[2] - T[1], angle: T[3] - T[2], rotate: T[4] - T[3], input: T[5] - T[4] } });
-    return { deg, upright, ocr: inp.canvas, segs: inp.segs, paper: a.paper, letterH };
+    return { deg, upright, ocr: inp.canvas, segs: inp.segs, shortH: inp.shortH, paper: a.paper, letterH };
   }
 
   // Kolor tekstu słowa: średnia najciemniejszych pikseli w jego prostokącie.
@@ -592,18 +599,67 @@
     }
   }
 
+  // Ten sam napis przeczytany dwa razy: na gęstych stronach (infografiki, kolorowe ramki)
+  // tesseract potrafi złożyć dwa nachodzące na siebie wiersze z tych samych liter. Litery obu
+  // kopii lądowały w jednym wierszu dokumentu i mieszały się („ReRbeblel KKisisss”). Z dwóch
+  // słów zajmujących w większości to samo miejsce zostaje pewniejsze. Słowa jednego wiersza,
+  // które tylko zachodzą na siebie brzegami, dostają ramki przycięte do granicy między nimi.
+  function dedupeWords(accepted) {
+    const area = (b) => Math.max(1, (b.x1 - b.x0) * (b.y1 - b.y0));
+    const drop = new Set();
+    for (let i = 0; i < accepted.length; i++) {
+      for (let j = i + 1; j < accepted.length; j++) {
+        const a = accepted[i].word.bbox, b = accepted[j].word.bbox;
+        const ix = Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0), iy = Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+        if (ix <= 0 || iy <= 0) continue;
+        if (accepted[i].line === accepted[j].line) continue;
+        if (ix * iy < 0.5 * Math.min(area(a), area(b))) continue;
+        const wi = accepted[i].word, wj = accepted[j].word;
+        drop.add(wi.confidence > wj.confidence || (wi.confidence === wj.confidence && area(a) >= area(b)) ? accepted[j] : accepted[i]);
+      }
+    }
+    if (drop.size) {
+      if (Array.isArray(window.__dwbOcrTrace)) window.__dwbOcrTrace.push({ dupes: [...drop].map((a) => a.text) });
+      for (let k = accepted.length - 1; k >= 0; k--) if (drop.has(accepted[k])) accepted.splice(k, 1);
+    }
+    const byLine = new Map();
+    for (const a of accepted) {
+      if (!byLine.has(a.line)) byLine.set(a.line, []);
+      byLine.get(a.line).push(a);
+    }
+    for (const list of byLine.values()) {
+      list.sort((p, q) => p.word.bbox.x0 - q.word.bbox.x0);
+      for (let k = 1; k < list.length; k++) {
+        const prev = list[k - 1].word.bbox, cur = list[k].word.bbox;
+        if (cur.x0 >= prev.x1) continue;
+        const mid = Math.round((Math.max(prev.x0, cur.x0) + Math.min(prev.x1, cur.x1)) / 2);
+        // kopie ramek — tesseract trzyma te obiekty u siebie (symbole, wiersz)
+        list[k - 1].word = { ...list[k - 1].word, bbox: { ...prev, x1: Math.max(prev.x0 + 1, mid) } };
+        list[k].word = { ...list[k].word, bbox: { ...cur, x0: Math.min(cur.x1 - 1, mid) } };
+      }
+    }
+    // kolejność w wierszu = od lewej (tak też rozkładane są litery), wiersze jak u tesseracta
+    accepted.splice(0, accepted.length, ...[...byLine.values()].flat());
+  }
+
   /**
    * Rozpoznanie jednej strony.
    * @returns { glyphs, eraseBoxes, words, chars } — współrzędne w pt (jak extractPage)
    */
   async function recognizePage(page, raw, opts = {}) {
     if (opts.signal?.cancelled) throw new (window.DWPdf?.CancelledError || Error)("cancelled");
-    const vp1 = page.getViewport({ scale: 1 });
-    const scale = Math.min(250 / 72, 3600 / Math.max(vp1.width, vp1.height));
-    const vp = page.getViewport({ scale });
+    // opts.norm: strona = wycinek oryginału powiększony k razy (pdf-convert tallStripNorm) —
+    // renderujemy tylko ten wycinek, współrzędne wyniku w punktach nowej strony
+    const norm = opts.norm;
+    const vp1 = norm ? { width: norm.w, height: norm.h } : page.getViewport({ scale: 1 });
+    // ~250 dpi, ale nie więcej niż ~9 mln pikseli (A3 jak dawniej) — limit powierzchni, nie
+    // dłuższego boku: długi zrzut ekranu czy paragon nie tracą przez to szerokości liter
+    const dpi = window.__dwbOcrDpi || 250; // miernik ocr:score (DPI=…)
+    const scale = Math.min(dpi / 72, Math.sqrt(OCR_MAX_PX / (vp1.width * vp1.height)), MAX_CANVAS_SIDE / Math.max(vp1.width, vp1.height));
+    const vp = norm ? page.getViewport({ scale: scale * norm.k, offsetX: -norm.x0 * scale * norm.k, offsetY: -norm.y0 * scale * norm.k }) : page.getViewport({ scale });
     const canvas = document.createElement("canvas");
-    canvas.width = Math.ceil(vp.width);
-    canvas.height = Math.ceil(vp.height);
+    canvas.width = Math.ceil(norm ? norm.w * scale : vp.width);
+    canvas.height = Math.ceil(norm ? norm.h * scale : vp.height);
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -615,13 +671,26 @@
     const tm1 = performance.now();
     let data = await recognizeOn(prep.ocr, opts.onProgress);
     if (Array.isArray(window.__dwbOcrTrace)) window.__dwbOcrTrace.push({ timing: { prep: Math.round(tm1 - tm0), ocr: Math.round(performance.now() - tm1) } });
+    // „Kartka bokiem” przy niepewnym odczycie — sprawdzamy też bez ćwierćobrotu. Wiersze o tym
+    // samym początku (lista, paragon, zrzut z powtarzającym się „Akapit N: …”) dają wyraźny wzór
+    // w pionie i profil wybierał 90°: strona obrócona, zero rozpoznanych słów. Zostaje lepsza.
+    if (opts.straighten !== false && Math.abs(Math.abs(prep.deg) - 90) < 15 && (data.confidence || 0) < 80) {
+      if (opts.signal?.cancelled) throw new (window.DWPdf?.CancelledError || Error)("cancelled");
+      const deg0 = prep.deg - 90 * Math.sign(prep.deg);
+      const straight = Math.abs(deg0) < 0.01 ? copyCanvas(canvas) : rotateCanvas(canvas, deg0, prep.paper);
+      const inp = ocrInput(straight, prep.letterH || 12 * scale);
+      const alt = { deg: deg0, upright: straight, ocr: inp.canvas, segs: inp.segs, shortH: inp.shortH, paper: prep.paper, letterH: prep.letterH };
+      const data0 = await recognizeOn(alt.ocr, opts.onProgress);
+      if (Array.isArray(window.__dwbOcrTrace)) window.__dwbOcrTrace.push({ sideways: prep.deg, conf90: Math.round(data.confidence || 0), conf0: Math.round(data0.confidence || 0) });
+      if ((data0.confidence || 0) > (data.confidence || 0) + 5) { prep = alt; data = data0; }
+    }
     // Słaba pewność = może jednak do góry nogami (mało wierszy, sam nagłówek) — druga próba
     // obrócona o 180°; zostaje lepsza.
     if (opts.straighten !== false && (data.confidence || 0) < 55) {
       if (opts.signal?.cancelled) throw new (window.DWPdf?.CancelledError || Error)("cancelled");
       const flipped = rotateCanvas(prep.upright, 180, prep.paper);
       const inp = ocrInput(flipped, (prep.letterH || 12 * scale));
-      const alt = { deg: prep.deg > 0 ? prep.deg - 180 : prep.deg + 180, upright: flipped, ocr: inp.canvas, segs: inp.segs, paper: prep.paper };
+      const alt = { deg: prep.deg > 0 ? prep.deg - 180 : prep.deg + 180, upright: flipped, ocr: inp.canvas, segs: inp.segs, shortH: inp.shortH, paper: prep.paper, letterH: prep.letterH };
       const data2 = await recognizeOn(alt.ocr, opts.onProgress);
       if ((data2.confidence || 0) > (data.confidence || 0) + 10) { prep = alt; data = data2; }
     }
@@ -681,6 +750,18 @@
         }
       }
     }
+    dedupeWords(accepted);
+    if (Array.isArray(window.__dwbOcrTrace)) window.__dwbOcrTrace.push({ ratio: { accepted: accepted.length, skipped, conf: Math.round(data.confidence || 0) } });
+    // Strona pisana ręcznie (notatki z tabletu, zeszyt): tesseract przyjmuje pojedyncze „słowa”
+    // (liczby, krótkie wyrazy) i wstawiał je drukiem w miejsce wymazanego pisma — wychodził
+    // miszmasz. Druk: ≥ 95% słów przyjętych, pewność strony ≥ 85%; infografika z drobnym drukiem
+    // ~55% i ~58%; pismo odręczne ~15–20% i ~35–42%. Taka strona zostaje w całości obrazem.
+    let handwritten = false;
+    if (accepted.length + skipped >= 30 && accepted.length < (accepted.length + skipped) * 0.35 && (data.confidence || 0) < 50) {
+      handwritten = true;
+      skipped += accepted.length;
+      accepted.length = 0;
+    }
     // wysokość słów druku na stronie — słowo dużo wyższe od mediany to raczej odręczne
     const hs = accepted.map((a) => a.word.bbox.y1 - a.word.bbox.y0).sort((x, y) => x - y);
     const medH = hs.length ? hs[hs.length >> 1] : 0;
@@ -713,6 +794,8 @@
       const size = Math.max(4, Math.min(72, (ests.length ? ests.sort((x, y) => x - y)[(ests.length - 1) >> 1] : 0) || 10));
       const lb = line.baseline;
       let prevEnd = null;
+      const lineStart = glyphs.length;
+      let boxW = 0, natW = 0, nLetters = 0;
       for (const a of list) {
         const word = a.word, wb = word.bbox;
         kept++;
@@ -728,6 +811,7 @@
           y = (lb.y0 + (lb.y1 - lb.y0) * (cx - lb.x0) / (lb.x1 - lb.x0)) / scale;
         } else y = (wb.y1 - (/[gjpqyąę,]/.test(a.text) ? 0.21 * size * scale : 0)) / scale;
         const color = inkColor(pixels, up.width, wb);
+        if (Array.isArray(window.__dwbOcrTrace) && window.__dwbOcrWordPos) window.__dwbOcrTrace.push({ wpos: [a.text, +y.toFixed(1), +size.toFixed(1), +(wb.x0 / scale).toFixed(1), +(wb.x1 / scale).toFixed(1), +(wb.y0 / scale).toFixed(1), +(wb.y1 / scale).toFixed(1)] });
         const chars = [...a.text];
         if (a.doubt) doubtful++;
         const mk = (u, x, x1) => ({ u, x, x1, adv: x1 - x, y, size, asc: size * 0.72, desc: size * 0.21, angle: 0, font: OCR_FONT, isSpace: false, color, bold: false, italic: false, order: order++, ocr: true, ocrPara: a.paraNo, doubt: a.doubt || undefined });
@@ -746,6 +830,9 @@
         prevEnd = x1;
         const ws = chars.map((ch) => (window.DWPdf?.helvWidth ? window.DWPdf.helvWidth(ch) : 0.556));
         const total = ws.reduce((n, v) => n + v, 0) || 1;
+        boxW += x1 - x0;
+        natW += total * size;
+        nLetters += chars.length;
         let x = x0;
         chars.forEach((ch, k) => {
           const w = ((x1 - x0) * ws[k]) / total;
@@ -756,12 +843,35 @@
         eraseBoxes.push({ x0: wb.x0 / scale - pad, y0: wb.y0 / scale - pad, x1: wb.x1 / scale + pad, y1: wb.y1 / scale + pad });
         wordBoxes.push({ x0: wb.x0 / scale, y0: wb.y0 / scale, x1: wb.x1 / scale, y1: wb.y1 / scale });
       }
+      // Szerokość jak na skanie także w Wordzie: litery są rozłożone w ramce słowa, ale w pliku
+      // to zwykły Arial — szerszy albo węższy od druku na skanie, więc wiersze zawijały się
+      // inaczej („posłużą” / „jako ściółka”), a strona przelewała się na następną. Odstęp między
+      // znakami (jeden na wiersz, jak fitSubstitutedFonts w pdf-layout) i spacje równe przerwie.
+      const d = nLetters ? (boxW - natW) / nLetters : 0;
+      const letterFit = Math.abs(d) >= size * 0.01 ? Math.round(Math.max(-0.2 * size, Math.min(0.2 * size, d)) * 20) : 0;
+      for (let k = lineStart; k < glyphs.length; k++) {
+        const g = glyphs[k];
+        if (g.isSpace) {
+          const sp = size * 0.278; // spacja Ariala
+          g.adv = sp; // naturalLineWidth: spacja + jej odstęp = przerwa ze skanu
+          g.fitSpacing = Math.round(Math.max(-0.2 * size, Math.min(size, g.x1 - g.x - sp)) * 20);
+        } else if (letterFit) g.fitSpacing = letterFit;
+      }
     }
+    // Krótka kreska tuż pod dołem rozpoznanego słowa (ramka sięga do wydłużeń dolnych) i w jego
+    // poziomie = podkreślenie; czy faktycznie podkreśla tekst, rozstrzyga układ strony (pdf-layout).
+    const underSegs = (prep.shortH || []).filter((sg) => wordBoxes.some((b) => {
+      const y0 = b.y0 * scale, y1 = b.y1 * scale, hh = y1 - y0, cy = (sg.y0 + sg.y1 + 1) / 2;
+      const ov = Math.min(sg.x1 + 1, b.x1 * scale) - Math.max(sg.x0, b.x0 * scale);
+      const len = sg.x1 - sg.x0 + 1;
+      return cy >= y0 + hh * 0.55 && cy <= y1 + hh * 0.4 && ov >= len * 0.6 && len >= prep.letterH * 2 && len >= (b.x1 - b.x0) * scale * 0.5;
+    }));
+    if (underSegs.length) prep.segs = [...(prep.segs || []), ...underSegs];
     // Strona była krzywa/obrócona: współrzędne są w układzie WYPROSTOWANEJ strony (pt), a obraz
     // skanu w dokumencie trzeba obrócić tak samo (pdf-convert → pdf-import encodeImage).
     // Linie tabel/ramek ze skanu: odcinki dla układu strony (pt, środek kreski + grubość),
     // a na obrazie tła wymazane — rysuje je dokument (tabela albo warstwa grafiki).
-    const lines = opts.lines === false ? [] : (prep.segs || []).map((sg) => {
+    const lines = opts.lines === false || handwritten ? [] : (prep.segs || []).map((sg) => {
       const color = inkColor(pixels, up.width, { x0: sg.x0, y0: sg.y0, x1: sg.x1 + 1, y1: sg.y1 + 1 });
       const pad = 1.5 / scale;
       eraseBoxes.push({ x0: sg.x0 / scale - pad, y0: sg.y0 / scale - pad, x1: (sg.x1 + 1) / scale + pad, y1: (sg.y1 + 1) / scale + pad });
@@ -771,7 +881,7 @@
     });
     const rotate = prep.deg ? { deg: prep.deg, w: up.width / scale, h: up.height / scale, ow: canvas.width / scale, oh: canvas.height / scale, paper: prep.paper } : null;
     for (const c of new Set([canvas, up, prep.ocr])) c.width = c.height = 0; // zwolnij pamięć (telefon)
-    return { glyphs, eraseBoxes, wordBoxes, lines, words, kept, skipped, doubtful, confidence: data.confidence, rotate };
+    return { glyphs, eraseBoxes, wordBoxes, lines, words, kept, skipped, doubtful, confidence: data.confidence, rotate, handwritten };
   }
 
   window.DWPdfOcr = { ensure, recognizePage, terminate, hasSimd, setParallel };
