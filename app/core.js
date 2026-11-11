@@ -103,6 +103,9 @@ let currentFileType = "";
 let originalFileBytes = null;
 let pendingDocEdits = [];
 let fileHandle = null;
+// Dokument, którego nie ma jeszcze na dysku (nowy, z PDF-a/zdjęcia, wynik porównania) — „Zapisz
+// jako” proponuje samą nazwę, bez „_edited” (to tylko ochrona oryginału przy edycji pliku z dysku).
+let currentFileFresh = false;
 let hasUnsavedChanges = false;
 let documentStructure = null;
 let searchMatches = [];
@@ -572,6 +575,7 @@ function detectFileType(name, mime) {
 
 function clearDocumentState() {
   currentFileName = "";
+  currentFileFresh = false;
   currentFileType = "";
   originalFileBytes = null;
   pendingDocEdits = [];

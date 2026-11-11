@@ -3303,7 +3303,7 @@ const composeUi = (() => {
       const file = new File([bytes], `${t(nameKey)}.docx`, {
         type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       });
-      const loaded = await window.ingestFile(file, { silent: true });
+      const loaded = await window.ingestFile(file, { silent: true, fresh: true });
       if (!loaded) return false;
       // od razu pisanie: Edycja + kursor na początku (zużyje go syncInlineEditMode)
       pendingInlineCursor = { paraIndex: 0, offset: 0 };

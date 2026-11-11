@@ -186,7 +186,7 @@ async function createRedlineDocument() {
     const { bytes, stats } = await dwbRedline(older, newer, { author: author || t("compareRedlineAuthor") });
     const base = (newerIsCurrent ? currentFileName : compareLast.refName || "dokument").replace(/\.docx$/i, "");
     const name = `${base} (${t("compareRedlineSuffix")}).docx`;
-    const ok = await openDocumentFiles([{ file: new File([bytes], name, { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }) }]);
+    const ok = await openDocumentFiles([{ file: new File([bytes], name, { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }), fresh: true }]);
     compareSetStatus(ok ? t("compareRedlineDone", { n: stats.changed + stats.added + stats.removed }) : t("compareFailed"));
   } catch (err) {
     log(`Porównanie: ${err.message || err}`, "error");

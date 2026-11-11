@@ -26,6 +26,7 @@ const UNDO_OP_LABEL = {
   case: "undoOpCase",
   trim: "undoOpTrim",
   affix: "undoOpAffix",
+  clearOcrMarks: "undoOpOcrMarks",
   paragraphBatch: "undoOpParagraphs",
   textbox: "undoOpTextbox",
   coreMetadata: "undoOpMetadata",

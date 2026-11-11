@@ -82,6 +82,7 @@ const dwbOpenDocs = (() => {
     d.track = typeof dwbTrack !== "undefined" ? dwbTrack.snapshot() : null; // śledzenie zmian tej karty
     d.name = currentFileName || d.name;
     d.handle = fileHandle || null;
+    d.fresh = currentFileFresh;
     d.dirty = !!hasUnsavedChanges;
     d.draft = typeof dwbDrafts !== "undefined" ? await dwbDrafts.park() : null;
     d.file = null;
@@ -99,7 +100,7 @@ const dwbOpenDocs = (() => {
     try {
       let ok;
       if (d.bytes) {
-        ok = await window.ingestFile(new File([d.bytes], d.name, { type: OPEN_DOCS_MIME }), { silent: true, track: d.track || null, ...(d.handle ? { handle: d.handle } : {}) });
+        ok = await window.ingestFile(new File([d.bytes], d.name, { type: OPEN_DOCS_MIME }), { silent: true, track: d.track || null, fresh: !!d.fresh, ...(d.handle ? { handle: d.handle } : {}) });
         if (ok) {
           if (d.dirty) {
             if (typeof dwbDrafts !== "undefined") dwbDrafts.unpark(d.draft);
@@ -108,7 +109,7 @@ const dwbOpenDocs = (() => {
           if (d.anchor && typeof restoreDocScrollAnchor === "function") restoreDocScrollAnchor(d.anchor);
         }
       } else if (d.file) {
-        ok = await window.ingestFile(d.file, d.handle && !d.pdf ? { handle: d.handle } : {});
+        ok = await window.ingestFile(d.file, { ...(d.handle && !d.pdf ? { handle: d.handle } : {}), ...(d.fresh ? { fresh: true } : {}) });
       }
       if (ok) {
         d.bytes = null;
@@ -167,7 +168,7 @@ const dwbOpenDocs = (() => {
         break;
       }
       room--;
-      const d = { id: `t${++seq}`, name: it.file.name, handle: it.handle || null, stamp: fileStamp(it.file), file: it.file, bytes: null, dirty: false, draft: null, anchor: null, pdf: CONVERTED.has(type) };
+      const d = { id: `t${++seq}`, name: it.file.name, handle: it.handle || null, stamp: fileStamp(it.file), file: it.file, bytes: null, dirty: false, draft: null, anchor: null, pdf: CONVERTED.has(type), fresh: !!it.fresh };
       if (!first) first = d;
       else waiting.push(d);
     }
@@ -175,7 +176,7 @@ const dwbOpenDocs = (() => {
     let ok = true;
     if (first.file && !docs.includes(first)) {
       // pierwszy nowy plik: przez zwykłe ingestFile (karta powstaje w opakowaniu niżej)
-      ok = await window.ingestFile(first.file, first.handle && !first.pdf ? { handle: first.handle } : {});
+      ok = await window.ingestFile(first.file, { ...(first.handle && !first.pdf ? { handle: first.handle } : {}), ...(first.fresh ? { fresh: true } : {}) });
     } else if (first.id !== activeId) {
       ok = await switchTo(first.id);
     }

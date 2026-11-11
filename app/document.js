@@ -105,6 +105,7 @@ async function ingestFile(file, options = {}) {
     if (typeof repairDocxFontNames === "function") originalFileBytes = await repairDocxFontNames(originalFileBytes);
     pendingDocEdits = [];
     currentFileName = file.name || "document.docx";
+    currentFileFresh = !!options.fresh;
     currentFileType = "docx";
     fileHandle = options.handle || null;
 
@@ -206,6 +207,21 @@ let quietRenderOnce = false;
 
 // opts.newFile — pierwszy render świeżo otwartego pliku: na ekranie jest jeszcze POPRZEDNI dokument,
 // więc nakładka „Wczytywanie…” ma być widoczna od razu (dawniej znikała na 0,4 s bez śladu).
+// Żółte „do sprawdzenia” z OCR w dokumencie? (menu pod prawym przyciskiem: „Usuń żółte zaznaczenia
+// OCR”) — liczone po każdym przerysowaniu z pliku w pamięci, menu czyta gotową odpowiedź.
+let ocrMarksPresent = false;
+function refreshOcrMarksState() {
+  const bytes = originalFileBytes;
+  getDocumentXmlString(bytes).then((xml) => { if (bytes === originalFileBytes) ocrMarksPresent = documentHasOcrMarks(xml); }).catch(() => {});
+}
+// Zdejmuje tylko zaznaczenia z OCR (styl „Do sprawdzenia (OCR)”), własne wyróżnienia zostają; jeden krok Cofnij.
+async function clearOcrMarks() {
+  const n = await applyDocumentEdit({ op: "clearOcrMarks" });
+  if (n) toastUndoable(t("ocrMarksCleared", { n }));
+  else toast(t("ocrMarksNone"), "info");
+  return n;
+}
+
 async function renderCurrentDocument(opts = {}) {
   if (!originalFileBytes || currentFileType !== "docx") return;
   const quiet = !opts.newFile && (quietRenderOnce || !!docCanvasEl?.querySelector(".docx-preview-host p"));
@@ -230,6 +246,7 @@ async function renderCurrentDocument(opts = {}) {
     // find-replace-workbench.js jest leniwy — bez niego wyjątek zatrzymałby włączenie edycji poniżej
     if (searchQueryEl?.value.trim() && typeof runDocumentSearch === "function") runDocumentSearch();
     setupInlineEditingAfterRender();
+    refreshOcrMarksState();
     if (typeof restoreFormatMarks === "function") restoreFormatMarks();
     if (typeof syncMobileDocZoomAfterRender === "function") syncMobileDocZoomAfterRender();
   } finally {

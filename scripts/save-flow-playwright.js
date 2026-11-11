@@ -125,6 +125,36 @@ async function run() {
       return { name: fileHandle?.name };
     });
     check("przeciągnięty plik (Chrome/Edge) dostaje uchwyt → „Zapisz” w miejscu", dropped.name === "przeciagniety.docx", JSON.stringify(dropped));
+
+    // 6) proponowana nazwa: „_edited” tylko przy pliku z dysku i bez dublowania (zgłoszenie
+    // 2026-11-11: nowy dokument i wynik konwersji PDF też dostawały „_edited”)
+    const suggest = async (setup) => {
+      await page.evaluate(() => { window.__fs.calls = []; setDirtyState(false); });
+      await page.evaluate(setup);
+      await idle(page);
+      await page.evaluate(() => saveDocumentAs());
+      await idle(page);
+      return page.evaluate(() => (window.__fs.calls.find((c) => c.startsWith("save-picker:")) || "").slice(12));
+    };
+    let name = await suggest(() => composeUi.createNew("blank"));
+    check("nowy pusty dokument: nazwa bez „_edited”", name && !/_edited/.test(name), name);
+    // po zapisie dokument jest na dysku — kolejne „Zapisz jako” chroni go jak każdy plik
+    name = await suggest(() => {});
+    check("nowy dokument po zapisie: dalej „_edited” jak przy pliku z dysku", name === "wybrany_edited.docx", name);
+    name = await suggest(() => ingestFile(new File([originalFileBytes], "skan z PDF.docx"), { silent: true, fresh: true }));
+    check("wynik konwersji PDF/zdjęcia: nazwa bez „_edited”", name === "skan z PDF.docx", name);
+    name = await suggest(() => ingestFile(new File([originalFileBytes], "raport_edited.docx"), { silent: true }));
+    check("plik już z „_edited”: bez dublowania", name === "raport_edited.docx", name);
+    // karta z dokumentem z konwersji odłożona i przywrócona — dalej „nowy”
+    name = await suggest(async () => {
+      await dwbOpenDocs.openFiles([{ file: new File([originalFileBytes], "z konwersji.docx"), fresh: true }]);
+      await dwbOpenDocs._idle();
+      const other = dwbOpenDocs.list().find((d) => !d.active);
+      const conv = dwbOpenDocs.list().find((d) => d.active);
+      await dwbOpenDocs.switchTo(other.id);
+      await dwbOpenDocs.switchTo(conv.id);
+    });
+    check("dokument z konwersji po przełączeniu kart: nadal bez „_edited”", name === "z konwersji.docx", name);
   }
 
   if (errors.length) check("brak błędów strony", false, errors.slice(0, 3).join(" | "));

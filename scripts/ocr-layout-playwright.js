@@ -157,6 +157,46 @@ async function run() {
   check("zrzut: rozpoznane akapity (≥ 72 z 80), żaden dwa razy", zc.filter((k) => k === 1).length >= 72 && zc.every((k) => k <= 1), JSON.stringify(zc));
   check("zrzut: obraz bez zmniejszania (≥ 1000 px szerokości)", z.widths.length && Math.min(...z.widths) >= 1000, JSON.stringify(z.widths));
 
+  // ── 3. żółte „do sprawdzenia” z OCR: styl „Do sprawdzenia (OCR)”, zdejmowane jednym ruchem,
+  //       własne wyróżnienia zostają, Cofnij przywraca (wybór Mateusza 2026-11-11)
+  const marks = await page.evaluate(async () => {
+    const z = await JSZip.loadAsync(originalFileBytes);
+    let doc = await z.file("word/document.xml").async("string");
+    const run = (txt, rpr) => `<w:p><w:r><w:rPr>${rpr}</w:rPr><w:t xml:space="preserve">${txt}</w:t></w:r></w:p>`;
+    doc = doc.replace("<w:body>", "<w:body>" + run("wątpliwe słowo", '<w:rStyle w:val="DWBOcrCheck"/><w:sz w:val="22"/><w:highlight w:val="yellow"/>') + run("moje wyróżnienie", '<w:highlight w:val="yellow"/>'));
+    z.file("word/document.xml", doc);
+    const bytes = await z.generateAsync({ type: "uint8array" });
+    await ingestFile(new File([bytes], "znaczniki.docx"), { silent: true });
+    await new Promise((r) => setTimeout(r, 300));
+    const xmlNow = async () => (await JSZip.loadAsync(await buildDocumentForSave())).file("word/document.xml").async("string");
+    const before = { present: ocrMarksPresent, menu: dwbDocMenu && typeof dwbDocMenu === "object" };
+    const n = await clearOcrMarks();
+    const after = await xmlNow();
+    await dwbUndo.undo();
+    await new Promise((r) => setTimeout(r, 300));
+    const undone = await xmlNow();
+    return {
+      before, n,
+      ocrGone: !/DWBOcrCheck/.test(after) && /wątpliwe słowo/.test(after) && !/<w:highlight w:val="yellow"\/><\/w:rPr><w:t xml:space="preserve">wątpliwe/.test(after),
+      ownKept: /<w:highlight w:val="yellow"\/><\/w:rPr><w:t xml:space="preserve">moje wyróżnienie/.test(after),
+      undoBack: /DWBOcrCheck/.test(undone),
+    };
+  });
+  check("dokument z zaznaczeniami OCR: aplikacja je widzi (pozycja w menu)", marks.before.present, JSON.stringify(marks));
+  check("„Usuń żółte zaznaczenia OCR”: znika styl i żółte z OCR, tekst zostaje", marks.n >= 1 && marks.ocrGone, JSON.stringify(marks));
+  check("„Usuń żółte zaznaczenia OCR”: własne żółte wyróżnienie zostaje", marks.ownKept, JSON.stringify(marks));
+  check("„Usuń żółte zaznaczenia OCR”: Cofnij przywraca", marks.undoBack, JSON.stringify(marks));
+  // konwersja: słowo „do sprawdzenia” ma styl OCR (pdf-docx), definicja stylu w styles.xml
+  const styled = await page.evaluate(async () => {
+    const NS = window.DWPdf;
+    const pages = [{ width: 595, height: 842, margins: { ml: 40, mr: 40, mt: 40, mb: 40 }, floats: [], blocks: [{ type: "para", x0: 40, x1: 555, top: 60, bottom: 72, lines: 1, tokens: [{ type: "text", text: "słowo", size: 11, hl: true }] }] }];
+    const w = await NS.buildDocx(pages, new Map(), { title: "", lang: "pl-PL", bodySize: 11, bodyFont: "Arial", fonts: [] }, JSZip).catch((e) => ({ err: String(e) }));
+    if (!w || w.err) return { err: w?.err || "brak" };
+    const z = await JSZip.loadAsync(w);
+    return { doc: await z.file("word/document.xml").async("string"), styles: await z.file("word/styles.xml").async("string") };
+  });
+  check("konwersja: żółte z OCR ma styl „Do sprawdzenia (OCR)” zdefiniowany w styles.xml", !styled.err && /<w:rPr><w:rStyle w:val="DWBOcrCheck"\/>/.test(styled.doc) && /w:styleId="DWBOcrCheck"/.test(styled.styles), styled.err || "");
+
   await browser.close();
   fs.rmSync(TMP, { recursive: true, force: true });
   if (errors.length) check("bez błędów w konsoli", false, errors.join(" | ").slice(0, 400));

@@ -715,7 +715,7 @@
       const name = (file.name || "dokument.pdf").replace(/\.pdf$/i, "") + ".docx";
       const docx = new File([res.bytes], name, { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
       closeDialog();
-      const ok = await ingestFile(docx, { silent: true });
+      const ok = await ingestFile(docx, { silent: true, fresh: true });
       if (ok) {
         // nowy plik, którego nie ma jeszcze na dysku — „Zapisz” zapyta o miejsce
         setDirtyState(true);
@@ -727,7 +727,8 @@
         toast(`${options.photo ? T(options.photo.pages > 1 ? `Zdjęcia (${options.photo.pages}) zamienione na dokument` : "Zdjęcie zamienione na dokument", "Photo(s) converted to a document") : T("Przekonwertowano PDF", "PDF converted")}: ${parts.join(", ")} (${secs} s). ${T("Zapisz jako .docx.", "Save it as .docx.")}`, "success");
         if (r.suspectChars) toast(T(`${r.suspectChars} ${plural(r.suspectChars, "znak mógł", "znaki mogły", "znaków mogło")} się źle odczytać z PDF — ${r.suspectChars === 1 ? "jest zaznaczony" : "są zaznaczone"} na żółto. Sprawdź je.`, `${r.suspectChars} character(s) may have been read incorrectly — highlighted in yellow.`), "warning");
         if (r.ocrPages) toast(T(`Rozpoznano druk na ${r.ocrPages} ${plural(r.ocrPages, "stronie", "stronach", "stronach")} — sprawdź go, OCR bywa omylny.`, `Printed text recognized on ${r.ocrPages} page(s) — please check it, OCR can make mistakes.`), "info");
-        if (r.ocrDoubt) toast(T(`${r.ocrDoubt} ${plural(r.ocrDoubt, "słowo rozpoznane", "słowa rozpoznane", "słów rozpoznanych")} z mniejszą pewnością ${r.ocrDoubt === 1 ? "jest zaznaczone" : "są zaznaczone"} na żółto — sprawdź je z oryginałem.`, `${r.ocrDoubt} word(s) recognized with lower confidence are highlighted in yellow — check them against the original.`), "warning");
+        // „Usuń zaznaczenia” w dymku; później to samo w menu pod prawym przyciskiem (dopóki są)
+        if (r.ocrDoubt) toast(T(`${r.ocrDoubt} ${plural(r.ocrDoubt, "słowo rozpoznane", "słowa rozpoznane", "słów rozpoznanych")} z mniejszą pewnością ${r.ocrDoubt === 1 ? "jest zaznaczone" : "są zaznaczone"} na żółto — sprawdź je z oryginałem.`, `${r.ocrDoubt} word(s) recognized with lower confidence are highlighted in yellow — check them against the original.`), "warning", { action: t("ocrMarksAction"), onAction: () => clearOcrMarks() });
         if (r.ocrSkipped) toast(T(`${r.ocrSkipped} ${plural(r.ocrSkipped, "fragment", "fragmenty", "fragmentów")} (np. pismo odręczne) ${r.ocrSkipped === 1 ? "został" : "zostało"} jako obraz, bez zmian — tego jeszcze nie rozpoznajemy.`, `${r.ocrSkipped} fragment(s) (e.g. handwriting) kept unchanged as image — not recognized yet.`), "info");
         if (r.scannedPages && !r.ocrPages && !r.ocrLayerPages) {
           toast(T(`${r.scannedPages === r.pages ? "To skan" : `${r.scannedPages} ${plural(r.scannedPages, "strona to skan", "strony to skany", "stron to skany")}`} — wstawiony jako obraz (bez rozpoznawania tekstu).`, `${r.scannedPages} scanned page(s) — inserted as images (no text recognition).`), "info");

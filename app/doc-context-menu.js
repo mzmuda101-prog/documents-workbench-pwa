@@ -138,6 +138,10 @@ const dwbDocMenu = (() => {
       add("delRule", "ctxDeleteRule", () => composeUi.clearRuleAt(ctx.textRule), { danger: true });
       sep();
     }
+    if (ctx.ocrMarks) {
+      add("ocrMarks", "ctxClearOcrMarks", () => clearOcrMarks());
+      sep();
+    }
     if (ctx.blankPage) {
       add("blankPage", "ctxRemoveBlankPage", () => removeBlankPage(ctx.blankPage));
       sep();
@@ -218,6 +222,7 @@ const dwbDocMenu = (() => {
       rule: isRule(p) ? p : null,
       textRule: composeUi.hasTextRule?.(p) ? p : null,
       blankPage: blankAfterTable(p),
+      ocrMarks: typeof ocrMarksPresent !== "undefined" && ocrMarksPresent,
       cell: !!p?.closest("td, th"),
     };
   }

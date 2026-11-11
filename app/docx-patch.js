@@ -943,6 +943,7 @@ function applyEditToXml(xml, edit, opts = {}) {
   if (edit.op === "link") return applyLinkInXml(xml, edit);
   if (edit.op === "bookmark") return applyBookmarkInXml(xml, edit); // docx-compose.js
   if (edit.op === "runStyle") return applyRunStyleInXml(xml, edit);
+  if (edit.op === "clearOcrMarks") return clearOcrMarksInXml(xml);
   if (edit.op === "table") return applyTableInXml(xml, edit);
   if (edit.op === "image") return applyImageInXml(xml, edit);
   if (edit.op === "tabStop") return applyTabStopInXml(xml, edit); // docx-compose.js
@@ -953,6 +954,23 @@ function applyEditToXml(xml, edit, opts = {}) {
   if (edit.op === "listLevel") return changeListLevelInXml(xml, edit.index, edit.delta);
   if (edit.op === "case" || edit.op === "trim" || edit.op === "affix") return applyParagraphTransformInXml(xml, edit, scope);
   return applyReplaceInXml(xml, edit, scope, opts);
+}
+
+// Żółte „do sprawdzenia” z OCR (pdf-docx: styl znaku DWBOcrCheck + wyróżnienie) — zdejmujemy styl
+// i wyróżnienie tylko z tych przebiegów; własne wyróżnienia użytkownika zostają.
+const OCR_MARK_RE = /<w:rStyle w:val="DWBOcrCheck"\/>/;
+function clearOcrMarksInXml(xml) {
+  let count = 0;
+  const out = xml.replace(/<w:rPr>((?:(?!<\/w:rPr>).)*?)<\/w:rPr>/gs, (all, inner) => {
+    if (!OCR_MARK_RE.test(inner)) return all;
+    count++;
+    const rest = inner.replace(OCR_MARK_RE, "").replace(/<w:highlight w:val="yellow"\/>/, "");
+    return rest ? `<w:rPr>${rest}</w:rPr>` : "";
+  });
+  return { xml: count ? out : xml, count };
+}
+function documentHasOcrMarks(xml) {
+  return OCR_MARK_RE.test(xml || "");
 }
 
 function recordPendingEdit(edit) {

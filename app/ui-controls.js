@@ -271,7 +271,9 @@ async function saveDocumentAs() {
   const tbText = typeof dwbTextbox !== "undefined" ? dwbTextbox.settle?.() : null; // pisanie w polu tekstowym — do pliku
   if (tbText) await tbText.catch(() => {});
   const base = (currentFileName || "document.docx").replace(/\.docx$/i, "");
-  const suggested = `${base}_edited.docx`;
+  // „_edited” tylko przy pliku z dysku (żeby nie nadpisać oryginału) i bez dublowania;
+  // dokument nowy / z PDF-a / ze zdjęcia nie ma oryginału — sama nazwa
+  const suggested = currentFileFresh || /_edited$/i.test(base) ? `${base}.docx` : `${base}_edited.docx`;
   // Budowa pliku PO oknie wyboru: na dużym dokumencie trwa sekundy, a showSaveFilePicker
   // wymaga świeżego gestu użytkownika — inaczej SecurityError i ciche przejście na prompt().
   const failed = (e) => {
@@ -314,6 +316,7 @@ async function saveDocumentAs() {
         fileHandle = handle;
         overwriteConfirmedFor = handle; // sam wybrał ten plik w oknie zapisu — kolejne „Zapisz” bez pytania
         currentFileName = handle.name || suggested;
+        currentFileFresh = false; // jest już na dysku
         setFileUi(currentFileName, size);
         toast(t("saveDone"), "success");
         document.dispatchEvent(new CustomEvent("dwb:saved")); // strażnik spójności (self-check.js)
@@ -339,6 +342,7 @@ async function saveDocumentAs() {
     return;
   }
   currentFileName = name;
+  currentFileFresh = false;
   // pobranie: przeglądarka (Safari/iPhone) jeszcze pyta „Pobrać?” — nie mówimy „zapisano”
   toast(t("saveDownloaded", { name }), "success");
   document.dispatchEvent(new CustomEvent("dwb:saved"));
