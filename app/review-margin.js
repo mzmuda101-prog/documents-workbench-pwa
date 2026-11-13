@@ -246,7 +246,7 @@ const dwbMargin = (() => {
       const c = toContent(p.getBoundingClientRect());
       const bar = document.createElement("div");
       bar.className = "mk-bar";
-      bar.style.left = `${Math.max(2, c.x - 14)}px`;
+      bar.style.left = `${Math.max(2, toContent({ left: textLeft(p), top: 0, right: 0, height: 0 }).x - 14)}px`;
       bar.style.top = `${c.y}px`;
       bar.style.height = `${Math.max(4, c.h)}px`;
       inner.appendChild(bar);
@@ -332,6 +332,30 @@ const dwbMargin = (() => {
     if (extra) hd.appendChild(extra);
     return hd;
   }
+  // Pasek zmiany na lewym marginesie STRONY (jak w Wordzie), nie przy akapicie — w tabeli stał
+  // między kolumnami (zgłoszenie 2026-11-13). Akapit wysunięty w lewo poza tekst — przy nim.
+  function textLeft(p) {
+    const pr = p.getBoundingClientRect();
+    const sec = p.closest("section.docx");
+    if (!sec) return pr.left;
+    const sr = sec.getBoundingClientRect();
+    const k = sec.offsetWidth ? sr.width / sec.offsetWidth : 1;
+    return Math.min(pr.left, sr.left + (parseFloat(getComputedStyle(sec).paddingLeft) || 0) * k);
+  }
+  // Kolor tekstu z pliku (Word: szary 595959, biały…) bywa nieczytelny na tle dymka (ciemny motyw)
+  // — wtedy bez niego; tekst z wyróżnieniem zawsze ciemny (wyróżnienia są jasne).
+  function readableRun(r) {
+    if (r.hl) return { ...r, color: "111111" };
+    if (!r.color) return r;
+    // kontrast WCAG z tłem dymka (--surface: jasny #f2f5fb, ciemny #111827); poniżej 3:1 — bez koloru
+    const L = (hex) => {
+      const n = parseInt(hex, 16);
+      const ch = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; };
+      return 0.2126 * ch(n >> 16) + 0.7152 * ch((n >> 8) & 255) + 0.0722 * ch(n & 255);
+    };
+    const a = L(r.color), bg = L(document.documentElement.dataset.theme === "dark" ? "111827" : "F2F5FB");
+    return (Math.max(a, bg) + 0.05) / (Math.min(a, bg) + 0.05) < 3 ? { ...r, color: undefined } : r;
+  }
   function richBody(x) {
     const body = document.createElement("div");
     body.className = "mk-body";
@@ -339,7 +363,7 @@ const dwbMargin = (() => {
       x.rich.forEach((runs) => {
         const p = document.createElement("div");
         p.className = "mk-p";
-        runs.forEach((r) => p.appendChild(composeUi.richRunEl(r)));
+        runs.forEach((r) => p.appendChild(composeUi.richRunEl(readableRun(r))));
         if (!runs.length) p.appendChild(document.createElement("br"));
         body.appendChild(p);
       });
@@ -565,7 +589,10 @@ const dwbMargin = (() => {
     wire.replaceChildren();
     const focus = hover || active;
     const hasDel = (it) => it.kind !== "comment" && it.data.rows.some((x) => /^(del|moveFrom|paraDel)$/.test(x.kind));
-    const list = items.filter((it) => !it.pop && !it.el.hidden && (it.key === focus || hasDel(it)));
+    // stała linia tylko gdy dymek stoi blisko swojego wiersza — dymek zepchnięty daleko dawał długie,
+    // prawie pionowe linie przez cały margines; wtedy linia dopiero przy wskazaniu / aktywnym
+    const near = (it) => Math.abs(it.top + 11 - it.anchor.y) < 48;
+    const list = items.filter((it) => !it.pop && !it.el.hidden && (it.key === focus || (hasDel(it) && near(it))));
     if (!list.length) return;
     const h = host();
     const secs = h ? [...h.querySelectorAll("section.docx")] : [];
@@ -701,6 +728,7 @@ const dwbMargin = (() => {
     hasItem: (key) => showing && items.some((it) => it.key === key),
     _items: () => items.map((it) => ({ key: it.key, kind: it.kind, top: it.top, h: it.h, anchorY: it.anchor.y, left: parseFloat(it.el.style.left), width: it.el.offsetWidth })),
     _rangeIn: rangeIn,
+    _readable: readableRun,
   };
 })();
 

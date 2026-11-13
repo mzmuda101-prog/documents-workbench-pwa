@@ -141,7 +141,9 @@ const dwbTrack = (() => {
     bar.setAttribute("aria-hidden", "true");
     bar.style.top = `${(pr.top - sr.top) / k}px`;
     bar.style.height = `${Math.max(4, pr.height / k)}px`;
-    bar.style.left = `${Math.max(2, (pr.left - sr.left) / k - 14)}px`;
+    // lewy margines strony (jak w Wordzie), nie brzeg akapitu — w tabeli pasek stał między kolumnami
+    const textX = Math.min((pr.left - sr.left) / k, parseFloat(getComputedStyle(sec).paddingLeft) || 0);
+    bar.style.left = `${Math.max(2, textX - 14)}px`;
     sec.appendChild(bar);
   }
   let markTimer = null;

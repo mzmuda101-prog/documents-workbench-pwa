@@ -50,6 +50,23 @@ async function run() {
   const hl = await page.evaluate(() => [...CSS.highlights.keys()].filter((k) => k.startsWith("dwb-rev-")).flatMap((k) => [...CSS.highlights.get(k)].map((r) => r.toString())));
   check("wstawki podkreślone w tekście: dokładnie wstawiony tekst", hl.includes("30") && hl.some((s) => s.trim() === "niezwłocznie"), JSON.stringify(hl));
   check("pasek przy akapitach ze zmianą", (await page.evaluate(() => document.querySelectorAll(".dwb-markup .mk-bar").length)) >= 5);
+  // zgłoszenie 2026-11-13: pasek przy zmianie w komórce tabeli stał między kolumnami
+  // tabela z dwiema kolumnami, zmiana w DRUGIEJ (jak w zgłoszeniu) — ten sam plik, komórka dopisana z lewej
+  await page.evaluate(async () => {
+    const z = await JSZip.loadAsync(originalFileBytes);
+    let x = await z.file("word/document.xml").async("string");
+    x = x.replace('<w:gridCol w:w="4000"/>', '<w:gridCol w:w="3000"/><w:gridCol w:w="4000"/>')
+      .replace("<w:tr><w:tc><w:tcPr/><w:p><w:r><w:t xml:space=\"preserve\">Komórka ", "<w:tr><w:tc><w:tcPr/><w:p><w:r><w:t>Parametr</w:t></w:r></w:p></w:tc><w:tc><w:tcPr/><w:p><w:r><w:t xml:space=\"preserve\">Komórka ");
+    z.file("word/document.xml", x);
+    await ingestFile(new File([await z.generateAsync({ type: "blob" })], "review-sample.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }));
+  });
+  await idle(page);
+  check("tabela: zmiana w drugiej kolumnie", await page.evaluate(() => [...document.querySelectorAll(".docx-preview-host td")].length >= 2));
+  const barX = await page.evaluate(() => [...new Set([...document.querySelectorAll(".dwb-markup .mk-bar")].map((b) => Math.round(b.getBoundingClientRect().left)))]);
+  check("paski zmian w jednej linii na lewym marginesie (też przy tabeli)", barX.length === 1, JSON.stringify(barX));
+  // zgłoszenie 2026-11-13: dymki zepchnięte daleko od wiersza dawały długie pionowe linie
+  const longWires = await page.evaluate(() => [...document.querySelectorAll(".mk-wire polyline:not(.is-focus)")].filter((pl) => { const pts = pl.getAttribute("points").split(" ").map((x) => x.split(",").map(Number)); return Math.abs(pts[2][1] - pts[0][1]) > 60; }).length);
+  check("bez długich linii do dymków zepchniętych daleko", longWires === 0, String(longWires));
 
   // ── tekst przesuwa się PO narysowaniu (przerwa strony, czcionka, obraz) ────
   // zgłoszenie 2026-11-13: dymek, pasek i linia zostawały przy starym miejscu tekstu
@@ -117,6 +134,18 @@ async function run() {
   const ex = await fileXml(page, "word/commentsExtended.xml");
   check("Rozwiąż w dymku: komentarz rozwiązany w pliku", /w15:done="1"/.test(ex));
   check("rozwiązany dymek zwinięty", await page.evaluate(() => document.querySelector('[data-key="c:10"]')?.classList.contains("is-done")));
+
+  // ── kolor tekstu komentarza z pliku nieczytelny na ciemnym dymku (szary 595959 z Worda) ──
+  await page.evaluate(() => { document.documentElement.dataset.theme = "dark"; dwbMargin.schedule(); });
+  await page.waitForTimeout(500);
+  const greyOk = await page.evaluate(() => {
+    const body = document.querySelector('[data-key="c:20"] .mk-body');
+    if (!body) return "brak dymka";
+    return dwbMargin._readable({ text: "x", color: "595959" }).color === undefined && dwbMargin._readable({ text: "x", color: "FF0000" }).color === "FF0000" && dwbMargin._readable({ text: "x", hl: "yellow" }).color === "111111";
+  });
+  check("ciemny motyw: szary kolor z pliku pominięty, czytelne kolory zostają", greyOk === true, String(greyOk));
+  await page.evaluate(() => { document.documentElement.dataset.theme = "light"; dwbMargin.schedule(); });
+  await page.waitForTimeout(400);
 
   // ── tryb „Bez” = bez dymków i podkreśleń; karta komentarza wraca ───────────
   await page.evaluate(() => dwbMargin.setMode("none"));
