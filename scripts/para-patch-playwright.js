@@ -25,7 +25,8 @@ const compareWithFullRender = (page, idx) => page.evaluate(async (indices) => {
   const MEASURED = /^--dwb-(trail|last-fill|spw)$/; // pomiary na miejscu — porównujemy ich skutek (wymiary)
   const styleOf = (p) => [...p.style].filter((k) => !MEASURED.test(k)).map((k) => `${k}:${p.style.getPropertyValue(k)}`).sort().join(";");
   const classesOf = (p) => [...p.classList].filter((c) => !APP.has(c)).sort().join(" ");
-  const look = (p) => { const cs = getComputedStyle(p); return ["textAlign", "marginLeft", "marginRight", "marginTop", "marginBottom", "textIndent", "lineHeight", "paddingLeft"].map((k) => `${k}=${cs[k]}`).join(" "); };
+  // + krój tekstu (pierwszy fragment) — styl akapitu z listy bez reguł CSS stylu wyszedłby tu inaczej
+  const look = (p) => { const cs = getComputedStyle(p); const tw = document.createTreeWalker(p, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.data.trim() ? 1 : 3) }); const t = getComputedStyle(tw.nextNode()?.parentElement || p); return ["textAlign", "marginLeft", "marginRight", "marginTop", "marginBottom", "textIndent", "lineHeight", "paddingLeft"].map((k) => `${k}=${cs[k]}`).concat(["fontSize", "fontWeight", "color"].map((k) => `${k}=${t[k]}`)).join(" "); };
   const live = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"));
   const src = document.createElement("div");
   src.className = `${docCanvasEl.className} dwb-pp-src`;
@@ -163,6 +164,71 @@ async function main() {
   await idle(page);
   const alignAfter = await page.evaluate((ix) => getComputedStyle(collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[ix[0]]).textAlign, span || [targets[0]]);
   check("Cofnij cofa ostatnią zmianę wyglądu", alignBefore !== alignAfter, `${alignBefore} → ${alignAfter}`);
+
+  // ── łatka z różnicy plików (patchFromDiff): operacje, które tylko przepisują akapity ──────────
+  const live = (i) => page.evaluate((i) => collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[i].textContent, i);
+  const viewIsFile = () => page.evaluate(async () => {
+    const ps = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"));
+    const dom = ps.map((p) => (p.dataset.lock ? null : previewRunsToPlainText(extractRunsFromPreviewParagraph(p)).replace(/[\t\n]/g, "")));
+    const xml = (await extractParagraphTextsFromDocx(await buildDocumentForSave())).map((t) => String(t).replace(/[\t\n]/g, ""));
+    return dom.length === xml.length && dom.every((t, k) => t === null || t === xml[k]);
+  });
+  const t0 = targets[0];
+  const renders = () => page.evaluate(() => window.__renders);
+  const zero = () => page.evaluate(() => { window.__renders = 0; });
+  // Cofnij / Ponów operacji na pliku (dawniej zawsze pełne przerysowanie)
+  await zero();
+  await page.evaluate(() => document.getElementById("redoBtn").click());
+  await idle(page);
+  check("Ponów zmiany wyglądu: bez przerysowania", (await renders()) === 0, String(await renders()));
+  await page.evaluate(() => document.getElementById("undoBtn").click());
+  await idle(page);
+  check("Cofnij zmiany wyglądu: bez przerysowania", (await renders()) === 0, String(await renders()));
+  const cu = await compareWithFullRender(page, span || [t0]);
+  check("…Cofnij: łatka = pełny render", cu.every((c) => c.ok), JSON.stringify(cu.filter((c) => !c.ok)));
+  // link (nowa relacja w pliku) — tylko ten akapit
+  await zero();
+  await page.evaluate((i) => applyDocumentEdit({ op: "link", index: i, start: 0, end: 5, href: "https://example.com/" }), t0);
+  await idle(page);
+  const cl = await compareWithFullRender(page, [t0]);
+  check("link: bez przerysowania, łatka = pełny render", (await renders()) === 0 && cl[0].ok, `${await renders()} ${cl[0].why}`);
+  check("…link w podglądzie", await page.evaluate((i) => !!collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[i].querySelector('a[href="https://example.com/"]'), t0));
+  await zero();
+  await page.evaluate(() => document.getElementById("undoBtn").click());
+  await idle(page);
+  check("…Cofnij link: bez przerysowania, linku nie ma", (await renders()) === 0 && await page.evaluate((i) => !collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[i].querySelector('a[href="https://example.com/"]'), t0), String(await renders()));
+  // koniec Sugerowania: poprawki w dokumencie — tylko zmienione akapity
+  await page.evaluate(() => localStorage.setItem("dwb.authorName", "Tester"));
+  await page.evaluate(() => dwbTrack.start({ silent: true }));
+  await idle(page);
+  await page.evaluate((i) => { const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[i]; p.closest(".docx-edit-root")?.focus(); placeCaret(p, 3); }, t0);
+  await page.keyboard.type("QQ ");
+  await page.waitForTimeout(500);
+  await zero();
+  await page.evaluate(() => dwbTrack.stop());
+  await idle(page);
+  const ct = await compareWithFullRender(page, [t0]);
+  check("koniec Sugerowania: bez przerysowania, łatka = pełny render", (await renders()) === 0 && ct[0].ok, `${await renders()} ${ct[0].why}`);
+  check("…poprawka w podglądzie (wstawka)", await page.evaluate((i) => /QQ/.test(collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[i].querySelector("[data-dwb-rev]")?.textContent || ""), t0));
+  check("…podgląd = plik", await viewIsFile());
+  // styl akapitu z listy (styl jest w pliku — plik stylów bez zmian): tylko ten akapit
+  for (const [key, name] of [["h1", "Nagłówek 1"], ["h2", "Nagłówek 2"], ["normal", "Normalny"]]) {
+    await zero();
+    await page.evaluate(([i, key]) => applyDocumentEdit({ op: "paraFormat", indices: [i], style: key, resetDirect: true }), [t0, key]);
+    await idle(page);
+    const cs = await compareWithFullRender(page, [t0]);
+    const r = await renders();
+    check(`styl „${name}”: ${r === 0 ? "bez przerysowania, " : ""}łatka = pełny render`, cs[0].ok, `${r} ${cs[0].why}`);
+    if (key === "h1") {
+      check("…„Nagłówek 1” bez przerysowania (styl w pliku)", r === 0, String(r));
+      check("…nagłówek w panelu Struktura", await page.evaluate((i) => { const txt = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[i].textContent.trim().slice(0, 20); return (documentStructure?.headings || []).some((h) => String(h.label || "").includes(txt)); }, t0));
+    }
+  }
+  // bezpiecznik: nowy akapit (podział strony) — dalej pełne przerysowanie i podgląd = plik
+  await zero();
+  await page.evaluate((i) => applyDocumentEdit({ op: "pageBreak", index: i }), t0);
+  await idle(page);
+  check("podział strony (nowy akapit): pełne przerysowanie, podgląd = plik", (await renders()) === 1 && await viewIsFile(), String(await renders()));
 
   check("bez błędów w konsoli", errors.length === 0, errors.slice(0, 3).join(" | "));
   await browser.close();

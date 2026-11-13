@@ -37,7 +37,8 @@ import { globalFingerprint, loadImpact, saveImpact, whyRun, makeRecord, unionExe
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TIMINGS = path.join(ROOT, ".test-timings.json");
-const PORT = 7823; // ten sam co APP_URL w scripts/docx-test-helpers.js
+// ten sam co APP_URL w scripts/docx-test-helpers.js; APP_URL=http://127.0.0.1:7824/ — drugi folder (worktree) obok
+const PORT = Number(new URL(process.env.APP_URL || "http://127.0.0.1:7823/").port) || 7823;
 
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
 const chain = pkg.scripts["test:serial"];
