@@ -123,8 +123,47 @@ function revCommentRich(comment) {
   return { paras, editable };
 }
 
+// Położenie zmiany w tekście akapitu „jak po przyjęciu” (tak rysuje go podgląd: wstawione się
+// liczy, usunięte nie; tabulator = „\t”, łamanie wiersza = „\n”) — dla podkreślenia wstawek
+// w tekście i kotwicy dymka na marginesie (review-margin.js). { at, shown } — shown = tekst
+// wstawki w podglądzie (dla usunięcia pusty: miejsce, z którego zniknął tekst).
+function revAcceptedSpan(p, target) {
+  let at = 0, shown = "", inside = false, found = false;
+  const walk = (el) => {
+    for (const n of Array.from(el.childNodes)) {
+      if (found && !inside) return;
+      if (n.nodeType !== 1 || n.namespaceURI !== W_NS) continue;
+      const isTarget = n === target;
+      if (isTarget) inside = true;
+      const name = n.localName;
+      if (name === "pPr" || name === "rPr") { if (isTarget) inside = false; continue; }
+      if (name === "del" || name === "moveFrom") { if (isTarget) { inside = false; found = true; } continue; }
+      const piece = name === "t" ? n.textContent || "" : name === "tab" ? "\t" : name === "br" ? "\n" : null;
+      if (piece != null) { if (inside) shown += piece; else at += piece.length; }
+      else walk(n);
+      if (isTarget) { inside = false; found = true; }
+    }
+  };
+  walk(p);
+  return found ? { at, shown } : null;
+}
+
 // ── odczyt ───────────────────────────────────────────────────────────────────
-async function scanDocxRevisions(bytes) {
+// Wynik dla tej samej wersji pliku liczony raz — czytają go karta komentarza (compose-ui.js),
+// dymki na marginesie (review-margin.js) i panel Recenzja. Wynik tylko do odczytu.
+const revScanCache = new WeakMap();
+function scanDocxRevisions(bytes) {
+  if (!bytes || typeof bytes !== "object") return scanDocxRevisionsNow(bytes);
+  let job = revScanCache.get(bytes);
+  if (!job) {
+    job = scanDocxRevisionsNow(bytes);
+    revScanCache.set(bytes, job);
+    job.catch(() => revScanCache.delete(bytes));
+  }
+  return job;
+}
+
+async function scanDocxRevisionsNow(bytes) {
   const zip = await loadDocxZipCached(bytes);
   const result = { changes: [], comments: [], notes: [], authors: new Map() };
   const parts = Object.keys(zip.files).filter((n) => REV_PARTS_RE.test(n)).sort((a, b) => (a === "word/document.xml" ? -1 : b === "word/document.xml" ? 1 : a.localeCompare(b)));
@@ -148,7 +187,13 @@ async function scanDocxRevisions(bytes) {
     const add = (kind, el, text) => {
       const author = revAttr(el, "author") || "?";
       result.authors.set(author, (result.authors.get(author) || 0) + 1);
-      result.changes.push({ id: revAttr(el, "id"), kind, author, date: revAttr(el, "date"), text: (text || "").trim(), ...where(el) });
+      const item = { id: revAttr(el, "id"), kind, author, date: revAttr(el, "date"), text: (text || "").trim(), ...where(el) };
+      if (part === "body" && /^(ins|del|moveFrom|moveTo)$/.test(kind)) {
+        const p = revClosest(el, "p");
+        const span = p ? revAcceptedSpan(p, el) : null;
+        if (span) { item.at = span.at; item.shown = span.shown; }
+      }
+      result.changes.push(item);
     };
     ["ins", "del", "moveFrom", "moveTo"].forEach((tag) => {
       revKids(doc.documentElement, tag).forEach((el) => {

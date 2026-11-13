@@ -2121,7 +2121,29 @@ const composeUi = (() => {
     if (!imgCard) return;
     imgCard.img.classList.remove("img-selected");
     imgCard.el.remove();
+    imgCard.handles?.remove();
     imgCard = null;
+  }
+  // ── przyciąganie rozmiaru obrazu (jak w Wordzie: obraz „staje” na typowych szerokościach) ──
+  // Cele w px układu: ¼, ⅓, ½, ⅔, ¾ i cała szerokość tekstu, rozmiar oryginalny (piksele pliku)
+  // i szerokości innych obrazów w dokumencie („tej samej szerokości co…”).
+  const IMG_SNAP_PCT = [25, 100 / 3, 50, 200 / 3, 75, 100];
+  function imageSnapTargets(img, textPx) {
+    const out = IMG_SNAP_PCT.map((pct) => ({ w: textPx * pct / 100, label: `${Math.round(pct)}%` }));
+    if (img.naturalWidth && img.naturalWidth < textPx * 0.98) out.push({ w: img.naturalWidth, label: t("imageSnapOriginal") });
+    host()?.querySelectorAll("img").forEach((o) => {
+      if (o === img || !o.closest(".docx-edit-root")) return;
+      const w = imageDocWidthPx(o);
+      if (w > 8 && w < textPx * 1.001) out.push({ w, label: t("imageSnapSame"), src: o });
+    });
+    return out;
+  }
+  // najbliższy cel w tolerancji (px układu); trzymany cel puszcza dopiero przy 1,8 × tolerancji
+  function snapImageWidth(w, targets, tol, held) {
+    let best = null;
+    targets.forEach((tg) => { const d = Math.abs(tg.w - w); if (d <= tol && (!best || d < Math.abs(best.w - w))) best = tg; });
+    if (!best && held && Math.abs(held.w - w) <= tol * 1.8) best = held;
+    return best;
   }
   function imagePct(img, p) {
     const w = p.clientWidth - parseFloat(getComputedStyle(p).paddingLeft || 0) - parseFloat(getComputedStyle(p).paddingRight || 0);
@@ -2258,7 +2280,93 @@ const composeUi = (() => {
     del.addEventListener("click", () => { const i = imgCard.index; hideImageCard(); imageEdit(i, { action: "delete" }, false); });
     el.addEventListener("mousedown", (e) => { if (e.target.closest("button")) e.preventDefault(); });
     document.body.appendChild(el);
-    imgCard = { el, img, p, index, savedPct: +range.value, isDragging: () => dragging, textPx: 0, caret: caretKey() };
+    // Uchwyty w rogach (jak w Wordzie): przeciąganie zmienia szerokość z zachowaniem proporcji,
+    // z przyciąganiem (imageSnapTargets); Alt — bez przyciągania. Klawiatura: suwak w karcie.
+    const handles = document.createElement("div");
+    handles.className = "img-handles";
+    handles.setAttribute("aria-hidden", "true");
+    ["nw", "ne", "se", "sw"].forEach((h) => { const d = document.createElement("div"); d.className = "img-h"; d.dataset.h = h; handles.appendChild(d); });
+    const badge = document.createElement("div");
+    badge.className = "img-snap-badge";
+    badge.hidden = true;
+    const guide = document.createElement("div");
+    guide.className = "img-snap-guide";
+    guide.hidden = true;
+    handles.append(badge, guide);
+    document.body.appendChild(handles);
+    let hdrag = null;
+    const placeHandles = (r) => {
+      handles.style.left = `${r.left}px`; handles.style.top = `${r.top}px`;
+      handles.style.width = `${r.width}px`; handles.style.height = `${r.height}px`;
+    };
+    handles.addEventListener("pointerdown", (e) => {
+      const h = e.target.closest(".img-h");
+      if (!h || !imgCard || imgCard.el !== el || e.button > 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      h.setPointerCapture?.(e.pointerId);
+      const im = imgCard.img;
+      const r = im.getBoundingClientRect();
+      const s = docZoomScale(im) || 1;
+      const textPx = imgCard.textPx || imageTextWidth(imgCard.p);
+      const center = getComputedStyle(imgCard.p).textAlign === "center";
+      hdrag = { id: e.pointerId, h: h.dataset.h, x0: e.clientX, y0: e.clientY, w0: r.width / s, aspect: r.height / (r.width || 1), s, textPx, k: center ? 2 : 1,
+        targets: imageSnapTargets(im, textPx), tol: (e.pointerType === "touch" ? 12 : 6) / s, held: null, w: r.width / s };
+      dragging = true;
+      handles.classList.add("is-dragging");
+    });
+    handles.addEventListener("pointermove", (e) => {
+      if (!hdrag || e.pointerId !== hdrag.id || !imgCard) return;
+      const d = hdrag;
+      const sx = d.h.includes("e") ? 1 : -1, sy = d.h.includes("s") ? 1 : -1;
+      const byX = sx * (e.clientX - d.x0) * d.k / d.s;
+      const byY = sy * (e.clientY - d.y0) * d.k / d.s / (d.aspect || 1);
+      let w = d.w0 + (Math.abs(byY) > Math.abs(byX) ? byY : byX);
+      w = Math.max(d.textPx * 0.05, Math.min(d.textPx, w));
+      const sn = e.altKey ? null : snapImageWidth(w, d.targets, d.tol, d.held);
+      d.held = sn;
+      if (sn) w = sn.w;
+      d.w = w;
+      const im = imgCard.img;
+      im.style.width = `${w}px`;
+      im.style.height = "auto";
+      const pct = Math.round(w / d.textPx * 1000) / 10;
+      range.value = String(Math.round(pct));
+      val.textContent = `${Math.round(pct)}%`;
+      const r = im.getBoundingClientRect();
+      placeHandles(r);
+      badge.hidden = false;
+      badge.textContent = sn ? (sn.label.endsWith("%") ? sn.label : `${sn.label} · ${Math.round(pct)}%`) : `${Math.round(pct)}%`;
+      badge.classList.toggle("is-snap", !!sn);
+      // linia przyciągania: prawa (albo lewa) krawędź obrazu przez całą kartkę
+      const sec = im.closest("section.docx");
+      guide.hidden = !sn;
+      if (sn && sec) {
+        const sr = sec.getBoundingClientRect();
+        const vr = docViewportEl?.getBoundingClientRect() || sr;
+        const top = Math.max(sr.top, vr.top), bottom = Math.min(sr.bottom, vr.bottom); // tylko w widocznym obszarze dokumentu
+        guide.style.left = `${(d.h.includes("e") ? r.right : r.left) - r.left}px`;
+        guide.style.top = `${top - r.top}px`;
+        guide.style.height = `${Math.max(0, bottom - top)}px`;
+      }
+    });
+    const endHandle = (e) => {
+      if (!hdrag || e.pointerId !== hdrag.id) return;
+      const d = hdrag;
+      hdrag = null;
+      dragging = false;
+      handles.classList.remove("is-dragging");
+      badge.hidden = true;
+      guide.hidden = true;
+      if (!imgCard || imgCard.el !== el) return;
+      const pct = Math.max(5, Math.min(100, Math.round(d.w / d.textPx * 1000) / 10));
+      if (Math.abs(pct - imgCard.savedPct) < 0.05) { placeImageCard(); return; }
+      imgCard.savedPct = pct;
+      imageEdit(imgCard.index, { action: "size", widthPct: pct });
+    };
+    handles.addEventListener("pointerup", endHandle);
+    handles.addEventListener("pointercancel", endHandle);
+    imgCard = { el, img, p, index, savedPct: +range.value, isDragging: () => dragging, textPx: 0, caret: caretKey(), handles, placeHandles };
     placeImageCard();
     // procent względem strony z pliku (Widok mobilny ≠ szerokość ekranu)
     pageTextPx(index).then((tp) => {
@@ -2275,8 +2383,9 @@ const composeUi = (() => {
     const vv = window.visualViewport;
     const r = imgCard.img.getBoundingClientRect();
     const vp = docViewportEl?.getBoundingClientRect();
-    if (vp && (r.bottom < vp.top || r.top > vp.bottom)) { imgCard.el.style.visibility = "hidden"; return; }
+    if (vp && (r.bottom < vp.top || r.top > vp.bottom)) { imgCard.el.style.visibility = "hidden"; if (imgCard.handles) imgCard.handles.style.visibility = "hidden"; return; }
     imgCard.el.style.visibility = "";
+    if (imgCard.handles) { imgCard.handles.style.visibility = ""; imgCard.placeHandles(r); }
     const viewW = vv ? vv.width : window.innerWidth;
     const viewH = vv ? vv.height : window.innerHeight;
     const w = imgCard.el.offsetWidth; const h = imgCard.el.offsetHeight;
@@ -2552,6 +2661,7 @@ const composeUi = (() => {
   }
 
   function paintCommentHighlights() {
+    if (typeof dwbMargin !== "undefined") dwbMargin.schedule(); // dymki za przerysowanym dokumentem
     if (typeof CSS === "undefined" || !CSS.highlights || typeof Highlight === "undefined") return;
     const open = new Highlight();
     const done = new Highlight();
@@ -3027,6 +3137,22 @@ const composeUi = (() => {
     cCard.el.style.top = `${top + (vv ? vv.offsetTop : 0)}px`;
   }
 
+  // Dymki na marginesie (review-margin.js) — te same operacje co karta komentarza.
+  // kind: reply | edit | resolve | delete; anchor = przycisk w dymku (tam otwiera się okienko).
+  function commentAction(id, kind, anchor) {
+    const c = commentData.byId.get(id);
+    if (!c) return;
+    const p = activeParagraph() || lastP;
+    const caret = p?.isConnected ? caretState(p) : null;
+    if (kind === "reply") openCommentForm(anchor, { replyTo: c.id, caret });
+    else if (kind === "edit") {
+      if (c.editable === false) { toast(t("commentEditBlocked"), "info"); return; }
+      openCommentForm(anchor, { editId: c.id, rich: c.rich?.length ? c.rich : [[{ text: c.text }]], caret });
+    } else if (kind === "resolve") runFileEdit({ op: "commentDone", id: c.id, done: !c.done }, caret);
+    else if (kind === "delete") runFileEdit({ op: "revisions", action: "removeComments", ids: [c.id, ...c.replies.map((r) => r.id)] }, caret);
+  }
+  const commentById = (id) => commentData.byId.get(id) || null;
+
   // ── nagłówek i stopka ─────────────────────────────────────────────────────
   // Strony w podglądzie: docx-preview łamie tylko przy jawnych podziałach, więc wysoka kartka =
   // kilka stron (szacunek z wysokości strony). Nagłówek kartki = jej pierwsza strona, stopka = ostatnia.
@@ -3271,8 +3397,11 @@ const composeUi = (() => {
     if (a !== linkCardMuted) linkCardMuted = null;
     if (a && !linkCardMuted) showLinkCard(a); else hideLinkCard();
     const hit = !readOnlyMode && !pop && !cCardMuted ? commentAtCaret() : null;
-    if (hit) showCommentCard(hit); else hideCommentCard();
+    // margines recenzji widoczny (review-margin.js) — zamiast karty nad wierszem świeci dymek obok
+    // dymek na marginesie (review-margin.js) — zamiast karty nad wierszem; aktywny ustawia margines
+    if (hit && !marginHas(hit.id)) showCommentCard(hit); else hideCommentCard();
   }
+  const marginHas = (id) => typeof dwbMargin !== "undefined" && dwbMargin.hasItem(`c:${id}`);
 
   let syncQueued = false;
   function queueSync() {
@@ -3390,7 +3519,7 @@ const composeUi = (() => {
     imageViewer.open(img);
   });
   document.addEventListener("pointerdown", (e) => {
-    if (!imgCard || imgCard.el.contains(e.target) || e.target === imgCard.img || pop?.el.contains(e.target) || e.target.closest?.(".image-viewer")) return;
+    if (!imgCard || imgCard.el.contains(e.target) || imgCard.handles?.contains(e.target) || e.target === imgCard.img || pop?.el.contains(e.target) || e.target.closest?.(".image-viewer")) return;
     hideImageCard();
   }, true);
   document.addEventListener("keydown", (e) => {
@@ -3423,7 +3552,7 @@ const composeUi = (() => {
     const sel = window.getSelection();
     if (sel && !sel.isCollapsed && sel.toString().trim()) { hideCommentCard(); return; } // zaznaczanie tekstu
     const hit = commentAtPoint(e.clientX, e.clientY);
-    if (hit) showCommentCard(hit, true); else hideCommentCard();
+    if (hit && !marginHas(hit.id)) showCommentCard(hit, true); else hideCommentCard();
   });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && cCard?.ro) hideCommentCard(); });
   // klik poza dokumentem i poza kartą (pasek, panel) — karta Czytania znika
@@ -3694,5 +3823,5 @@ const composeUi = (() => {
     document.getElementById(id)?.addEventListener("click", openNewDialog);
   });
 
-  return { openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, stampPageNumbers, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, clearIndentAt, hasTextRule, clearRuleAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
+  return { commentAction, commentById, commentRanges, richRunEl: (r) => richRunEl(r), openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, stampPageNumbers, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, clearIndentAt, hasTextRule, clearRuleAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
 })();

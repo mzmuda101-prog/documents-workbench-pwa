@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v1.00.22";
+const CACHE_VERSION = "v1.00.25";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
@@ -35,6 +35,7 @@ const SHELL_ASSETS = [
   `./app/docx-redline.js?v=${ASSET_V}`,
   `./app/track-changes.js?v=${ASSET_V}`,
   `./app/docx-revisions.js?v=${ASSET_V}`,
+  `./app/review-margin.js?v=${ASSET_V}`,
   `./app/docx-forms.js?v=${ASSET_V}`,
   `./app/doc-links.js?v=${ASSET_V}`,
   `./app/docx-patch.js?v=${ASSET_V}`,

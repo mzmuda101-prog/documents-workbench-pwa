@@ -41,6 +41,7 @@ const dwbTrack = (() => {
     if (!state.on) {
       if (infoEl()) infoEl().textContent = t("trackOffHint");
       clearMarks();
+      if (typeof dwbMargin !== "undefined") dwbMargin.schedule();
     } else scheduleMarks();
   }
 
@@ -121,6 +122,7 @@ const dwbTrack = (() => {
     return doc ? collectParagraphElements(doc.documentElement, "all").map(acceptedText) : [];
   }
   function clearMarks() {
+    state.live = [];
     docCanvasEl?.querySelectorAll(".dwb-tracked, .dwb-tracked-gap").forEach((p) => p.classList.remove("dwb-tracked", "dwb-tracked-gap"));
     docCanvasEl?.querySelectorAll(".dwb-track-bar").forEach((b) => b.remove());
   }
@@ -155,16 +157,68 @@ const dwbTrack = (() => {
     const keys = paras.map((p) => previewRunsToPlainText(extractRunsFromPreviewParagraph(p)));
     const rows = rlAlign(state.baseKeys, keys);
     clearMarks();
-    let changed = 0, gapNext = false;
+    let changed = 0, gapNext = false, removedText = [];
+    const live = [];
     rows.forEach((r) => {
-      if (r.kind === "removed") { gapNext = true; changed++; return; }
+      if (r.kind === "removed") { gapNext = true; changed++; removedText.push(state.baseKeys[r.o] ?? ""); return; }
       const p = r.n != null ? paras[r.n] : null;
       if (!p) return;
-      if (r.kind === "changed" || r.kind === "added") { p.classList.add("dwb-tracked"); changed++; }
-      if (gapNext) { p.classList.add("dwb-tracked-gap"); gapNext = false; }
+      if (r.kind === "changed" || r.kind === "added") {
+        p.classList.add("dwb-tracked");
+        changed++;
+        live.push({ n: r.n, p, ...(r.kind === "added" ? { ins: keys[r.n] ? [{ start: 0, end: keys[r.n].length }] : [], dels: [], added: true } : liveDiff(state.baseKeys[r.o] ?? "", keys[r.n])) });
+      }
+      if (gapNext) {
+        p.classList.add("dwb-tracked-gap");
+        live.push({ n: r.n, p, ins: [], dels: removedText.filter((x) => x.trim()).map((text) => ({ at: 0, text, para: true })) });
+        gapNext = false;
+        removedText = [];
+      }
     });
+    state.live = live;
     docCanvasEl?.querySelectorAll("p.dwb-tracked").forEach(placeBar);
     if (infoEl()) infoEl().textContent = t("trackOnInfo", { name: state.author, n: changed });
+    if (typeof dwbMargin !== "undefined") dwbMargin.schedule();
+  }
+  // Różnica słów w akapicie (to samo cięcie co docx-redline.js) → wstawione zakresy w tekście
+  // „po” i usunięte kawałki z miejscem, z którego zniknęły — do podkreślenia i dymków.
+  function liveDiff(before, after) {
+    const toks = (s) => {
+      const out = [];
+      let pos = 0;
+      (String(s).match(/\s+|[\p{L}\p{N}_'’]+|[^\s\p{L}\p{N}_'’]/gu) || []).forEach((text) => { out.push({ key: text, text, pos }); pos += text.length; });
+      return out;
+    };
+    const a = toks(before), b = toks(after);
+    const ops = rlDiffTokens(a, b);
+    const ins = [], dels = [];
+    let at = 0;
+    ops.forEach((o) => {
+      if (o.kind === "same") { at = o.tok.pos + o.tok.text.length; return; }
+      if (o.kind === "ins") {
+        const last = ins[ins.length - 1];
+        if (last && last.end === o.tok.pos) last.end += o.tok.text.length; else ins.push({ start: o.tok.pos, end: o.tok.pos + o.tok.text.length });
+        at = o.tok.pos + o.tok.text.length;
+        return;
+      }
+      const last = dels[dels.length - 1];
+      if (last && last.at === at && last.open) last.text += o.tok.text; else dels.push({ at, text: o.tok.text, open: true });
+    });
+    dels.forEach((d) => delete d.open);
+    // słowo poprawione, nie zastąpione („Workbench” → „Workbenc”): wspólny początek i koniec
+    // usuniętego i wstawionego kawałka w tym samym miejscu zostają — zmienione tylko znaki między
+    dels.forEach((d) => {
+      const x = ins.find((i) => i.start === d.at);
+      if (!x) return;
+      const put = after.slice(x.start, x.end);
+      let k = 0;
+      while (k < put.length && k < d.text.length && put[k] === d.text[k]) k++;
+      let m = 0;
+      while (m < put.length - k && m < d.text.length - k && put[put.length - 1 - m] === d.text[d.text.length - 1 - m]) m++;
+      x.start += k; x.end -= m; d.at += k;
+      d.text = d.text.slice(k, d.text.length - m);
+    });
+    return { ins: ins.filter((x) => x.end > x.start), dels: dels.filter((d) => d.text.trim()) };
   }
 
   // Po otwarciu pliku: stan z karty (restore) albo — Word zapisał plik ze śledzeniem — włącz.
@@ -219,7 +273,7 @@ const dwbTrack = (() => {
     sync();
   }
 
-  return { init, start, stop, toggle, bake, bytesForDisk, mirrorRevisions, onDocumentLoaded, snapshot, scheduleMarks, isOn: () => state.on, _state: state };
+  return { init, start, stop, toggle, bake, bytesForDisk, mirrorRevisions, onDocumentLoaded, snapshot, scheduleMarks, liveChanges: () => (state.on ? state.live || [] : []), author: () => state.author, isOn: () => state.on, _state: state, _liveDiff: liveDiff };
 })();
 
 document.addEventListener("DOMContentLoaded", () => dwbTrack.init());
