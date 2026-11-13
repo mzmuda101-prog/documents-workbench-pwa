@@ -882,6 +882,15 @@ html.is-mobile .dwb-page-margin-guide { display: none; }
   box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .empty-state h2 { font-size: 18px; color: var(--ink); font-weight: 700; }
+/* Wejście raz na sesję, gdy gaśnie intro (ui-controls.js): ikona → tytuł → opis → przyciski.
+   Start 200 ms po zgaśnięciu intro (w połowie jego zanikania), odstępy nierówne, nic nie blokuje. */
+.empty-state.intro-reveal > * { animation: dwb-rise-in 300ms var(--ease-out) 200ms backwards; }
+.empty-state.intro-reveal > h2 { animation-delay: 250ms; }
+.empty-state.intro-reveal > p { animation-delay: 290ms; }
+.empty-state.intro-reveal > .empty-actions { animation-delay: 320ms; }
+.empty-state.intro-reveal > .recent-files, .empty-state.intro-reveal > .empty-drop-hint { animation-delay: 340ms; }
+@keyframes dwb-rise-in { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) { .empty-state.intro-reveal > * { animation-name: dwb-fade-in; } }
 .empty-state p { font-size: 13px; max-width: 320px; line-height: 1.45; }
 
 .search-hit { outline: 2px solid color-mix(in srgb, var(--warning) 55%, transparent); outline-offset: 2px; border-radius: 2px; }

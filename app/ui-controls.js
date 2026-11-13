@@ -102,9 +102,14 @@ function initIntroSplash() {
     clearTimeout(maxTimer);
     splash.classList.add("hide");
     sessionStorage.setItem(INTRO_PLAYED_KEY, "true");
+    // ekran startowy wchodzi raz, gdy intro gaśnie (CSS .intro-reveal); potem klasa znika,
+    // żeby powrót do pustego ekranu po zamknięciu dokumentu nie powtarzał wejścia
+    const empty = document.getElementById("emptyState");
+    empty?.classList.add("intro-reveal");
     setTimeout(() => {
       splash.style.display = "none";
       document.body.classList.remove("splashing");
+      empty?.classList.remove("intro-reveal");
     }, 700);
   };
   const maybeHide = () => { if (videoDone && appReady) hideSplash(); };
