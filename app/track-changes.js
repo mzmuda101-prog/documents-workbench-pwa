@@ -59,8 +59,6 @@ const dwbTrack = (() => {
     state.baseKeys = await baselineKeys(state.baseline);
     state.on = true;
     sync();
-    // akapity z cudzymi zmianami: przy śledzeniu tylko do odczytu (docx-inline-edit.js paragraphRevisionLock)
-    if (typeof refreshInlineLocks === "function") refreshInlineLocks().catch(() => {});
     if (!silent) toast(t("trackOnToast", { name: state.author }), "info");
     return true;
   }
@@ -131,7 +129,7 @@ const dwbTrack = (() => {
   // Do zapisu na dysk: czysty stan z aplikacji → plik z poprawkami (gdy śledzenie włączone).
   async function bytesForDisk(clean) {
     if (!state.on || !state.baseline || !clean) return clean;
-    const { bytes } = await dwbRedline(state.baseline, clean, { author: state.author, trackOn: true });
+    const { bytes } = await dwbRedline(state.baseline, clean, { author: state.author, trackOn: true, keepRevisions: true });
     return bytes;
   }
 

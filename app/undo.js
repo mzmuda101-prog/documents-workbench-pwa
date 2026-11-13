@@ -173,6 +173,22 @@ const dwbUndo = (() => {
     pendingDocEdits = [];
     // syncInlineEditMode (po odświeżeniu bazy) ustawi kursor tam, gdzie był
     if (state.caret && !readOnlyMode) pendingInlineCursor = state.caret;
+    // operacja zmieniła tylko treść kilku akapitów (wyrównanie, Akceptuj, link…) — tylko je od nowa
+    const current = originalFileBytes;
+    let idx = typeof changedParagraphIndices === "function" ? await changedParagraphIndices(current, target).catch(() => null) : null;
+    // akapity z pisaniem jeszcze nie w pliku — na ekranie inne niż w pliku: też od nowa (pełny render by je wyrównał)
+    // (pisanie w przypisach ma własną numerację — wtedy pełny render)
+    if (idx && typeof collectBodyParagraphEdits === "function") {
+      const notesDirty = typeof dwbNotes !== "undefined" && dwbNotes.collectEdits().length;
+      idx = notesDirty ? null : [...new Set([...idx, ...collectBodyParagraphEdits().map((e) => e.index)])];
+    }
+    if (idx?.length && idx.length <= 50) {
+      originalFileBytes = target;
+      if (await patchParagraphsInPlace(idx, { content: true }).catch(() => false)) {
+        if (!restoreDocScrollAnchor(state.anchor) && docViewportEl) docViewportEl.scrollTop = state.scrollTop;
+        return;
+      }
+    }
     await reloadFromBytes(target, { anchor: state.anchor });
     if (!state.anchor && docViewportEl) docViewportEl.scrollTop = state.scrollTop;
   }

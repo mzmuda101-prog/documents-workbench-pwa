@@ -13,6 +13,13 @@
 // Akapit „złożony” (pole, kontrolka, wzór, już istniejąca poprawka, fragment zagnieżdżony) nie
 // jest rozbierany na słowa: stara wersja — usunięta, nowa — wstawiona (bezpieczne, jak Word przy
 // akapitach, których nie umie dopasować). Zmiany samego formatowania nie są śledzone.
+// Wyjątek przy śledzeniu (opts.keepRevisions): akapit z cudzymi wstawkami / usunięciami w prostej
+// postaci (te same, które da się edytować — docx-inline-edit.js paragraphRevisionLock) liczy różnicę
+// słów jak każdy inny, a cudze zmiany zostają — jak w Wordzie (tools/word-oracle/probe-track-others.js):
+//   - pisanie we wstawce Anny → wstawka Anny rozcięta, moja wstawka między połówkami,
+//   - kasowanie we wstawce Anny → moje usunięcie W JEJ wstawce (w:ins > w:del); moja własna wstawka
+//     po prostu znika,
+//   - usunięcia Anny zostają na swoim miejscu.
 
 const RL_COMPLEX_TAGS = ["fldChar", "fldSimple", "instrText", "sdt", "smartTag", "customXml", "oMath", "oMathPara", "txbxContent", "ins", "del", "moveFrom", "moveTo", "rPrChange"];
 const RL_DEL_DROP_TAGS = ["bookmarkStart", "bookmarkEnd", "commentRangeStart", "commentRangeEnd", "permStart", "permEnd", "proofErr"];
@@ -25,10 +32,19 @@ function rlEl(doc, name, attrs) {
   return el;
 }
 
-function rlComplex(p) {
-  if (RL_COMPLEX_TAGS.some((tag) => p.getElementsByTagNameNS(W_NS, tag).length)) return true;
-  // fragment tekstu głębiej niż akapit/link (np. w polu, kontrolce) — model akapitu by go zgubił
-  return Array.from(p.getElementsByTagNameNS(W_NS, "r")).some((r) => r.parentNode !== p && r.parentNode.localName !== "hyperlink");
+// Akapit z cudzymi wstawkami / usunięciami, które różnica słów zachowa (bez przeniesień i zmian formatu).
+function rlSimpleRevisions(p) {
+  if (typeof paragraphRevisionLock !== "function" || paragraphRevisionLock(p) === "lockTracked") return false;
+  return !["moveFrom", "moveTo", "rPrChange", "pPrChange"].some((tag) => p.getElementsByTagNameNS(W_NS, tag).length);
+}
+function rlComplex(p, keepRevisions) {
+  const keep = keepRevisions && rlSimpleRevisions(p);
+  const tags = keep ? RL_COMPLEX_TAGS.filter((x) => x !== "ins" && x !== "del") : RL_COMPLEX_TAGS;
+  if (tags.some((tag) => p.getElementsByTagNameNS(W_NS, tag).length)) return true;
+  // fragment tekstu głębiej niż akapit/link (np. w polu, kontrolce) — model akapitu by go zgubił;
+  // w cudzej wstawce / usunięciu (akapit „prosty”) — model akapitu go zna (rev, wyspa)
+  const ok = keep ? ["hyperlink", "ins", "del"] : ["hyperlink"];
+  return Array.from(p.getElementsByTagNameNS(W_NS, "r")).some((r) => r.parentNode !== p && !(ok.includes(r.parentNode.localName) && r.parentNode.parentNode === p));
 }
 
 function rlRuns(p) { return extractRunsFromParagraphXml(p); }
@@ -42,7 +58,9 @@ function rlTokens(runs, side) {
     if (run.island) { out.push({ key: `\u0001is:${run.island}`, ri, side, kind: "island" }); return; }
     if (run.tab) { out.push({ key: "\t", ri, side, kind: "tab", text: "\t" }); return; }
     const parts = String(run.text || "").match(/\s+|[\p{L}\p{N}_'’]+|[^\s\p{L}\p{N}_'’]/gu) || [];
-    parts.forEach((text) => out.push({ key: text, ri, side, kind: "text", text }));
+    // tekst w cudzej wstawce ≠ ten sam tekst poza nią (inaczej zmiana mogłaby „przenieść” go ze wstawki)
+    const pre = run.rev ? `\u0003${run.rev}\u0003` : "";
+    parts.forEach((text) => out.push({ key: pre + text, ri, side, kind: "text", text }));
   });
   return out;
 }
@@ -162,10 +180,15 @@ function rlRewriteChanged(state, newP, oldP) {
     if (!cur) return;
     const run = { ...cur.run, text: cur.text };
     delete run.island; delete run.break; delete run.tab;
+    // cudza wstawka: niezmieniony tekst zostaje w niej, usunięty — moje usunięcie w jej środku;
+    // wpisany w niej — moja wstawka (rozcina cudzą); z mojej własnej wstawki usunięty po prostu znika
+    const rev = run.rev || "";
+    delete run.rev;
+    if (rev && cur.kind === "del" && rlRevAuthor(rev) === state.author) { cur = null; return; }
     if (cur.kind === "del") delete run.link; // relacje linku starej paczki tu nie istnieją
     const node = (cur.kind === "del" ? null : runFromOriginal(doc, run, originalsNew)) || (cur.kind === "del" ? runFromOriginal(doc, run, originalsOld) : null) || createRunElement(doc, run);
     if (cur.kind === "del") rlToDeleted(node);
-    items.push({ kind: cur.kind, link: run.link || "", node });
+    items.push({ kind: cur.kind, link: run.link || "", node, rev: cur.kind === "ins" ? "" : rev });
     cur = null;
   };
   diff.forEach(({ kind: k, tok }) => {
@@ -174,11 +197,13 @@ function rlRewriteChanged(state, newP, oldP) {
     const run = runs[tok.ri];
     if (tok.kind === "island") {
       flush();
-      if (kind === "del") return; // wyspa starej wersji (komentarz, zakładka) — nie dublujemy
+      // cudze usunięcie zostaje (Word: kasowanie zakresu z cudzym usunięciem go nie rusza)
+      const othersDel = /^<w:(del|moveFrom)[\s>]/.test(run.island);
+      if (kind === "del" && !othersDel) return; // wyspa starej wersji (komentarz, zakładka) — nie dublujemy
       const frag = new DOMParser().parseFromString(run.island, "application/xml").documentElement;
       const node = doc.importNode(frag, true);
       if (node.getAttributeNS("http://www.w3.org/2000/xmlns/", "w") === W_NS) node.removeAttributeNS("http://www.w3.org/2000/xmlns/", "w");
-      items.push({ kind: kind === "ins" ? "ins" : "same", link: "", node, island: true });
+      items.push({ kind: kind === "ins" && !othersDel ? "ins" : "same", link: "", node, island: true });
       return;
     }
     if (tok.kind === "break") {
@@ -196,25 +221,38 @@ function rlRewriteChanged(state, newP, oldP) {
   // przebudowa akapitu: w:pPr zostaje, reszta z listy (linki → w:hyperlink, zmiany → w:ins/w:del)
   rlKids(newP).filter((n) => n.localName !== "pPr").forEach((n) => newP.removeChild(n));
   Array.from(newP.childNodes).filter((n) => n.nodeType !== 1).forEach((n) => newP.removeChild(n));
-  let host = newP, hostLink = "", wrap = null;
+  let host = newP, hostLink = "", wrap = null, outer = null, outerKey = "";
   items.forEach((it) => {
     // wyspy (zakładki, komentarze) poza w:ins — znaczniki zakresu nie mogą być w poprawce
     const link = it.island ? "" : it.link;
     if (link !== hostLink) {
-      wrap = null;
+      wrap = null; outer = null; outerKey = "";
       if (link) { host = createHyperlinkElement(doc, link, linkAttrs.get(link)); newP.appendChild(host); }
       else host = newP;
       hostLink = link;
     }
-    if (it.kind === "same" || (it.island && it.node.localName !== "r")) { wrap = null; host.appendChild(it.node); return; }
-    if (!wrap || wrap.localName !== it.kind) { wrap = rlRevision(state, it.kind); host.appendChild(wrap); }
+    // cudza wstawka (jej autor, data, id) — kolejne fragmenty z niej w jednym opakowaniu
+    const key = it.island ? "" : it.rev || "";
+    if (key !== outerKey) {
+      wrap = null;
+      outer = key ? revWrapperFromKey(doc, key) : null;
+      if (outer) host.appendChild(outer);
+      outerKey = outer ? key : "";
+    }
+    const box = outer || host;
+    if (it.kind === "same" || (it.island && it.node.localName !== "r")) { wrap = null; box.appendChild(it.node); return; }
+    if (!wrap || wrap.localName !== it.kind || wrap.parentNode !== box) { wrap = rlRevision(state, it.kind); box.appendChild(wrap); }
     wrap.appendChild(it.node);
   });
   return true;
 }
 
-function rlParagraphKey(p) {
-  return rlComplex(p) ? `\u0002${new XMLSerializer().serializeToString(p).replace(/\s(w:rsid\w*|w14:paraId|w14:textId)="[^"]*"/g, "")}` : rlText(rlRuns(p));
+function rlRevAuthor(key) {
+  try { return (JSON.parse(key)[1].find((a) => a[1] === "w:author") || [])[2] || ""; } catch (_) { return ""; }
+}
+
+function rlParagraphKey(p, keepRevisions) {
+  return rlComplex(p, keepRevisions) ? `\u0002${new XMLSerializer().serializeToString(p).replace(/\s(w:rsid\w*|w14:paraId|w14:textId)="[^"]*"/g, "")}` : rlText(rlRuns(p));
 }
 
 // Wyrównanie akapitów (LCS na dokładnym tekście; puste akapity też — zachowują pozycję).
@@ -261,7 +299,8 @@ function rlMaxId(doc) {
 }
 
 // Główna funkcja: bajty starszej i nowszej wersji → bajty nowszej z poprawkami.
-// opts: { author, date (ISO), trackOn (w:trackRevisions w settings.xml: true/false/undefined) }
+// opts: { author, date (ISO), trackOn (w:trackRevisions w settings.xml: true/false/undefined),
+//         keepRevisions (śledzenie: akapit z cudzymi zmianami — różnica słów, cudze zmiany zostają) }
 async function dwbRedline(oldBytes, newBytes, opts = {}) {
   const [oldZip, newZip] = await Promise.all([JSZip.loadAsync(oldBytes), JSZip.loadAsync(newBytes)]);
   const parse = (x) => new DOMParser().parseFromString(x, "application/xml");
@@ -275,7 +314,8 @@ async function dwbRedline(oldBytes, newBytes, opts = {}) {
     date: (opts.date || new Date().toISOString()).replace(/\.\d{3}Z$/, "Z"),
     nextId: Math.max(rlMaxId(doc), rlMaxId(oldDoc)) + 1,
   };
-  const rows = rlAlign(oldParas.map(rlParagraphKey), newParas.map(rlParagraphKey));
+  const keep = !!opts.keepRevisions;
+  const rows = rlAlign(oldParas.map((p) => rlParagraphKey(p, keep)), newParas.map((p) => rlParagraphKey(p, keep)));
   const stats = { changed: 0, added: 0, removed: 0 };
   // pozycje usuniętych akapitów liczymy na NIEZMIENIONYCH odniesieniach (przed wstawianiem)
   const placements = [];
@@ -297,7 +337,7 @@ async function dwbRedline(oldBytes, newBytes, opts = {}) {
     if (row.kind === "changed" || (row.kind === "same" && row.o != null && row.n != null)) {
       const np = newParas[row.n], op = oldParas[row.o];
       if (row.kind === "same") return;
-      if (rlComplex(np) || rlComplex(op)) {
+      if (rlComplex(np, keep) || rlComplex(op, keep)) {
         placements.push({ oldP: op, anchor: np, where: "before" });
         rlWrapRuns(state, np, "ins");
         rlMarkParagraph(state, np, "ins");

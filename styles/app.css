@@ -3623,6 +3623,10 @@ body.dwb-painting .docx-preview-host * {
   --mk-a0: #ff7a80; --mk-a1: #7fb2ff; --mk-a2: #5fd3a6; --mk-a3: #c2a0ff; --mk-a4: #ffad6b; --mk-a5: #ff8cc6;
   --mk-wire: rgba(170, 190, 220, 0.55);
 }
+/* Opakowanie wstawki w Edycji (docx-inline-edit.js stampRevisionWraps) — sam w sobie bez wyglądu:
+   reguła docx-preview dla „span” dawała mu domyślny kolor i krój dokumentu, więc kolorowy /
+   pogrubiony tekst we wstawce tracił wygląd fragmentu, w którym stoi */
+.docx-preview-host span[data-dwb-rev] { color: inherit; font: inherit; letter-spacing: inherit; }
 ::highlight(dwb-rev-0) { color: #c4262e; text-decoration: underline; text-decoration-thickness: 1.5px; }
 ::highlight(dwb-rev-1) { color: #1f5fbf; text-decoration: underline; text-decoration-thickness: 1.5px; }
 ::highlight(dwb-rev-2) { color: #12805c; text-decoration: underline; text-decoration-thickness: 1.5px; }

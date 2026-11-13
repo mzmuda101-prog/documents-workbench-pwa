@@ -356,7 +356,9 @@ function applyDocumentEdit(edit, xmlOpts = {}) {
   if (!originalFileBytes) return Promise.resolve(0);
   return typeof holdTypingWhile === "function" ? holdTypingWhile(() => applyDocumentEditHeld(edit, xmlOpts), -1) : applyDocumentEditHeld(edit, xmlOpts);
 }
+let docEditBaseBytes = null; // plik tuż przed operacją (po scaleniu pisania) — dla łatki z różnicy
 async function applyDocumentEditHeld(edit, xmlOpts) {
+  docEditBaseBytes = null;
   const res = typeof withQuietFile === "function" ? await withQuietFile(() => applyDocumentEditNow(edit, xmlOpts)) : await applyDocumentEditNow(edit, xmlOpts);
   if (!res.reload) {
     if (res.quiet && res.n > 0) {
@@ -376,6 +378,12 @@ async function applyDocumentEditHeld(edit, xmlOpts) {
   // Akceptuj / Odrzuć pojedynczą zmianę, „Zaproponuj zmianę” — zmienia TREŚĆ kilku akapitów: te
   // akapity od nowa (render w tle), reszta dokumentu stoi (bez mignięcia i skoku przewinięcia)
   if (res.n > 0 && res.patch?.length && await patchParagraphsInPlace(res.patch, { content: true }).catch(() => false)) {
+    setDirtyState(true);
+    return res.n;
+  }
+  // każda inna zmiana, która tylko PRZEPISAŁA akapity (koniec Sugerowania, Akceptuj wszystkie, link,
+  // zakładka, tabulator…): te akapity od nowa, reszta stoi — gdy plik pozwala (patchFromDiff)
+  if (res.n > 0 && docEditBaseBytes && await patchFromDiff(docEditBaseBytes, originalFileBytes)) {
     setDirtyState(true);
     return res.n;
   }
@@ -468,7 +476,64 @@ async function patchParagraphsInPlace(indices, { content = false } = {}) {
   if (typeof composeUi !== "undefined") composeUi.syncState?.(); // przyciski wyrównania / wcięcia
   // nowa treść: baza porównań, wyspy (komentarze, zakładki, usunięcia), blokady, dymki — jak po renderze
   if (content && typeof setupInlineEditingAfterRender === "function") setupInlineEditingAfterRender();
+  if (content) {
+    // jak po renderCurrentDocument: nagłówki w panelu Struktura, wyniki wyszukiwania, znaki ¶, OCR
+    documentStructure = analyzeDocumentDom(docCanvasEl);
+    renderStructurePanel(documentStructure);
+    if (searchQueryEl?.value.trim() && typeof runDocumentSearch === "function") runDocumentSearch();
+    refreshOcrMarksState();
+    if (typeof restoreFormatMarks === "function") restoreFormatMarks();
+  }
   return true;
+}
+
+// Które akapity zmieniła operacja: indeksy akapitów (jak collectParagraphElements „all”), gdy
+// poza nimi plik jest TEN SAM — ta sama liczba akapitów, reszta word/document.xml co do znaku,
+// pozostałe części paczki (style, numeracja, przypisy, obrazy, relacje) bez zmian; metadane
+// (docProps) mogą się różnić. Inaczej null — pełne przerysowanie.
+async function changedParagraphIndices(before, after) {
+  if (!before || !after || before === after) return null;
+  const [za, zb] = await Promise.all([JSZip.loadAsync(before), JSZip.loadAsync(after)]);
+  const names = (z) => Object.keys(z.files).filter((n) => !z.files[n].dir && n !== "word/document.xml" && !n.startsWith("docProps/")).sort();
+  const na = names(za), nb = names(zb);
+  if (na.join("\n") !== nb.join("\n")) return null;
+  for (const n of na) {
+    const [a, b] = await Promise.all([za.file(n).async("uint8array"), zb.file(n).async("uint8array")]);
+    if (a.length === b.length && a.every((x, i) => x === b[i])) continue;
+    // relacje treści: dopisane / zdjęte, wspólne bez zmian (relsCompatible)
+    if (n === "word/_rels/document.xml.rels" && relsCompatible(new TextDecoder().decode(a), new TextDecoder().decode(b))) continue;
+    return null;
+  }
+  const [xa, xb] = await Promise.all([za.file("word/document.xml")?.async("string"), zb.file("word/document.xml")?.async("string")]);
+  if (!xa || !xb) return null;
+  const da = new DOMParser().parseFromString(xa, "application/xml"), db = new DOMParser().parseFromString(xb, "application/xml");
+  const pa = collectParagraphElements(da.documentElement, "all"), pb = collectParagraphElements(db.documentElement, "all");
+  if (pa.length !== pb.length) return null;
+  const ser = new XMLSerializer();
+  const changed = [];
+  pa.forEach((p, i) => { if (ser.serializeToString(p) !== ser.serializeToString(pb[i])) changed.push(i); });
+  // obiekty rysowane po ułożeniu stron (pola tekstowe, kształty, obrazy pływające) — tylko pełny render
+  const drawn = (p) => ["drawing", "pict", "object"].some((tag) => p.getElementsByTagNameNS(W_NS, tag).length) || p.getElementsByTagName("mc:AlternateContent").length;
+  if (changed.some((i) => drawn(pa[i]) || drawn(pb[i]))) return null;
+  // reszta dokumentu (tabele, sekcje, kolejność) — ta sama: zmienione akapity zastąpione znacznikiem
+  changed.forEach((i) => { pa[i].parentNode.replaceChild(da.createComment("p"), pa[i]); pb[i].parentNode.replaceChild(db.createComment("p"), pb[i]); });
+  if (ser.serializeToString(da) !== ser.serializeToString(db)) return null;
+  return changed;
+}
+
+function relsCompatible(before, after) {
+  const map = (xml) => new Map(Array.from(new DOMParser().parseFromString(xml, "application/xml").getElementsByTagName("Relationship"))
+    .map((r) => [r.getAttribute("Id"), `${r.getAttribute("Type")}|${r.getAttribute("Target")}|${r.getAttribute("TargetMode") || ""}`]));
+  // wspólne relacje bez zmian; dopisane (nowy link) albo zdjęte (Cofnij link) — niezmienione akapity ich nie używają
+  const a = map(before), b = map(after);
+  return [...a].every(([id, v]) => !b.has(id) || b.get(id) === v);
+}
+
+// Łatka z różnicy plików: zmienione akapity od nowa (patchParagraphsInPlace content), gdy to bezpieczne
+async function patchFromDiff(before, after) {
+  const idx = await changedParagraphIndices(before, after).catch(() => null);
+  if (!idx || !idx.length || idx.length > 50) return false;
+  return patchParagraphsInPlace(idx, { content: true }).catch(() => false);
 }
 
 function copyParagraphLook(p, from) {
@@ -507,6 +572,7 @@ function afterQuietDocumentEdit(edit) {
 
 async function applyDocumentEditNow(edit, xmlOpts) {
   if (typeof mergeInlineEditsIntoBytesNow === "function") await mergeInlineEditsIntoBytesNow();
+  docEditBaseBytes = originalFileBytes;
   const normalized = edit.op ? edit : { ...edit, op: "replace" };
   // poprawki z różnicy „przed” → teraz (track-changes.js) — cały plik naraz, nie operacja na XML
   if (normalized.op === "redline") {
@@ -514,7 +580,7 @@ async function applyDocumentEditNow(edit, xmlOpts) {
       originalFileBytes = (await buildPatchedDocx(originalFileBytes, pendingDocEdits)).bytes;
       pendingDocEdits = [];
     }
-    const { bytes, stats } = await dwbRedline(normalized.baseline, originalFileBytes, { author: normalized.author, trackOn: normalized.trackOn });
+    const { bytes, stats } = await dwbRedline(normalized.baseline, originalFileBytes, { author: normalized.author, trackOn: normalized.trackOn, keepRevisions: true });
     originalFileBytes = bytes;
     // propozycja zmiany w jednym akapicie (track-changes.js suggest): tylko ten akapit od nowa
     const onlyChanged = !stats.added && !stats.removed && Array.isArray(normalized.patch);
