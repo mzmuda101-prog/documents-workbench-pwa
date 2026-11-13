@@ -169,7 +169,8 @@ const dwbDocMenu = (() => {
     sep();
     add("link", "ctxLink", () => { restoreRange(); composeUi.openLinkForm(); }, { kbd: "Mod+K" });
     add("comment", "ctxComment", () => { restoreRange(); composeUi.openCommentForm(); }, { kbd: "Mod+Alt+M" });
-    if (typeof dwbTrack !== "undefined") add("suggest", dwbTrack.isOn() ? "ctxSuggestOff" : "ctxSuggestOn", () => dwbTrack.toggle(), { kbd: "Mod+Shift+E" });
+    // propozycja zmiany zaznaczonego tekstu (bez włączania trybu Sugerowanie) — obok komentarza
+    if (ctx.hasSel && typeof dwbTrack !== "undefined") add("suggest", "ctxSuggest", () => { const r = savedRange?.cloneRange(); if (r) dwbTrack.suggest(r); });
     add("note", "ctxFootnote", () => { restoreRange(); composeUi.insertNote("footnote"); });
     if (ctx.cell) {
       sep();

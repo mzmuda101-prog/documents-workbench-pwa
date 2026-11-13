@@ -3730,6 +3730,15 @@ body.dwb-painting .docx-preview-host * {
 
 /* Sugerowanie w przełączniku trybu (app-frame.js) — na wąskim ekranie bez miejsca: zostaje w menu
    kontekstowym, w panelu Recenzja i pod Ctrl/⌘+Shift+E */
-@media (max-width: 720px) { .mode-btn-suggest { display: none; } }
+.mode-btn-suggest { display: inline-flex; align-items: center; justify-content: center; padding-inline: 9px; }
+.mode-btn-suggest svg { display: block; }
+/* Ikony trybów: szeroko Czytanie / Edycja z napisem, Sugerowanie ikoną; na telefonie wszystkie trzy
+   jako ikony (napis w podpowiedzi i dla czytnika ekranu) — mieszczą się w jednym rzędzie z zoomem */
+.mode-btn .mode-ico { display: none; }
+@media (max-width: 480px) {
+  .mode-btn .mode-txt { display: none; }
+  .mode-btn .mode-ico { display: block; }
+  .mode-btn { display: inline-flex; align-items: center; justify-content: center; padding-inline: 10px; }
+}
 .mode-btn-suggest.is-active { background: #c4262e; }
 .mode-switch.has-pill:has(.mode-btn-suggest.is-active) .mode-pill { background: #c4262e; }

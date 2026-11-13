@@ -87,6 +87,47 @@ const dwbTrack = (() => {
 
   function toggle() { return state.on ? stop() : start(); }
 
+  // „Zaproponuj zmianę…” (menu kontekstowe, jak propozycja w Dokumentach Google): zaznaczony tekst
+  // w jednym akapicie → okienko z nowym tekstem (puste = propozycja usunięcia) → śledzona zmiana
+  // z imieniem autora, bez włączania trybu Sugerowanie. Jeden krok Cofnij. Przy włączonym
+  // śledzeniu to po prostu zamiana tekstu (różnica policzy się sama).
+  async function suggest(range) {
+    if (!range || range.collapsed || readOnlyMode || !originalFileBytes) return false;
+    const host = docCanvasEl?.querySelector(".docx-preview-host");
+    const paraOf = (n) => (n?.nodeType === 1 ? n : n?.parentElement)?.closest?.("p");
+    const p = paraOf(range.startContainer);
+    if (!p || p !== paraOf(range.endContainer) || !p.classList.contains("docx-editable-p")) { toast(t("suggestOnePara"), "info"); return false; }
+    const old = range.toString();
+    const index = collectPreviewParagraphElements(host).indexOf(p);
+    const pre = document.createRange();
+    pre.selectNodeContents(p);
+    pre.setEnd(range.startContainer, range.startOffset);
+    const at = pre.toString().length;
+    const val = await appPrompt(t("suggestMsg", { text: old.length > 80 ? `${old.slice(0, 79)}…` : old }), old, { title: t("suggestTitle"), ok: t("suggestOk") });
+    if (val == null || val === old) return false;
+    await dwbUndo.group("undoOpSuggest", async () => {
+      const wasOn = state.on;
+      if (!wasOn && !(await start({ silent: true }))) return;
+      // po włączeniu śledzenia akapit bywa oznaczony od nowa — zakres liczony od nowa z położeń
+      const q = collectPreviewParagraphElements(docCanvasEl?.querySelector(".docx-preview-host"))[index];
+      const r = q && formDomRange(q, at, at + old.length);
+      if (!r || r.toString() !== old) { if (!wasOn) await bake({ keepOn: false }); toast(t("suggestOnePara"), "info"); return; }
+      focusDocParagraph(q);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+      if (val) { if (!document.execCommand("insertText", false, val)) insertTextAtCaret(val); }
+      else document.execCommand("delete");
+      onInlineParagraphInput();
+      if (!wasOn) {
+        await bake({ keepOn: false });
+        toast(t("suggestDone", { name: state.author || authorNameCached() }), "info");
+      }
+    });
+    return true;
+  }
+  function authorNameCached() { try { return localStorage.getItem(AUTHOR_KEY) || ""; } catch (_) { return ""; } }
+
   // Do zapisu na dysk: czysty stan z aplikacji → plik z poprawkami (gdy śledzenie włączone).
   async function bytesForDisk(clean) {
     if (!state.on || !state.baseline || !clean) return clean;
@@ -278,7 +319,7 @@ const dwbTrack = (() => {
     sync();
   }
 
-  return { init, start, stop, toggle, bake, bytesForDisk, mirrorRevisions, onDocumentLoaded, snapshot, scheduleMarks, liveChanges: () => (state.on ? state.live || [] : []), author: () => state.author, isOn: () => state.on, _state: state, _liveDiff: liveDiff };
+  return { init, start, stop, toggle, suggest, bake, bytesForDisk, mirrorRevisions, onDocumentLoaded, snapshot, scheduleMarks, liveChanges: () => (state.on ? state.live || [] : []), author: () => state.author, isOn: () => state.on, _state: state, _liveDiff: liveDiff };
 })();
 
 document.addEventListener("DOMContentLoaded", () => dwbTrack.init());

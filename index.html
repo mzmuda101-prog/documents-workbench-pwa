@@ -16,8 +16,8 @@
     <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png" />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin.woff2" crossorigin />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin-ext.woff2" crossorigin />
-    <link rel="stylesheet" href="styles/app.css?v=v1.00.29" />
-    <script src="app/theme-boot.js?v=v1.00.29"></script>
+    <link rel="stylesheet" href="styles/app.css?v=v1.00.30" />
+    <script src="app/theme-boot.js?v=v1.00.30"></script>
   </head>
   <body>
     <!-- Pierwszy przystanek Tab: skok prosto do dokumentu (panel to kilkadziesiąt kontrolek). -->
@@ -1015,11 +1015,11 @@
                 <!-- Czytanie / Edycja: przycisk steruje ukrytym #readMode (jedno źródło prawdy). -->
                 <div class="mode-switch" role="group" data-i18n-aria="modeAria" aria-label="Tryb" data-hint data-hint-pl="Czytanie / Edycja (Ctrl/⌘+Alt+E)" data-hint-en="Reading / Editing (Ctrl/⌘+Alt+E)" data-hint-delay="0.9">
                   <input id="readMode" type="checkbox" checked hidden />
-                  <button class="mode-btn is-active" type="button" data-mode="read" aria-pressed="true" data-i18n="modeRead">Czytanie</button>
-                  <button class="mode-btn" type="button" data-mode="edit" aria-pressed="false" data-i18n="modeEdit">Edycja</button>
+                  <button class="mode-btn is-active" type="button" data-mode="read" aria-pressed="true" data-i18n-aria="modeRead" aria-label="Czytanie" data-hint data-hint-pl="Czytanie — dokument tylko do podglądu" data-hint-en="Reading — view only" data-hint-delay="0.6"><svg class="mode-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg><span class="mode-txt" data-i18n="modeRead">Czytanie</span></button>
+                  <button class="mode-btn" type="button" data-mode="edit" aria-pressed="false" data-i18n-aria="modeEdit" aria-label="Edycja" data-hint data-hint-pl="Edycja — zmiany wprost w dokumencie" data-hint-en="Editing — change the document directly" data-hint-delay="0.6"><svg class="mode-ico" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span class="mode-txt" data-i18n="modeEdit">Edycja</span></button>
                   <!-- Sugerowanie (jak „Recenzowanie” w Wordzie / „Proponowanie” w Dokumentach Google): Edycja ze
                        śledzeniem zmian (track-changes.js) — każda zmiana to propozycja do przyjęcia lub odrzucenia -->
-                  <button class="mode-btn mode-btn-suggest" type="button" data-mode="suggest" aria-pressed="false" data-i18n="modeSuggest" data-hint data-hint-pl="Sugerowanie — pisz i kasuj jak zwykle, a każda zmiana zostaje propozycją do przyjęcia lub odrzucenia (Ctrl/⌘+Shift+E)" data-hint-en="Suggesting — type and delete as usual; every change becomes a suggestion to accept or reject (Ctrl/⌘+Shift+E)" data-hint-delay="0.6">Sugerowanie</button>
+                  <button class="mode-btn mode-btn-suggest" type="button" data-mode="suggest" aria-pressed="false" data-i18n-aria="modeSuggest" aria-label="Sugerowanie" data-hint data-hint-pl="Sugerowanie — pisz i kasuj jak zwykle, a każda zmiana zostaje propozycją do przyjęcia lub odrzucenia (Ctrl/⌘+Shift+E)" data-hint-en="Suggesting — type and delete as usual; every change becomes a suggestion to accept or reject (Ctrl/⌘+Shift+E)" data-hint-delay="0.3"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 6.5v4"/><path d="M10 8.5h4"/><path d="M10 13h4"/></svg></button>
                 </div>
                 <!-- Cofnij / Ponów (undo.js): operacje z panelu, formatowanie i pisanie w podglądzie -->
                 <div class="undo-group" role="group" data-i18n-aria="undoGroupAria" aria-label="Cofnij i ponów">
@@ -1241,65 +1241,65 @@
         <p class="newdoc-foot" data-i18n="newDocFoot">Plik powstaje na tym urządzeniu. „Zapisz” zapyta, gdzie go zapisać.</p>
       </form>
     </dialog>
-    <script defer src="app/core.js?v=v1.00.29"></script>
-    <script defer src="app/language.js?v=v1.00.29"></script>
-    <script defer src="app/docx-metadata.js?v=v1.00.29"></script>
-    <script defer src="app/docx-compare.js?v=v1.00.29"></script>
-    <script defer src="app/docx-redline.js?v=v1.00.29"></script>
-    <script defer src="app/track-changes.js?v=v1.00.29"></script>
-    <script defer src="app/docx-revisions.js?v=v1.00.29"></script>
-    <script defer src="app/review-margin.js?v=v1.00.29"></script>
-    <script defer src="app/docx-forms.js?v=v1.00.29"></script>
-    <script defer src="app/doc-links.js?v=v1.00.29"></script>
-    <script defer src="app/docx-patch.js?v=v1.00.29"></script>
-    <script defer src="app/docx-compose.js?v=v1.00.29"></script>
-    <script defer src="app/textboxes.js?v=v1.00.29"></script>
-    <script defer src="app/tab-leaders.js?v=v1.00.29"></script>
-    <script defer src="app/template-tokens.js?v=v1.00.29"></script>
-    <script defer src="app/docx-run-styles.js?v=v1.00.29"></script>
-    <script defer src="app/docx-inline-edit.js?v=v1.00.29"></script>
-    <script defer src="app/doc-notes.js?v=v1.00.29"></script>
-    <script defer src="app/paste-rich.js?v=v1.00.29"></script>
-    <script defer src="app/document.js?v=v1.00.29"></script>
-    <script defer src="app/docx-render-fixes.js?v=v1.00.29"></script>
-    <script defer src="app/list-numbering.js?v=v1.00.29"></script>
-    <script defer src="app/docx-viewer.js?v=v1.00.29"></script>
-    <script defer src="app/analysis.js?v=v1.00.29"></script>
-    <script defer src="app/structure-panel.js?v=v1.00.29"></script>
-    <script defer src="app/semantic-search.js?v=v1.00.29"></script>
-    <script defer src="app/local-ai.js?v=v1.00.29"></script>
-    <script defer src="app/doc-ask.js?v=v1.00.29"></script>
-    <script defer src="app/doc-rewrite.js?v=v1.00.29"></script>
-    <script defer src="app/grammar-style.js?v=v1.00.29"></script>
-    <script defer src="app/placeholders.js?v=v1.00.29"></script>
-    <script defer src="app/snippets.js?v=v1.00.29"></script>
-    <script defer src="app/snippet-suggest.js?v=v1.00.29"></script>
-    <script defer src="app/doc-caret-nav.js?v=v1.00.29"></script>
-    <script defer src="app/doc-selection.js?v=v1.00.29"></script>
-    <script defer src="app/print-preview.js?v=v1.00.29"></script>
-    <script defer src="app/bug-report.js?v=v1.00.29"></script>
-    <script defer src="app/edit-tools.js?v=v1.00.29"></script>
-    <script defer src="app/mobile-doc-zoom.js?v=v1.00.29"></script>
-    <script defer src="app/ui-controls.js?v=v1.00.29"></script>
-    <script defer src="app/lazy-features.js?v=v1.00.29"></script>
-    <script defer src="app/app-frame.js?v=v1.00.29"></script>
-    <script defer src="app/touch.js?v=v1.00.29"></script>
-    <script defer src="app/pinch-zoom.js?v=v1.00.29"></script>
-    <script defer src="app/page-breaks.js?v=v1.00.29"></script>
-    <script defer src="app/format-marks.js?v=v1.00.29"></script>
-    <script defer src="app/undo.js?v=v1.00.29"></script>
-    <script defer src="app/compose-ui.js?v=v1.00.29"></script>
-    <script defer src="app/autocorrect.js?v=v1.00.29"></script>
-    <script defer src="app/self-check.js?v=v1.00.29"></script>
-    <script defer src="app/image-viewer.js?v=v1.00.29"></script>
-    <script defer src="app/drafts.js?v=v1.00.29"></script>
-    <script defer src="app/open-docs.js?v=v1.00.29"></script>
-    <script defer src="app/view-mode.js?v=v1.00.29"></script>
-    <script defer src="app/keyboard.js?v=v1.00.29"></script>
-    <script defer src="app/shortcuts.js?v=v1.00.29"></script>
-    <script defer src="app/doc-context-menu.js?v=v1.00.29"></script>
-    <script defer src="app/doc-comfort.js?v=v1.00.29"></script>
-    <script defer src="app/launch-files.js?v=v1.00.29"></script>
-    <script defer src="app/bootstrap.js?v=v1.00.29"></script>
+    <script defer src="app/core.js?v=v1.00.30"></script>
+    <script defer src="app/language.js?v=v1.00.30"></script>
+    <script defer src="app/docx-metadata.js?v=v1.00.30"></script>
+    <script defer src="app/docx-compare.js?v=v1.00.30"></script>
+    <script defer src="app/docx-redline.js?v=v1.00.30"></script>
+    <script defer src="app/track-changes.js?v=v1.00.30"></script>
+    <script defer src="app/docx-revisions.js?v=v1.00.30"></script>
+    <script defer src="app/review-margin.js?v=v1.00.30"></script>
+    <script defer src="app/docx-forms.js?v=v1.00.30"></script>
+    <script defer src="app/doc-links.js?v=v1.00.30"></script>
+    <script defer src="app/docx-patch.js?v=v1.00.30"></script>
+    <script defer src="app/docx-compose.js?v=v1.00.30"></script>
+    <script defer src="app/textboxes.js?v=v1.00.30"></script>
+    <script defer src="app/tab-leaders.js?v=v1.00.30"></script>
+    <script defer src="app/template-tokens.js?v=v1.00.30"></script>
+    <script defer src="app/docx-run-styles.js?v=v1.00.30"></script>
+    <script defer src="app/docx-inline-edit.js?v=v1.00.30"></script>
+    <script defer src="app/doc-notes.js?v=v1.00.30"></script>
+    <script defer src="app/paste-rich.js?v=v1.00.30"></script>
+    <script defer src="app/document.js?v=v1.00.30"></script>
+    <script defer src="app/docx-render-fixes.js?v=v1.00.30"></script>
+    <script defer src="app/list-numbering.js?v=v1.00.30"></script>
+    <script defer src="app/docx-viewer.js?v=v1.00.30"></script>
+    <script defer src="app/analysis.js?v=v1.00.30"></script>
+    <script defer src="app/structure-panel.js?v=v1.00.30"></script>
+    <script defer src="app/semantic-search.js?v=v1.00.30"></script>
+    <script defer src="app/local-ai.js?v=v1.00.30"></script>
+    <script defer src="app/doc-ask.js?v=v1.00.30"></script>
+    <script defer src="app/doc-rewrite.js?v=v1.00.30"></script>
+    <script defer src="app/grammar-style.js?v=v1.00.30"></script>
+    <script defer src="app/placeholders.js?v=v1.00.30"></script>
+    <script defer src="app/snippets.js?v=v1.00.30"></script>
+    <script defer src="app/snippet-suggest.js?v=v1.00.30"></script>
+    <script defer src="app/doc-caret-nav.js?v=v1.00.30"></script>
+    <script defer src="app/doc-selection.js?v=v1.00.30"></script>
+    <script defer src="app/print-preview.js?v=v1.00.30"></script>
+    <script defer src="app/bug-report.js?v=v1.00.30"></script>
+    <script defer src="app/edit-tools.js?v=v1.00.30"></script>
+    <script defer src="app/mobile-doc-zoom.js?v=v1.00.30"></script>
+    <script defer src="app/ui-controls.js?v=v1.00.30"></script>
+    <script defer src="app/lazy-features.js?v=v1.00.30"></script>
+    <script defer src="app/app-frame.js?v=v1.00.30"></script>
+    <script defer src="app/touch.js?v=v1.00.30"></script>
+    <script defer src="app/pinch-zoom.js?v=v1.00.30"></script>
+    <script defer src="app/page-breaks.js?v=v1.00.30"></script>
+    <script defer src="app/format-marks.js?v=v1.00.30"></script>
+    <script defer src="app/undo.js?v=v1.00.30"></script>
+    <script defer src="app/compose-ui.js?v=v1.00.30"></script>
+    <script defer src="app/autocorrect.js?v=v1.00.30"></script>
+    <script defer src="app/self-check.js?v=v1.00.30"></script>
+    <script defer src="app/image-viewer.js?v=v1.00.30"></script>
+    <script defer src="app/drafts.js?v=v1.00.30"></script>
+    <script defer src="app/open-docs.js?v=v1.00.30"></script>
+    <script defer src="app/view-mode.js?v=v1.00.30"></script>
+    <script defer src="app/keyboard.js?v=v1.00.30"></script>
+    <script defer src="app/shortcuts.js?v=v1.00.30"></script>
+    <script defer src="app/doc-context-menu.js?v=v1.00.30"></script>
+    <script defer src="app/doc-comfort.js?v=v1.00.30"></script>
+    <script defer src="app/launch-files.js?v=v1.00.30"></script>
+    <script defer src="app/bootstrap.js?v=v1.00.30"></script>
   </body>
 </html>

@@ -158,13 +158,28 @@ async function run() {
   await clickMenu(/^Rozwiąż komentarz/);
   await idle(page);
   check("…Rozwiąż z menu: komentarz rozwiązany w pliku", await page.evaluate(async () => /w15:done="1"/.test(await (await JSZip.loadAsync(originalFileBytes)).file("word/commentsExtended.xml").async("string"))));
+  // ── „Zaproponuj zmianę…”: zaznaczenie → nowy tekst → propozycja (bez trybu Sugerowanie) ──
   menu = await ctxMenu("Ostatni");
-  check("menu kontekstowe: „Sugeruj zmiany”", menu.some((x) => /^Sugeruj zmiany/.test(x)), menu.join(" | "));
-  await clickMenu(/^Sugeruj zmiany/);
+  check("menu bez przełącznika śledzenia (jest przycisk trybu)", !menu.some((x) => /Sugeruj zmiany|Zakończ sugerowanie/.test(x)), menu.join(" | "));
+  await page.keyboard.press("Escape");
+  await page.evaluate(() => { const p = [...document.querySelectorAll(".docx-preview-host p")].find((x) => x.textContent.startsWith("Ostatni")); const tn = document.createTreeWalker(p, NodeFilter.SHOW_TEXT).nextNode(); const r = document.createRange(); r.setStart(tn, 0); r.setEnd(tn, 7); p.closest(".docx-edit-root").focus(); getSelection().removeAllRanges(); getSelection().addRange(r); });
+  const sp = await page.evaluate(() => { const r = getSelection().getRangeAt(0).getBoundingClientRect(); return { x: r.left + 4, y: r.top + r.height / 2 }; });
+  await page.mouse.click(sp.x, sp.y, { button: "right" });
+  await page.waitForSelector(".doc-menu");
+  menu = await page.evaluate(() => [...document.querySelectorAll(".doc-menu button")].filter((b) => !b.closest(".doc-menu-row")).map((b) => b.textContent.trim()));
+  check("zaznaczenie: „Zaproponuj zmianę…” w menu", menu.includes("Zaproponuj zmianę…"), menu.join(" | "));
+  // okno z polem — odpowiedź testu przez __dwbAutoDialog (jak wpisanie „Końcowy” i OK)
+  await page.evaluate(() => { window.__dwbAutoDialog = (d) => (d.input && /Zaproponuj/.test(d.title) ? "Końcowy" : true); });
+  await clickMenu(/^Zaproponuj zmianę/);
   await idle(page);
-  check("…włącza śledzenie i przełącznik pokazuje Sugerowanie", await page.evaluate(() => dwbTrack.isOn() && document.querySelector(".mode-btn.is-active")?.dataset.mode === "suggest"));
-  await page.evaluate(() => dwbTrack.stop());
+  await page.waitForTimeout(500);
+  const sug = await para(page, "Końcowy");
+  check("propozycja w pliku: usunięte „Ostatni”, wstawione „Końcowy”, autor z ustawień", sug?.del.some((d) => d.text === "Ostatni" && d.author === "Tester") && sug.ins.some((x) => x.text === "Końcowy" && x.author === "Tester"), JSON.stringify(sug));
+  check("…tryb dalej Edycja (śledzenie wyłączone)", await page.evaluate(() => !dwbTrack.isOn() && document.querySelector(".mode-btn.is-active")?.dataset.mode === "edit"));
+  await page.evaluate(() => dwbUndo.undo());
   await idle(page);
+  const back2 = await para(page, "Ostatni");
+  check("jedno Cofnij: propozycja znika, tekst jak był", back2 && !back2.ins.length && !back2.del.length && back2.text.startsWith("Ostatni akapit"), JSON.stringify(back2));
 
   check("brak błędów strony", !errors.length, errors.join(" | "));
   await browser.close();
