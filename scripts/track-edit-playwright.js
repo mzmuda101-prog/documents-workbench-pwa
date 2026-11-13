@@ -119,13 +119,67 @@ async function run() {
   await page.evaluate(() => appFrame.setReadOnly(false));
   await idle(page);
 
-  // ── Śledź zmiany włączone: akapit z cudzymi zmianami zablokowany ───────────
+  // ── Śledź zmiany włączone: pisanie w akapicie z cudzymi zmianami jak w Wordzie ──
+  // (tools/word-oracle/probe-track-others.js): moje usunięcie w cudzej wstawce = w:ins > w:del,
+  // pisanie w niej = moja wstawka obok, cudze usunięcie zostaje. Świeży plik (inna nazwa — ta sama
+  // przełącza na otwarty już dokument z edycjami z góry).
+  await page.locator("#fileInput").setInputFiles({ name: "review-sample-track.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer: require("fs").readFileSync("docs/samples/review-sample.docx") });
+  await idle(page);
+  await page.evaluate(() => appFrame.setReadOnly(false));
+  await idle(page);
   await page.evaluate(() => dwbTrack.start());
   await idle(page);
-  await page.waitForTimeout(500);
-  const on = await page.evaluate(() => [...document.querySelectorAll(".docx-preview-host p")].find((p) => p.textContent.startsWith("Termin"))?.dataset.lock || "-");
-  check("Śledź zmiany włączone: akapit z cudzymi zmianami tylko do odczytu", on === "lockTrackedOn", on);
+  const on = await page.evaluate(() => [...document.querySelectorAll(".docx-preview-host p")].filter((p) => /^(Termin|Zleceniodawca)/.test(p.textContent)).map((p) => p.dataset.lock || "-").join(","));
+  check("Śledź zmiany włączone: akapity z cudzymi zmianami edytowalne", on === "-,-", on);
+  const selectIn = (start, from, to) => page.evaluate(([start, from, to]) => {
+    const p = [...document.querySelectorAll(".docx-preview-host p")].find((x) => x.textContent.startsWith(start));
+    const at = (n) => { const tw = document.createTreeWalker(p, NodeFilter.SHOW_TEXT); let t, pos = 0; while ((t = tw.nextNode())) { if (pos + t.data.length >= n) return [t, n - pos]; pos += t.data.length; } };
+    const r = document.createRange();
+    r.setStart(...at(from)); r.setEnd(...at(to));
+    p.closest(".docx-edit-root").focus({ preventScroll: true });
+    getSelection().removeAllRanges(); getSelection().addRange(r);
+  }, [start, from, to]);
+  // akapit pliku z poprawkami (jak na dysk): kolejne elementy — [rodzaj, autor, tekst, zagnieżdżone]
+  const shape = (start) => page.evaluate(async (start) => {
+    await mergeInlineEditsIntoBytes();
+    const bytes = await dwbTrack.bytesForDisk(originalFileBytes);
+    const d = await getDocumentXmlDom(bytes);
+    const p = collectParagraphElements(d.documentElement, "all").find((x) => getParagraphText(x).startsWith(start) || x.textContent.startsWith(start));
+    const txt = (e) => Array.from(e.getElementsByTagNameNS(W_NS, "*")).filter((n) => n.localName === "t" || n.localName === "delText").map((n) => n.textContent).join("");
+    const one = (e) => e.localName === "r" ? txt(e) : [e.localName, e.getAttributeNS(W_NS, "author"), ...Array.from(e.childNodes).filter((c) => c.nodeType === 1).map(one)];
+    const out = [];
+    Array.from(p.childNodes).filter((c) => c.nodeType === 1 && c.localName !== "pPr").forEach((c) => { const v = one(c); if (typeof v === "string" && typeof out[out.length - 1] === "string") out[out.length - 1] += v; else out.push(v); });
+    return JSON.stringify(out);
+  }, start);
+  // „wynosi ” obok usunięcia Anny → moje usunięcie; „3|0” we wstawce Anny + „5”
+  await selectIn("Termin", 17, 24);
+  await page.keyboard.press("Backspace");
+  await idle(page);
+  const w = "Termin płatności ".length;
+  await page.evaluate((w) => { const p = [...document.querySelectorAll(".docx-preview-host p")].find((x) => x.textContent.startsWith("Termin")); const s = p.querySelector("[data-dwb-rev]"); const r = document.createRange(); r.setStart(s.firstChild, 1); r.collapse(true); getSelection().removeAllRanges(); getSelection().addRange(r); }, w);
+  await page.keyboard.type("5");
+  await idle(page);
+  const t1 = await shape("Termin");
+  check("śledzenie: kasowanie obok cudzego usunięcia + pisanie w cudzej wstawce (jak Word)",
+    t1 === JSON.stringify(["Termin płatności ", ["del", "Tester", "wynosi "], ["del", "Anna Nowak", "14"], ["ins", "Anna Nowak", ["del", "Tester", "30"]], ["ins", "Tester", "350"], " dni."]), t1);
+  // „niezwłocznie” we wstawce Jana → „szybko”
+  await selectIn("Zleceniodawca", 14, 26);
+  await page.keyboard.type("szybko");
+  await idle(page);
+  const t2 = await shape("Zleceniodawca");
+  check("śledzenie: zamiana słowa w cudzej wstawce (jak Word)",
+    t2.startsWith(JSON.stringify(["Zleceniodawca ", ["ins", "Jan Kowalski", ["del", "Tester", "niezwłocznie"]], ["ins", "Tester", "szybko"], ["ins", "Jan Kowalski", " "], "zgłasza usterki."]).slice(0, -1)), t2);
+  // koniec śledzenia: poprawki w dokumencie; Odrzuć moje = tekst jak przed edycją (cudze zostają)
   await page.evaluate(() => dwbTrack.stop());
+  await idle(page);
+  const after = await page.evaluate(async () => {
+    const scan = await scanDocxRevisions(originalFileBytes);
+    return { n: scan.changes.length, authors: [...scan.authors.keys()].sort().join(","), text: [...document.querySelectorAll(".docx-preview-host p")].find((x) => x.textContent.startsWith("Termin"))?.textContent };
+  });
+  check("po zakończeniu śledzenia: poprawki trzech autorów w dokumencie, podgląd = tekst po przyjęciu", after.authors === "Anna Nowak,Jan Kowalski,Tester" && after.text === "Termin płatności 350 dni.", JSON.stringify(after));
+  await page.locator("#fileInput").setInputFiles("docs/samples/review-sample.docx");
+  await idle(page);
+  await page.evaluate(() => appFrame.setReadOnly(false));
   await idle(page);
 
   // ── przełącznik trybu: Sugerowanie = Edycja + śledzenie; Edycja kończy śledzenie ──

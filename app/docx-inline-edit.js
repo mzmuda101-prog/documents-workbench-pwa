@@ -298,8 +298,8 @@ function paragraphPageBreakLock(xp) {
 // zapis oddaje ją bez zmian w tym samym miejscu), wstawka = fragmenty z cechą „rev” (zapis odtwarza
 // opakowanie z tym samym autorem i datą). Blokada, gdy czegoś nie da się tak zachować: zmiana
 // głębiej niż w akapicie (w linku, polu), wstawka z czymś innym niż zwykły tekst / tabulator,
-// przeniesienie z zakresem (moveFromRangeStart…) — i przy włączonym „Śledź zmiany”: poprawki
-// liczy wtedy różnica plików (docx-redline.js), która akapit z cudzymi zmianami bierze w całości.
+// przeniesienie z zakresem (moveFromRangeStart…). Przy włączonym „Śledź zmiany” taki akapit też
+// jest edytowalny — różnica plików (docx-redline.js keepRevisions) zachowuje cudze zmiany jak Word.
 const REV_WRAP = new Set(["ins", "del", "moveFrom", "moveTo"]);
 function paragraphRevisionLock(xp) {
   let any = false;
@@ -318,7 +318,6 @@ function paragraphRevisionLock(xp) {
   }
   if (!any) return null;
   if (["moveFromRangeStart", "moveToRangeStart", "moveFromRangeEnd", "moveToRangeEnd"].some((tag) => xp.getElementsByTagNameNS(W_NS, tag).length)) return "lockTracked";
-  if (typeof dwbTrack !== "undefined" && dwbTrack.isOn()) return "lockTrackedOn";
   return null;
 }
 // Wstawki w podglądzie: tekst z w:ins / w:moveTo owinięty w <span data-dwb-rev="klucz"> — pisanie
@@ -3073,16 +3072,6 @@ function setupInlineEditingAfterRender() {
     .then(() => markLockedParagraphs(bytes))
     .finally(() => { if (seq === inlineSetupSeq) inlineLocksPending = false; }) // tylko ostatni render zdejmuje
     .then(() => { syncInlineEditMode(); refreshFontFamilyList(); });
-}
-
-// Blokady od nowa bez przerysowania (np. włączone „Śledź zmiany” blokuje akapity z cudzymi
-// zmianami — lockTrackedOn). Tylko gdy podgląd = plik (po scaleniu edycji), bo znaczniki-wyspy
-// stawiane są z położeń w pliku.
-async function refreshInlineLocks() {
-  if (!originalFileBytes || !docCanvasEl?.querySelector(".docx-preview-host")) return;
-  await mergeInlineEditsIntoBytes();
-  await markLockedParagraphs(originalFileBytes);
-  syncInlineEditMode();
 }
 
 function mergeInlineEditsIntoBytes() {

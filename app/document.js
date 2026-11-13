@@ -514,7 +514,7 @@ async function applyDocumentEditNow(edit, xmlOpts) {
       originalFileBytes = (await buildPatchedDocx(originalFileBytes, pendingDocEdits)).bytes;
       pendingDocEdits = [];
     }
-    const { bytes, stats } = await dwbRedline(normalized.baseline, originalFileBytes, { author: normalized.author, trackOn: normalized.trackOn });
+    const { bytes, stats } = await dwbRedline(normalized.baseline, originalFileBytes, { author: normalized.author, trackOn: normalized.trackOn, keepRevisions: true });
     originalFileBytes = bytes;
     // propozycja zmiany w jednym akapicie (track-changes.js suggest): tylko ten akapit od nowa
     const onlyChanged = !stats.added && !stats.removed && Array.isArray(normalized.patch);
