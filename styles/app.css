@@ -139,10 +139,14 @@
    RESET
    =================================================== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* przytrzymanie przycisku palcem nie zaznacza jego napisu (treść dokumentu dalej zaznaczalna) */
+button, [role="button"] { -webkit-user-select: none; user-select: none; }
 
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  /* bez szarego błysku Safari/Chrome przy stuknięciu — przyciski mają własne :active (scale 0.97) */
+  -webkit-tap-highlight-color: transparent;
   /* Aplikacja, nie strona: bez przybliżania podwójnym stuknięciem. Na iPadzie szybkie „−/+”
      Safari brał za podwójne stuknięcie i powiększał CAŁĄ aplikację (pasek ucięty z lewej),
      mimo manipulation na samych przyciskach. Dokument przybliża się własnym gestem. */

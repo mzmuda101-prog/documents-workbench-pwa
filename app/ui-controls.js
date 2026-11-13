@@ -46,6 +46,7 @@ function applyThemePref() {
   const pref = getThemePref();
   const dark = pref === "dark" || (pref === "system" && !!themeMq?.matches);
   rootEl.setAttribute("data-theme", dark ? "dark" : "light");
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", dark ? "#0b1018" : "#e8ecf4"));
   document.querySelectorAll("#themeSeg [data-theme-pref]").forEach((b) => {
     const on = b.dataset.themePref === pref;
     b.classList.toggle("is-on", on);
