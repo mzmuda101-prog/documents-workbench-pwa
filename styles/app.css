@@ -2273,6 +2273,9 @@ textarea.ff-pop-input { min-height: 4.5em; resize: vertical; }
   animation: compose-pop-in 120ms ease-out;
 }
 @keyframes compose-pop-in { from { opacity: 0; transform: translateY(-4px); } }
+/* okienko nad przyciskiem (brak miejsca pod nim, compose-ui.js placePop): wyrasta w górę */
+.compose-pop.is-above { animation-name: compose-pop-in-up; }
+@keyframes compose-pop-in-up { from { opacity: 0; transform: translateY(4px); } }
 @media (prefers-reduced-motion: reduce) { .compose-pop { animation: none; } }
 .compose-cap { padding: 8px 10px 4px; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .compose-item {
@@ -2611,6 +2614,8 @@ p.dwb-exact img { vertical-align: baseline; }
 .compose-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .compose-actions-gap { flex: 1; }
 .compose-actions .btn { padding: 7px 12px; border-radius: 10px; min-height: 0; }
+/* gdy formularz musi się przewijać (mało miejsca), Anuluj / OK zostają przyklejone u dołu okienka */
+.compose-pop-form > .compose-actions { position: sticky; bottom: -12px; margin: 0 -12px -12px; padding: 8px 12px 12px; background: var(--surface); border-radius: 0 0 14px 14px; }
 .link-card {
   position: fixed; z-index: 8900; display: flex; align-items: center; gap: 4px; max-width: min(360px, calc(100vw - 16px));
   padding: 4px 4px 4px 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface);

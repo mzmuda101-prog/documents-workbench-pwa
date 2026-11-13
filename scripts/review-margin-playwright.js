@@ -164,11 +164,25 @@ async function run() {
   // ── Odpowiedz z dymka ────────────────────────────────────────────────────
   await page.click('[data-key="c:10"]');
   await page.waitForTimeout(400);
+  // niski ekran laptopa: pod przyciskiem za mało miejsca — okienko szuka go nad nim, bez przewijania w ścisku
+  const vpSize = page.viewportSize();
+  await page.setViewportSize({ width: vpSize.width, height: 720 });
+  await page.waitForTimeout(300);
   await page.click('[data-key="c:10"] .mk-reply-btn');
   await page.waitForSelector(".compose-pop-comment .cf-rich");
+  const fit = await page.evaluate(() => {
+    const pop = document.querySelector(".compose-pop-comment"), br = document.querySelector('[data-key="c:10"] .mk-reply-btn').getBoundingClientRect();
+    const pr = pop.getBoundingClientRect(), ok = pop.querySelector(".lf-ok").getBoundingClientRect();
+    const room = Math.max(innerHeight - br.bottom - 16, br.top - 16);
+    return { inView: pr.top >= 0 && pr.bottom <= innerHeight + 1, okVisible: ok.bottom <= Math.min(innerHeight, pr.bottom) + 1,
+      coversBtn: pr.bottom > br.top + 1 && pr.top < br.bottom, cramped: pop.scrollHeight > pop.clientHeight + 1 && pop.scrollHeight <= room, h: pop.scrollHeight, room: Math.round(room) };
+  });
+  check("odpowiedź: okienko na ekranie, przyciski widoczne, nie zasłania „Odpowiedz”, bez ścisku", fit.inView && fit.okVisible && !fit.coversBtn && !fit.cramped, JSON.stringify(fit));
   await page.locator(".compose-pop-comment .cf-rich").click();
   await page.keyboard.type("Odpowiedź z dymka");
   await page.click(".compose-pop-comment .lf-ok");
+  await idle(page);
+  await page.setViewportSize(vpSize);
   await idle(page);
   check("Odpowiedz w dymku: odpowiedź w pliku", (await fileXml(page, "word/comments.xml")).includes("Odpowiedź z dymka"));
   check("odpowiedź widać w dymku", await page.evaluate(() => !!document.querySelector('[data-key="c:10"]')?.textContent.includes("Odpowiedź z dymka")));

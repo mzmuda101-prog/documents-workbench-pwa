@@ -364,8 +364,17 @@ const composeUi = (() => {
     const viewH = vv ? vv.height : window.innerHeight;
     const w = el.offsetWidth;
     const left = Math.max(8, Math.min(r.left, viewW - w - 8));
-    const top = r.bottom + 6;
-    el.style.maxHeight = `${Math.max(160, viewH - top - 10)}px`;
+    // Pod przyciskiem, a gdy tam się nie mieści — nad nim (jak menu systemowe), żeby okienko nie
+    // musiało się przewijać w ścisku (np. „Odpowiedz” w dymku nisko na ekranie laptopa).
+    // Gdy nie mieści się nigdzie (telefon z klawiaturą) — po stronie z większym miejscem.
+    el.style.maxHeight = "none";
+    const need = el.offsetHeight;
+    const below = viewH - r.bottom - 16, above = r.top - 16;
+    const up = need > below && above > below;
+    const room = Math.max(160, up ? above : below);
+    const top = up ? Math.max(8, r.top - 6 - Math.min(need, room)) : r.bottom + 6;
+    el.classList.toggle("is-above", up);
+    el.style.maxHeight = `${room}px`;
     el.style.left = `${left + (vv ? vv.offsetLeft : 0)}px`;
     el.style.top = `${top + (vv ? vv.offsetTop : 0)}px`;
   }
@@ -395,6 +404,8 @@ const composeUi = (() => {
       // w okienku z polami Tab chodzi między polami — zamknięcie gubiłoby wpisany tekst
       else if (e.key === "Tab" && !el.querySelector("input, select, textarea, [contenteditable]")) closePop();
     });
+    // pole rośnie przy pisaniu — okienko nad przyciskiem nie może urosnąć w dół na przycisk
+    el.addEventListener("input", () => { if (pop?.el === el) placePop(el, anchor); });
     document.body.appendChild(el);
     pop = { el, anchor };
     anchor.setAttribute("aria-expanded", "true");
