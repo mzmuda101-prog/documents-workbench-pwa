@@ -299,8 +299,9 @@ const appFrame = (() => {
   }
   function syncModeSwitch() {
     const ro = !!readModeEl?.checked;
+    const mode = ro ? "read" : typeof dwbTrack !== "undefined" && dwbTrack.isOn() ? "suggest" : "edit";
     modeBtns.forEach((b) => {
-      const on = (b.dataset.mode === "read") === ro;
+      const on = b.dataset.mode === mode;
       b.classList.toggle("is-active", on);
       b.setAttribute("aria-pressed", String(on));
     });
@@ -311,8 +312,18 @@ const appFrame = (() => {
     readModeEl.checked = !!ro;
     readModeEl.dispatchEvent(new Event("change", { bubbles: true }));
   }
-  modeBtns.forEach((b) => b.addEventListener("click", () => setReadOnly(b.dataset.mode === "read")));
+  // Sugerowanie = Edycja + śledzenie zmian; Edycja z Sugerowania kończy śledzenie (poprawki zostają
+  // w dokumencie — jak przełączenie z Recenzowania na Edycję w Wordzie); Czytanie śledzenia nie rusza
+  modeBtns.forEach((b) => b.addEventListener("click", async () => {
+    const m = b.dataset.mode;
+    setReadOnly(m === "read");
+    if (typeof dwbTrack === "undefined" || m === "read") return;
+    if (m === "suggest" && !dwbTrack.isOn()) await dwbTrack.start();
+    else if (m === "edit" && dwbTrack.isOn()) await dwbTrack.stop();
+    syncModeSwitch();
+  }));
   readModeEl?.addEventListener("change", syncModeSwitch);
+  document.addEventListener("dwb:track", syncModeSwitch);
 
   // ── zoom na pasku ──────────────────────────────────────────────────────────
   // Procent + ikonka widoku (telefon = Widok mobilny, monitor = desktopowy); stuknięcie

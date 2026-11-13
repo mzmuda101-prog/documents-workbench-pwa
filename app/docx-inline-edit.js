@@ -2205,6 +2205,30 @@ function execInlineFormat(command) {
   // przez execCommand, którego stan przeglądarki nasze wstawianie liter ignorowało — za pogrubionym
   // słowem nie dało się zacząć pisać bez pogrubienia (Ctrl/⌘+B „nic nie robiło”).
   const range = docSelectionRange({ remembered: false });
+  // kursor W ŚRODKU słowa (litera przed i za nim): jak w Wordzie format dostaje całe słowo, kursor
+  // zostaje w tym samym miejscu; na brzegu słowa / na spacji — format dalszego pisania (niżej)
+  if (range?.collapsed && range.startContainer.nodeType === 3 && command !== "strike") {
+    const tn = range.startContainer, at = range.startOffset, txt = tn.data;
+    const W = /[\p{L}\p{N}_'’-]/u;
+    const p = tn.parentElement?.closest(".docx-editable-p");
+    if (p && at > 0 && at < txt.length && W.test(txt[at - 1]) && W.test(txt[at])) {
+      let a = at, b = at;
+      while (a > 0 && W.test(txt[a - 1])) a--;
+      while (b < txt.length && W.test(txt[b])) b++;
+      const caret = getCaretOffset(p);
+      const r = document.createRange();
+      r.setStart(tn, a);
+      r.setEnd(tn, b);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+      document.execCommand(command, false, null);
+      onInlineParagraphInput();
+      placeCaret(p, caret);
+      syncFormatIndicators();
+      return;
+    }
+  }
   if (range?.collapsed && (range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement)?.closest?.(".docx-editable-p")) {
     const on = formatFlagsAt(range)[command];
     setTypingStyle({ [command]: !on });
@@ -2843,6 +2867,14 @@ function handleFormatShortcut(e) {
     // indeks górny / dolny jak w Wordzie: Ctrl/⌘+Shift+= / Ctrl/⌘+= (e.code — klawisz „=”, też
     // na polskim układzie); bez zaznaczenia przełącza format dalszego pisania
     if (e.code === "Equal") { e.preventDefault(); toggleVertAlign(e.shiftKey ? "superscript" : "subscript"); return true; }
+  }
+  // wyrównanie jak w Wordzie: Ctrl/⌘+L / E / R / J (tylko z kursorem w tekście dokumentu —
+  // poza nim przeglądarka zostaje przy swoich skrótach)
+  const align = !e.shiftKey && { KeyL: "left", KeyE: "center", KeyR: "right", KeyJ: "both" }[e.code];
+  if (align && docCaretParagraph(e.target) && typeof composeUi !== "undefined") {
+    e.preventDefault();
+    composeUi.applyAlign(align);
+    return true;
   }
   const cmd = { b: "bold", i: "italic", u: "underline" }[e.key.toLowerCase()];
   if (!cmd || !docCaretParagraph(e.target)) return false;

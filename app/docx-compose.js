@@ -2023,6 +2023,24 @@ function composeTableEvenCols(tbl) {
   composeFitCellWidths(tbl);
   return true;
 }
+// Szerokości kolumn z przeciągnięcia krawędzi (compose-ui.js): jedna wartość (twipy) na kolumnę
+// siatki — siatka, szerokości komórek (ze scaleniami) i szerokość tabeli = suma (jak Word po
+// przeciągnięciu krawędzi).
+function composeTableSetWidths(doc, tbl, widths) {
+  const gridEl = composeDirectChild(tbl, "tblGrid");
+  const cols = gridEl ? Array.from(gridEl.childNodes).filter((n) => n.nodeType === 1 && n.localName === "gridCol") : [];
+  if (!Array.isArray(widths) || !cols.length || widths.length !== cols.length || widths.some((w) => !Number.isFinite(w) || w < 120 || w > 40000)) return false;
+  cols.forEach((g, i) => g.setAttributeNS(W_NS, "w:w", String(Math.round(widths[i]))));
+  composeFitCellWidths(tbl);
+  const tblPr = composeDirectChild(tbl, "tblPr");
+  if (tblPr) {
+    const total = String(Math.round(widths.reduce((x, y) => x + y, 0)));
+    let tw = composeDirectChild(tblPr, "tblW");
+    if (!tw) { tw = composeEl(doc, "tblW", { w: total, type: "dxa" }); composeOrderedChild(tblPr, tw, COMPOSE_TBLPR_ORDER); }
+    else { tw.setAttributeNS(W_NS, "w:w", total); tw.setAttributeNS(W_NS, "w:type", "dxa"); }
+  }
+  return true;
+}
 function composeScopeCells(rows, tr, tc, scope) {
   const col = composeGridStart(tc);
   return scope === "row" ? composeCells(tr)
@@ -2182,6 +2200,8 @@ function applyTableInXml(xml, edit) {
     composeTableBorders(doc, tbl, edit.kind);
   } else if (a === "evenCols") {
     if (!composeTableEvenCols(tbl)) return { xml, count: 0 };
+  } else if (a === "colWidths") {
+    if (!composeTableSetWidths(doc, tbl, edit.widths)) return { xml, count: 0 };
   } else if (a === "delTable") {
     const parent = tbl.parentNode;
     // tabela w komórce — komórka musi kończyć się akapitem

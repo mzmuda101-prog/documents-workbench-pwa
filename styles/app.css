@@ -3703,3 +3703,33 @@ body.dwb-painting .docx-preview-host * {
   content: ""; position: absolute; top: -7px; left: 22px; width: 12px; height: 12px; transform: rotate(45deg);
   background: var(--mk-card-bg); border-left: 1px solid var(--border-subtle); border-top: 1px solid var(--border-subtle);
 }
+
+/* Szerokość kolumn tabeli przeciąganiem krawędzi (compose-ui.js) */
+.tbl-col-hit { position: fixed; z-index: 30; width: 8px; cursor: col-resize; touch-action: none; }
+.is-col-dragging, .is-col-dragging * { cursor: col-resize !important; user-select: none !important; }
+.tbl-col-guide { position: fixed; z-index: 8960; width: 0; border-left: 1px dashed var(--accent); pointer-events: none; }
+.tbl-col-guide.is-snap { border-left: 1px solid #e0338b; }
+.tbl-col-guide > span {
+  position: absolute; top: 4px; left: 6px; padding: 2px 8px; border-radius: 6px; white-space: nowrap;
+  background: var(--ink); color: var(--surface); font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.tbl-col-guide.is-snap > span { background: #e0338b; color: #fff; }
+.tbl-col-guide > span[hidden] { display: none; }
+@media print { .tbl-col-hit, .tbl-col-guide { display: none !important; } }
+
+/* Wstaw → Symbol (compose-ui.js) */
+.symbol-pick { display: grid; grid-template-columns: repeat(6, 36px); gap: 4px; padding: 4px 8px; }
+.symbol-pick button {
+  width: 36px; height: 36px; padding: 0; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--panel);
+  color: var(--ink); font-size: 18px; line-height: 1; cursor: pointer; font-family: inherit;
+}
+@media (hover: hover) { .symbol-pick button:hover { border-color: var(--accent); background: var(--accent-light); } }
+.symbol-pick button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (pointer: coarse) { .symbol-pick { grid-template-columns: repeat(6, 44px); } .symbol-pick button { width: 44px; height: 44px; font-size: 20px; } }
+.symbol-pick-name { padding: 6px 10px 8px; font-size: 12.5px; color: var(--muted-strong); min-height: 1.4em; }
+
+/* Sugerowanie w przełączniku trybu (app-frame.js) — na wąskim ekranie bez miejsca: zostaje w menu
+   kontekstowym, w panelu Recenzja i pod Ctrl/⌘+Shift+E */
+@media (max-width: 720px) { .mode-btn-suggest { display: none; } }
+.mode-btn-suggest.is-active { background: #c4262e; }
+.mode-switch.has-pill:has(.mode-btn-suggest.is-active) .mode-pill { background: #c4262e; }

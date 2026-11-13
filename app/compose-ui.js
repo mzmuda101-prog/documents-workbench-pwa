@@ -477,6 +477,11 @@ const composeUi = (() => {
       icon: ICON('<rect x="3" y="5" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/>'),
       onPick: () => insertText(todayText()),
     });
+    popItem(el, {
+      label: t("insertSymbol"), desc: t("insertSymbolDesc"),
+      icon: ICON('<path d="M15 4.5a4.5 4.5 0 0 0-6 0 3 3 0 0 0 1 4.6l3 1.4a3 3 0 0 1 1 4.6 4.5 4.5 0 0 1-6 0"/><path d="M9 9.5a3 3 0 0 0-1 4.6l3 1.4a3 3 0 0 1 1 4.6 4.5 4.5 0 0 1-6 0" opacity=".55"/>'),
+      onPick: () => openPop(insertBtn, buildSymbolPicker),
+    });
     popCap(el, t("insertGroupDoc"));
     popItem(el, {
       label: t("insertTable"), desc: t("insertTableDesc"),
@@ -1294,6 +1299,70 @@ const composeUi = (() => {
     if (first && !window.matchMedia?.("(pointer: coarse)").matches) first.dataset.autofocus = "1";
   }
 
+  // ── Wstaw → Symbol (jak w Wordzie): najczęstsze znaki, u góry ostatnio używane ─────────
+  // [znak, nazwa pl, nazwa en] — nazwa w podpowiedzi i dla czytnika ekranu
+  const SYMBOLS = [
+    ["§", "paragraf", "section"], ["¶", "akapit", "pilcrow"], ["©", "prawa autorskie", "copyright"], ["®", "znak zastrzeżony", "registered"], ["™", "znak towarowy", "trademark"], ["№", "numer", "numero"],
+    ["€", "euro", "euro"], ["$", "dolar", "dollar"], ["£", "funt", "pound"], ["¥", "jen", "yen"], ["¢", "cent", "cent"], ["‰", "promil", "per mille"],
+    ["°", "stopień", "degree"], ["±", "plus minus", "plus-minus"], ["×", "razy", "multiplication"], ["÷", "dzielenie", "division"], ["≈", "w przybliżeniu", "approximately"], ["≠", "różne", "not equal"],
+    ["≤", "mniejsze lub równe", "less or equal"], ["≥", "większe lub równe", "greater or equal"], ["½", "jedna druga", "one half"], ["¼", "jedna czwarta", "one quarter"], ["¾", "trzy czwarte", "three quarters"], ["²", "do kwadratu", "squared"],
+    ["³", "do sześcianu", "cubed"], ["µ", "mikro", "micro"], ["∞", "nieskończoność", "infinity"], ["√", "pierwiastek", "square root"], ["Δ", "delta", "delta"], ["π", "pi", "pi"],
+    ["–", "półpauza", "en dash"], ["—", "pauza", "em dash"], ["…", "wielokropek", "ellipsis"], ["„", "cudzysłów otwierający", "low double quote"], ["”", "cudzysłów zamykający", "right double quote"], ["’", "apostrof", "apostrophe"],
+    ["«", "cudzysłów francuski otwierający", "left guillemet"], ["»", "cudzysłów francuski zamykający", "right guillemet"], ["•", "punktor", "bullet"], ["·", "kropka środkowa", "middle dot"], ["†", "krzyżyk", "dagger"], ["‡", "podwójny krzyżyk", "double dagger"],
+    ["→", "strzałka w prawo", "right arrow"], ["←", "strzałka w lewo", "left arrow"], ["↑", "strzałka w górę", "up arrow"], ["↓", "strzałka w dół", "down arrow"], ["↔", "strzałka w obie strony", "left-right arrow"], ["⇒", "wynika", "implies"],
+    ["✓", "ptaszek", "check mark"], ["✗", "krzyżyk (nie)", "ballot x"], ["☐", "pole wyboru", "ballot box"], ["☒", "pole zaznaczone", "checked box"], ["★", "gwiazdka", "star"], ["□", "kwadrat", "square"],
+  ];
+  const SYMBOL_RECENT_KEY = "dwb.symbolsRecent";
+  function recentSymbols() { try { return JSON.parse(localStorage.getItem(SYMBOL_RECENT_KEY) || "[]").filter((c) => SYMBOLS.some((x) => x[0] === c)).slice(0, 6); } catch (_) { return []; } }
+  function useSymbol(ch) {
+    try { localStorage.setItem(SYMBOL_RECENT_KEY, JSON.stringify([ch, ...recentSymbols().filter((c) => c !== ch)].slice(0, 6))); } catch (_) {}
+    insertText(ch);
+  }
+  function buildSymbolPicker(el) {
+    el.classList.add("compose-pop-symbols");
+    const COLS = 6;
+    const label = document.createElement("div");
+    label.className = "symbol-pick-name";
+    const nameOf = (ch) => { const x = SYMBOLS.find((y) => y[0] === ch); return x ? (currentLang === "en" ? x[2] : x[1]) : ch; };
+    const grid = (chars, cap) => {
+      popCap(el, cap);
+      const g = document.createElement("div");
+      g.className = "symbol-pick";
+      g.setAttribute("role", "grid");
+      chars.forEach((ch, i) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = ch;
+        b.dataset.i = String(i);
+        b.setAttribute("aria-label", nameOf(ch));
+        const show = () => { label.textContent = `${ch}  ${nameOf(ch)}`; };
+        b.addEventListener("mouseenter", show);
+        b.addEventListener("focus", show);
+        b.addEventListener("click", () => { closePop(); useSymbol(ch); });
+        g.appendChild(b);
+      });
+      g.addEventListener("keydown", (e) => {
+        const b = e.target.closest("button");
+        if (!b) return;
+        const i = +b.dataset.i;
+        const n = { ArrowRight: i + 1, ArrowLeft: i - 1, ArrowDown: i + COLS, ArrowUp: i - COLS }[e.key];
+        if (n == null) return;
+        e.preventDefault();
+        e.stopPropagation();
+        g.querySelector(`button[data-i="${Math.max(0, Math.min(chars.length - 1, n))}"]`)?.focus();
+      }, true);
+      el.appendChild(g);
+      return g;
+    };
+    const recent = recentSymbols();
+    if (recent.length) grid(recent, t("symbolRecent"));
+    const all = grid(SYMBOLS.map((x) => x[0]), t("insertSymbol"));
+    el.appendChild(label);
+    label.textContent = t("symbolHint");
+    const first = (recent.length ? el.querySelector(".symbol-pick button") : all.querySelector("button"));
+    if (first && !window.matchMedia?.("(pointer: coarse)").matches) first.dataset.autofocus = "1";
+  }
+
   async function insertTable(rows, cols) {
     const p = caretParagraph();
     if (!p) return;
@@ -1916,8 +1985,20 @@ const composeUi = (() => {
     if (next) {
       const idx = firstParaIndexIn(next);
       if (idx >= 0) {
-        const el = collectPreviewParagraphElements(host())[idx];
+        const all = collectPreviewParagraphElements(host());
+        const el = all[idx];
         focusParagraphAtOffset(idx, back ? previewRunsToPlainText(extractRunsFromPreviewParagraph(el)).length : 0);
+        // jak w Wordzie: Tab / Shift+Tab zaznacza całą treść komórki (pisanie ją zastępuje)
+        const paras = all.filter((q) => q.closest("td, th") === next);
+        const lastP = paras[paras.length - 1];
+        if (paras.length && paras.some((q) => q.textContent.length)) {
+          const r = document.createRange();
+          r.setStart(paras[0], 0);
+          r.setEnd(lastP, lastP.childNodes.length);
+          const sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(r);
+        }
       }
       return true;
     }
@@ -1925,6 +2006,147 @@ const composeUi = (() => {
     tableAction("rowBelow").then(() => focusCell(cell.ti, cell.r + 1, 0));
     return true;
   }
+
+  // ── szerokość kolumn: przeciąganie krawędzi komórki (jak w Wordzie) ─────────
+  // Najechanie na pionową krawędź komórki w Edycji = kursor ↔; przeciągnięcie pokazuje przerywaną
+  // linię (jak Word), puszczenie zapisuje szerokości (op table/colWidths — siatka, komórki, tabela).
+  // Krawędź wewnątrz tabeli przesuwa granicę dwóch kolumn (suma bez zmian), prawa krawędź zmienia
+  // ostatnią kolumnę. Przyciąganie: brzegi tekstu strony, granice kolumn innych tabel, równy
+  // podział dwóch kolumn (etykieta „równe”); Alt — bez przyciągania. Tylko mysz / rysik.
+  const COL_MIN_TW = 240; // ~0,42 cm — węższej kolumny Word też nie daje przeciągnąć
+  let colHit = null, colDrag = null;
+  function tableGrid(table) {
+    const occ = [];
+    const bounds = [];
+    let left = Infinity;
+    Array.from(table.rows).forEach((tr, r) => {
+      let col = 0;
+      Array.from(tr.cells).forEach((td) => {
+        occ[r] = occ[r] || [];
+        while (occ[r][col]) col++;
+        const cs = td.colSpan || 1, rs = td.rowSpan || 1;
+        for (let y = r; y < r + rs; y++) { occ[y] = occ[y] || []; for (let x = col; x < col + cs; x++) occ[y][x] = true; }
+        const rc = td.getBoundingClientRect();
+        left = Math.min(left, rc.left);
+        const k = col + cs - 1;
+        if (bounds[k] == null) bounds[k] = rc.right;
+        col += cs;
+      });
+    });
+    return bounds.length && !bounds.some((x) => x == null) ? { left, bounds } : null;
+  }
+  function clearColHit() { colHit?.el.remove(); colHit = null; }
+  function colGuide(x, top, h, snapped, label) {
+    let g = document.querySelector(".tbl-col-guide");
+    if (!g) { g = document.createElement("div"); g.className = "tbl-col-guide"; g.setAttribute("aria-hidden", "true"); g.innerHTML = "<span></span>"; document.body.appendChild(g); }
+    g.style.left = `${x}px`; g.style.top = `${top}px`; g.style.height = `${h}px`;
+    g.classList.toggle("is-snap", !!snapped);
+    const sp = g.querySelector("span");
+    sp.textContent = label || "";
+    sp.hidden = !label;
+    return g;
+  }
+  const colCm = (tw) => `${cmText(tw)} cm`; // cmText — ustawienia strony (wyżej)
+  docCanvasEl?.addEventListener("pointermove", (e) => {
+    if (colDrag || readOnlyMode || e.pointerType === "touch" || e.buttons) { if (!colDrag && colHit && e.buttons) clearColHit(); return; }
+    const table = e.target.closest?.("table");
+    if (!table || !host()?.contains(table) || !table.closest(".docx-edit-root")) { if (colHit && !colHit.el.contains(e.target)) clearColHit(); return; }
+    const g = tableGrid(table);
+    const tr = table.getBoundingClientRect();
+    const k = g ? g.bounds.findIndex((x) => Math.abs(e.clientX - x) <= 4) : -1;
+    if (k < 0) { clearColHit(); return; }
+    if (colHit?.table === table && colHit.k === k) return;
+    clearColHit();
+    const el = document.createElement("div");
+    el.className = "tbl-col-hit";
+    el.style.left = `${g.bounds[k] - 4}px`; el.style.top = `${tr.top}px`; el.style.height = `${tr.height}px`;
+    el.setAttribute("aria-hidden", "true");
+    document.body.appendChild(el);
+    colHit = { el, table, k };
+    el.addEventListener("pointerleave", () => { if (!colDrag) clearColHit(); });
+    el.addEventListener("pointerdown", startColDrag);
+  });
+  docViewportEl?.addEventListener("scroll", () => { if (!colDrag) clearColHit(); }, { passive: true });
+  async function startColDrag(e) {
+    if (!colHit || e.button > 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const { table, k } = colHit;
+    const p = Array.from(table.querySelectorAll("p")).find((q) => q.closest("table") === table);
+    const index = p ? resolveParaIndex(p) : -1;
+    const g = tableGrid(table);
+    if (index < 0 || !g || !originalFileBytes || typeof composeCellOf !== "function") return;
+    colHit.el.setPointerCapture?.(e.pointerId);
+    const doc = await getDocumentXmlDom(originalFileBytes).catch(() => null);
+    const xp = doc ? collectParagraphElements(doc.documentElement, "all")[index] : null;
+    const tbl = xp ? composeCellOf(xp)?.tbl : null;
+    const widths = tbl ? composeGridWidths(tbl) : [];
+    if (widths.length !== g.bounds.length || widths.some((w) => !w)) { toast(t("tableColResizeNo"), "info"); clearColHit(); return; }
+    const pxW = g.bounds[g.bounds.length - 1] - g.left;
+    const twPerPx = widths.reduce((x, y) => x + y, 0) / (pxW || 1);
+    const tr = table.getBoundingClientRect();
+    // cele przyciągania (ekran, px): brzegi tekstu strony, granice kolumn innych tabel, równy podział
+    const sec = table.closest("section.docx");
+    const targets = [];
+    if (sec) {
+      const sr = sec.getBoundingClientRect(), kk = sec.offsetWidth ? sr.width / sec.offsetWidth : 1, cs = getComputedStyle(sec);
+      targets.push({ x: sr.left + (parseFloat(cs.paddingLeft) || 0) * kk, src: "page" }, { x: sr.right - (parseFloat(cs.paddingRight) || 0) * kk, src: "page" });
+    }
+    host().querySelectorAll("table").forEach((o) => {
+      if (o === table) return;
+      const og = tableGrid(o);
+      og?.bounds.forEach((x) => targets.push({ x, src: "table" }));
+    });
+    const prevX = k > 0 ? g.bounds[k - 1] : g.left;
+    if (k < g.bounds.length - 1) targets.push({ x: (prevX + g.bounds[k + 1]) / 2, src: "equal" });
+    colDrag = { id: e.pointerId, table, k, index, widths, twPerPx, g, x0: g.bounds[k], tr, targets, held: null, x: g.bounds[k] };
+    document.documentElement.classList.add("is-col-dragging");
+    colGuide(colDrag.x, tr.top, tr.height, false, colCm(widths[k]));
+  }
+  function colDragWidths(d, x) {
+    const dtw = (x - d.x0) * d.twPerPx;
+    const w = d.widths.slice();
+    w[d.k] += dtw;
+    if (d.k < w.length - 1) w[d.k + 1] -= dtw;
+    return w;
+  }
+  window.addEventListener("pointermove", (e) => {
+    const d = colDrag;
+    if (!d || e.pointerId !== d.id) return;
+    const prevX = d.k > 0 ? d.g.bounds[d.k - 1] : d.g.left;
+    const minX = prevX + COL_MIN_TW / d.twPerPx;
+    const maxX = d.k < d.g.bounds.length - 1 ? d.g.bounds[d.k + 1] - COL_MIN_TW / d.twPerPx : Infinity;
+    let x = Math.max(minX, Math.min(maxX, e.clientX));
+    let hit = null;
+    if (!e.altKey) {
+      const tol = 6;
+      d.targets.forEach((t0) => { const dd = Math.abs(t0.x - x); if (dd <= tol && t0.x >= minX && t0.x <= maxX && (!hit || dd < Math.abs(hit.x - x))) hit = t0; });
+      if (!hit && d.held && Math.abs(d.held.x - x) <= tol * 1.8) hit = d.held; // lepkość
+    }
+    d.held = hit;
+    if (hit) x = hit.x;
+    d.x = x;
+    const w = colDragWidths(d, x);
+    const label = hit?.src === "equal" ? `${t("tableColEqual")} · ${colCm(w[d.k])}` : colCm(w[d.k]);
+    const sec = d.table.closest("section.docx")?.getBoundingClientRect();
+    const vr = docViewportEl?.getBoundingClientRect();
+    const top = hit && sec ? Math.max(sec.top, vr?.top ?? sec.top) : d.tr.top;
+    const bottom = hit && sec ? Math.min(sec.bottom, vr?.bottom ?? sec.bottom) : d.tr.bottom;
+    colGuide(x, top, Math.max(0, bottom - top), !!hit, label);
+  });
+  const endColDrag = (e) => {
+    const d = colDrag;
+    if (!d || e.pointerId !== d.id) return;
+    colDrag = null;
+    document.documentElement.classList.remove("is-col-dragging");
+    document.querySelector(".tbl-col-guide")?.remove();
+    clearColHit();
+    if (e.type === "pointercancel" || Math.abs(d.x - d.x0) < 1) return;
+    const widths = colDragWidths(d, d.x).map((v) => Math.round(v));
+    runFileEdit({ op: "table", index: d.index, action: "colWidths", widths });
+  };
+  window.addEventListener("pointerup", endColDrag, true);
+  window.addEventListener("pointercancel", endColDrag, true);
 
   // ── obrazy ────────────────────────────────────────────────────────────────
   const IMG_MAX_PX = 2400;

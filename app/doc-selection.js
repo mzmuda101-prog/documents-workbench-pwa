@@ -188,20 +188,31 @@ const dwbSel = (() => {
     return a;
   }
 
-  function clearCells(info) {
-    const { list, ia, ib, start, end } = info;
+  // Zaznaczenie przez kilka komórek = CAŁE komórki (Word rozszerza je do pełnych komórek —
+  // sprawdzone wyrocznią tools/word-oracle/probe-table-select.js): Delete czyści całą treść każdej
+  // z nich (tabela zostaje). Dawniej znikały tylko zaznaczone kawałki („A1|B|1” → „∅ ¶ 1”).
+  // onlyFirst: pisanie — Word zastępuje treść PIERWSZEJ komórki, pozostałe zostają.
+  const cellOfP = (p) => p?.closest("td, th") || null;
+  function clearCells(info, { onlyFirst = false } = {}) {
+    const { list, a, b } = info;
+    let ia = info.ia, ib = info.ib;
+    const first = cellOfP(a), last = cellOfP(b);
+    while (ia > 0 && first && cellOfP(list[ia - 1]) === first) ia--;
+    while (ib < list.length - 1 && last && cellOfP(list[ib + 1]) === last) ib++;
+    if (onlyFirst) { ib = ia; while (ib < list.length - 1 && first && cellOfP(list[ib + 1]) === first) ib++; }
     for (let i = ia; i <= ib; i++) {
       const p = list[i];
       if (!p || p.dataset.lock) continue;
       const r = document.createRange();
-      if (i === ia) r.setStart(start.node, start.offset); else r.setStart(p, 0);
-      if (i === ib) r.setEnd(end.node, end.offset); else r.setEnd(p, p.childNodes.length);
+      r.selectNodeContents(p);
       r.deleteContents();
     }
-    setCaret(start.node.isConnected ? start.node : info.a, start.node.isConnected ? Math.min(start.offset, start.node.nodeType === 3 ? start.node.length : start.node.childNodes.length) : 0);
+    const head = list[ia];
+    setCaret(head, 0);
     onInlineParagraphInput();
-    return info.a;
+    return head;
   }
+  const cellCross = (info) => info && info.ia !== info.ib && (info.a.dataset.box || "") !== (info.b.dataset.box || "") && !spanRefusal(info);
 
   // Zmiana w pliku w kolejce; usunięcie przez granicę strony (sekcje podglądu) zostawia w podglądzie
   // pustą kartkę — po zapisie rysujemy dokument od nowa (kursor i przewinięcie wracają).
@@ -239,7 +250,7 @@ const dwbSel = (() => {
 
   function insertAfterDelete(info, text) {
     const style = styleOfFirst(info);
-    const p = deleteSpan(info);
+    const p = cellCross(info) && text ? clearCells(info, { onlyFirst: true }) : deleteSpan(info);
     if (!p) return;
     if (text) {
       insertStyledTextAtCaret(text, mergeRunStyles(style || {}, currentTypingStyle()), p, { turnOff: currentTypingStyle() });

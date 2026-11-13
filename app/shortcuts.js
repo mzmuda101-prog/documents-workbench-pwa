@@ -36,6 +36,8 @@ const DWB_SHORTCUTS = [
   { group: "format", id: "bold", keys: ["Mod+B"], pl: "Pogrubienie", en: "Bold" },
   { group: "format", id: "italic", keys: ["Mod+I"], pl: "Kursywa", en: "Italic" },
   { group: "format", id: "underline", keys: ["Mod+U"], pl: "Podkreślenie", en: "Underline" },
+  { group: "format", id: "alignKeys", keys: ["Mod+L", "Mod+E", "Mod+R", "Mod+J"], pl: "Wyrównaj do lewej / do środka / do prawej / wyjustuj", en: "Align left / center / right / justify" },
+  { group: "format", id: "headingKeys", keys: ["Mod+Alt+1", "Mod+Alt+2", "Mod+Alt+3"], pl: "Nagłówek 1 / 2 / 3 (kursor w tekście)", en: "Heading 1 / 2 / 3 (cursor in text)" },
   { group: "format", id: "sizeUp", keys: ["Mod+]", "Mod+Shift+>"], pl: "Większa czcionka", en: "Bigger font" },
   { group: "format", id: "sizeDown", keys: ["Mod+[", "Mod+Shift+<"], pl: "Mniejsza czcionka", en: "Smaller font" },
   { group: "format", id: "superscript", keys: ["Mod+Shift+="], pl: "Indeks górny", en: "Superscript" },
@@ -50,7 +52,7 @@ const DWB_SHORTCUTS = [
   { group: "insert", id: "bookmark", keys: ["Mod+Shift+F5"], pl: "Zakładka", en: "Bookmark" },
 
   { group: "view", id: "focusMode", keys: ["Mod+Alt+F"], pl: "Tryb skupienia (kursor poza tekstem)", en: "Focus mode (cursor outside text)" },
-  { group: "view", id: "regions", keys: ["Mod+Alt+1", "Mod+Alt+2", "Mod+Alt+3"], pl: "Panel / pasek / dokument", en: "Panel / toolbar / document" },
+  { group: "view", id: "regions", keys: ["Mod+Alt+1", "Mod+Alt+2", "Mod+Alt+3"], pl: "Panel / pasek / dokument (kursor poza tekstem)", en: "Panel / toolbar / document (cursor outside text)" },
   { group: "view", id: "regionCycle", keys: ["F6", "Shift+F6"], pl: "Obszary po kolei", en: "Cycle screen areas" },
   { group: "view", id: "nextHeading", keys: ["Mod+Tab"], pl: "Następny nagłówek (w tekście)", en: "Next heading (in text)" },
   { group: "view", id: "back", keys: ["Alt+←"], pl: "Wróć po kliknięciu linku", en: "Back after following a link" },

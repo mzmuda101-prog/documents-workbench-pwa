@@ -128,6 +128,44 @@ async function run() {
   await page.evaluate(() => dwbTrack.stop());
   await idle(page);
 
+  // ── przełącznik trybu: Sugerowanie = Edycja + śledzenie; Edycja kończy śledzenie ──
+  const ctxMenu = async (start) => {
+    const pt = await page.evaluate((start) => { const r = [...document.querySelectorAll(".docx-preview-host p")].find((p) => p.textContent.startsWith(start)).getBoundingClientRect(); return { x: r.left + 20, y: r.top + r.height / 2 }; }, start);
+    await page.mouse.click(pt.x, pt.y);
+    await page.waitForTimeout(250);
+    await page.mouse.click(pt.x, pt.y, { button: "right" });
+    await page.waitForSelector(".doc-menu");
+    return page.evaluate(() => [...document.querySelectorAll(".doc-menu button")].filter((b) => !b.closest(".doc-menu-row")).map((b) => b.textContent.trim()).filter(Boolean));
+  };
+  const clickMenu = (re) => page.evaluate((src) => { const re = new RegExp(src); [...document.querySelectorAll(".doc-menu button")].find((b) => re.test(b.textContent))?.click(); }, re.source);
+  await page.click('.mode-btn[data-mode="suggest"]');
+  await idle(page);
+  check("przełącznik „Sugerowanie”: Edycja ze śledzeniem zmian", await page.evaluate(() => dwbTrack.isOn() && !readOnlyMode && document.querySelector(".mode-btn.is-active")?.dataset.mode === "suggest"));
+  await page.click('.mode-btn[data-mode="edit"]');
+  await idle(page);
+  check("…„Edycja” kończy śledzenie", await page.evaluate(() => !dwbTrack.isOn() && document.querySelector(".mode-btn.is-active")?.dataset.mode === "edit"));
+
+  // ── menu kontekstowe: zmiany i komentarze ─────────────────────────────────
+  let menu = await ctxMenu("Termin");
+  check("menu kontekstowe na akapicie ze zmianą: Akceptuj / Odrzuć na górze", /Akceptuj zmian/.test(menu[0]) && /Odrzuć zmian/.test(menu[1]), menu.slice(0, 4).join(" | "));
+  const before = await para(page, "Termin");
+  await clickMenu(/Akceptuj zmian/);
+  await idle(page);
+  const acc = await para(page, "Termin");
+  check("…Akceptuj z menu: zmiany akapitu przyjęte w pliku", before.ins.length + before.del.length > 0 && !acc.ins.length && !acc.del.length && acc.text === before.text, JSON.stringify([before, acc]));
+  menu = await ctxMenu("Kara");
+  check("menu kontekstowe w komentowanym tekście: Odpowiedz / Rozwiąż / Usuń", ["Odpowiedz na komentarz", "Rozwiąż komentarz", "Usuń komentarz"].every((x) => menu.includes(x)), menu.join(" | "));
+  await clickMenu(/^Rozwiąż komentarz/);
+  await idle(page);
+  check("…Rozwiąż z menu: komentarz rozwiązany w pliku", await page.evaluate(async () => /w15:done="1"/.test(await (await JSZip.loadAsync(originalFileBytes)).file("word/commentsExtended.xml").async("string"))));
+  menu = await ctxMenu("Ostatni");
+  check("menu kontekstowe: „Sugeruj zmiany”", menu.some((x) => /^Sugeruj zmiany/.test(x)), menu.join(" | "));
+  await clickMenu(/^Sugeruj zmiany/);
+  await idle(page);
+  check("…włącza śledzenie i przełącznik pokazuje Sugerowanie", await page.evaluate(() => dwbTrack.isOn() && document.querySelector(".mode-btn.is-active")?.dataset.mode === "suggest"));
+  await page.evaluate(() => dwbTrack.stop());
+  await idle(page);
+
   check("brak błędów strony", !errors.length, errors.join(" | "));
   await browser.close();
   let failed = 0;

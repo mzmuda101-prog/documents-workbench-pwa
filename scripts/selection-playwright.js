@@ -174,7 +174,9 @@ async function run() {
   await page.keyboard.press("Delete");
   await idle();
   now = await texts();
-  check("zaznaczenie przez komórki: tekst usunięty, tabela 2×2 zostaje", now.length === 14 && now[iA1] === "A1" && now[iA1 + 1] === "" && now[iB2] === " komórka", JSON.stringify(now.slice(iA1, iB2 + 1)));
+  // jak w Wordzie (tools/word-oracle/probe-table-select.js): zaznaczenie przez komórki = całe
+  // komórki — Delete czyści całą ich treść, nie tylko zaznaczone kawałki
+  check("zaznaczenie przez komórki: całe komórki wyczyszczone, tabela 2×2 zostaje", now.length === 14 && now.slice(iA1, iB2 + 1).every((x) => x === ""), JSON.stringify(now.slice(iA1, iB2 + 1)));
   await consistent("czyszczenie komórek");
   await undo();
 

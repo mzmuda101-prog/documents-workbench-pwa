@@ -9,7 +9,7 @@
 //   Ctrl/⌘+F            szukaj w dokumencie (pole na pasku)
 //   Enter / Shift+Enter  w polu szukania: następne / poprzednie trafienie
 //   F3 / Shift+F3, Ctrl/⌘+G / Ctrl/⌘+Shift+G  następne / poprzednie trafienie (wszędzie)
-//   Ctrl/⌘+Alt+1 / 2 / 3 panel / pasek / dokument   (F6 / Shift+F6 — po kolei)
+//   Ctrl/⌘+Alt+1 / 2 / 3 panel / pasek / dokument   (F6 / Shift+F6 — po kolei); w tekście — Nagłówek 1/2/3
 //   Ctrl/⌘+Alt+E        Czytanie ⇄ Edycja
 //   Ctrl/⌘+Alt+F        tryb skupienia
 //   Ctrl/⌘+Alt+N        nowy dokument (okno szablonów)
@@ -140,6 +140,12 @@
         KeyF: () => originalFileBytes && dwbView.toggle(),
         KeyN: () => typeof composeUi !== "undefined" && composeUi.openNewDialog(),
       };
+      // kursor w tekście dokumentu (Edycja): Ctrl/⌘+Alt+1/2/3 = Nagłówek 1/2/3 jak w Wordzie;
+      // poza tekstem — obszary ekranu (jak Ctrl/⌘+Alt+F: przypis w tekście, skupienie poza nim)
+      const head = { Digit1: "h1", Numpad1: "h1", Digit2: "h2", Numpad2: "h2", Digit3: "h3", Numpad3: "h3" }[e.code];
+      const sel = window.getSelection?.();
+      const inText = !readOnlyMode && sel?.rangeCount && (sel.anchorNode?.nodeType === 1 ? sel.anchorNode : sel.anchorNode?.parentElement)?.closest?.(".docx-editable-p") && docCanvasEl?.contains(document.activeElement);
+      if (head && inText && typeof composeUi !== "undefined") { e.preventDefault(); composeUi.applyStyle(head); return; }
       const fn = map[e.code];
       if (fn) { e.preventDefault(); fn(); }
       return;

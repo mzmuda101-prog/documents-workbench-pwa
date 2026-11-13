@@ -146,6 +146,20 @@ const dwbDocMenu = (() => {
       add("blankPage", "ctxRemoveBlankPage", () => removeBlankPage(ctx.blankPage));
       sep();
     }
+    // ── recenzja na górze menu (jak w Wordzie): zmiana w tym akapicie, komentarz pod kursorem ──
+    if (ctx.revisions.length) {
+      const ids = ctx.revisions.map((c) => c.id);
+      add("revAccept", ctx.revisions.length > 1 ? "ctxAcceptChanges" : "ctxAcceptChange", () => dwbMargin.revisions("accept", ids), { primary: true });
+      add("revReject", ctx.revisions.length > 1 ? "ctxRejectChanges" : "ctxRejectChange", () => dwbMargin.revisions("reject", ids));
+      sep();
+    }
+    if (ctx.commentId) {
+      const c = composeUi.commentById(ctx.commentId);
+      add("cmReply", "ctxCommentReply", () => { restoreRange(); composeUi.commentAction(ctx.commentId, "reply"); });
+      add("cmResolve", c?.done ? "ctxCommentReopen" : "ctxCommentResolve", () => composeUi.commentAction(ctx.commentId, "resolve"));
+      add("cmDelete", "ctxCommentDelete", () => composeUi.commentAction(ctx.commentId, "delete"), { danger: true });
+      sep();
+    }
     if (ctx.hasSel) {
       add("cut", "ctxCut", () => execClip("cut"), { kbd: "Mod+X" });
       add("copy", "ctxCopy", () => execClip("copy"), { kbd: "Mod+C" });
@@ -155,6 +169,7 @@ const dwbDocMenu = (() => {
     sep();
     add("link", "ctxLink", () => { restoreRange(); composeUi.openLinkForm(); }, { kbd: "Mod+K" });
     add("comment", "ctxComment", () => { restoreRange(); composeUi.openCommentForm(); }, { kbd: "Mod+Alt+M" });
+    if (typeof dwbTrack !== "undefined") add("suggest", dwbTrack.isOn() ? "ctxSuggestOff" : "ctxSuggestOn", () => dwbTrack.toggle(), { kbd: "Mod+Shift+E" });
     add("note", "ctxFootnote", () => { restoreRange(); composeUi.insertNote("footnote"); });
     if (ctx.cell) {
       sep();
@@ -213,6 +228,15 @@ const dwbDocMenu = (() => {
     docViewportEl?.addEventListener("scroll", () => close(false), { passive: true });
     return menuEl;
   }
+  function commentAt(r) {
+    if (!r || typeof composeUi === "undefined" || !composeUi.commentRanges) return null;
+    // kursor w komentarzu albo zaznaczenie zachodzące na komentowany tekst (Safari zaznacza słowo
+    // pod prawym kliknięciem — początek wypada wtedy dokładnie na granicy komentarza)
+    // (zakresy zachodzą na siebie albo się stykają: początek r ≤ koniec komentarza i koniec r ≥ jego początek)
+    const overlaps = (cr) => cr.comparePoint(r.startContainer, r.startOffset) <= 0 && cr.comparePoint(r.endContainer, r.endOffset) >= 0;
+    const hit = composeUi.commentRanges().find(({ id, range }) => { try { return overlaps(range) && !composeUi.commentById(id)?.parentId; } catch (_) { return false; } });
+    return hit ? hit.id : null;
+  }
   function context() {
     const r = selRange();
     const p = paraOf(r?.startContainer);
@@ -224,6 +248,9 @@ const dwbDocMenu = (() => {
       blankPage: blankAfterTable(p),
       ocrMarks: typeof ocrMarksPresent !== "undefined" && ocrMarksPresent,
       cell: !!p?.closest("td, th"),
+      // recenzja: komentarz pod kursorem i śledzone zmiany w akapicie (review-margin.js)
+      commentId: commentAt(r),
+      revisions: typeof dwbMargin !== "undefined" && p ? dwbMargin.revisionsAt(p) : [],
     };
   }
   function open(point, { viaKeyboard = false } = {}) {

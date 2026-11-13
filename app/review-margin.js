@@ -114,7 +114,11 @@ const dwbMargin = (() => {
   function scan() {
     const bytes = originalFileBytes;
     if (!bytes || typeof scanDocxRevisions !== "function") return Promise.resolve(null);
-    if (cache.bytes !== bytes) cache = { bytes, job: scanDocxRevisions(bytes).catch(() => null) };
+    if (cache.bytes !== bytes) {
+      const c = { bytes, job: scanDocxRevisions(bytes).catch(() => null), data: null };
+      c.job.then((d) => { c.data = d; });
+      cache = c;
+    }
     return cache.job;
   }
 
@@ -727,6 +731,14 @@ const dwbMargin = (() => {
     visible: () => showing,
     hasItem: (key) => showing && items.some((it) => it.key === key),
     _items: () => items.map((it) => ({ key: it.key, kind: it.kind, top: it.top, h: it.h, anchorY: it.anchor.y, left: parseFloat(it.el.style.left), width: it.el.offsetWidth })),
+    // menu kontekstowe (doc-context-menu.js): śledzone zmiany w akapicie podglądu (z ostatniego skanu
+    // TEJ wersji pliku) i Akceptuj / Odrzuć jak w dymku
+    revisionsAt: (p) => {
+      if (!p || cache.bytes !== originalFileBytes || !cache.data) return [];
+      const paras = collectPreviewParagraphElements(host());
+      return cache.data.changes.filter((c) => c.part === "body" && Number.isFinite(c.paraIndex) && paras[c.paraIndex] === p);
+    },
+    revisions,
     _rangeIn: rangeIn,
     _readable: readableRun,
   };

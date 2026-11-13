@@ -38,6 +38,7 @@ const dwbTrack = (() => {
     const btn = showBtn();
     if (btn) btn.hidden = !state.on;
     document.documentElement.classList.toggle("track-on", state.on);
+    document.dispatchEvent(new CustomEvent("dwb:track", { detail: { on: state.on } })); // przełącznik trybu (app-frame.js)
     if (!state.on) {
       if (infoEl()) infoEl().textContent = t("trackOffHint");
       clearMarks();
