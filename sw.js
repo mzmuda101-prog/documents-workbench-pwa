@@ -90,10 +90,12 @@ const SHELL_ASSETS = [
   `./app/doc-ask.js?v=${ASSET_V}`,
   `./app/doc-rewrite.js?v=${ASSET_V}`,
   `./app/bootstrap.js?v=${ASSET_V}`,
-  "./assets/images/favicon.png",
-  "./assets/images/apple-touch-icon.png",
-  "./assets/images/icon-192.png",
-  "./assets/images/icon-512.png",
+  "./assets/images/favicon.png?v=20261114-logo",
+  "./assets/images/apple-touch-icon.png?v=20261114-logo",
+  "./assets/images/icon-192.png?v=20261114-logo",
+  "./assets/images/icon-512.png?v=20261114-logo",
+  "./assets/images/icon-maskable-192.png?v=20261114-logo",
+  "./assets/images/icon-maskable-512.png?v=20261114-logo",
   "./docs/samples/sample.docx",
   "./docs/samples/przewodnik.docx", // „Przykład” — przewodnik po aplikacji, działa też offline
   // [EN] Lazy panel UI — cached for offline after first open
