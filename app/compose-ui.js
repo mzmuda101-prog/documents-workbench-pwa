@@ -3152,6 +3152,19 @@ const composeUi = (() => {
     else if (kind === "delete") runFileEdit({ op: "revisions", action: "removeComments", ids: [c.id, ...c.replies.map((r) => r.id)] }, caret);
   }
   const commentById = (id) => commentData.byId.get(id) || null;
+  // Ikonka komentarza na marginesie (review-margin.js, telefon): kursor na początek komentowanego
+  // tekstu (karta liczy położenie od kursora) i karta — w Czytaniu tylko do podglądu.
+  function showCommentById(id) {
+    const hit = commentRanges().find((x) => x.id === id);
+    if (!hit || !commentData.byId.get(id)) return;
+    const r = hit.range.cloneRange();
+    r.collapse(true);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(r);
+    cCardMuted = false;
+    showCommentCard(hit, !!readOnlyMode);
+  }
 
   // ── nagłówek i stopka ─────────────────────────────────────────────────────
   // Strony w podglądzie: docx-preview łamie tylko przy jawnych podziałach, więc wysoka kartka =
@@ -3823,5 +3836,5 @@ const composeUi = (() => {
     document.getElementById(id)?.addEventListener("click", openNewDialog);
   });
 
-  return { commentAction, commentById, commentRanges, richRunEl: (r) => richRunEl(r), openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, stampPageNumbers, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, clearIndentAt, hasTextRule, clearRuleAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
+  return { commentAction, commentById, showCommentById, commentRanges, richRunEl: (r) => richRunEl(r), openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, stampPageNumbers, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, clearIndentAt, hasTextRule, clearRuleAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
 })();

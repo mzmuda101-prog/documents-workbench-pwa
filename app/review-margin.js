@@ -212,9 +212,8 @@ const dwbMargin = (() => {
       const p = paras[c.paraIndex];
       if (!p) return;
       bars.add(p);
-      if (mode !== "all") return;
       const k = colorOf(c.author);
-      if ((c.kind === "ins" || c.kind === "moveTo") && c.shown && c.shown.trim()) {
+      if (mode === "all" && (c.kind === "ins" || c.kind === "moveTo") && c.shown && c.shown.trim()) {
         const r = rangeIn(p, c.at, c.shown);
         if (r) hl[k].push(r);
       }
@@ -236,7 +235,7 @@ const dwbMargin = (() => {
         rows.push({ kind: "ins", text: s, at: x.start });
       });
       g.dels.forEach((d) => rows.push({ kind: d.para ? "paraDel" : "del", text: d.text, at: d.at }));
-      if (rows.length && mode === "all") liveGroups.push({ key: `l:${g.n}`, p: g.p, rows, live: true });
+      if (rows.length) liveGroups.push({ key: `l:${g.n}`, p: g.p, rows, live: true });
     });
     if (hlOk()) {
       clearHighlights();
@@ -255,7 +254,12 @@ const dwbMargin = (() => {
 
     // dymki
     const next = [];
-    if (cards) {
+    const marks = []; // telefon / wąsko: ikonki komentarzy na marginesie strony (jak w Wordzie)
+    compact = !cards;
+    // dymek zmiany POD tekstem (jak w Wordzie: „Zaakceptować czy odrzucić?”) zamiast w kolumnie:
+    // gdy kolumny nie ma (telefon, wąsko) albo w trybie Proste (czysty tekst, bez bocznego pasa zmian)
+    const popChanges = !cards || mode === "simple";
+    {
       const ranges = new Map((typeof composeUi !== "undefined" && composeUi.commentRanges ? composeUi.commentRanges() : []).map((x) => [x.id, x.range]));
       comments.forEach((c) => {
         const range = ranges.get(c.id);
@@ -263,6 +267,7 @@ const dwbMargin = (() => {
         if (!r && range?.startContainer?.isConnected) r = (range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement)?.closest("p")?.getBoundingClientRect();
         if (!r && Number.isFinite(c.paraIndex)) r = paras[c.paraIndex]?.getBoundingClientRect();
         if (!r) return;
+        if (!cards) { marks.push({ id: c.id, author: c.author, done: c.done, anchor: toContent(r) }); return; }
         next.push({ key: `c:${c.id}`, kind: "comment", data: c, range, anchor: toContent(r), p: range?.startContainer?.isConnected ? (range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement)?.closest("p") : null });
       });
       [...groups.values()].forEach((g) => {
@@ -273,19 +278,21 @@ const dwbMargin = (() => {
         // same wstawki widać w tekście — ich dymek dopiero, gdy kursor stanie w tym akapicie (jak Word)
         if (g.rows.length > 1 && g.rows.some((x) => x.kind === "ins")) g.rows = g.rows.filter((x) => x.kind !== "paraIns");
         const quiet = g.rows.every((x) => x.kind === "ins" || x.kind === "moveTo" || x.kind === "paraIns");
-        next.push({ key: g.key, kind: "change", data: g, range, anchor: toContent(r), quiet, p: g.p });
+        next.push({ key: g.key, kind: "change", data: g, range, anchor: toContent(r), quiet, p: g.p, pop: popChanges });
       });
       liveGroups.forEach((g) => {
         const first = g.rows[0];
         const range = rangeIn(g.p, first.at, first.kind === "ins" ? first.text : "", first.kind === "ins" ? first.text.length : 0);
         const r = firstRect(range) || g.p.getBoundingClientRect();
-        next.push({ key: g.key, kind: "live", data: g, range, anchor: toContent(r), quiet: g.rows.every((x) => x.kind === "ins"), p: g.p });
+        next.push({ key: g.key, kind: "live", data: g, range, anchor: toContent(r), quiet: g.rows.every((x) => x.kind === "ins"), p: g.p, pop: popChanges });
       });
     }
     items.forEach((it) => it.el.remove());
     items = next;
     items.forEach((it) => { it.el = card(it); inner.appendChild(it.el); });
-    items.forEach((it) => { it.el.style.width = `${colW}px`; it.el.style.left = `${colX}px`; });
+    const popW = Math.min(360, v.clientWidth - 24);
+    items.forEach((it) => { it.el.style.width = `${it.pop ? popW : colW}px`; it.el.style.left = `${colX}px`; it.el.classList.toggle("is-compact", !!it.pop); });
+    paintMarks(marks, pageR, bars);
     showing = items.length > 0;
     layer.classList.toggle("has-cards", showing);
     if (active && !items.some((it) => it.key === active)) active = null;
@@ -406,6 +413,20 @@ const dwbMargin = (() => {
         const ids = g.rows.map((x) => x.id);
         tools.append(btn("ok", "reviewAcceptOne", () => revisions("accept", ids), "mk-ok"), btn("no", "reviewRejectOne", () => revisions("reject", ids), "mk-no"));
       }
+      // wąsko: karta pod wierszem jak dymek w Wordzie — pytanie i ✓ / ✗ dla całej zmiany na górze
+      if (it.pop && it.kind === "change" && !ro()) {
+        const ask = document.createElement("div");
+        ask.className = "mk-ask";
+        const q = document.createElement("span");
+        q.textContent = t("marginAsk");
+        const ids = g.rows.map((x) => x.id);
+        const a2 = document.createElement("span");
+        a2.className = "mk-ask-act";
+        a2.append(btn("ok", "reviewAcceptOne", () => revisions("accept", ids), "mk-ok"), btn("no", "reviewRejectOne", () => revisions("reject", ids), "mk-no"));
+        ask.append(q, a2);
+        el.appendChild(ask);
+        tools = null;
+      }
       el.appendChild(head(author, it.kind === "live" ? "" : g.date, tools));
       if (it.kind === "live") { const s = document.createElement("div"); s.className = "mk-live-tag"; s.textContent = t("marginLive"); el.querySelector(".mk-who").appendChild(s); }
       g.rows.slice(0, 8).forEach((x) => {
@@ -423,7 +444,7 @@ const dwbMargin = (() => {
         main.append(k);
         if (s) main.append(" ", tx);
         row.append(main);
-        if (it.kind === "change" && !ro()) {
+        if (it.kind === "change" && !ro() && !(it.pop && g.rows.length === 1)) {
           const a = document.createElement("span");
           a.className = "mk-row-act";
           a.append(btn("ok", "reviewAcceptOne", () => revisions("accept", [x.id]), "mk-ok"), btn("no", "reviewRejectOne", () => revisions("reject", [x.id]), "mk-no"));
@@ -431,6 +452,7 @@ const dwbMargin = (() => {
         }
         el.appendChild(row);
       });
+      if (it.pop && ro() && it.kind === "change") { const n = document.createElement("div"); n.className = "mk-more"; n.textContent = t("marginRoNote"); el.appendChild(n); }
       if (g.rows.length > 8) { const more = document.createElement("div"); more.className = "mk-more"; more.textContent = `+${g.rows.length - 8}`; el.appendChild(more); }
       if (it.kind === "live" && !ro()) {
         const foot = document.createElement("div");
@@ -455,13 +477,71 @@ const dwbMargin = (() => {
   }
 
   // ── układ: aktywny przy swoim miejscu, reszta rozsuwa się w górę i w dół ──
+  // Wąsko (telefon, Widok mobilny, duże powiększenie): obok kartki nie ma miejsca na kolumnę
+  // dymków. Zmiana pokazuje się wtedy jako zwarta karta POD swoim wierszem — tylko aktywna
+  // (kursor albo stuknięcie w akapit / znacznik przy pasku); komentarze mają ikonki przy
+  // prawej krawędzi strony, stuknięcie otwiera kartę komentarza (compose-ui.js).
+  let compact = false;
+  function paintMarks(marks, pageR, bars) {
+    inner.querySelectorAll(".mk-cmark, .mk-bar-hit").forEach((b) => b.remove());
+    const v = vp();
+    const right = Math.min(pageR, v.scrollLeft + v.clientWidth) - 30;
+    const used = [];
+    if (compact) marks.forEach((m) => {
+      if (used.some((y) => Math.abs(y - m.anchor.y) < 6)) return; // kilka komentarzy w wierszu — jedna ikonka
+      used.push(m.anchor.y);
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = `mk-cmark${m.done ? " is-done" : ""}`;
+      b.style.left = `${right}px`;
+      b.style.top = `${m.anchor.y + Math.min(m.anchor.h, 22) / 2 - 13}px`;
+      b.style.setProperty("--mk-c", `var(--mk-a${colorOf(m.author)})`);
+      b.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
+      b.setAttribute("aria-label", `${t("commentCard")}: ${m.author}`);
+      b.addEventListener("mousedown", (e) => e.preventDefault());
+      b.addEventListener("click", () => composeUi.showCommentById?.(m.id));
+      inner.appendChild(b);
+    });
+    // pasek przy zmienionym akapicie: większy cel do stuknięcia (≥ 24 px) — pokazuje kartę zmiany
+    bars.forEach((p) => {
+      const it = items.find((x) => x.pop && x.p === p);
+      if (!it) return;
+      const c = toContent(p.getBoundingClientRect());
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "mk-bar-hit";
+      b.style.left = `${Math.max(0, c.x - 26)}px`;
+      b.style.top = `${c.y}px`;
+      b.style.height = `${Math.max(24, c.h)}px`;
+      b.setAttribute("aria-label", t("reviewChangesHead"));
+      b.addEventListener("mousedown", (e) => e.preventDefault());
+      b.addEventListener("click", () => focusItem(active === it.key ? null : it.key));
+      inner.appendChild(b);
+    });
+  }
+  function placePop() {
+    const v = vp();
+    const it = items.find((x) => x.pop && x.key === active);
+    if (!it) return;
+    const w = it.el.offsetWidth;
+    const minX = v.scrollLeft + 12, maxX = v.scrollLeft + v.clientWidth - w - 12;
+    it.el.style.left = `${Math.max(minX, Math.min(it.anchor.x - 16, maxX))}px`;
+    const line = Math.min(it.anchor.h, 28);
+    it.top = it.anchor.y + line + 8;
+    it.h = it.el.offsetHeight;
+    // pod wierszem; przy dolnej krawędzi widoku — nad nim
+    if (it.top + it.h > v.scrollTop + v.clientHeight - 8 && it.anchor.y - it.h - 8 > v.scrollTop) it.top = it.anchor.y - it.h - 8;
+    it.el.style.top = `${Math.round(it.top)}px`;
+  }
   function place() {
     if (!items.length) { if (wire) wire.replaceChildren(); return; }
-    // najpierw stan (aktywny ma więcej przycisków = inną wysokość), potem pomiar
-    items.forEach((it) => { it.el.hidden = !!it.quiet && it.key !== active; it.el.classList.toggle("is-active", it.key === active); });
-    const list = items.filter((it) => !it.el.hidden).sort((a, b) => a.anchor.y - b.anchor.y || a.anchor.x - b.anchor.x);
+    // najpierw stan (aktywny ma więcej przycisków = inną wysokość), potem pomiar; dymek pod tekstem — tylko aktywny
+    items.forEach((it) => { it.el.hidden = (it.pop || !!it.quiet) && it.key !== active; it.el.classList.toggle("is-active", it.key === active); });
+    placePop();
+    const list = items.filter((it) => !it.pop && !it.el.hidden).sort((a, b) => a.anchor.y - b.anchor.y || a.anchor.x - b.anchor.x);
     list.forEach((it) => { it.h = it.el.offsetHeight; it.top = it.anchor.y - 4; });
     const ai = active ? list.findIndex((it) => it.key === active) : -1;
+    if (!list.length) { paintFocus(); drawWire(); return; }
     if (ai < 0) {
       let floor = -Infinity;
       list.forEach((it) => { it.top = Math.max(it.top, floor); floor = it.top + it.h + GAP; });
@@ -477,24 +557,33 @@ const dwbMargin = (() => {
     paintFocus();
     drawWire();
   }
+  // Linie jak w Wordzie: przy każdym usunięciu (dymek ze zmianą „usunięto”) przerywana linia
+  // w kolorze autora od miejsca w tekście do dymka — stale; przy aktywnym / wskazanym dymku
+  // (też komentarzu) linia wyraźniejsza.
   function drawWire() {
     if (!wire) return;
     wire.replaceChildren();
-    const it = items.find((x) => x.key === (hover || active));
-    if (!it) return;
+    const focus = hover || active;
+    const hasDel = (it) => it.kind !== "comment" && it.data.rows.some((x) => /^(del|moveFrom|paraDel)$/.test(x.kind));
+    const list = items.filter((it) => !it.pop && !it.el.hidden && (it.key === focus || hasDel(it)));
+    if (!list.length) return;
     const h = host();
     const secs = h ? [...h.querySelectorAll("section.docx")] : [];
     const pageR = Math.max(0, ...secs.map((s) => toContent(s.getBoundingClientRect()).r));
-    const y0 = it.anchor.y + Math.min(it.anchor.h, 22) - 1;
-    const x1 = parseFloat(it.el.style.left);
-    const y1 = it.top + 18;
-    const pl = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-    pl.setAttribute("points", `${it.anchor.x},${y0} ${pageR},${y0} ${x1},${y1}`);
-    wire.appendChild(pl);
-    const w = Math.max(x1 + 4, inner.scrollWidth), hh = Math.max(y0, y1) + 4;
-    wire.setAttribute("width", String(w));
-    wire.setAttribute("height", String(hh));
-    wire.style.setProperty("--mk-c", it.el.style.getPropertyValue("--mk-c"));
+    let w = 0, hh = 0;
+    list.forEach((it) => {
+      const y0 = it.anchor.y + 1; // górna krawędź wiersza (jak Word), nie po literach
+      const x1 = parseFloat(it.el.style.left);
+      const y1 = it.top + 11;
+      const pl = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+      pl.setAttribute("points", `${it.anchor.x},${y0} ${pageR},${y0} ${x1},${y1}`);
+      pl.style.setProperty("--mk-c", it.el.style.getPropertyValue("--mk-c"));
+      if (it.key === focus) pl.classList.add("is-focus");
+      wire.appendChild(pl);
+      w = Math.max(w, x1 + 4); hh = Math.max(hh, y0, y1);
+    });
+    wire.setAttribute("width", String(Math.max(w, inner.scrollWidth)));
+    wire.setAttribute("height", String(hh + 4));
   }
   // podświetlenie miejsca w tekście aktywnego / wskazanego dymka
   function paintFocus() {
@@ -581,8 +670,22 @@ const dwbMargin = (() => {
     docCanvasEl?.addEventListener("input", schedule);
     document.getElementById("readMode")?.addEventListener("change", schedule);
     if (v && typeof ResizeObserver === "function") new ResizeObserver(() => { frame(); schedule(); }).observe(v);
+    // Tekst przesuwa się już PO policzeniu dymków (przerwy między stronami z page-breaks.js,
+    // doczytane czcionki i obrazy, rozwinięty pasek): dymki, paski i linie stały przy starym
+    // miejscu, a podkreślenie (CSS Highlight) szło za tekstem — dymek zmiany z pkt 7 przy
+    // akapicie z pkt 6 (zgłoszenie 2026-11-13). Zmiana wysokości dokumentu = przeliczenie.
+    if (docCanvasEl && typeof ResizeObserver === "function") new ResizeObserver(() => { if (layer) schedule(); }).observe(docCanvasEl);
+    docCanvasEl?.addEventListener("load", () => { if (layer) schedule(); }, true); // obraz w dokumencie
+    document.fonts?.addEventListener?.("loadingdone", () => { if (layer) schedule(); });
     document.addEventListener("dwb:undo-step", schedule);
     document.addEventListener("selectionchange", () => { if (showing) onSelection(); });
+    // dymek pod tekstem: stuknięcie obok (poza dymkiem i znacznikiem przy pasku) go zamyka —
+    // w Czytaniu na telefonie stuknięcie w tekst nie przesuwa kursora, więc samo zaznaczenie nie wystarcza
+    document.addEventListener("pointerdown", (e) => {
+      const it = items.find((x) => x.pop && x.key === active);
+      if (!it || it.el.contains(e.target) || e.target.closest?.(".mk-bar-hit") || e.target.closest?.(".compose-pop, .app-dialog")) return;
+      focusItem(null);
+    }, true);
     // Esc w dymku — z powrotem do dokumentu
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape" || !layer?.contains(document.activeElement)) return;

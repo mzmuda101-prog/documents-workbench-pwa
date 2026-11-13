@@ -51,6 +51,27 @@ async function run() {
   check("wstawki podkreślone w tekście: dokładnie wstawiony tekst", hl.includes("30") && hl.some((s) => s.trim() === "niezwłocznie"), JSON.stringify(hl));
   check("pasek przy akapitach ze zmianą", (await page.evaluate(() => document.querySelectorAll(".dwb-markup .mk-bar").length)) >= 5);
 
+  // ── tekst przesuwa się PO narysowaniu (przerwa strony, czcionka, obraz) ────
+  // zgłoszenie 2026-11-13: dymek, pasek i linia zostawały przy starym miejscu tekstu
+  const shift = await page.evaluate(async () => {
+    const art = document.querySelector(".docx-preview-host section.docx article");
+    const spacer = document.createElement("div");
+    spacer.style.height = "180px";
+    spacer.className = "test-spacer";
+    art.prepend(spacer);
+    await new Promise((r) => setTimeout(r, 700));
+    const p = [...document.querySelectorAll(".docx-preview-host p")].find((x) => x.textContent.includes("Termin płatności"));
+    const bar = [...document.querySelectorAll(".mk-bar")].map((b) => b.getBoundingClientRect().top).sort((a, b) => Math.abs(a - p.getBoundingClientRect().top) - Math.abs(b - p.getBoundingClientRect().top))[0];
+    const card = document.querySelector('.mk-card[data-key^="g:"]:not([hidden])');
+    const it = dwbMargin._items().find((i) => i.key === card?.dataset.key);
+    const out = { pTop: p.getBoundingClientRect().top, bar, anchorOk: it ? Math.abs(it.anchorY - (p.getBoundingClientRect().top - docViewportEl.getBoundingClientRect().top + docViewportEl.scrollTop)) < 30 : false };
+    spacer.remove();
+    await new Promise((r) => setTimeout(r, 700));
+    return out;
+  });
+  check("tekst przesunięty po narysowaniu: pasek idzie za akapitem", Math.abs(shift.bar - shift.pTop) < 2, JSON.stringify(shift));
+  check("tekst przesunięty po narysowaniu: dymek przeliczony do nowego miejsca", shift.anchorOk, JSON.stringify(shift));
+
   // ── Edycja: kursor w komentarzu = aktywny dymek przy wierszu, bez karty ───
   await page.evaluate(() => appFrame.setReadOnly(false));
   await idle(page);
@@ -111,9 +132,35 @@ async function run() {
   // ── wąski ekran: bez dymków ──────────────────────────────────────────────
   await page.setViewportSize({ width: 900, height: 900 });
   await page.waitForTimeout(800);
-  check("wąski ekran: bez dymków (brak miejsca obok kartki)", await page.evaluate(() => !document.querySelector(".mk-card")));
+  check("wąski ekran: bez kolumny dymków (brak miejsca obok kartki)", await page.evaluate(() => !document.querySelector(".mk-card:not([hidden])")));
+  check("wąski ekran: ikonki komentarzy przy krawędzi strony", await page.evaluate(() => document.querySelectorAll(".mk-cmark").length >= 1));
+  await page.locator(".mk-bar-hit").first().click();
+  await page.waitForTimeout(500);
+  const pop = await page.evaluate(() => { const c = document.querySelector(".mk-card.is-compact:not([hidden])"); if (!c) return null; const r = c.getBoundingClientRect(); return { key: c.dataset.key, ask: !!c.querySelector(".mk-ask .mk-ok"), left: r.left, right: r.right, vw: docViewportEl.getBoundingClientRect().right }; });
+  check("wąski ekran: stuknięcie w pasek = zmiana pod tekstem z ✓ / ✗", pop && pop.ask, JSON.stringify(pop));
+  check("wąski ekran: dymek zmiany mieści się w widoku", pop && pop.left >= 0 && pop.right <= pop.vw + 1, JSON.stringify(pop));
+  await page.mouse.click(5, 300);
+  await page.waitForTimeout(300);
+  check("wąski ekran: stuknięcie obok zamyka dymek", await page.evaluate(() => !document.querySelector(".mk-card.is-compact:not([hidden])")));
+  await page.locator(".mk-cmark").first().click();
+  await page.waitForTimeout(500);
+  check("wąski ekran: ikonka komentarza otwiera kartę komentarza", !!(await page.$(".comment-card")));
+  await page.keyboard.press("Escape");
   await page.setViewportSize({ width: 1440, height: 950 });
   await page.waitForTimeout(800);
+
+  // ── Proste (jak „Proste znaczniki” w Wordzie): bez kolumny zmian, zmiana pod tekstem po kliknięciu ──
+  await page.evaluate(() => dwbMargin.setMode("simple"));
+  await page.waitForTimeout(600);
+  check("Proste: bez podkreśleń wstawek i bez dymków zmian w kolumnie", await page.evaluate(() => ![...CSS.highlights.keys()].some((k) => k.startsWith("dwb-rev-")) && !document.querySelector(".mk-change:not(.is-compact):not([hidden])")));
+  check("Proste: komentarze dalej obok strony", await page.evaluate(() => !!document.querySelector(".mk-comment:not([hidden])")));
+  const tp = await page.evaluate(() => { const r = [...document.querySelectorAll(".docx-preview-host p")].find((p) => p.textContent.startsWith("Termin")).getBoundingClientRect(); return { x: r.left + 40, y: r.top + r.height / 2, bottom: r.bottom }; });
+  await page.mouse.click(tp.x, tp.y);
+  await page.waitForTimeout(600);
+  const sp = await page.evaluate(() => { const c = document.querySelector(".mk-card.is-compact:not([hidden])"); return c ? { top: c.getBoundingClientRect().top, txt: c.textContent } : null; });
+  check("Proste: klik w zmieniony akapit = dymek pod wierszem z pytaniem", sp && sp.top >= tp.bottom - 30 && /Zaakceptować|Accept/.test(sp.txt), JSON.stringify(sp));
+  await page.evaluate(() => dwbMargin.setMode("all"));
+  await page.waitForTimeout(500);
 
   // ── Śledź zmiany na żywo ─────────────────────────────────────────────────
   await page.evaluate(() => loadSampleDocument("sample"));

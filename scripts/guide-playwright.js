@@ -130,7 +130,8 @@ async function run() {
   check("rozdz. 13: komentarz z pogrubieniem przyciskiem B z paska", /<w:b\/><\/w:rPr><w:t xml:space="preserve">pogrubione/.test(cx), cx.slice(-400));
   await page.evaluate(() => { const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).find((x) => /^Przycisk „A” na pasku/.test(x.textContent)); const r = formDomRange(p, 11, 11); p.closest(".docx-edit-root").focus({ preventScroll: true }); getSelection().removeAllRanges(); getSelection().addRange(r); });
   await page.waitForTimeout(400);
-  check("rozdz. 13: karta komentarza z ołówkiem (poprawianie treści)", await page.evaluate(() => !!document.querySelector(".comment-card .cc-edit")));
+  // szeroki ekran: komentarz w dymku na marginesie (review-margin.js), wąski — w karcie nad tekstem
+  check("rozdz. 13: karta komentarza z ołówkiem (poprawianie treści)", await page.evaluate(() => !!document.querySelector('.comment-card .cc-edit, .mk-comment.is-active .mk-actions .mk-btn[aria-label="Edytuj komentarz"], .mk-comment.is-active .mk-actions .mk-btn[aria-label="Edit comment"]')));
   await page.click("#pageLayoutBtn");
   await page.click('.compose-pop [data-preset="narrow"]');
   await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 10000 });
