@@ -264,11 +264,11 @@ body.splashing {
   position: absolute; top: 4px; left: 4px; width: var(--lang-pill-width, 40px); height: calc(100% - 8px);
   border-radius: var(--r-full); background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 92%, white) 0%, var(--accent) 100%);
   transform: translateX(var(--lang-pill-x, 0)); z-index: 0; pointer-events: none;
-  transition: transform 360ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: transform 220ms var(--ease-out);
   box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 22%, transparent);
   max-width: calc(100% - 8px);
 }
-.lang-switch.is-ready .lang-switch-indicator { transition: transform 360ms cubic-bezier(0.22, 1, 0.36, 1); }
+.lang-switch.is-ready .lang-switch-indicator { transition: transform 220ms var(--ease-out); }
 .lang-button {
   position: relative; z-index: 1; border: 0; background: transparent; color: var(--muted);
   font: inherit; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
@@ -1032,7 +1032,7 @@ html.is-mobile .dwb-page-margin-guide { display: none; }
 .toast {
   display: flex; gap: 10px; align-items: flex-start; min-width: 220px; max-width: 360px;
   padding: 12px 14px; border-radius: var(--r); background: var(--glass-bg-strong);
-  border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); animation: toast-in 240ms var(--ease-out);
+  border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); transition: opacity 240ms var(--ease-out), transform 240ms var(--ease-out);
   touch-action: pan-x; /* pion należy do gestu „w dół = zamknij” (core.js) */
 }
 .toast.out { opacity: 0; transform: translateY(6px); transition: opacity 150ms var(--ease-out), transform 150ms var(--ease-out); }
@@ -1041,6 +1041,7 @@ html.is-mobile .dwb-page-margin-guide { display: none; }
 .toast.warning { border-color: color-mix(in srgb, var(--warning) 40%, var(--border)); }
 .toast-icon { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; background: var(--accent-light); color: var(--accent); flex-shrink: 0; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@starting-style { .toast { opacity: 0; transform: translateY(8px); } }
 
 .log-line { padding: 2px 0; }
 
@@ -1422,6 +1423,11 @@ details.panel > summary .panel-title { flex: 1; }
 :root.sidebar-docked.sidebar-open .app { max-width: calc(1380px + var(--sidebar-w, 320px) + 14px); }
 @media (prefers-reduced-motion: reduce) {
   :root.sidebar-docked .main, :root.sidebar-docked .app { transition: none; }
+  .sidebar { transition: opacity var(--t); }
+  .sidebar-handle { transition: opacity var(--t), color var(--t), border-color var(--t), background var(--t), box-shadow var(--t); }
+  .toast, .toast.out { transition-property: opacity; }
+  .read-hint { animation-name: dwb-fade-in; }
+  .lang-switch.is-ready .lang-switch-indicator { transition: none; }
 }
 /* < 1024 px (nakładka): prawie pełne tło panelu, żeby dokument nie prześwitywał między kartami */
 :root:not(.sidebar-docked):not(.is-mobile) .sidebar {
@@ -3193,7 +3199,7 @@ section.docx.dwb-gapped { min-height: var(--dwb-sec-min) !important; }
 .lai-status.is-ready { color: var(--success); }
 .lai-status.is-error { color: var(--warning); }
 .lai-bar { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; margin-top: 6px; }
-.lai-bar > i { display: block; height: 100%; background: var(--accent); transition: width 0.2s; }
+.lai-bar > i { display: block; height: 100%; background: var(--accent); }
 .lai-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .lai-btn {
   font: inherit; font-size: 0.9rem; min-height: 40px; padding: 8px 14px; border-radius: 10px; cursor: pointer;
@@ -3500,13 +3506,13 @@ body.dwb-painting .docx-preview-host * {
 .recent-files { width: min(460px, 100%); margin: 14px auto 0; text-align: left; }
 .recent-files[hidden] { display: none; }
 .recent-title { margin: 0 0 6px; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
-.recent-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 248px; overflow-y: auto; overscroll-behavior: contain; }
+.recent-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; } /* minmax: długa nazwa nie wypycha ✕ za ekran; bez max-height — plików najwyżej 6 */
 .recent-item { display: flex; align-items: stretch; gap: 4px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--panel); }
 .recent-open {
   flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
   padding: 8px 12px; border: 0; background: none; border-radius: 12px; font: inherit; text-align: left; color: var(--ink); cursor: pointer;
 }
-.recent-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; font-weight: 600; }
+.recent-name { max-width: 100%; overflow-wrap: anywhere; font-size: 13.5px; font-weight: 600; } /* cała nazwa, bez ucinania: wersje („…aneks nr 3/4…”) różnią się przy końcu, a plików jest najwyżej 6 */
 .recent-meta { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .recent-del { flex: none; width: 40px; border: 0; background: none; border-radius: 12px; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
 .recent-open:focus-visible, .recent-del:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent); }
@@ -3652,7 +3658,7 @@ body.dwb-painting .docx-preview-host * {
   transition: top 160ms ease-out, transform 160ms ease-out, box-shadow 160ms ease-out;
   cursor: default; display: flex; flex-direction: column; gap: 4px;
 }
-.mk-card:hover { box-shadow: 0 4px 14px rgba(16, 32, 64, .14); }
+@media (hover: hover) and (pointer: fine) { .mk-card:hover { box-shadow: 0 4px 14px rgba(16, 32, 64, .14); } }
 .mk-card.is-active { box-shadow: 0 8px 24px rgba(16, 32, 64, .18); border-color: var(--border-focus); border-left-color: var(--mk-c, var(--accent)); z-index: 2; }
 .mk-card:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
 .mk-head { display: flex; align-items: center; gap: 8px; min-width: 0; }

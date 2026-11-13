@@ -21,7 +21,7 @@
   }
 })();
 
-const APP_BUILD_VERSION = "v1.00.38";
+const APP_BUILD_VERSION = "v1.00.39";
 
 const IS_LOW_POWER = (() => {
   try {
@@ -169,7 +169,6 @@ function attachToastSwipe(toastEl) {
       if (Math.abs(raw) < TOAST_SWIPE_SLOP) return;
       dragging = true;
       clearTimeout(toastEl._dwbTimer); // trzymany nie znika spod palca
-      toastEl.style.animation = "none"; // wejście (keyframes) nie może walczyć z palcem
       toastEl.style.transition = "none";
       try { toastEl.setPointerCapture(id); } catch (_) {}
     }
@@ -609,8 +608,11 @@ function syncDocViewportHeight() {
 
 function formatFileSize(bytes) {
   if (!bytes || bytes < 1024) return `${bytes || 0} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  // przecinek po polsku („1,5 KB”), kropka po angielsku — separator z języka aplikacji
+  const locale = typeof currentLang !== "undefined" && I18N[currentLang] ? I18N[currentLang].locale : "pl-PL";
+  const n = (v) => v.toLocaleString(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  if (bytes < 1024 * 1024) return `${n(bytes / 1024)} KB`;
+  return `${n(bytes / (1024 * 1024))} MB`;
 }
 
 function detectFileType(name, mime) {

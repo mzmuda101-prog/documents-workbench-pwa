@@ -339,8 +339,9 @@ const dwbComfort = (() => {
     const d = new Date(ts);
     const loc = I18N[currentLang]?.locale || "pl-PL";
     const today = new Date();
-    if (d.toDateString() === today.toDateString()) return d.toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" });
-    return d.toLocaleDateString(loc, { day: "numeric", month: "short" });
+    if (d.toDateString() === today.toDateString()) return d.toLocaleTimeString(loc, { hour: "numeric", minute: "2-digit" });
+    // starszy niż ten rok — z rokiem, inaczej „9 paź” sprzed roku wygląda jak tegoroczny
+    return d.toLocaleDateString(loc, d.getFullYear() === today.getFullYear() ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" });
   }
   let recentJob = 0;
   async function renderRecent() {
@@ -366,7 +367,9 @@ const dwbComfort = (() => {
       open.className = "recent-open";
       const name = document.createElement("span");
       name.className = "recent-name";
+      name.dir = "auto"; // nazwa po arabsku/hebrajsku: „.docx” po właściwej stronie
       name.textContent = rec.name;
+      open.title = rec.name; // pełna nazwa, gdy dwie linie nie wystarczą
       const meta = document.createElement("span");
       meta.className = "recent-meta";
       meta.textContent = `${whenText(rec.openedAt)} · ${formatFileSize(rec.size)}`;
