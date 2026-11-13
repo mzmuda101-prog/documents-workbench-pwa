@@ -2210,6 +2210,17 @@ textarea.ff-pop-input { min-height: 4.5em; resize: vertical; }
 .insert-btn { display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 10px 0 8px; color: var(--accent); }
 .insert-btn span { font-size: 12.5px; }
 .tb-select-style { max-width: 124px; }
+.style-pick { position: relative; display: inline-flex; }
+.style-pick-ico { display: none; }
+/* Telefon (jak ikony trybów): Wstaw / Tabela / Układ / Przepisz i lista stylów jako ikony — napis
+   zostaje w podpowiedzi i w aria-label; lista stylów otwiera się jak zwykle (nazwy w liście) */
+@media (max-width: 480px) {
+  .insert-btn > span[data-i18n] { display: none; }
+  .insert-btn { justify-content: center; min-width: 40px; padding-inline: 10px; }
+  .style-pick-ico { display: block; position: absolute; inset: 0; margin: auto; pointer-events: none; color: var(--ink-2); }
+  .tb-select-style { width: 40px; padding: 0; color: transparent; appearance: none; -webkit-appearance: none; text-align: center; }
+  .tb-select-style option { color: var(--ink); }
+}
 /* krój i rozmiar w miejscu kursora (pole puste = w zaznaczeniu kilka różnych) */
 .tb-select-font { width: 136px; max-width: 136px; text-overflow: ellipsis; }
 .tb-select-size { width: 64px; font-variant-numeric: tabular-nums; }
@@ -3726,6 +3737,15 @@ body.dwb-painting .docx-preview-host * {
 @media (hover: hover) { .symbol-pick button:hover { border-color: var(--accent); background: var(--accent-light); } }
 .symbol-pick button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 @media (pointer: coarse) { .symbol-pick { grid-template-columns: repeat(6, 44px); } .symbol-pick button { width: 44px; height: 44px; font-size: 20px; } }
+.symbol-sets { display: flex; gap: 2px; margin: 6px 8px 2px; padding: 2px; border: 1px solid var(--border-subtle); border-radius: 9px; }
+.symbol-sets button {
+  flex: 1; min-height: 28px; padding: 0 8px; border: 0; border-radius: 7px; background: none;
+  color: var(--ink-2); font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.symbol-sets button[aria-pressed="true"] { background: var(--accent-light); color: var(--accent); font-weight: 600; }
+@media (hover: hover) { .symbol-sets button:hover { color: var(--accent); } }
+.symbol-sets button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (pointer: coarse) { .symbol-sets button { min-height: 36px; } }
 .symbol-pick-name { padding: 6px 10px 8px; font-size: 12.5px; color: var(--muted-strong); min-height: 1.4em; }
 
 /* Sugerowanie w przełączniku trybu (app-frame.js) — na wąskim ekranie bez miejsca: zostaje w menu

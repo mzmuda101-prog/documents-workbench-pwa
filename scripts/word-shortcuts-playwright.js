@@ -102,6 +102,23 @@ async function run() {
   await page.locator(".compose-item", { hasText: /^Symbol/ }).click();
   const recent = await page.evaluate(() => { const g = document.querySelectorAll(".symbol-pick"); return g.length === 2 ? g[0].textContent : ""; });
   check("…§ w „Ostatnio używanych”", recent === "§", recent);
+  // podzbiory jak w oknie Symbol Worda: Matematyka → ∑, Greckie → α
+  await page.locator(".symbol-sets button", { hasText: "Matematyka" }).click();
+  const mathSet = await page.evaluate(() => ({ pressed: document.querySelector('.symbol-sets [data-set="math"]').getAttribute("aria-pressed"), grids: document.querySelectorAll(".symbol-pick").length, label: [...document.querySelectorAll(".symbol-pick button")].find((b) => b.textContent === "∑")?.getAttribute("aria-label") }));
+  check("Symbol → Matematyka: ∑ z nazwą, jedna siatka zamiast ogólnej", mathSet.pressed === "true" && mathSet.grids === 2 && mathSet.label === "suma", JSON.stringify(mathSet));
+  await page.locator(".symbol-pick button", { hasText: "∑" }).click();
+  await idle();
+  await page.click("#insertMenuBtn");
+  await page.locator(".compose-item", { hasText: /^Symbol/ }).click();
+  await page.locator(".symbol-sets button", { hasText: "Greckie" }).click();
+  await page.locator(".symbol-pick button", { hasText: "α" }).first().click();
+  await idle();
+  const mathText = await page.evaluate(async () => { await mergeInlineEditsIntoBytes(); const d = await getDocumentXmlDom(originalFileBytes); return collectParagraphElements(d.documentElement, "all").map(getParagraphText).find((t) => t.startsWith("Szukaj")); });
+  check("Wstaw → Symbol: ∑ i α w pliku", /^Szukaj§∑α:/.test(mathText || ""), mathText);
+  await page.click("#insertMenuBtn");
+  await page.locator(".compose-item", { hasText: /^Symbol/ }).click();
+  const recent2 = await page.evaluate(() => document.querySelectorAll(".symbol-pick")[0].textContent);
+  check("…α, ∑, § w „Ostatnio używanych”", recent2 === "α∑§", recent2);
   await page.keyboard.press("Escape");
 
   check("brak błędów strony", !errors.length, errors.join(" | "));

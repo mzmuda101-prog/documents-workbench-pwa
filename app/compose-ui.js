@@ -1301,7 +1301,7 @@ const composeUi = (() => {
 
   // ── Wstaw → Symbol (jak w Wordzie): najczęstsze znaki, u góry ostatnio używane ─────────
   // [znak, nazwa pl, nazwa en] — nazwa w podpowiedzi i dla czytnika ekranu
-  const SYMBOLS = [
+  const SYMBOLS_GENERAL = [
     ["§", "paragraf", "section"], ["¶", "akapit", "pilcrow"], ["©", "prawa autorskie", "copyright"], ["®", "znak zastrzeżony", "registered"], ["™", "znak towarowy", "trademark"], ["№", "numer", "numero"],
     ["€", "euro", "euro"], ["$", "dolar", "dollar"], ["£", "funt", "pound"], ["¥", "jen", "yen"], ["¢", "cent", "cent"], ["‰", "promil", "per mille"],
     ["°", "stopień", "degree"], ["±", "plus minus", "plus-minus"], ["×", "razy", "multiplication"], ["÷", "dzielenie", "division"], ["≈", "w przybliżeniu", "approximately"], ["≠", "różne", "not equal"],
@@ -1312,6 +1312,21 @@ const composeUi = (() => {
     ["→", "strzałka w prawo", "right arrow"], ["←", "strzałka w lewo", "left arrow"], ["↑", "strzałka w górę", "up arrow"], ["↓", "strzałka w dół", "down arrow"], ["↔", "strzałka w obie strony", "left-right arrow"], ["⇒", "wynika", "implies"],
     ["✓", "ptaszek", "check mark"], ["✗", "krzyżyk (nie)", "ballot x"], ["☐", "pole wyboru", "ballot box"], ["☒", "pole zaznaczone", "checked box"], ["★", "gwiazdka", "star"], ["□", "kwadrat", "square"],
   ];
+  // jak podzbiory „Operatory matematyczne” / „Greckie” w oknie Symbol Worda — poza równaniem to zwykłe znaki
+  const SYMBOLS_MATH = [
+    ["∑", "suma", "summation"], ["∏", "iloczyn", "product"], ["∫", "całka", "integral"], ["∬", "całka podwójna", "double integral"], ["∮", "całka krzywoliniowa", "contour integral"], ["∂", "pochodna cząstkowa", "partial differential"],
+    ["∇", "nabla", "nabla"], ["√", "pierwiastek", "square root"], ["∛", "pierwiastek sześcienny", "cube root"], ["∞", "nieskończoność", "infinity"], ["∝", "proporcjonalne", "proportional to"], ["∅", "zbiór pusty", "empty set"],
+    ["∈", "należy do", "element of"], ["∉", "nie należy do", "not an element of"], ["⊂", "zawiera się w", "subset of"], ["⊆", "zawiera się lub równe", "subset of or equal"], ["∪", "suma zbiorów", "union"], ["∩", "część wspólna", "intersection"],
+    ["∀", "dla każdego", "for all"], ["∃", "istnieje", "there exists"], ["¬", "negacja", "not"], ["∧", "i (koniunkcja)", "logical and"], ["∨", "lub (alternatywa)", "logical or"], ["⇔", "wtedy i tylko wtedy", "if and only if"],
+    ["≡", "tożsamościowo równe", "identical to"], ["≅", "przystające", "congruent"], ["∼", "podobne", "similar"], ["≪", "dużo mniejsze", "much less than"], ["≫", "dużo większe", "much greater than"], ["∓", "minus plus", "minus-plus"],
+    ["⋅", "kropka mnożenia", "dot operator"], ["∘", "złożenie", "ring operator"], ["⊥", "prostopadłe", "perpendicular"], ["∥", "równoległe", "parallel"], ["∠", "kąt", "angle"], ["′", "prim", "prime"],
+    ["″", "bis", "double prime"], ["ℕ", "liczby naturalne", "natural numbers"], ["ℤ", "liczby całkowite", "integers"], ["ℚ", "liczby wymierne", "rationals"], ["ℝ", "liczby rzeczywiste", "real numbers"], ["ℂ", "liczby zespolone", "complex numbers"],
+    ["⁰", "do potęgi zero", "superscript zero"], ["¹", "do potęgi jeden", "superscript one"], ["ⁿ", "do potęgi n", "superscript n"], ["₂", "indeks dolny 2", "subscript two"], ["⅓", "jedna trzecia", "one third"], ["⅔", "dwie trzecie", "two thirds"],
+  ];
+  const GREEK = "α alfa alpha|β beta beta|γ gamma gamma|δ delta delta|ε epsilon epsilon|ζ dzeta zeta|η eta eta|θ theta theta|ι jota iota|κ kappa kappa|λ lambda lambda|μ mi mu|ν ni nu|ξ ksi xi|ο omikron omicron|π pi pi|ρ ro rho|σ sigma sigma|τ tau tau|υ ypsilon upsilon|φ fi phi|χ chi chi|ψ psi psi|ω omega omega|Γ Gamma Gamma|Δ Delta Delta|Θ Theta Theta|Λ Lambda Lambda|Ξ Ksi Xi|Π Pi Pi|Σ Sigma Sigma|Φ Fi Phi|Ψ Psi Psi|Ω Omega Omega";
+  const SYMBOLS_GREEK = GREEK.split("|").map((x) => x.split(" "));
+  const SYMBOL_SETS = [["general", SYMBOLS_GENERAL], ["math", SYMBOLS_MATH], ["greek", SYMBOLS_GREEK]];
+  const SYMBOLS = SYMBOL_SETS.flatMap((x) => x[1]);
   const SYMBOL_RECENT_KEY = "dwb.symbolsRecent";
   function recentSymbols() { try { return JSON.parse(localStorage.getItem(SYMBOL_RECENT_KEY) || "[]").filter((c) => SYMBOLS.some((x) => x[0] === c)).slice(0, 6); } catch (_) { return []; } }
   function useSymbol(ch) {
@@ -1324,8 +1339,8 @@ const composeUi = (() => {
     const label = document.createElement("div");
     label.className = "symbol-pick-name";
     const nameOf = (ch) => { const x = SYMBOLS.find((y) => y[0] === ch); return x ? (currentLang === "en" ? x[2] : x[1]) : ch; };
-    const grid = (chars, cap) => {
-      popCap(el, cap);
+    const grid = (chars, cap, detached) => {
+      if (cap) popCap(el, cap);
       const g = document.createElement("div");
       g.className = "symbol-pick";
       g.setAttribute("role", "grid");
@@ -1351,12 +1366,34 @@ const composeUi = (() => {
         e.stopPropagation();
         g.querySelector(`button[data-i="${Math.max(0, Math.min(chars.length - 1, n))}"]`)?.focus();
       }, true);
-      el.appendChild(g);
+      if (!detached) el.appendChild(g);
       return g;
     };
     const recent = recentSymbols();
     if (recent.length) grid(recent, t("symbolRecent"));
-    const all = grid(SYMBOLS.map((x) => x[0]), t("insertSymbol"));
+    // podzbiór (jak lista „Podzbiór” w oknie Symbol Worda): Ogólne / Matematyka / Greckie
+    const tabs = document.createElement("div");
+    tabs.className = "symbol-sets";
+    tabs.setAttribute("role", "group");
+    tabs.setAttribute("aria-label", t("symbolSets"));
+    el.appendChild(tabs);
+    let all = null;
+    const show = (key) => {
+      const set = SYMBOL_SETS.find((x) => x[0] === key)[1];
+      const g = grid(set.map((x) => x[0]), null, true);
+      if (all) all.replaceWith(g); else tabs.after(g);
+      all = g;
+      tabs.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.set === key)));
+    };
+    SYMBOL_SETS.forEach(([key]) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.dataset.set = key;
+      b.textContent = t(`symbolSet_${key}`);
+      b.addEventListener("click", () => { show(key); all.querySelector("button")?.focus(); });
+      tabs.appendChild(b);
+    });
+    show("general");
     el.appendChild(label);
     label.textContent = t("symbolHint");
     const first = (recent.length ? el.querySelector(".symbol-pick button") : all.querySelector("button"));

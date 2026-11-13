@@ -115,6 +115,25 @@ async function run() {
   }
   console.log("  ✓ Brakujące kroje: rodzaj zapasowy (sans-serif/serif) i widoczne pogrubienie");
 
+  // Pasek Edycji na telefonie: Wstaw / Układ / Przepisz i lista stylów jako ikony 40 px (jak ikony
+  // trybów), nazwa dalej w aria-label; lista stylów działa
+  await page.evaluate(() => appFrame.setReadOnly(false));
+  await page.waitForTimeout(500);
+  const tb = await page.evaluate(() => {
+    const w = (id) => Math.round(document.getElementById(id).getBoundingClientRect().width);
+    const sel = document.getElementById("fmtParaStyle");
+    const ico = document.querySelector(".style-pick-ico").getBoundingClientRect();
+    return {
+      widths: ["insertMenuBtn", "pageLayoutBtn", "rewriteBtn"].map(w).concat(w("fmtParaStyle")),
+      labels: ["insertMenuBtn", "pageLayoutBtn", "rewriteBtn", "fmtParaStyle"].map((id) => document.getElementById(id).getAttribute("aria-label")),
+      icoShown: ico.width > 0,
+      textHidden: getComputedStyle(sel).color === "rgba(0, 0, 0, 0)",
+    };
+  });
+  if (tb.widths.some((x) => x > 44) || !tb.icoShown || !tb.textHidden) throw new Error(`Pasek Edycji na telefonie bez ikon: ${JSON.stringify(tb)}`);
+  if (tb.labels.join("|") !== "Wstaw|Układ|Przepisz|Styl akapitu") throw new Error(`Ikony bez nazwy dla czytnika: ${JSON.stringify(tb.labels)}`);
+  console.log("  ✓ Pasek Edycji: Wstaw / Układ / Przepisz / styl jako ikony, nazwy w aria-label");
+
   assertNoErrors(errors, "mobile-playwright");
   await browser.close();
   console.log("  ✓ Brak błędów JS w konsoli\n");
