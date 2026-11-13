@@ -1000,7 +1000,10 @@ html.is-mobile .dwb-page-margin-guide { display: none; }
 .loading-overlay {
   position: fixed; inset: 0; z-index: 10000; display: flex; align-items: center; justify-content: center;
   background: rgba(10, 16, 28, 0.32); backdrop-filter: blur(6px);
+  /* łapie kliknięcia od razu, ale pokazuje się po 150 ms: szybkie wczytanie nie mruga ekranem */
+  animation: dwb-fade-in 150ms var(--ease-out) 150ms backwards;
 }
+@keyframes dwb-fade-in { from { opacity: 0; } }
 /* ciche przerysowanie: przez pierwsze 0,4 s nakładka łapie kliknięcia, ale jej nie widać */
 .loading-overlay.loading-quiet { background: transparent; backdrop-filter: none; cursor: progress; }
 .loading-overlay.loading-quiet .loading-card { visibility: hidden; }
@@ -3376,6 +3379,24 @@ body.dwb-painting .docx-preview-host * {
   overscroll-behavior: contain;
 }
 .app-dialog::backdrop { background: rgba(8, 14, 28, 0.38); }
+/* Okna: wejście 200 ms (od 0.97, ze środka — okno nie ma wyzwalacza), zamknięcie od razu.
+   Bez animacji wyjścia celowo: z allow-discrete zamknięte okno 150 ms łapałoby kliknięcia.
+   Skróty (klawiatura) bez ruchu. Stara przeglądarka bez @starting-style: po prostu bez animacji. */
+:is(.app-dialog:not(.shortcuts-dialog), .newdoc-dialog, .sn-dialog, .pdfconv-dialog, .lai-dialog)[open] {
+  transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out);
+}
+:is(.app-dialog:not(.shortcuts-dialog), .newdoc-dialog, .sn-dialog, .pdfconv-dialog, .lai-dialog)[open]::backdrop {
+  transition: opacity 200ms var(--ease-out);
+}
+@starting-style {
+  :is(.app-dialog:not(.shortcuts-dialog), .newdoc-dialog, .sn-dialog, .pdfconv-dialog, .lai-dialog)[open] { opacity: 0; transform: scale(0.97); }
+  :is(.app-dialog:not(.shortcuts-dialog), .newdoc-dialog, .sn-dialog, .pdfconv-dialog, .lai-dialog)[open]::backdrop { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  @starting-style {
+    :is(.app-dialog, .newdoc-dialog, .sn-dialog, .pdfconv-dialog, .lai-dialog)[open] { transform: none; }
+  }
+}
 .app-dialog:focus { outline: none; }
 .app-dialog-inner { display: flex; flex-direction: column; gap: 12px; padding: 18px; margin: 0; }
 .app-dialog-title { margin: 0; font-size: 17px; line-height: 1.3; overflow-wrap: anywhere; }
