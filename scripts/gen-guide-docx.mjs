@@ -131,7 +131,7 @@ const body = [
     "Kara umowna wynosi 5% wartości zlecenia.",
     { raw: '<w:commentRangeEnd w:id="10"/><w:r><w:commentReference w:id="10"/></w:r>' },
   ]),
-  tip("otwórz panel Recenzja — zobaczysz zmianę recenzentki (14 → 30) i komentarz do kary umownej. Kliknij ✓ albo ✗ przy zmianie, albo „Akceptuj wszystkie”. Akapit ze śledzoną zmianą da się edytować dopiero po jej rozstrzygnięciu."),
+  tip("otwórz panel Recenzja — zobaczysz zmianę recenzentki (14 → 30) i komentarz do kary umownej. Kliknij ✓ albo ✗ w dymku obok strony albo przy zmianie w panelu, albo „Akceptuj wszystkie”. W akapicie ze zmianą możesz też pisać, jak w Wordzie — tekst wpisany we wstawce zostaje jej częścią."),
 
   h1("8. Przypisy, tabele i listy"),
   p([

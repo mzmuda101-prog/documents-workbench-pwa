@@ -58,6 +58,8 @@ const dwbTrack = (() => {
     state.baseKeys = await baselineKeys(state.baseline);
     state.on = true;
     sync();
+    // akapity z cudzymi zmianami: przy śledzeniu tylko do odczytu (docx-inline-edit.js paragraphRevisionLock)
+    if (typeof refreshInlineLocks === "function") refreshInlineLocks().catch(() => {});
     if (!silent) toast(t("trackOnToast", { name: state.author }), "info");
     return true;
   }

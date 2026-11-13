@@ -70,7 +70,9 @@ function focusDocParagraph(p) {
 // śledzona zmiana w środku by przepadły. Takie akapity są tylko do odczytu, z wyjaśnieniem.
 // Odnośnik do przypisu NIE blokuje — jest „wyspą” (doc-notes.js), jak znacznik komentarza.
 const INLINE_LOCK_TAGS = [
-  ["ins", "lockTracked"], ["del", "lockTracked"], ["moveFrom", "lockTracked"], ["moveTo", "lockTracked"], ["rPrChange", "lockTracked"],
+  // śledzone wstawki/usunięcia — paragraphRevisionLock (edytowalne, gdy da się je zachować);
+  // zmiana formatowania fragmentu (w:rPrChange) zawsze blokuje
+  ["rPrChange", "lockTracked"],
   ["drawing", "lockObject"], ["pict", "lockObject"], ["object", "lockObject"],
   ["fldChar", "lockField"], ["fldSimple", "lockField"],
   // model akapitu zna tylko w:t / w:br / w:tab — zapis kasował twardy/miękki dywiz („e‑mail” → „email”)
@@ -242,7 +244,7 @@ function stampCommentMarks(xp, el, nextKey, noteLabels = []) {
       span.dataset.cm = key;
       span.dataset.cmId = n.getAttributeNS(W_NS, "id") || n.getElementsByTagNameNS(W_NS, "commentReference")[0]?.getAttributeNS(W_NS, "id") || "";
       span.dataset.cmKind = n.localName === "r" ? "ref" : n.localName === "commentRangeStart" ? "start" : n.localName === "commentRangeEnd" ? "end"
-        : n.localName === "bookmarkStart" ? "bm-start" : "bm-end"; // zakładka — osobne numery id niż komentarze
+        : n.localName === "bookmarkStart" ? "bm-start" : n.localName === "bookmarkEnd" ? "bm-end" : "rev"; // zakładka / usunięcie (wyspa)
       span.contentEditable = "false";
       span.className = "cm-mark";
       if (afterObj?.offset === offset) { afterObj.el.after(span); afterObj.el = span; return; }
@@ -292,6 +294,87 @@ function paragraphPageBreakLock(xp) {
   return onlyBreak ? "lockPageBreakOnly" : "lockPageBreak";
 }
 
+// Śledzone zmiany w akapicie (Word pozwala w nim pisać): usunięcie = wyspa (niewidoczna w podglądzie,
+// zapis oddaje ją bez zmian w tym samym miejscu), wstawka = fragmenty z cechą „rev” (zapis odtwarza
+// opakowanie z tym samym autorem i datą). Blokada, gdy czegoś nie da się tak zachować: zmiana
+// głębiej niż w akapicie (w linku, polu), wstawka z czymś innym niż zwykły tekst / tabulator,
+// przeniesienie z zakresem (moveFromRangeStart…) — i przy włączonym „Śledź zmiany”: poprawki
+// liczy wtedy różnica plików (docx-redline.js), która akapit z cudzymi zmianami bierze w całości.
+const REV_WRAP = new Set(["ins", "del", "moveFrom", "moveTo"]);
+function paragraphRevisionLock(xp) {
+  let any = false;
+  for (const tag of REV_WRAP) {
+    for (const el of Array.from(xp.getElementsByTagNameNS(W_NS, tag))) {
+      const parent = el.parentNode;
+      if (parent?.localName === "rPr" && parent.parentNode?.localName === "pPr") { any = true; continue; } // znak akapitu
+      if (parent !== xp) return "lockTracked";
+      any = true;
+      if (tag === "ins" || tag === "moveTo") {
+        const ok = Array.from(el.childNodes).every((r) => r.nodeType !== 1 || (r.namespaceURI === W_NS && r.localName === "r"
+          && Array.from(r.childNodes).every((c) => c.nodeType !== 1 || (c.namespaceURI === W_NS && ["rPr", "t", "tab"].includes(c.localName)))));
+        if (!ok) return "lockTracked";
+      }
+    }
+  }
+  if (!any) return null;
+  if (["moveFromRangeStart", "moveToRangeStart", "moveFromRangeEnd", "moveToRangeEnd"].some((tag) => xp.getElementsByTagNameNS(W_NS, tag).length)) return "lockTracked";
+  if (typeof dwbTrack !== "undefined" && dwbTrack.isOn()) return "lockTrackedOn";
+  return null;
+}
+// Wstawki w podglądzie: tekst z w:ins / w:moveTo owinięty w <span data-dwb-rev="klucz"> — pisanie
+// w środku zostaje w wstawce, odczyt podglądu (extractRunsFromPreviewParagraph) zna jej granice.
+// Tekst podglądu ≠ tekst pliku (numer przypisu, symbol…) — bez owijania i akapit tylko do odczytu.
+function stampRevisionWraps(xp, el) {
+  el.querySelectorAll("span[data-dwb-rev]").forEach((w) => w.replaceWith(...w.childNodes));
+  el.normalize();
+  const spans = [];
+  let pos = 0;
+  paragraphXmlParts(xp).forEach((n) => {
+    if (n.localName !== "r") return;
+    const rev = n.parentNode?.localName === "ins" || n.parentNode?.localName === "moveTo" ? revKey(n.parentNode) : null;
+    Array.from(n.childNodes).forEach((c) => {
+      const len = c.localName === "t" ? (c.textContent || "").length : c.localName === "tab" || c.localName === "br" ? 1 : 0;
+      if (rev && len) spans.push({ start: pos, end: pos + len, rev });
+      pos += len;
+    });
+  });
+  if (!spans.length) return true;
+  const nodes = [];
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    // tekst wysp (numer przypisu, symbol) nie jest tekstem fragmentów — w pliku ma zero znaków w w:t
+    // „\uFEFF” — miejsce na kursor za odnośnikiem przypisu (doc-notes.js), nie treść
+    if (n.nodeType === 3) {
+      if (n.parentElement?.closest(".docx-tab, [data-cm]") || /^\uFEFF*$/.test(n.data)) continue;
+      if (n.data.includes("\uFEFF")) return false;
+      nodes.push(n);
+    }
+    else if (n.classList?.contains("docx-tab") || (n.tagName === "BR" && !n.dataset.dwbPh)) nodes.push(n);
+  }
+  const textOf = (n) => (n.nodeType === 3 ? n.data : n.tagName === "BR" ? "\n" : "\t");
+  if (nodes.map(textOf).join("").length !== pos) return false;
+  // od końca — dzielenie węzłów nie przesuwa wcześniejszych położeń
+  let off = 0;
+  const at = nodes.map((n) => { const o = off; off += n.nodeType === 3 ? n.data.length : 1; return o; });
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    const n = nodes[i], s0 = at[i], l = n.nodeType === 3 ? n.data.length : 1;
+    for (let k = spans.length - 1; k >= 0; k--) {
+      const sp = spans[k];
+      const a = Math.max(sp.start, s0), b = Math.min(sp.end, s0 + l);
+      if (a >= b) continue;
+      if (n.nodeType !== 3) { n.dataset.dwbRev = sp.rev; continue; } // tabulator w wstawce
+      let piece = n;
+      if (b - s0 < piece.data.length) piece.splitText(b - s0);
+      if (a - s0 > 0) piece = piece.splitText(a - s0);
+      const w = document.createElement("span");
+      w.dataset.dwbRev = sp.rev;
+      piece.replaceWith(w);
+      w.appendChild(piece);
+    }
+  }
+  return true;
+}
+
 function paragraphNestedRunLock(xp) {
   const runs = xp.getElementsByTagNameNS(W_NS, "r");
   for (let i = 0; i < runs.length; i++) {
@@ -299,6 +382,7 @@ function paragraphNestedRunLock(xp) {
     if (parent === xp) continue;
     if (isInsideTextbox(runs[i], xp)) continue; // tekst pola tekstowego (wyspa, textboxes.js)
     if (parent.localName === "hyperlink" && parent.parentNode === xp) continue;
+    if (REV_WRAP.has(parent.localName) && parent.parentNode === xp) continue; // śledzona zmiana — paragraphRevisionLock
     const sdt = parent.localName === "sdtContent" ? parent.parentNode : null;
     if (sdt && sdt.parentNode === xp && typeof formIslandSdt === "function" && formIslandSdt(sdt)) continue; // pole-wyspa
     return parent.localName === "hyperlink" ? "lockLink" : "lockField";
@@ -372,7 +456,7 @@ async function markLockedParagraphs(bytes) {
     const objLock = paragraphObjectLock(xp);
     const hit = INLINE_LOCK_TAGS.find(([tag, why]) => (why !== "lockObject" || objLock) && xp.getElementsByTagNameNS(W_NS, tag).length);
     const mathLock = xp.getElementsByTagNameNS(MATH_NS, "oMath").length || xp.getElementsByTagNameNS(MATH_NS, "oMathPara").length ? "lockObject" : null;
-    let lock = formParagraphLock(xp) || hit?.[1] || mathLock || paragraphSymbolLock(xp) || paragraphPageBreakLock(xp) || paragraphNestedRunLock(xp) || paragraphCommentLock(xp); // pole formularza Worda: docx-forms.js
+    let lock = formParagraphLock(xp) || hit?.[1] || paragraphRevisionLock(xp) || mathLock || paragraphSymbolLock(xp) || paragraphPageBreakLock(xp) || paragraphNestedRunLock(xp) || paragraphCommentLock(xp); // pole formularza Worda: docx-forms.js
     stampLinkTips(xp, el);
     if (!lock && !stampParagraphLinks(xp, el)) lock = "lockLink";
     if (!lock) {
@@ -383,6 +467,7 @@ async function markLockedParagraphs(bytes) {
     if (!lock && hasRef) lock = typeof dwbNotes !== "undefined" ? dwbNotes.stampRefs(xp, el, nextKey) : "lockNote";
     if (!lock) lock = stampSymbolIslands(xp, el, nextKey);
     if (!lock) stampCommentMarks(xp, el, nextKey, hasRef ? dwbNotes.refLabelLengths(el) : []);
+    if (!lock && !stampRevisionWraps(xp, el)) lock = "lockTracked";
     if (lock) el.dataset.lock = lock;
     else delete el.dataset.lock;
   });
@@ -2956,6 +3041,16 @@ function setupInlineEditingAfterRender() {
     .then(() => markLockedParagraphs(bytes))
     .finally(() => { if (seq === inlineSetupSeq) inlineLocksPending = false; }) // tylko ostatni render zdejmuje
     .then(() => { syncInlineEditMode(); refreshFontFamilyList(); });
+}
+
+// Blokady od nowa bez przerysowania (np. włączone „Śledź zmiany” blokuje akapity z cudzymi
+// zmianami — lockTrackedOn). Tylko gdy podgląd = plik (po scaleniu edycji), bo znaczniki-wyspy
+// stawiane są z położeń w pliku.
+async function refreshInlineLocks() {
+  if (!originalFileBytes || !docCanvasEl?.querySelector(".docx-preview-host")) return;
+  await mergeInlineEditsIntoBytes();
+  await markLockedParagraphs(originalFileBytes);
+  syncInlineEditMode();
 }
 
 function mergeInlineEditsIntoBytes() {

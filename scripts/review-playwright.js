@@ -95,8 +95,10 @@ async function run() {
   await page.waitForTimeout(400);
   const locks = await page.evaluate(() => collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).map((p) => `${p.dataset.lock || "-"}:${p.isContentEditable}`));
   // akapit z odnośnikiem do przypisu (9) — od 2026-10-04 edytowalny, odnośnik to „wyspa” (doc-notes.js)
-  check("blokady: śledzone zmiany (akapity 2, 4, 5 — też sama zmiana formatu); akapit z przypisem końcowym (9) edytowalny",
-    locks[1] === "lockTracked:false" && locks[3] === "lockTracked:false" && locks[4] === "lockTracked:false" && locks[8] === "-:true", locks.join(" "));
+  // od 2026-11-13 jak w Wordzie: w akapicie ze wstawką / usunięciem się pisze (review-margin-playwright
+  // sprawdza zapis); blokuje tylko zmiana formatu fragmentu (5) i przeniesienie z zakresem (11)
+  check("blokady: wstawka/usunięcie edytowalne (2, 4), zmiana formatu (5) i przeniesienie (11) zablokowane; przypis końcowy (9) edytowalny",
+    locks[1] === "-:true" && locks[3] === "-:true" && locks[4] === "lockTracked:false" && locks[10] === "lockTracked:false" && locks[8] === "-:true", locks.join(" "));
   check("akapit ze zmianą tylko formatu AKAPITU (wyrównanie) edytowalny — zapis tekstu jej nie rusza", locks[5] === "-:true", locks[5]);
   check("akapit z samym komentarzem da się edytować", locks[2] === "-:true", locks[2]);
   check("mapowanie: w podglądzie tyle akapitów treści, ile w pliku (bez nagłówka i przypisów)",

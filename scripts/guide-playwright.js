@@ -70,8 +70,9 @@ async function run() {
   // Etap 2: linki i proste pola formularza w zdaniu nie blokują akapitu (model akapitu je zachowuje)
   // od 2026-10-04 akapit z odnośnikiem do przypisu też edytowalny (odnośnik = „wyspa”, doc-notes.js)
   // od 2026-10-05 także akapit z obrazem (obraz = wyspa, docx-inline-edit.js paragraphObjectLock)
-  check("zablokowane: zmiana, odsyłacz (linki, pola w zdaniu, przypisy i obrazy edytowalne)",
-    !r.locked.lockLink && !r.locked.lockForm && !r.locked.lockNote && !r.locked.lockObject && r.locked.lockField === 1 && r.locked.lockTracked === 1 && Object.keys(r.locked).length === 2, JSON.stringify(r.locked));
+  // od 2026-11-13 także akapit ze śledzoną wstawką / usunięciem (jak w Wordzie — track-edit-playwright.js)
+  check("zablokowany tylko odsyłacz (zmiany śledzone, linki, pola w zdaniu, przypisy i obrazy edytowalne)",
+    !r.locked.lockLink && !r.locked.lockForm && !r.locked.lockNote && !r.locked.lockObject && !r.locked.lockTracked && r.locked.lockField === 1 && Object.keys(r.locked).length === 1, JSON.stringify(r.locked));
   check("formularz: tekst, lista, data, pole wyboru", r.forms === "text,dropdown,date,checkbox", r.forms);
   check("spis treści: 17 linków do rozdziałów (+ link do rozdz. 3 z rozdz. 16) + odsyłacz do „Zapisu”", r.toc === 18 && r.xref === "#_Guide12", `${r.toc} ${r.xref}`);
 

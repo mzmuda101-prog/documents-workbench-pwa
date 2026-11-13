@@ -55,6 +55,9 @@ function getParagraphText(pEl) {
   const runs = pEl.getElementsByTagNameNS(W_NS, "r");
   for (let r = 0; r < runs.length; r++) {
     if (isInsideTextbox(runs[r], pEl)) continue;
+    // usunięty / przeniesiony stąd tekst (śledzona zmiana) — w podglądzie go nie ma (stan „po przyjęciu”)
+    const wrap = runs[r].parentNode;
+    if (wrap?.namespaceURI === W_NS && (wrap.localName === "del" || wrap.localName === "moveFrom")) continue;
     const children = runs[r].childNodes;
     for (let c = 0; c < children.length; c++) {
       const child = children[c];
@@ -74,7 +77,8 @@ function clearParagraphRuns(pEl) {
     r.parentNode.removeChild(r);
   });
   // puste opakowania linków (fragmenty już usunięte) — nowe linki tworzy applyRunsToParagraphXml
-  Array.from(pEl.childNodes).forEach((n) => { if (n.localName === "hyperlink" && n.namespaceURI === W_NS) pEl.removeChild(n); });
+  // i opakowania śledzonych zmian (wstawka wraca z cechy „rev” fragmentów, usunięcie — jako wyspa)
+  Array.from(pEl.childNodes).forEach((n) => { if (n.namespaceURI === W_NS && /^(hyperlink|ins|moveTo|del|moveFrom)$/.test(n.localName)) pEl.removeChild(n); });
 }
 
 function setParagraphText(pEl, text) {

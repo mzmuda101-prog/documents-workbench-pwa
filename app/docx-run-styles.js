@@ -103,6 +103,7 @@ function runsStyleEqual(a, b) {
     && (a.fontFamily || "") === (b.fontFamily || "")
     && (a.fontSize || "") === (b.fontSize || "")
     && (a.link || "") === (b.link || "")
+    && (a.rev || "") === (b.rev || "")
     && normHighlight(a.highlight) === normHighlight(b.highlight)
     && normVertAlign(a.vertAlign) === normVertAlign(b.vertAlign);
 }
@@ -162,6 +163,8 @@ function extractRunsFromPreviewParagraph(pEl) {
       return;
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return;
+    // śledzona wstawka (docx-inline-edit.js stampRevisionWraps): tekst w niej = fragment w w:ins
+    if (node.dataset?.dwbRev) inherited = { ...inherited, rev: node.dataset.dwbRev };
     // tabulator z pliku: docx-preview rysuje <span class="docx-tab">&emsp;</span>. Dawniej szedł do
     // pliku jako spacja szerokości „em” — po edycji akapitu wyrównanie do tabulatora znikało.
     if (node.classList?.contains("docx-tab")) {
@@ -265,7 +268,14 @@ function paragraphXmlParts(pEl) {
         const sub = child.childNodes[j];
         if (sub.nodeType === 1 && sub.localName === "r" && sub.namespaceURI === W_NS) parts.push(sub);
       }
-    } else if (child.localName === "sdt" && typeof formIslandSdt === "function" && formIslandSdt(child)) parts.push(child);
+    } else if (child.localName === "ins" || child.localName === "moveTo") {
+      // śledzona wstawka: jej fragmenty jak zwykłe, z cechą „rev” (revKey) — zapis odtwarza opakowanie
+      for (let j = 0; j < child.childNodes.length; j++) {
+        const sub = child.childNodes[j];
+        if (sub.nodeType === 1 && sub.localName === "r" && sub.namespaceURI === W_NS) parts.push(sub);
+      }
+    } else if (child.localName === "del" || child.localName === "moveFrom") parts.push(child); // usunięcie — wyspa (w podglądzie niewidoczne)
+    else if (child.localName === "sdt" && typeof formIslandSdt === "function" && formIslandSdt(child)) parts.push(child);
   }
   return parts;
 }
@@ -304,8 +314,26 @@ function xmlRunFont(fonts) {
   return clean(fonts.getAttributeNS(W_NS, "eastAsia")) || null;
 }
 // Format fragmentu w:r w modelu akapitu (pogrubienie, kolor, krój, rozmiar, link…).
+// Opakowanie śledzonej wstawki (w:ins / w:moveTo) jako klucz: nazwa + wszystkie atrybuty (autor,
+// data, id…) — ten sam w pliku i w podglądzie (data-dwb-rev), więc nietknięty akapit wychodzi
+// „bez zmian”, a zapis odtwarza wstawkę z tym samym autorem i datą (revWrapperFromKey).
+function revKey(el) {
+  const attrs = Array.from(el.attributes || []).filter((a) => a.namespaceURI !== "http://www.w3.org/2000/xmlns/").map((a) => [a.namespaceURI || "", a.name, a.value]).sort((x, y) => (x[1] < y[1] ? -1 : 1));
+  return JSON.stringify([el.localName, attrs]);
+}
+function revWrapperFromKey(doc, key) {
+  try {
+    const [name, attrs] = JSON.parse(key);
+    if (name !== "ins" && name !== "moveTo") return null;
+    const el = doc.createElementNS(W_NS, `w:${name}`);
+    attrs.forEach(([ns, qn, v]) => { if (ns) el.setAttributeNS(ns, qn, v); else el.setAttribute(qn, v); });
+    return el;
+  } catch (_) { return null; }
+}
+
 function xmlRunStyle(r) {
   const style = {};
+  if (r.parentNode?.namespaceURI === W_NS && (r.parentNode.localName === "ins" || r.parentNode.localName === "moveTo")) style.rev = revKey(r.parentNode);
   if (r.parentNode?.localName === "hyperlink") {
     const ref = hyperlinkRef(r.parentNode);
     if (ref) style.link = ref;
@@ -546,7 +574,7 @@ function originalRunProps(pEl) {
   const out = [];
   const walk = (parent) => Array.from(parent.childNodes).forEach((n) => {
     if (n.namespaceURI !== W_NS) return;
-    if (n.localName === "hyperlink") return walk(n);
+    if (n.localName === "hyperlink" || n.localName === "ins" || n.localName === "moveTo") return walk(n);
     if (n.localName !== "r" || !Array.from(n.childNodes).some((c) => c.localName === "t" && c.textContent)) return;
     const rPr = Array.from(n.childNodes).find((c) => c.localName === "rPr" && c.namespaceURI === W_NS);
     out.push({ style: xmlRunStyle(n), rPr: rPr || null });
@@ -605,7 +633,7 @@ function applyRunsToParagraphXml(pEl, runs) {
       const frag = new DOMParser().parseFromString(run.island, "application/xml").documentElement;
       // pole tekstowe zostało w akapicie (clearParagraphRuns) — jego kopia z wyspy podwoiłaby je
       if (frag?.localName === "r" && frag.getElementsByTagNameNS(W_NS, "txbxContent").length) return;
-      if (frag && frag.namespaceURI === W_NS && ["sdt", "r", "commentRangeStart", "commentRangeEnd", "bookmarkStart", "bookmarkEnd"].includes(frag.localName)) {
+      if (frag && frag.namespaceURI === W_NS && ["sdt", "r", "commentRangeStart", "commentRangeEnd", "bookmarkStart", "bookmarkEnd", "del", "moveFrom"].includes(frag.localName)) {
         const node = doc.importNode(frag, true);
         // deklaracja xmlns:w z zapisu wyspy — dokument ma ją w korzeniu (bez tego każdy znacznik
         // dostawał w pliku własną kopię przestrzeni nazw)
@@ -622,8 +650,16 @@ function applyRunsToParagraphXml(pEl, runs) {
       return;
     }
     if (!run.text) return;
+    if (run.rev) { // śledzona wstawka: kolejne fragmenty tej samej wstawki w jednym opakowaniu
+      if (!hl || hl._dwbRev !== run.rev) {
+        hl = revWrapperFromKey(doc, run.rev);
+        if (hl) { hl._dwbRev = run.rev; pEl.appendChild(hl); }
+      }
+      (hl || pEl).appendChild(runFromOriginal(doc, run, originals) || createRunElement(doc, run));
+      return;
+    }
     if (!run.link) { hl = null; pEl.appendChild(runFromOriginal(doc, run, originals) || createRunElement(doc, run)); return; }
-    if (!hl || hl._dwbLink !== run.link) {
+    if (!hl || hl._dwbRev || hl._dwbLink !== run.link) {
       hl = createHyperlinkElement(doc, run.link, linkAttrs.get(run.link));
       hl._dwbLink = run.link;
       pEl.appendChild(hl);
