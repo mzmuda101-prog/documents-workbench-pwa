@@ -3742,3 +3742,7 @@ body.dwb-painting .docx-preview-host * {
 }
 .mode-btn-suggest.is-active { background: #c4262e; }
 .mode-switch.has-pill:has(.mode-btn-suggest.is-active) .mode-pill { background: #c4262e; }
+.mk-row-replace .mk-old { text-decoration: line-through; text-decoration-color: var(--mk-c); }
+.mk-row-replace .mk-new { text-decoration: underline; text-decoration-color: var(--mk-c); }
+/* jedna decyzja: ✓ / ✗ w nagłówku zawsze widoczne (to jedyne przyciski dymka) */
+.mk-card .mk-tools-main { opacity: 1 !important; }

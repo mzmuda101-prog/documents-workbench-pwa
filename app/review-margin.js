@@ -385,6 +385,25 @@ const dwbMargin = (() => {
     if (typeof runReviewScan === "function" && document.getElementById("panel-review")?.open) runReviewScan();
   }
 
+  // Usunięcie i wstawka w tym samym miejscu (ten sam autor) = jedna decyzja „Zamieniono: 14 → 30”
+  // (Word zapisuje to jako dwie poprawki; ✓ / ✗ działa na obie naraz). Dawniej dwa wiersze i trzy pary
+  // przycisków, a po przyjęciu samego usunięcia dymek ze zostawioną wstawką się chował.
+  function pairRows(rows) {
+    const out = [];
+    for (let i = 0; i < rows.length; i++) {
+      const a = rows[i], b = rows[i + 1];
+      const isDel = (x) => x && (x.kind === "del" || x.kind === "moveFrom");
+      const isIns = (x) => x && (x.kind === "ins" || x.kind === "moveTo");
+      const near = (x, y) => Number.isFinite(x.at) && Number.isFinite(y.at) && x.at === y.at && (x.author || "") === (y.author || "");
+      if ((isDel(a) && isIns(b) && near(a, b)) || (isIns(a) && isDel(b) && near(a, b))) {
+        const d = isDel(a) ? a : b, n = isIns(a) ? a : b;
+        out.push({ kind: "replace", ids: [d.id, n.id].filter((x) => x != null), old: d.text || d.shown || "", text: n.text || n.shown || "", at: d.at, author: d.author });
+        i++;
+      } else out.push({ ...a, ids: a.id != null ? [a.id] : [] });
+    }
+    return out;
+  }
+
   function card(it) {
     const el = document.createElement("div");
     el.className = `mk-card mk-${it.kind}`;
@@ -435,14 +454,17 @@ const dwbMargin = (() => {
       el.style.setProperty("--mk-c", `var(--mk-a${colorOf(author)})`);
       el.setAttribute("aria-label", `${t("reviewChangesHead")}: ${author}`);
       let tools = null;
-      if (it.kind === "change" && !ro() && g.rows.length > 1) {
+      const units = pairRows(g.rows);
+      // jedna decyzja — ✓ / ✗ w nagłówku (jak karta w Wordzie); kilka — przy każdym wierszu
+      const single = units.length === 1;
+      if (it.kind === "change" && !ro() && single && !it.pop) {
         tools = document.createElement("span");
-        tools.className = "mk-tools";
-        const ids = g.rows.map((x) => x.id);
+        tools.className = "mk-tools mk-tools-main";
+        const ids = units[0].ids;
         tools.append(btn("ok", "reviewAcceptOne", () => revisions("accept", ids), "mk-ok"), btn("no", "reviewRejectOne", () => revisions("reject", ids), "mk-no"));
       }
       // wąsko: karta pod wierszem jak dymek w Wordzie — pytanie i ✓ / ✗ dla całej zmiany na górze
-      if (it.pop && it.kind === "change" && !ro()) {
+      if (it.pop && it.kind === "change" && !ro() && single) {
         const ask = document.createElement("div");
         ask.className = "mk-ask";
         const q = document.createElement("span");
@@ -457,31 +479,39 @@ const dwbMargin = (() => {
       }
       el.appendChild(head(author, it.kind === "live" ? "" : g.date, tools));
       if (it.kind === "live") { const s = document.createElement("div"); s.className = "mk-live-tag"; s.textContent = t("marginLive"); el.querySelector(".mk-who").appendChild(s); }
-      g.rows.slice(0, 8).forEach((x) => {
+      const clip = (v) => { const s = String(v || "").replace(/\s+/g, " ").trim(); return s.length > 140 ? `${s.slice(0, 139)}…` : s; };
+      units.slice(0, 8).forEach((x) => {
         const row = document.createElement("div");
         row.className = `mk-row mk-row-${x.kind}`;
         const k = document.createElement("span");
         k.className = "mk-kind";
-        const tx = document.createElement("span");
-        tx.className = "mk-txt";
-        const s = String(x.text || x.shown || "").replace(/\s+/g, " ").trim();
-        tx.textContent = s.length > 140 ? `${s.slice(0, 139)}…` : s;
-        k.textContent = `${x.kind === "paraDel" && it.kind === "live" ? t("marginParaDeleted") : kindLabel(x.kind)}${s ? ":" : ""}`;
         const main = document.createElement("span");
         main.className = "mk-row-main";
-        main.append(k);
-        if (s) main.append(" ", tx);
+        if (x.kind === "replace") {
+          k.textContent = `${t("reviewKindReplace")}:`;
+          const o = document.createElement("span"); o.className = "mk-txt mk-old"; o.textContent = clip(x.old);
+          const n = document.createElement("span"); n.className = "mk-txt mk-new"; n.textContent = clip(x.text);
+          main.append(k, " ", o, " → ", n);
+        } else {
+          const s = clip(x.text || x.shown);
+          const tx = document.createElement("span");
+          tx.className = "mk-txt";
+          tx.textContent = s;
+          k.textContent = `${x.kind === "paraDel" && it.kind === "live" ? t("marginParaDeleted") : kindLabel(x.kind)}${s ? ":" : ""}`;
+          main.append(k);
+          if (s) main.append(" ", tx);
+        }
         row.append(main);
-        if (it.kind === "change" && !ro() && !(it.pop && g.rows.length === 1)) {
+        if (it.kind === "change" && !ro() && !single && x.ids.length) {
           const a = document.createElement("span");
           a.className = "mk-row-act";
-          a.append(btn("ok", "reviewAcceptOne", () => revisions("accept", [x.id]), "mk-ok"), btn("no", "reviewRejectOne", () => revisions("reject", [x.id]), "mk-no"));
+          a.append(btn("ok", "reviewAcceptOne", () => revisions("accept", x.ids), "mk-ok"), btn("no", "reviewRejectOne", () => revisions("reject", x.ids), "mk-no"));
           row.appendChild(a);
         }
         el.appendChild(row);
       });
       if (it.pop && ro() && it.kind === "change") { const n = document.createElement("div"); n.className = "mk-more"; n.textContent = t("marginRoNote"); el.appendChild(n); }
-      if (g.rows.length > 8) { const more = document.createElement("div"); more.className = "mk-more"; more.textContent = `+${g.rows.length - 8}`; el.appendChild(more); }
+      if (units.length > 8) { const more = document.createElement("div"); more.className = "mk-more"; more.textContent = `+${units.length - 8}`; el.appendChild(more); }
       if (it.kind === "live" && !ro()) {
         const foot = document.createElement("div");
         foot.className = "mk-live-foot";

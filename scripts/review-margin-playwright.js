@@ -50,6 +50,10 @@ async function run() {
   const hl = await page.evaluate(() => [...CSS.highlights.keys()].filter((k) => k.startsWith("dwb-rev-")).flatMap((k) => [...CSS.highlights.get(k)].map((r) => r.toString())));
   check("wstawki podkreślone w tekście: dokładnie wstawiony tekst", hl.includes("30") && hl.some((s) => s.trim() === "niezwłocznie"), JSON.stringify(hl));
   check("pasek przy akapitach ze zmianą", (await page.evaluate(() => document.querySelectorAll(".dwb-markup .mk-bar").length)) >= 5);
+  // zgłoszenie 2026-11-13: trzy pary ✓ / ✗ przy jednej zamianie — usunięcie + wstawka w tym samym
+  // miejscu = jedna decyzja „Zamieniono: 14 → 30”, przyciski tylko w nagłówku
+  const rep = await page.evaluate(() => { const c = [...document.querySelectorAll(".mk-change")].find((x) => x.querySelector(".mk-row-replace")); return c ? { text: c.querySelector(".mk-row-replace").textContent.replace(/\s+/g, " "), pairs: c.querySelectorAll(".mk-ok").length, head: !!c.querySelector(".mk-tools-main .mk-ok") } : null; });
+  check("usunięcie + wstawka = jedna zamiana „14 → 30” (Czytanie: bez przycisków)", rep && /14 → 30/.test(rep.text) && rep.pairs === 0, JSON.stringify(rep));
   // zgłoszenie 2026-11-13: pasek przy zmianie w komórce tabeli stał między kolumnami
   // tabela z dwiema kolumnami, zmiana w DRUGIEJ (jak w zgłoszeniu) — ten sam plik, komórka dopisana z lewej
   await page.evaluate(async () => {
@@ -107,7 +111,7 @@ async function run() {
   // ── ✓ z dymka zmienia plik; Cofnij wraca ─────────────────────────────────
   const m0 = marks(await fileXml(page, "word/document.xml"));
   const key = await page.evaluate(() => [...document.querySelectorAll(".mk-change")].find((c) => c.querySelector(".mk-row-format"))?.dataset.key);
-  await page.evaluate((k) => document.querySelector(`[data-key="${k}"] .mk-row-format .mk-ok`).click(), key);
+  await page.evaluate((k) => document.querySelector(`[data-key="${k}"] .mk-tools-main .mk-ok`).click(), key); // jedna decyzja — ✓ w nagłówku
   await idle(page);
   const m1 = marks(await fileXml(page, "word/document.xml"));
   check("✓ w dymku: zmiana przyjęta w pliku", m1 === m0 - 1, `${m0} → ${m1}`);
@@ -115,6 +119,17 @@ async function run() {
   await page.evaluate(() => dwbUndo.undo());
   await idle(page);
   check("Cofnij: zmiana wróciła", marks(await fileXml(page, "word/document.xml")) === m0);
+  const repEdit = await page.evaluate(() => { const c = [...document.querySelectorAll(".mk-change")].find((x) => x.querySelector(".mk-row-replace")); return c ? { pairs: c.querySelectorAll(".mk-ok").length, head: !!c.querySelector(".mk-tools-main .mk-ok"), rowBtns: c.querySelectorAll(".mk-row-act").length } : null; });
+  check("Edycja: przy zamianie jedna para ✓ / ✗ — w nagłówku, bez przycisków w wierszu", repEdit && repEdit.pairs === 1 && repEdit.head && !repEdit.rowBtns, JSON.stringify(repEdit));
+  for (const [act, want] of [["mk-ok", "30"], ["mk-no", "14"]]) {
+    await page.evaluate((act) => { const c = [...document.querySelectorAll(".mk-change")].find((x) => x.querySelector(".mk-row-replace")); c.querySelector(`.mk-tools-main .${act}`).click(); }, act);
+    await idle(page);
+    const x = await fileXml(page, "word/document.xml");
+    const para = (x.match(/<w:p\b(?:(?!<w:p\b).)*?Termin(?:(?!<\/w:p>).)*<\/w:p>/s) || [""])[0];
+    check(`zamiana ${act === "mk-ok" ? "✓" : "✗"}: obie poprawki naraz, zostaje „${want}”`, !/<w:(ins|del)\b/.test(para) && para.replace(/<[^>]+>/g, "").includes(`wynosi ${want} dni`), para.replace(/<[^>]+>/g, ""));
+    await page.evaluate(() => dwbUndo.undo());
+    await idle(page);
+  }
 
   // ── Odpowiedz z dymka ────────────────────────────────────────────────────
   await page.click('[data-key="c:10"]');
