@@ -3655,7 +3655,8 @@ body.dwb-painting .docx-preview-host * {
   border: 1px solid var(--border-subtle); border-left: 3px solid var(--mk-c, var(--accent));
   box-shadow: 0 1px 3px rgba(16, 32, 64, .08);
   font-size: 12.5px; line-height: 1.4; color: var(--ink);
-  transition: top 160ms ease-out, transform 160ms ease-out, box-shadow 160ms ease-out;
+  top: 0; /* pionowa pozycja w transform: translateY() z review-margin.js */
+  transition: transform 160ms var(--ease-out), box-shadow 160ms ease-out;
   cursor: default; display: flex; flex-direction: column; gap: 4px;
 }
 @media (hover: hover) and (pointer: fine) { .mk-card:hover { box-shadow: 0 4px 14px rgba(16, 32, 64, .14); } }

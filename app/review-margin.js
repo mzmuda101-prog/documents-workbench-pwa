@@ -589,7 +589,17 @@ const dwbMargin = (() => {
     it.h = it.el.offsetHeight;
     // pod wierszem; przy dolnej krawędzi widoku — nad nim
     if (it.top + it.h > v.scrollTop + v.clientHeight - 8 && it.anchor.y - it.h - 8 > v.scrollTop) it.top = it.anchor.y - it.h - 8;
-    it.el.style.top = `${Math.round(it.top)}px`;
+    setCardY(it.el, it.top);
+  }
+  // Pionowo przez transform (GPU), nie top (układ). Pierwsze ustawienie bez przejścia: z „none”
+  // dymek zjeżdżałby z góry kartki (top startował z auto, którego nie da się animować).
+  function setCardY(el, y) {
+    const v = `translateY(${Math.round(y)}px)`;
+    if (el.style.transform) { el.style.transform = v; return; }
+    el.style.transition = "none";
+    el.style.transform = v;
+    void el.offsetHeight; // zatwierdź pozycję, zanim wróci przejście
+    el.style.transition = "";
   }
   function place() {
     if (!items.length) { if (wire) wire.replaceChildren(); return; }
@@ -611,7 +621,8 @@ const dwbMargin = (() => {
       // nad aktywnym brakuje miejsca — dymki nad nim wyjeżdżają w górę poza widok (jak w Wordzie);
       // wrócą na swoje miejsca, gdy aktywny przestanie nim być
     }
-    list.forEach((it) => { it.el.style.top = `${Math.round(it.top)}px`; });
+    // rozsuwanie dymków: transform liczy karta graficzna, top przeliczałby układ w każdej klatce
+    list.forEach((it) => setCardY(it.el, it.top));
     paintFocus();
     drawWire();
   }

@@ -34,8 +34,14 @@ async function run() {
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto(APP_URL, { waitUntil: "load" });
   await page.evaluate(() => { document.getElementById("heroSplash")?.remove(); setSidebarOpen(false); });
+  // dymki stoją przez transform: pierwsze ustawienie nie może zjeżdżać z góry kartki (z „none” do celu)
+  await page.evaluate(() => { window.__mkFly = 0; const tick = () => { document.querySelectorAll(".mk-card:not([hidden])").forEach((c) => {
+    const want = /translateY\((-?\d+)/.exec(c.style.transform); if (want && +want[1] > 50 && Math.abs(new DOMMatrix(getComputedStyle(c).transform).m42) < 2) window.__mkFly++; });
+    if (window.__mkFly !== -1) requestAnimationFrame(tick); }; tick(); });
   await page.locator("#fileInput").setInputFiles("docs/samples/review-sample.docx");
   await idle(page);
+  const fly = await page.evaluate(() => { const n = window.__mkFly; window.__mkFly = -1; return n; });
+  check("dymki pojawiają się od razu na miejscu (nie zjeżdżają z góry)", fly === 0, `klatek z dymkiem u góry: ${fly}`);
 
   // ── Czytanie: dymki obok kartki ──────────────────────────────────────────
   const its = await items(page);
