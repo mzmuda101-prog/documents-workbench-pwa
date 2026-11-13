@@ -66,11 +66,11 @@ const dwbTrack = (() => {
   }
 
   // Poprawki do dokumentu w aplikacji (jeden krok Cofnij). keepOn — śledzenie trwa dalej od tego stanu.
-  async function bake({ keepOn = false } = {}) {
+  async function bake({ keepOn = false, patch = null } = {}) {
     if (!state.on || !state.baseline) return 0;
     const baseline = state.baseline;
     state.on = false; // na czas wpisywania — zapis nie liczy różnicy drugi raz
-    const n = await applyDocumentEdit({ op: "redline", baseline, author: state.author, trackOn: keepOn });
+    const n = await applyDocumentEdit({ op: "redline", baseline, author: state.author, trackOn: keepOn, patch });
     state.baseline = null;
     state.baseKeys = null;
     if (keepOn) await start({ silent: true });
@@ -120,7 +120,7 @@ const dwbTrack = (() => {
       else document.execCommand("delete");
       onInlineParagraphInput();
       if (!wasOn) {
-        await bake({ keepOn: false });
+        await bake({ keepOn: false, patch: [index] }); // tylko ten akapit od nowa (document.js)
         toast(t("suggestDone", { name: state.author || authorNameCached() }), "info");
       }
     });

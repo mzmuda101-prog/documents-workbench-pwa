@@ -373,6 +373,12 @@ async function applyDocumentEditHeld(edit, xmlOpts) {
     if (typeof pendingInlineCursor !== "undefined") pendingInlineCursor = null; // kursor nietknięty
     return res.n;
   }
+  // Akceptuj / Odrzuć pojedynczą zmianę, „Zaproponuj zmianę” — zmienia TREŚĆ kilku akapitów: te
+  // akapity od nowa (render w tle), reszta dokumentu stoi (bez mignięcia i skoku przewinięcia)
+  if (res.n > 0 && res.patch?.length && await patchParagraphsInPlace(res.patch, { content: true }).catch(() => false)) {
+    setDirtyState(true);
+    return res.n;
+  }
   await reloadFromBytes(originalFileBytes);
   if (res.n > 0) setDirtyState(true);
   return res.n;
@@ -398,13 +404,17 @@ function paraPatchable(edit) {
 // klasy, które dokłada Edycja (nie render) — zostają na żywym akapicie
 const PARA_APP_CLASSES = new Set(["docx-editable-p", "dwb-caret-p", "ff-para", "docx-locked-p", "dwb-tiny-active"]);
 
-async function patchParagraphsInPlace(indices) {
+// content: treść akapitu też z renderu w tle (zmienił się tekst — Akceptuj / Odrzuć, propozycja
+// zmiany); potem od nowa znaczniki-wyspy, blokady i baza porównań (jak po pełnym renderze), bez
+// rysowania reszty dokumentu. Tylko gdy liczba akapitów w pliku = na ekranie; akapity z przypisem —
+// pełny render (numery przypisów liczy cały dokument).
+async function patchParagraphsInPlace(indices, { content = false } = {}) {
   const host = docCanvasEl?.querySelector(".docx-preview-host");
   if (!host) return false;
   const previews = collectPreviewParagraphElements(host);
   const sorted = [...new Set(indices)].sort((a, b) => a - b);
   const live = sorted.map((i) => previews[i]);
-  if (live.some((p) => !p || p.dataset.lock || p.dataset.dwbCont || p.nextElementSibling?.dataset?.dwbCont
+  if (live.some((p) => !p || (!content && p.dataset.lock) || p.dataset.dwbCont || p.nextElementSibling?.dataset?.dwbCont
     || p.closest("td, th, .dwb-tb, header, footer") || isListParagraph(p) || p.classList.contains("dwb-tiny-para"))) return false;
   // akapity w pliku: wprost w treści, jedna sekcja, kolejne po sobie
   const doc = new DOMParser().parseFromString(await getDocumentXmlString(originalFileBytes), "application/xml");
@@ -412,6 +422,7 @@ async function patchParagraphsInPlace(indices) {
   const all = collectParagraphElements(doc.documentElement, "all");
   const xps = sorted.map((i) => all[i]);
   if (!body || xps.some((x) => !x || x.parentNode !== body)) return false;
+  if (content && (all.length !== previews.length || xps.some((x) => x.getElementsByTagNameNS(W_NS, "footnoteReference").length || x.getElementsByTagNameNS(W_NS, "endnoteReference").length))) return false;
   if (body.getElementsByTagNameNS(W_NS, "sectPr").length !== 1) return false; // kilka sekcji (kolumny, strony)
   const kids = [...body.childNodes].filter((n) => n.nodeType === 1);
   const lo = kids.indexOf(xps[0]);
@@ -441,7 +452,10 @@ async function patchParagraphsInPlace(indices) {
     const rendered = collectPreviewParagraphElements(src.querySelector(".docx-preview-host"));
     const off = prev ? 1 : 0;
     if (rendered.length !== xps.length + off + (next ? 1 : 0)) return false;
-    live.forEach((p, k) => copyParagraphLook(p, rendered[off + k]));
+    live.forEach((p, k) => {
+      copyParagraphLook(p, rendered[off + k]);
+      if (content) { p.replaceChildren(...rendered[off + k].childNodes); delete p.dataset.lock; }
+    });
   } finally {
     src.remove();
   }
@@ -452,6 +466,8 @@ async function patchParagraphsInPlace(indices) {
   if (typeof applyScreenLastLines === "function") applyScreenLastLines(host, live.filter((p) => p.classList.contains("dwb-justify")));
   if (typeof dwbPageBreaks !== "undefined") dwbPageBreaks.schedule(0); // wysokość akapitu mogła się zmienić
   if (typeof composeUi !== "undefined") composeUi.syncState?.(); // przyciski wyrównania / wcięcia
+  // nowa treść: baza porównań, wyspy (komentarze, zakładki, usunięcia), blokady, dymki — jak po renderze
+  if (content && typeof setupInlineEditingAfterRender === "function") setupInlineEditingAfterRender();
   return true;
 }
 
@@ -500,7 +516,9 @@ async function applyDocumentEditNow(edit, xmlOpts) {
     }
     const { bytes, stats } = await dwbRedline(normalized.baseline, originalFileBytes, { author: normalized.author, trackOn: normalized.trackOn });
     originalFileBytes = bytes;
-    return { n: stats.changed + stats.added + stats.removed, reload: true };
+    // propozycja zmiany w jednym akapicie (track-changes.js suggest): tylko ten akapit od nowa
+    const onlyChanged = !stats.added && !stats.removed && Array.isArray(normalized.patch);
+    return { n: stats.changed + stats.added + stats.removed, reload: true, patch: onlyChanged ? normalized.patch : null };
   }
   // „✦ Przepisz” (doc-rewrite.js): nowy tekst akapitu (albo kilku) jako poprawka (w:ins / w:del) — zmiana
   // i poprawka w jednym kroku Cofnij. Przy włączonym śledzeniu zmiana idzie zwykłą drogą
@@ -519,6 +537,21 @@ async function applyDocumentEditNow(edit, xmlOpts) {
     originalFileBytes = tracking ? after : (await dwbRedline(before, after, { author: normalized.author })).bytes;
     return { n, reload: true };
   }
+  // Akceptuj / Odrzuć wskazanych zmian w treści (nie znaków akapitu, wierszy ani przeniesień):
+  // akapity, w których są — do przerysowania tylko ich (applyDocumentEditHeld)
+  let patch = null;
+  if (normalized.op === "revisions" && (normalized.action === "accept" || normalized.action === "reject") && Array.isArray(normalized.ids) && normalized.ids.length && typeof scanDocxRevisions === "function") {
+    const scan = await scanDocxRevisions(originalFileBytes).catch(() => null);
+    const hit = scan ? scan.changes.filter((c) => normalized.ids.includes(c.id)) : [];
+    if (hit.length && hit.every((c) => c.part === "body" && Number.isFinite(c.paraIndex) && /^(ins|del|format|paraFormat)$/.test(c.kind))) {
+      // skan liczy akapity treści („body”), łatka — wszystkie (jak podgląd): ta sama skala
+      const d = await getDocumentXmlDom(originalFileBytes).catch(() => null);
+      const bodyPs = d ? collectParagraphElements(d.documentElement, "body") : [];
+      const allPs = d ? collectParagraphElements(d.documentElement, "all") : [];
+      const idx = [...new Set(hit.map((c) => allPs.indexOf(bodyPs[c.paraIndex])))];
+      if (idx.length && idx.every((i) => i >= 0)) patch = idx;
+    }
+  }
   recordPendingEdit(normalized);
   const beforeEdit = originalFileBytes;
   const { bytes, changeCount } = await buildPatchedDocx(originalFileBytes, pendingDocEdits, xmlOpts);
@@ -530,5 +563,5 @@ async function applyDocumentEditNow(edit, xmlOpts) {
   if (normalized.quiet && changeCount > 0) return { n: changeCount, reload: false, quiet: true };
   if (docEditIsQuiet(normalized) && changeCount > 0
     && (await getDocumentXmlString(beforeEdit)) === (await getDocumentXmlString(bytes))) return { n: changeCount, reload: false, quiet: true };
-  return { n: changeCount, reload: true };
+  return { n: changeCount, reload: true, patch };
 }

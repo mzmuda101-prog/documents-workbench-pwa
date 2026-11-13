@@ -121,6 +121,30 @@ async function run() {
   check("Cofnij: zmiana wróciła", marks(await fileXml(page, "word/document.xml")) === m0);
   const repEdit = await page.evaluate(() => { const c = [...document.querySelectorAll(".mk-change")].find((x) => x.querySelector(".mk-row-replace")); return c ? { pairs: c.querySelectorAll(".mk-ok").length, head: !!c.querySelector(".mk-tools-main .mk-ok"), rowBtns: c.querySelectorAll(".mk-row-act").length } : null; });
   check("Edycja: przy zamianie jedna para ✓ / ✗ — w nagłówku, bez przycisków w wierszu", repEdit && repEdit.pairs === 1 && repEdit.head && !repEdit.rowBtns, JSON.stringify(repEdit));
+  // Akceptuj / Odrzuć bez przerysowania całego dokumentu — tylko dotknięty akapit; niezmiennik:
+  // widok po łatce = widok po pełnym renderze (tekst, wyspy, dymki), plik = widok
+  {
+    await page.evaluate(() => { window.__renders = 0; const o = window.renderCurrentDocument; if (!o.__wrapped) { window.renderCurrentDocument = async (...a) => { window.__renders++; return o(...a); }; window.renderCurrentDocument.__wrapped = true; } });
+    await page.evaluate(() => { const c = [...document.querySelectorAll(".mk-change")].find((x) => x.querySelector(".mk-row-replace")); c.querySelector(".mk-tools-main .mk-ok").click(); });
+    await idle(page);
+    const snap = () => page.evaluate(async () => {
+      const ps = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"));
+      // akapity tylko do odczytu — jak w korpusie (I2): zapis bierze je z pliku bez zmian
+      const dom = ps.map((p) => (p.dataset.lock ? "[ro]" : previewRunsToPlainText(extractRunsFromPreviewParagraph(p)).replace(/[\t\n\uFEFF]/g, "")));
+      const isl = ps.map((p) => extractRunsFromPreviewParagraph(p).filter((r) => r.island).length).join(",");
+      const xml = (await extractParagraphTextsFromDocx(originalFileBytes)).map((t, i) => (ps[i]?.dataset.lock ? "[ro]" : t.replace(/[\t\n]/g, "")));
+      return { renders: window.__renders, dom: dom.join("¶"), xml: xml.join("¶"), isl, items: dwbMargin._items().map((i) => i.key).sort().join(","), locks: ps.map((p) => p.dataset.lock || "-").join(",") };
+    });
+    const a = await snap();
+    check("✓ zamiany bez pełnego przerysowania dokumentu", a.renders === 0, String(a.renders));
+    check("…po łatce: podgląd = plik", a.dom === a.xml, `${a.dom}\n   ${a.xml}`);
+    await page.evaluate(() => reloadFromBytes(originalFileBytes));
+    await idle(page);
+    const b = await snap();
+    check("…łatka = pełny render (tekst, wyspy, blokady, dymki)", a.dom === b.dom && a.isl === b.isl && a.locks === b.locks && a.items === b.items, JSON.stringify({ a: [a.isl, a.locks, a.items], b: [b.isl, b.locks, b.items] }));
+    await page.evaluate(() => dwbUndo.undo());
+    await idle(page);
+  }
   for (const [act, want] of [["mk-ok", "30"], ["mk-no", "14"]]) {
     await page.evaluate((act) => { const c = [...document.querySelectorAll(".mk-change")].find((x) => x.querySelector(".mk-row-replace")); c.querySelector(`.mk-tools-main .${act}`).click(); }, act);
     await idle(page);
