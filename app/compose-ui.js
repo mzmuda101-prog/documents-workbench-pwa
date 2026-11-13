@@ -362,8 +362,11 @@ const composeUi = (() => {
     const r = anchor.getBoundingClientRect(); // układ widocznego obszaru (iOS z klawiaturą ≠ fixed)
     const viewW = vv ? vv.width : window.innerWidth;
     const viewH = vv ? vv.height : window.innerHeight;
+    const lane = marginLane(el, anchor, viewW);
+    el.style.width = lane ? `${lane.width}px` : "";
+    el.style.maxWidth = lane ? "none" : "";
     const w = el.offsetWidth;
-    const left = Math.max(8, Math.min(r.left, viewW - w - 8));
+    const left = lane ? lane.left : Math.max(8, Math.min(r.left, viewW - w - 8));
     // Pod przyciskiem, a gdy tam się nie mieści — nad nim (jak menu systemowe), żeby okienko nie
     // musiało się przewijać w ścisku (np. „Odpowiedz” w dymku nisko na ekranie laptopa).
     // Gdy nie mieści się nigdzie (telefon z klawiaturą) — po stronie z większym miejscem.
@@ -377,6 +380,23 @@ const composeUi = (() => {
     el.style.maxHeight = `${room}px`;
     el.style.left = `${left + (vv ? vv.offsetLeft : 0)}px`;
     el.style.top = `${top + (vv ? vv.offsetTop : 0)}px`;
+  }
+
+  // Okienko z dymka na marginesie (Odpowiedz / Edytuj) stoi w pasie dymków, nie na kartce:
+  // od dymka w prawo; za wąsko — wolno wejść na prawy margines kartki, ale nie na tekst.
+  // Gdy i to za mało (duże powiększenie, wąskie okno, duże litery) — null = zwykłe położenie.
+  const LANE_MIN = 260, LANE_MAX = 380;
+  function marginLane(el, anchor, viewW) {
+    const card = anchor.closest?.(".mk-card:not(.is-compact)");
+    const vpEl = card && document.getElementById("docViewport");
+    if (!vpEl) return null;
+    const z = parseFloat(el.style.getPropertyValue("--cc-z")) || 1;
+    const textR = Math.max(0, ...[...vpEl.querySelectorAll(".docx-preview-host section.docx")].map((s) => s.getBoundingClientRect().right - (parseFloat(getComputedStyle(s).paddingRight) || 0)));
+    const right = Math.min(viewW, vpEl.getBoundingClientRect().right) - 8;
+    const minW = LANE_MIN * z;
+    const left = Math.max(textR + 8, Math.min(card.getBoundingClientRect().left, right - minW));
+    const width = Math.min(right - left, LANE_MAX * z);
+    return width >= minW ? { left, width } : null;
   }
 
   function openPop(anchor, build) {

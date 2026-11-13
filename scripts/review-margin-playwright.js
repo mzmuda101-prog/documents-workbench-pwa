@@ -166,7 +166,7 @@ async function run() {
   await page.waitForTimeout(400);
   // niski ekran laptopa: pod przyciskiem za mało miejsca — okienko szuka go nad nim, bez przewijania w ścisku
   const vpSize = page.viewportSize();
-  await page.setViewportSize({ width: vpSize.width, height: 720 });
+  await page.setViewportSize({ width: 1300, height: 720 }); // najwęższy pas z dymkami w obu silnikach
   await page.waitForTimeout(300);
   await page.click('[data-key="c:10"] .mk-reply-btn');
   await page.waitForSelector(".compose-pop-comment .cf-rich");
@@ -175,9 +175,12 @@ async function run() {
     const pr = pop.getBoundingClientRect(), ok = pop.querySelector(".lf-ok").getBoundingClientRect();
     const room = Math.max(innerHeight - br.bottom - 16, br.top - 16);
     return { inView: pr.top >= 0 && pr.bottom <= innerHeight + 1, okVisible: ok.bottom <= Math.min(innerHeight, pr.bottom) + 1,
-      coversBtn: pr.bottom > br.top + 1 && pr.top < br.bottom, cramped: pop.scrollHeight > pop.clientHeight + 1 && pop.scrollHeight <= room, h: pop.scrollHeight, room: Math.round(room) };
+      coversBtn: pr.bottom > br.top + 1 && pr.top < br.bottom, cramped: pop.scrollHeight > pop.clientHeight + 1 && pop.scrollHeight + (pop.offsetHeight - pop.clientHeight) <= room, h: pop.scrollHeight, room: Math.round(room),
+      // dymek w pasie obok kartki: okienko też w pasie (najwyżej na prawym marginesie), nie na tekście
+      textR: Math.round(Math.max(...[...document.querySelectorAll(".docx-preview-host section.docx")].map((x) => x.getBoundingClientRect().right - parseFloat(getComputedStyle(x).paddingRight)))), popL: Math.round(pr.left) };
   });
   check("odpowiedź: okienko na ekranie, przyciski widoczne, nie zasłania „Odpowiedz”, bez ścisku", fit.inView && fit.okVisible && !fit.coversBtn && !fit.cramped, JSON.stringify(fit));
+  check("odpowiedź z dymka w pasie: okienko obok kartki, nie na tekście", fit.popL >= fit.textR, JSON.stringify(fit));
   await page.locator(".compose-pop-comment .cf-rich").click();
   await page.keyboard.type("Odpowiedź z dymka");
   await page.click(".compose-pop-comment .lf-ok");
