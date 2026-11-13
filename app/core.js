@@ -21,7 +21,7 @@
   }
 })();
 
-const APP_BUILD_VERSION = "v1.00.35";
+const APP_BUILD_VERSION = "v1.00.36";
 
 const IS_LOW_POWER = (() => {
   try {
@@ -151,6 +151,54 @@ function dismissToast(toastEl) {
   setTimeout(() => toastEl.remove(), 200);
 }
 
+// Palcem: dymek wjeżdża od dołu, więc w dół go zamykamy. Póki palec na nim — idzie 1:1 za palcem
+// (bez przejścia), w górę z oporem; po puszczeniu: 40 px albo szybkie machnięcie = zamknij, inaczej
+// szybki powrót. Przechwyt wskaźnika dopiero po 6 px, żeby stuknięcie w „Cofnij” / ✕ dalej było klikiem.
+const TOAST_SWIPE_SLOP = 6, TOAST_SWIPE_DIST = 40, TOAST_SWIPE_VELOCITY = 0.11; // px/ms
+function attachToastSwipe(toastEl) {
+  let id = null, y0 = 0, t0 = 0, dy = 0, dragging = false;
+  const reduce = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+  toastEl.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse" || id !== null || toastEl.classList.contains("out")) return; // drugi palec ignorujemy
+    id = e.pointerId; y0 = e.clientY; t0 = performance.now(); dy = 0; dragging = false;
+  });
+  toastEl.addEventListener("pointermove", (e) => {
+    if (e.pointerId !== id) return;
+    const raw = e.clientY - y0;
+    if (!dragging) {
+      if (Math.abs(raw) < TOAST_SWIPE_SLOP) return;
+      dragging = true;
+      clearTimeout(toastEl._dwbTimer); // trzymany nie znika spod palca
+      toastEl.style.animation = "none"; // wejście (keyframes) nie może walczyć z palcem
+      toastEl.style.transition = "none";
+      try { toastEl.setPointerCapture(id); } catch (_) {}
+    }
+    dy = raw > 0 ? raw : raw * 0.2; // w górę nie ma dokąd: opór zamiast ściany
+    toastEl.style.transform = `translateY(${dy}px)`;
+    toastEl.style.opacity = String(1 - Math.min(Math.max(dy, 0) / toastEl.offsetHeight, 1) * 0.6);
+  });
+  const end = (e) => {
+    if (e.pointerId !== id) return;
+    id = null;
+    if (!dragging) return;
+    dragging = false;
+    const velocity = dy / Math.max(performance.now() - t0, 1);
+    if (e.type === "pointerup" && (dy >= TOAST_SWIPE_DIST || (dy > 0 && velocity > TOAST_SWIPE_VELOCITY))) {
+      toastEl.style.transition = "opacity 150ms var(--ease-out), transform 150ms var(--ease-out)";
+      if (!reduce()) toastEl.style.transform = `translateY(calc(${Math.max(dy, 0)}px + 100%))`;
+      toastEl.style.opacity = "0"; // styl w linii przebija .out — wygaszamy wprost
+      dismissToast(toastEl);
+      return;
+    }
+    toastEl.style.transition = reduce() ? "none" : "opacity 200ms var(--ease-out), transform 200ms var(--ease-out)";
+    toastEl.style.transform = "";
+    toastEl.style.opacity = "";
+    toastEl._dwbTimer = scheduleToastOut(toastEl, 1600);
+  };
+  toastEl.addEventListener("pointerup", end);
+  toastEl.addEventListener("pointercancel", end);
+}
+
 function toast(msg, type = "info", opts = {}) {
   const hasAction = !!(opts && opts.action && typeof opts.onAction === "function");
   const last = _lastMergeToast;
@@ -202,6 +250,7 @@ function toast(msg, type = "info", opts = {}) {
     if (e.pointerType !== "mouse" || toastEl.classList.contains("out")) return;
     toastEl._dwbTimer = scheduleToastOut(toastEl, 1600);
   });
+  attachToastSwipe(toastEl);
   toastContainerEl.appendChild(toastEl);
   toastEl._dwbTimer = scheduleToastOut(toastEl, opts.duration || toastDuration(type, msg, hasAction));
   _lastMergeToast = !hasAction && TOAST_MERGE_TYPES.has(type) ? { el: toastEl, label, type, at: performance.now() } : null;

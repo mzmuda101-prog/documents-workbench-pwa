@@ -214,6 +214,33 @@ async function main() {
   await openFile(ph.page, HEADINGS, "Umowa-najmu.docx");
   const handle = await ph.page.evaluate(() => getComputedStyle(document.getElementById("panelHandle")).display);
   check("telefon z dokumentem: zamknięty uchwyt panelu schowany (nie zasłania liter)", handle === "none", handle);
+  // dymek palcem: w dół = zamknij, krótko = wraca, stuknięcie w „Cofnij” dalej jest klikiem
+  const swipe = await ph.page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const drag = async (el, steps, msPerStep) => {
+      const r = el.getBoundingClientRect(), x = r.left + 20, y = r.top + 10, o = { pointerId: 7, pointerType: "touch", bubbles: true, clientX: x };
+      el.dispatchEvent(new PointerEvent("pointerdown", { ...o, clientY: y }));
+      for (const dy of steps) { await wait(msPerStep); el.dispatchEvent(new PointerEvent("pointermove", { ...o, clientY: y + dy })); }
+      el.dispatchEvent(new PointerEvent("pointerup", { ...o, clientY: y + steps[steps.length - 1] }));
+    };
+    document.querySelectorAll(".toast").forEach((x) => x.remove());
+    const far = toast("w dół", "warning"); await wait(300);
+    await drag(far, [10, 30, 60], 16); await wait(260);
+    const slow = toast("krótko", "error"); await wait(300);
+    await drag(slow, [8, 12, 16], 120); await wait(260);
+    const back = { alive: slow.isConnected, transform: slow.style.transform };
+    const up = toast("w górę", "error"); await wait(300);
+    await drag(up, [-20, -60], 16);
+    const upAlive = up.isConnected;
+    let acted = 0;
+    const act = toast("akcja", "success", { action: "Cofnij", onAction: () => { acted++; } });
+    act.querySelector(".toast-action").click();
+    return { farGone: !far.isConnected, back, upAlive, acted };
+  });
+  check("telefon: dymek machnięty w dół znika", swipe.farGone, JSON.stringify(swipe));
+  check("telefon: dymek przesunięty o kawałek wraca na miejsce", swipe.back.alive && swipe.back.transform === "", JSON.stringify(swipe));
+  check("telefon: dymek pchnięty w górę zostaje", swipe.upAlive, JSON.stringify(swipe));
+  check("telefon: stuknięcie w „Cofnij” w dymku dalej działa", swipe.acted === 1, JSON.stringify(swipe));
   check("telefon: bez błędów w konsoli", ph.errors.length === 0, ph.errors.slice(0, 3).join(" | "));
   await ph.context.close();
   await browser.close();

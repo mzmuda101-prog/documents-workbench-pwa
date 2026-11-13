@@ -1020,6 +1020,7 @@ html.is-mobile .dwb-page-margin-guide { display: none; }
   display: flex; gap: 10px; align-items: flex-start; min-width: 220px; max-width: 360px;
   padding: 12px 14px; border-radius: var(--r); background: var(--glass-bg-strong);
   border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); animation: toast-in 240ms var(--ease-out);
+  touch-action: pan-x; /* pion należy do gestu „w dół = zamknij” (core.js) */
 }
 .toast.out { opacity: 0; transform: translateY(6px); transition: opacity 150ms var(--ease-out), transform 150ms var(--ease-out); }
 .toast.success { border-color: color-mix(in srgb, var(--success) 40%, var(--border)); }
