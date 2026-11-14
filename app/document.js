@@ -112,6 +112,7 @@ async function ingestFile(file, options = {}) {
     setFileUi(currentFileName, originalFileBytes.byteLength);
     setDirtyState(false);
 
+    if (typeof dwbWalk !== "undefined") dwbWalk.stop(); // przegląd zmian po kolei — dotyczył poprzedniego pliku
     await renderCurrentDocument({ newFile: true });
     if (typeof dwbBugReport !== "undefined") dwbBugReport.startSession(originalFileBytes, currentFileName); // „Zgłoś błąd”: początek sesji
     // śledzenie zmian: stan z karty (open-docs) albo z ustawień pliku (Word ze śledzeniem).

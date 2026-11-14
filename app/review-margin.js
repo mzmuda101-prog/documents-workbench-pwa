@@ -767,7 +767,7 @@ const dwbMargin = (() => {
   }
 
   return {
-    init, schedule, setMode, focusItem,
+    init, schedule, setMode, focusItem, rangeIn, colorOf, // rangeIn, colorOf — przegląd po kolei (review-walk.js)
     mode: () => mode,
     visible: () => showing,
     hasItem: (key) => showing && items.some((it) => it.key === key),

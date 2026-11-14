@@ -1,4 +1,4 @@
-const CACHE_VERSION = "v1.00.43";
+const CACHE_VERSION = "v1.00.44";
 const APP_CACHE = `docs-wb-shell-${CACHE_VERSION}`;
 const HEAVY_CACHE = `docs-wb-heavy-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `docs-wb-runtime-${CACHE_VERSION}`;
@@ -102,6 +102,7 @@ const SHELL_ASSETS = [
   `./app/export-panel.js?v=${ASSET_V}`,
   `./app/stats-panel.js?v=${ASSET_V}`,
   `./app/review-panel.js?v=${ASSET_V}`,
+  `./app/review-walk.js?v=${ASSET_V}`,
   `./app/forms-panel.js?v=${ASSET_V}`,
   `./app/spell-check.js?v=${ASSET_V}`,
   `./app/spell-worker.js?v=${ASSET_V}`,

@@ -7,7 +7,7 @@ const LAZY_FEATURE_SCRIPTS = {
   "find-replace": ["app/find-replace-workbench.js"],
   export: ["app/export-panel.js"],
   stats: ["app/stats-panel.js"],
-  review: ["app/review-panel.js"],
+  review: ["app/review-panel.js", "app/review-walk.js"],
   forms: ["app/forms-panel.js"],
   compare: ["app/compare-describe.js", "app/compare-panel.js"],
 };
