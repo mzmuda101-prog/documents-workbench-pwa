@@ -1948,6 +1948,30 @@ const composeUi = (() => {
       b.dataset.size = name;
       mark(b, sameTw(Math.min(cur.w, cur.h), w) && sameTw(Math.max(cur.w, cur.h), h));
     });
+    // Word: Układ → Kolumny. Zaznaczenie kilku akapitów — kolumny tylko w nim (podziały ciągłe
+    // wokół, jak Word), inaczej sekcja kursora. Linia między kolumnami — przełącznik.
+    const cols = cur.cols || { num: 1, sep: false };
+    const range = ctx.p ? selectedParagraphIndices(ctx.p) : [];
+    const colEdit = (num, sep) => ({ op: "columns", num, sep, index: range.length > 1 ? range[0] : ctx.index, ...(range.length > 1 ? { endIndex: range[range.length - 1] } : {}) });
+    const runCols = async (num, sep) => {
+      if (range.length > 1 && ctx.p?.closest("td, th, .dwb-tb, header, footer")) { toast(t("sectionBreakNoHere"), "info"); return; }
+      pageSetupReflowHint();
+      await runFileEdit(colEdit(num, sep), ctx.p ? caretState(ctx.p) : null);
+    };
+    popCap(el, range.length > 1 ? t("colsCapSel") : t("colsCap"));
+    const colIcon = (n) => ICON(Array.from({ length: n }, (_, i) => { const w = (16 - (n - 1) * 2) / n, x = 4 + i * (w + 2); return `<path d="M${x} 5h${w}M${x} 9h${w}M${x} 13h${w}M${x} 17h${w}"/>`; }).join(""));
+    [[1, "colsOne"], [2, "colsTwo"], [3, "colsThree"]].forEach(([n, key]) => {
+      const b = popItem(el, { label: t(key), icon: colIcon(n), onPick: () => runCols(n, cols.sep) });
+      b.dataset.cols = String(n);
+      mark(b, range.length < 2 && cols.num === n);
+    });
+    if (cols.num > 1 && range.length < 2) {
+      const b = popItem(el, { label: t("colsLine"), icon: ICON('<path d="M4 6h6M4 10h6M4 14h6M14 6h6M14 10h6M14 14h6"/><line x1="12" y1="4" x2="12" y2="18"/>'), onPick: () => runCols(cols.num, !cols.sep) });
+      b.dataset.cols = "sep";
+      b.setAttribute("role", "menuitemcheckbox");
+      b.setAttribute("aria-checked", String(cols.sep));
+      b.classList.toggle("is-current", cols.sep);
+    }
     // Word: Ustawienia strony → Układ → Wyrównanie w pionie — w tym samym okienku (dawniej w „Wstaw”)
     buildPageVAlignMenu(el);
     // Word: Układ → Podziały — podział strony i podziały sekcji (inna orientacja / marginesy / nagłówki dalej)

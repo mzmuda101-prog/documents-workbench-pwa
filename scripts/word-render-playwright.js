@@ -208,7 +208,9 @@ async function run() {
     return { n: sheets.length, texts: sheets.map((s) => s.textContent.replace(/\s+/g, " ").slice(0, 80)), side: a && c ? c.left - a.left : null, rowDiff: a && c ? Math.abs(c.top - a.top) : null };
   });
   check("podgląd wydruku: 3 strony", pp.n === 3, JSON.stringify(pp.texts));
-  check("podgląd wydruku: kolumna prawa obok lewej (ta sama wysokość, przesunięta w prawo)", pp.side > 150 && pp.rowDiff < 40, JSON.stringify(pp));
+  // Word (tools/word-oracle/probe-columns-balance.js): kolumny przed sekcją „następna strona” NIE są
+  // wyrównywane — krótki tekst stoi cały w kolumnie 1 (C pod B); wyrównanie tylko przed sekcją ciągłą
+  check("podgląd wydruku: kolumny jak w Wordzie — przed nową stroną bez wyrównania (C pod A i B, w kolumnie 1)", Math.abs(pp.side) < 10 && pp.rowDiff > 20, JSON.stringify(pp));
 
   // ── tabele (drugi dokument) ──
   await page.evaluate(() => { if (window.dwbPrint?.isOpen()) dwbPrint.close(); if (typeof setDirtyState === "function") setDirtyState(false); });

@@ -133,13 +133,91 @@ const dwbPageBreaks = (() => {
     return !multiColumn(el.closest("article"));
   }
 
-  // Sekcja w kilku kolumnach (sekcja ciągła z w:cols, np. „2 kolumny” w środku strony) — jeden
-  // <article> z column-count. Linijki obu kolumn leżą na tych samych wysokościach, więc liczymy
-  // ją jako jedną całość (jak wiersz tabeli): idzie na następną stronę w całości.
+  // Sekcja w kilku kolumnach (w:cols) — <article> z column-count. Linijki kolumn leżą na tych samych
+  // wysokościach, więc każdy zestaw kolumn (strona, patrz columnPages) liczymy jako całość, jak
+  // wiersz tabeli: odstęp strony staje przed nim, nigdy w środku kolumn.
   function multiColumn(article) {
     if (!article) return false;
     const n = parseInt(getComputedStyle(article).columnCount, 10);
     return n > 1;
+  }
+
+  // Kolumny strona po stronie, jak w Wordzie: kolumna 1, kolumna 2, potem następna strona. Sam CSS
+  // (column-count) rozkładał cały tekst sekcji na dwie długie kolumny przez wszystkie strony —
+  // obok „Akapitu 1” stał „Akapit 36”, a granica strony cięła wiersze. Przed pierwszym blokiem
+  // każdej strony stoi znacznik .dwb-col-break (column-span: all) — przerywa zestaw kolumn, więc
+  // każda strona ma własny. Strony po kolei: bloki z sumy wysokości w szerokości kolumny (offsetHeight
+  // — prostokąty fragmentów w kolumnach WebKit podaje błędnie), potem pomiar zestawu między
+  // znacznikami; wystaje poza stronę — znacznik o blok wcześniej (wyrównywanie kolumn i podział
+  // akapitu między nie bywa o linijkę inne niż suma).
+  // Ostatnia strona kolumn: Word wypełnia najpierw pierwszą kolumnę (wyrównuje tylko przed sekcją
+  // ciągłą — u nas następny <article> tej kartki). Wypełniacz .dwb-col-fill na końcu dopełnia
+  // zestaw do pełnej strony, więc wyrównywanie CSS daje to samo: pełna kolumna 1, reszta w 2.
+  // shortcut: granica strony między akapitami (Word dzieli też akapit) — poprawić, gdy plik z bazy
+  // tego wymaga.
+  const COL_SPAN = ".dwb-page-gap, .dwb-col-break";
+  function columnPages(article, firstAvail, bodyH, scale) {
+    const n = parseInt(getComputedStyle(article).columnCount, 10) || 1;
+    article.querySelectorAll(":scope > .dwb-col-break, :scope > .dwb-col-fill").forEach((x) => x.remove());
+    // odstępy stron z poprzedniego liczenia też przerywają zestaw kolumn (column-span) i zawyżały
+    // pomiar — na czas układania schowane (compute i tak ustawia je od nowa przed zestawami)
+    const hidden = [...article.querySelectorAll(":scope > .dwb-page-gap, :scope > .dwb-page-gap-spacer")];
+    hidden.forEach((g) => { g.style.display = "none"; });
+    try { layColumnPages(article, n, firstAvail, bodyH, scale); } finally { hidden.forEach((g) => { g.style.display = ""; }); }
+  }
+  function layColumnPages(article, n, firstAvail, bodyH, scale) {
+    const blocks = [...article.children].filter((el) => !el.matches(".dwb-page-gap, .dwb-page-gap-spacer"));
+    // kontrola wdów i sierot Worda: podział akapitu zostawia ≥ 2 wiersze z każdej strony, więc akapit
+    // do 3 wierszy nie dzieli się między kolumny (Chrome przy wyrównywaniu łamał swoje widows: 2)
+    for (const el of blocks) {
+      if (el.tagName !== "P") continue;
+      const lh = parseFloat(getComputedStyle(el).lineHeight) || (parseFloat(getComputedStyle(el).fontSize) || 12) * 1.2;
+      el.classList.toggle("dwb-col-keep", el.offsetHeight / lh < 3.5);
+    }
+    const hs = blocks.map((el) => { const cs = getComputedStyle(el); return el.offsetHeight + (parseFloat(cs.marginTop) || 0) + (parseFloat(cs.marginBottom) || 0); });
+    const edit = !!article.closest(".docx-edit-root");
+    const mk = (cls) => { const x = document.createElement("div"); x.className = cls; x.setAttribute("aria-hidden", "true"); if (edit) x.contentEditable = "false"; return x; };
+    // przed odstępem strony, jeśli już stoi przed blokiem (kolejność: znacznik, odstęp, blok)
+    const at = (el) => { let x = el; while (x.previousElementSibling?.matches(".dwb-page-gap, .dwb-page-gap-spacer")) x = x.previousElementSibling; return x; };
+    // góra zestawu: dół znacznika poprzedniej strony, inaczej góra sekcji (odstępy schowane)
+    const setTop = (first, prevBr) => () => (prevBr ? prevBr.getBoundingClientRect().bottom : article.getBoundingClientRect().top);
+    let i = 0, page = 0, prev = null, used = 0;
+    for (;;) {
+      const allowed = page === 0 ? Math.max(0, firstAvail) : bodyH;
+      let j = i;
+      used = 0;
+      while (j < blocks.length && (j === i || used + hs[j] <= n * allowed)) used += hs[j++];
+      if (j >= blocks.length) break; // reszta mieści się na tej stronie — ostatnia
+      const br = mk("dwb-col-break");
+      at(blocks[j]).before(br);
+      const from = setTop(blocks[i], prev);
+      const height = () => (br.getBoundingClientRect().top - from()) / scale;
+      while (j > i + 1 && height() > allowed + 0.5) { j--; at(blocks[j]).before(br); }
+      i = j; page++; prev = br;
+      used = 0;
+    }
+    if (article.nextElementSibling?.matches("article")) {
+      // przed sekcją ciągłą Word wyrównuje kolumny i zostawia odstęp „po” ostatniego akapitu (CSS
+      // obcina marginesy na końcu kolumn — tekst pod kolumnami stał ~1 odstęp za wysoko)
+      const lastBlock = blocks[blocks.length - 1];
+      article.style.paddingBottom = lastBlock ? `${parseFloat(getComputedStyle(lastBlock).marginBottom) || 0}px` : "";
+      return;
+    }
+    const allowed = page === 0 ? Math.max(0, firstAvail) : bodyH;
+    let fillH = Math.floor(n * allowed - used);
+    if (fillH <= 0) return;
+    const fill = mk("dwb-col-fill");
+    article.appendChild(fill);
+    const lastTop = setTop(blocks[i], prev);
+    const lastH = () => (article.getBoundingClientRect().bottom - lastTop()) / scale;
+    // wypełniacz o tyle mniejszy, o ile zestaw wystaje (podział akapitów między kolumny)
+    for (let guard = 0; guard < 6 && fillH > 0; guard++) {
+      fill.style.height = `${fillH}px`;
+      const over = lastH() - allowed;
+      if (over <= 0.5) break;
+      fillH = Math.floor(fillH - Math.max(n * over, 4));
+    }
+    if (fillH <= 0) fill.remove();
   }
 
   // Linijki treści kartki (y w układzie kartki, bez zoomu): akapity rozbite na wiersze tekstu,
@@ -170,9 +248,20 @@ const dwbPageBreaks = (() => {
         el, i, n: lines.length, row, next, together, widow }));
     };
     if (multiColumn(article)) {
-      const r = article.getBoundingClientRect();
-      if (r.height) add(article, [[r.top, r.bottom]], true);
-      out[out.length - 1] && (out[out.length - 1].multi = true);
+      // każdy zestaw kolumn (strona) = całość: od elementu „na całą szerokość” tuż przed pierwszym
+      // blokiem (odstęp strony / znacznik) do następnego znacznika — prostokąty akapitów w kolumnach
+      // WebKit podaje błędnie, a te elementy leżą zwyczajnie w przepływie
+      const ar = article.getBoundingClientRect();
+      const breaks = [...article.querySelectorAll(":scope > .dwb-col-break")];
+      [null, ...breaks].forEach((br, k) => {
+        let el = br ? br.nextElementSibling : article.firstElementChild;
+        while (el?.matches(`${COL_SPAN}, .dwb-page-gap-spacer, .dwb-col-fill`)) el = el.nextElementSibling;
+        if (!el) return;
+        const before = el.previousElementSibling;
+        const top = before?.matches(COL_SPAN) ? before.getBoundingClientRect().bottom : ar.top;
+        const bottom = breaks[k] ? breaks[k].getBoundingClientRect().top : ar.bottom;
+        if (bottom > top) { add(el, [[top, bottom]], true); out[out.length - 1].multi = true; }
+      });
       return out;
     }
     article.querySelectorAll("p, tr").forEach((el) => {
@@ -311,6 +400,14 @@ const dwbPageBreaks = (() => {
       if (dist >= 0 && fh > 0) bottomZone = Math.max(padB, dist + fh);
     }
     const bodyH = pageH - padT - bottomZone;
+    // kolumny strona po stronie: znaczniki zestawów kolumn przed liczeniem linijek. Pierwsza strona
+    // kolumn zaczyna się tam, gdzie sekcja w kolumnach (położenie bez odstępów stron nad nią).
+    for (const a of articles) {
+      if (!multiColumn(a)) continue;
+      let top = (a.getBoundingClientRect().top - secRect.top) / scale;
+      for (const g of sec.querySelectorAll(":scope > article > .dwb-page-gap")) if (g.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING) top -= parseFloat(g.dataset.shift) || 0;
+      columnPages(a, top < pageH - bottomZone ? pageH - bottomZone - top : bodyH, bodyH, scale);
+    }
     const contentTop = (article.getBoundingClientRect().top - secRect.top) / scale;
     const out = { sec, pageW, pageH, padT, padB, padL, padR, bodyH, bottomZone, contentTop, cuts: [], end: contentTop };
     if (!(bodyH > 40)) return out;
@@ -380,7 +477,7 @@ const dwbPageBreaks = (() => {
         let line = 0; // > 0: granica w środku akapitu, przed jego wierszem nr line
         if (blockBreaks) {
           if (u[b].multi) {
-            block = null; // kolumny: granica strony jako kreska, bez odstępu w środku kolumn
+            block = u[b].el; // zestaw kolumn (strona) w całości: odstęp przed nim (column-span: all)
           } else if (u[b].row) {
             // tabela przechodzi w całości (gdy się mieści na stronie)
             const head = u.findIndex((x) => x.row && topBlock(x.el, article) === topBlock(u[b].el, article));
@@ -566,7 +663,7 @@ const dwbPageBreaks = (() => {
     if (!h) return;
     const on = enabled() && !(typeof shouldUseMobileReflow === "function" && shouldUseMobileReflow());
     rootEl.classList.toggle("page-breaks-on", on);
-    if (!on || docCanvasEl.classList.contains("hidden")) { clear(h); relayoutTextboxes(h); return; }
+    if (!on || docCanvasEl.classList.contains("hidden")) { clear(h); h.querySelectorAll(".dwb-col-break, .dwb-col-fill").forEach((b) => b.remove()); relayoutTextboxes(h); return; }
     await ensureKeepInfo();
     if (myRun !== run) return; // w międzyczasie zaczęło się nowsze liczenie
     let page = 1;
@@ -600,7 +697,7 @@ const dwbPageBreaks = (() => {
             continue;
           }
           let prev = block.previousElementSibling;
-          while (prev?.matches(".dwb-page-gap, .dwb-page-gap-spacer")) prev = prev.previousElementSibling;
+          while (prev?.matches(".dwb-page-gap, .dwb-page-gap-spacer, .dwb-col-break")) prev = prev.previousElementSibling;
           const mb = prev ? Math.max(0, parseFloat(getComputedStyle(prev).marginBottom) || 0) : 0;
           const mt = Math.max(0, parseFloat(getComputedStyle(block).marginTop) || 0);
           // z odstępem między blokami ich marginesy już się nie łączą (mb + mt zamiast max)

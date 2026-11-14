@@ -37,7 +37,10 @@ orientacja, rozmiar, wyrównanie w pionie), śledzenie zmian i recenzja.
 | 8 | **Tabela w tabeli** ✅ już działało (Wstaw → Tabela z kursorem w komórce); test table-cell pilnuje | 2 | Wstaw tabelę w komórce | Mapy z PDF tak wyglądają. |
 | 9 | **Style tabel (galeria)** | 12 (zwykle sama „Tabela – siatka”) | Projekt tabeli → Style | Niski zysk: pliki rzadko mają coś ponad siatkę. |
 
-Bez plików w bazie, ale Word to ma (w kolejce z planu): kolumny tekstu, znak wodny, sortowanie
+Bez plików w bazie, ale Word to ma (w kolejce z planu): ✅ kolumny tekstu (Układ → Kolumny: jedna /
+dwie / trzy, linia między kolumnami, zaznaczony fragment z podziałami ciągłymi; kolumny strona po
+stronie w podglądzie i wydruku jak w Wordzie — v1.00.55; kolumny nierównej szerokości na później),
+znak wodny, sortowanie
 tabeli, edytor równań, Alt+X. Jeszcze dalej: inicjał, obramowanie strony, podpisy i odsyłacze
 („Rysunek 1”), kształty, wykresy, SmartArt.
 
@@ -55,7 +58,7 @@ pod prawym przyciskiem. Na telefonie (do 480 px) te same menu, przyciski jako ik
 | **Przycisk odstępów** („Akapit” w Wordzie) | interlinia, wcięcia, odstępy, „Więcej…” | „Tabulatory…” (pozycja, wyrównanie, kropki) — jak przycisk „Tabulatory” w oknie Akapit |
 | **Krój / rozmiar** | krój, rozmiar, większa / mniejsza | „Czcionka…” (Ctrl/⌘+D): odstęp znaków, kapitaliki, wersaliki, przekreślenie podwójne |
 | **Wstaw** | obiekty: tabela, obraz, pole tekstowe, symbol, przypis, link, spis treści… | równanie, podpis „Rysunek 1” |
-| **Układ** | strona: marginesy, orientacja, rozmiar, wyrównanie w pionie | „Podziały” (sekcja: następna strona), „Kolumny”, „Znak wodny”, obramowanie strony |
+| **Układ** | strona: marginesy, orientacja, rozmiar, kolumny ✅, wyrównanie w pionie, podziały ✅ | „Znak wodny”, obramowanie strony |
 | **Karta obrazu** (przy zaznaczonym obrazie) | rozmiar, opis, zamiana | „Zawijanie” — jak przycisk „Opcje układu” obok obrazu w Wordzie |
 | **Tabela** (gdy kursor w tabeli) | wiersze, kolumny, scalanie, nagłówek, cieniowanie, krawędzie; szerokość kolumn i wysokość wierszy przeciąganiem krawędzi (mysz) | wyrównanie w komórce (góra / środek / dół), kierunek tekstu, sortowanie, tabela w komórce |
 | **Recenzja** (panel + tryb Sugerowanie) | zmiany, komentarze, przegląd po kolei ✅ | — |

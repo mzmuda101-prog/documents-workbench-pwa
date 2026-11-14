@@ -3150,7 +3150,11 @@ body:not(.has-document) #printPreviewMenuItem, body:not(.has-document) #pageSetu
 
 /* Odstępy między stronami w Edycji (page-breaks.js): niewidoczny odstęp przed pierwszym blokiem
    strony + pas przerwy w kolorze tła obszaru, wystający poza kartkę (krawędzie dwóch arkuszy) */
-.dwb-page-gap { display: block; height: 0; margin: 0; padding: 0; border: 0; user-select: none; }
+.dwb-page-gap { display: block; height: 0; margin: 0; padding: 0; border: 0; user-select: none; column-span: all; }
+/* kolumny strona po stronie (page-breaks.js columnPages): przerywa zestaw kolumn — każda strona własny */
+.dwb-col-break { display: block; height: 0; margin: 0; padding: 0; border: 0; column-span: all; user-select: none; }
+.dwb-col-fill { display: block; margin: 0; padding: 0; border: 0; user-select: none; }
+.dwb-col-keep { break-inside: avoid; }
 /* granica w środku akapitu (jak w Wordzie): „dystans” o zerowej szerokości do linijki granicy,
    pod nim pas pełnej szerokości — wiersze akapitu, które by na niego wpadły, schodzą pod niego */
 .dwb-page-gap-spacer { float: left; width: 0; height: 0; margin: 0; padding: 0; border: 0; user-select: none; }

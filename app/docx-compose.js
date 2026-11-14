@@ -1594,7 +1594,60 @@ function composeSectionPageSetup(doc, index) {
     w, h, orient: pgSz?.getAttributeNS(W_NS, "orient") === "landscape" || w > h ? "landscape" : "portrait",
     top: num(mar, "top", 1418), bottom: num(mar, "bottom", 1418), left: num(mar, "left", 1418), right: num(mar, "right", 1418),
     sections: composeAllSections(doc).length || 1,
+    cols: composeSectionCols(sect),
   };
+}
+// Kolumny sekcji: { num, sep } (brak w:cols / w:num = jedna)
+function composeSectionCols(sect) {
+  const cols = composeDirectChild(sect, "cols");
+  const n = parseInt(cols?.getAttributeNS(W_NS, "num") || "", 10);
+  const sep = cols?.getAttributeNS(W_NS, "sep");
+  return { num: n > 1 ? n : 1, sep: !!sep && !/^(0|false|off)$/i.test(sep) };
+}
+
+// ── op "columns": Układ → Kolumny jak w Wordzie ─────────────────────────────────────────────────
+// { index, endIndex?, num, sep }: bez zaznaczenia — sekcja kursora; zaznaczenie kilku akapitów —
+// podziały CIĄGŁE przed i za nim (Word robi tak samo), kolumny tylko w tym fragmencie. Kolumny równej
+// szerokości (podgląd nie rysuje nierównych), odstęp 1,25 cm, w:sep = linia między kolumnami.
+function applyColumnsInXml(xml, edit) {
+  const doc = composeParse(xml);
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  const num = Math.max(1, Math.min(3, edit.num | 0 || 1));
+  // koniec sekcji za akapitem i (jak podział sekcji „ciągły”; dalsza część dziedziczy nagłówki)
+  const splitAfter = (i) => {
+    const p = paragraphs[i];
+    if (!p) return false;
+    if (composeDirectChild(composeDirectChild(p, "pPr") || p, "sectPr")) return true; // już koniec sekcji
+    if (p.parentNode?.localName !== "body") return false; // w tabeli / polu — Word też tam nie dzieli
+    let next = p.nextSibling;
+    while (next && (next.nodeType !== 1 || next.localName === "sectPr")) next = next.nextSibling;
+    if (!next) return true; // ostatni akapit dokumentu — koniec sekcji i tak
+    const later = composeSectionAt(doc, i);
+    const earlier = later.cloneNode(true);
+    Array.from(later.childNodes).filter((n) => n.nodeType === 1 && ["headerReference", "footerReference", "type"].includes(n.localName)).forEach((n) => later.removeChild(n));
+    later.insertBefore(composeEl(doc, "type", { val: "continuous" }), Array.from(later.childNodes).find((n) => n.nodeType === 1 && !["footnotePr", "endnotePr"].includes(n.localName)) || null);
+    composeSetPPrChild(composeEnsurePPr(p), "sectPr", earlier);
+    return true;
+  };
+  let at = edit.index | 0;
+  if (edit.endIndex != null && edit.endIndex > at) {
+    const a = at, b = edit.endIndex | 0;
+    // najpierw koniec fragmentu, potem jego początek (indeksy akapitów się nie zmieniają)
+    if (!splitAfter(b) || (a > 0 && !splitAfter(a - 1))) return { xml, count: 0 };
+    at = b;
+  }
+  const sect = composeSectionAt(doc, at);
+  let cols = composeDirectChild(sect, "cols");
+  if (!cols) {
+    cols = composeEl(doc, "cols");
+    sect.insertBefore(cols, COMPOSE_SECT_AFTER_PGNUM.slice(1).map((n) => composeDirectChild(sect, n)).find(Boolean) || null);
+  }
+  while (cols.firstChild) cols.removeChild(cols.firstChild); // nierówne szerokości (w:col) — teraz równe
+  ["num", "sep", "equalWidth"].forEach((a) => cols.removeAttributeNS(W_NS, a));
+  if (!cols.getAttributeNS(W_NS, "space")) cols.setAttributeNS(W_NS, "w:space", "708");
+  if (num > 1) cols.setAttributeNS(W_NS, "w:num", String(num));
+  if (num > 1 && edit.sep) cols.setAttributeNS(W_NS, "w:sep", "1");
+  return { xml: composeSerialize(doc), count: 1 };
 }
 function composeEnsurePageEls(doc, sect) {
   let pgSz = composeDirectChild(sect, "pgSz");

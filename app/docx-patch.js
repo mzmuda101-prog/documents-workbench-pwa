@@ -941,7 +941,8 @@ function applyEditToXml(xml, edit, opts = {}) {
   if (edit.op === "snippetExpand") return applySnippetExpandInXml(xml, edit.snippets, scope);
   if (edit.op === "splitParagraph") return splitParagraphInXml(xml, edit.index, edit.before, edit.after, edit.beforeRuns, edit.afterRuns, edit.nextNormal);
   if (edit.op === "pageBreak") return applyPageBreakInXml(xml, edit);
-  if (edit.op === "sectionBreak") return applySectionBreakInXml(xml, edit); // docx-compose.js // docx-compose.js
+  if (edit.op === "sectionBreak") return applySectionBreakInXml(xml, edit);
+  if (edit.op === "columns") return applyColumnsInXml(xml, edit); // docx-compose.js // docx-compose.js // docx-compose.js
   if (edit.op === "hrule") return applyHruleInXml(xml, edit);
   if (edit.op === "pageVAlign") return applyPageVAlignInXml(xml, edit); // docx-compose.js
   if (edit.op === "pageSetup") return applyPageSetupInXml(xml, edit); // docx-compose.js

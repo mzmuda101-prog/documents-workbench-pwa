@@ -64,8 +64,8 @@ async function run() {
 
   // ── marginesy: gotowe ──
   await openLayout();
-  const menu = await page.evaluate(() => [...document.querySelectorAll(".compose-pop .compose-item")].filter((b) => b.getAttribute("aria-checked") === "true").map((b) => b.dataset.preset || b.dataset.orient || b.dataset.size || b.dataset.v));
-  check("„Układ” na pasku: zaznaczone obecne ustawienia (Normalne, pionowa, A4, do góry)", JSON.stringify(menu) === JSON.stringify(["normal", "portrait", "A4", "top"]), JSON.stringify(menu));
+  const menu = await page.evaluate(() => [...document.querySelectorAll(".compose-pop .compose-item")].filter((b) => b.getAttribute("aria-checked") === "true").map((b) => b.dataset.preset || b.dataset.orient || b.dataset.size || (b.dataset.cols && `kol${b.dataset.cols}`) || b.dataset.v));
+  check("„Układ” na pasku: zaznaczone obecne ustawienia (Normalne, pionowa, A4, jedna kolumna, do góry)", JSON.stringify(menu) === JSON.stringify(["normal", "portrait", "A4", "kol1", "top"]), JSON.stringify(menu));
   await page.keyboard.press("Escape");
   await page.click("#insertMenuBtn");
   const insertItems = await page.evaluate(() => [...document.querySelectorAll(".compose-pop-insert .compose-item-label")].map((x) => x.textContent));
