@@ -2889,7 +2889,7 @@ const composeUi = (() => {
     popCap(el, t("imageWrap"));
     const cur = wrapModeOf(img);
     [["inline", "wrapInline", "wrapInlineDesc"], ["square", "wrapSquare", "wrapSquareDesc"], ["topBottom", "wrapTopBottom", "wrapTopBottomDesc"], ["behind", "wrapBehind", "wrapBehindDesc"], ["front", "wrapFront", "wrapFrontDesc"]].forEach(([mode, key, desc]) => {
-      const b = popItem(el, { label: t(key), desc: t(desc), icon: ICON(WRAP_ICONS[mode]), onPick: () => imageEdit(index, { action: "wrap", wrap: mode }) });
+      const b = popItem(el, { label: t(key), desc: t(desc), icon: ICON(WRAP_ICONS[mode]), onPick: () => imageEdit(index, { action: "wrap", wrap: mode }, true, img) });
       b.dataset.wrap = mode;
       b.setAttribute("role", "menuitemradio");
       b.setAttribute("aria-checked", String(mode === cur));
@@ -2897,12 +2897,17 @@ const composeUi = (() => {
     });
   }
 
-  async function imageEdit(index, edit, reselect = true) {
+  async function imageEdit(index, edit, reselect = true, img0 = imgCard?.index === index ? imgCard.img : null) {
+    // który obraz akapitu (przy kilku obrazach / polu tekstowym obok) — ten z karty albo podany
+    // (menu zawijania: wybór zamyka kartę, więc obraz przychodzi z menu)
+    const tg = img0?.isConnected ? imageTarget(img0) : null;
+    const which = tg && tg.paraIndex === index ? { nth: tg.nth, count: tg.count } : {};
     if (imgCard && reselect) imgCard.busy = true;
-    await applyDocumentEdit({ op: "image", index, ...edit }).catch((err) => log(`Obraz: ${err.message || err}`, "error"));
+    await applyDocumentEdit({ op: "image", index, ...which, ...edit }).catch((err) => log(`Obraz: ${err.message || err}`, "error"));
     if (!reselect) return;
     await whenEditable();
-    const img = collectPreviewParagraphElements(host())[index]?.querySelector("img");
+    const imgs = docImageTargets(host()).filter((x) => x.paraIndex === index);
+    const img = (imgs[which.nth | 0] || imgs[0])?.img;
     if (!img || readOnlyMode) { hideImageCard(); return; }
     if (imgCard?.el.isConnected && imgCard.index === index) {
       imgCard.img.classList.remove("img-selected");

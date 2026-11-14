@@ -2645,13 +2645,17 @@ function composeWrapDrawing(doc, p, box, mode) {
   return anchor;
 }
 
-// op "image": { index, action: "size" (widthPct) | "align" (align) | "alt" (descr) | "delete" | "wrap" (wrap) }
-// Działa na pierwszym obrazie akapitu — także z plików z Worda (wp:inline albo wp:anchor).
+// op "image": { index, nth, count, action: "size" (widthPct) | "align" (align) | "alt" (descr) | "delete" | "wrap" (wrap) }
+// Obraz akapitu nr nth (jak w podglądzie — docImageTargets; count = ile ich tam jest; bez nth —
+// pierwszy). Dawniej zawsze pierwszy w:drawing akapitu: przy dwóch obrazach zmieniał się nie ten,
+// a pole tekstowe przed obrazem dostawało jego rozmiar / zawijanie. Także z plików z Worda.
 function applyImageInXml(xml, edit) {
   const doc = composeParse(xml);
   const paragraphs = collectParagraphElements(doc.documentElement, "all");
   const p = paragraphs[edit.index];
-  const drawing = p?.getElementsByTagNameNS(W_NS, "drawing")[0];
+  const runs = p ? composeImageRuns(p) : [];
+  if (edit.count != null && runs.length !== edit.count) return { xml, count: 0 }; // podgląd ≠ plik — nic nie zgadujemy
+  const drawing = runs[edit.nth | 0]?.getElementsByTagNameNS(W_NS, "drawing")[0];
   const box = drawing && Array.from(drawing.childNodes).find((n) => n.nodeType === 1 && (n.localName === "inline" || n.localName === "anchor"));
   if (!box) return { xml, count: 0 };
   const extent = Array.from(box.childNodes).find((n) => n.localName === "extent");

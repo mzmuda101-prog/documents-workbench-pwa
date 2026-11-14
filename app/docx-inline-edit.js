@@ -233,6 +233,9 @@ function stampCommentMarks(xp, el, nextKey, noteLabels = []) {
       span.dataset.cmKind = "obj-mark";
       span.contentEditable = "false";
       span.className = "cm-mark";
+      // tuż za obrazem w linii (ten sam punkt tekstu) — za NIM, nie na początku miejsca: obraz pływający
+      // po obrazie w linii lądował przed nim i zapis akapitu zamieniał je miejscami (przegląd 2026-11-14)
+      if (afterObj?.offset === offset) { afterObj.el.after(span); afterObj.el = span; return; }
       if (!groups.has(offset)) groups.set(offset, []);
       groups.get(offset).push(span);
       return;

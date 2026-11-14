@@ -236,6 +236,23 @@ function layoutTabStops(host) {
         range.setStartAfter(sp);
         if (next) range.setEndBefore(next);
         else range.setEndAfter(p.lastChild || p);
+        // dziesiętny: do pozycji dochodzi separator, nie koniec tekstu (dawniej jak prawy — „12,50”
+        // kończyło się na pozycji). Jak Word (tools/word-oracle/probe-tab-decimal.js): PIERWSZY przecinek
+        // albo kropka przed cyfrą („1.234,50” — kropka); bez separatora — koniec tekstu
+        if (stop.style === "decimal") {
+          const at = range.toString().search(/[.,](?=\d)/);
+          if (at >= 0) {
+            const tw = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+            let left = at;
+            for (let t = tw.nextNode(); t; t = tw.nextNode()) {
+              if (!range.intersectsNode(t) || sp.contains(t)) continue;
+              const from = t === range.startContainer ? range.startOffset : 0;
+              const len = t.data.length - from;
+              if (left <= len) { range.setEnd(t, from + left); break; }
+              left -= len;
+            }
+          }
+        }
         after = (range.getBoundingClientRect().width / scale) * PX2PT;
         if (stop.style === "center") after /= 2;
       }

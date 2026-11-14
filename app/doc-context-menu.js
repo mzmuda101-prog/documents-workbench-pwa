@@ -257,13 +257,15 @@ const dwbDocMenu = (() => {
       commentId: commentAt(r),
       revisions: typeof dwbMargin !== "undefined" && p ? dwbMargin.revisionsAt(p) : [],
       // obraz w akapicie (też „za tekstem” — tekst leży nad nim i klik go nie łapie; Word: Zaznacz obiekty)
-      image: readOnlyMode ? null : imageAt(point) || p?.querySelector("img") || null,
+      image: readOnlyMode ? null : imageAt(point) || p?.querySelector("img") || null, // (p — akapit z kursorem)
     };
   }
   // obraz pod wskazanym miejscem (także pływający pod tekstem innego akapitu)
   function imageAt(point) {
     if (!point || !Number.isFinite(point.x)) return null;
-    return [...(host()?.querySelectorAll("img") || [])].find((im) => { const b = im.getBoundingClientRect(); return b.width && point.x >= b.left && point.x <= b.right && point.y >= b.top && point.y <= b.bottom; }) || null;
+    // tylko obraz w akapicie (karta obrazu działa na akapicie); tło zakotwiczone do strony (np. skan z
+    // PDF) leży w podglądzie poza akapitami — bez polecenia, które nic by nie zrobiło
+    return [...(host()?.querySelectorAll("p img") || [])].find((im) => { const b = im.getBoundingClientRect(); return b.width && point.x >= b.left && point.x <= b.right && point.y >= b.top && point.y <= b.bottom; }) || null;
   }
   function open(point, { viaKeyboard = false } = {}) {
     if (!originalFileBytes) return false;
