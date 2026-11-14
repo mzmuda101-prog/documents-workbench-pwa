@@ -27,7 +27,7 @@ orientacja, rozmiar, wyrównanie w pionie), śledzenie zmian i recenzja.
 
 | # | Brak | Plików | Co w Wordzie | Uwagi |
 |---|---|---|---|---|
-| 1 | **Własne style: utwórz / zmień** | 17 z 24 | Style → Utwórz styl, Modyfikuj | Pisma urzędowe i foldery mają 18–34 własnych stylów. Dziś można tylko wybrać z 8 stałych. Najpierw: „Nowy styl z zaznaczenia” i „Zaktualizuj styl do zaznaczenia”. |
+| 1 | **Własne style: utwórz / zmień** ✅ utwórz z zaznaczenia, zaktualizuj, style pliku na liście (v1.00.45); dalej „Zmień styl…” | 17 z 24 | Style → Utwórz styl, Modyfikuj | Pisma urzędowe i foldery mają 18–34 własnych stylów. Dziś można tylko wybrać z 8 stałych. Najpierw: „Nowy styl z zaznaczenia” i „Zaktualizuj styl do zaznaczenia”. |
 | 2 | **Format numeracji list** | 13 z 24 | Numerowanie → a) / i. / I. / 1.1. | Pliki używają liter i rzymskich. Dziś tylko domyślne „1.” (poziomy dają a., i. same). Do tego: zacznij od nowa / kontynuuj numerację, wielopoziomowa „1.1.1”. |
 | 3 | **Tabulatory od zera** | 10 z 24 (3 prawe / środkowe / dziesiętne, 2 z kropkami) | Linijka, Akapit → Tabulatory | Dziś da się tylko przesunąć istniejące kropki. Potrzebne okienko „Tabulatory” (pozycja, wyrównanie, wypełnienie) i może linijka. |
 | 4 | **Obraz pływający i zawijanie tekstu** | 5 (4 za tekstem) | Zawijanie: przyległe, za tekstem, przed tekstem | Już w planie (punkt 4). Pliki z PDF mają tło-skan „za tekstem”. |
@@ -40,6 +40,26 @@ orientacja, rozmiar, wyrównanie w pionie), śledzenie zmian i recenzja.
 Bez plików w bazie, ale Word to ma (w kolejce z planu): kolumny tekstu, znak wodny, sortowanie
 tabeli, edytor równań, Alt+X. Jeszcze dalej: inicjał, obramowanie strony, podpisy i odsyłacze
 („Rysunek 1”), kształty, wykresy, SmartArt.
+
+## Gdzie co ma być (nawigacja)
+
+Prośba Mateusza: nowe funkcje nie mogą lądować byle gdzie — bierzemy z Worda to, co dobre
+(rzecz tam, gdzie się jej szuka; szybkie polecenia blisko, pełne okno o krok dalej), bez kopiowania
+wstążki 1:1 (telefon). Zasada: **każde polecenie ma jeden dom**, do tego ewentualnie skrót i menu
+pod prawym przyciskiem. Na telefonie (do 480 px) te same menu, przyciski jako ikony.
+
+| Dom | Co tam jest | Co dojdzie (z listy braków) |
+|---|---|---|
+| **Lista stylów** (pasek Edycji) | style, „Style tego dokumentu”, Nowy styl z zaznaczenia, Zaktualizuj styl ✅ | „Zmień styl…” (okno: nazwa, krój, rozmiar, kolor, wyrównanie, odstępy, bazowy, następny) |
+| **Przycisk listy** (jak strzałka przy numeracji w Wordzie) | punktory, numeracja, poziom | format numeracji: 1. / 1) / a) / i. / I. / 1.1.1, „Numeruj od nowa”, „Kontynuuj numerację” |
+| **Przycisk odstępów** („Akapit” w Wordzie) | interlinia, wcięcia, odstępy, „Więcej…” | „Tabulatory…” (pozycja, wyrównanie, kropki) — jak przycisk „Tabulatory” w oknie Akapit |
+| **Krój / rozmiar** | krój, rozmiar, większa / mniejsza | „Czcionka…” (Ctrl/⌘+D): odstęp znaków, kapitaliki, wersaliki, przekreślenie podwójne |
+| **Wstaw** | obiekty: tabela, obraz, pole tekstowe, symbol, przypis, link, spis treści… | równanie, podpis „Rysunek 1” |
+| **Układ** | strona: marginesy, orientacja, rozmiar, wyrównanie w pionie | „Podziały” (sekcja: następna strona), „Kolumny”, „Znak wodny”, obramowanie strony |
+| **Karta obrazu** (przy zaznaczonym obrazie) | rozmiar, opis, zamiana | „Zawijanie” — jak przycisk „Opcje układu” obok obrazu w Wordzie |
+| **Tabela** (gdy kursor w tabeli) | wiersze, kolumny, scalanie, nagłówek, cieniowanie, krawędzie | wyrównanie w komórce (góra / środek / dół), kierunek tekstu, sortowanie, tabela w komórce |
+| **Recenzja** (panel + tryb Sugerowanie) | zmiany, komentarze, przegląd po kolei ✅ | — |
+| **Prawy przycisk** | najczęstsze: wytnij / kopiuj / wklej, styl, lista, komentarz, recenzja | „Akapit…”, „Czcionka…” (jak w Wordzie) |
 
 ## Jak to sprawdzać
 

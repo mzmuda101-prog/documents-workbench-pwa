@@ -1193,6 +1193,12 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
       total += res.count;
       continue;
     }
+    if (normalized.op === "styleCreate" || normalized.op === "styleUpdate") { // docx-compose.js — własne style
+      const res = await applyStyleInZip(zip, xml, normalized);
+      xml = res.xml;
+      total += res.count;
+      continue;
+    }
     if (normalized.op === "noteInsert") { // doc-notes.js — nowy przypis: część footnotes/endnotes, style, odnośnik
       const res = await applyNoteInsertInZip(zip, xml, normalized);
       xml = res.xml;

@@ -96,9 +96,51 @@ const composeUi = (() => {
   async function applyStyle(key) {
     const p = caretParagraph();
     if (!p || key.startsWith("plus:")) { syncState(); return; } // „Normalny + ramka” — to tylko stan
+    if (key === "act:new" || key === "act:update") { styleSel.blur(); syncState(); await styleAction(key, p); return; } // lista wraca do stylu akapitu
     // jak w Wordzie: nadanie stylu (także tego samego) zdejmuje bezpośrednie formatowanie akapitu —
     // tak wychodzi się z ramki/tła dodanych wprost (lista pokazuje wtedy „Normalny + ramka”)
     await runFileEdit({ op: "paraFormat", indices: selectedParagraphIndices(p), style: key, resetDirect: true }, caretState(p));
+  }
+
+  // Nowy styl z zaznaczenia / Zaktualizuj styl do zaznaczenia (jak szybkie polecenia stylów w Wordzie;
+  // docx-compose.js applyStyleInZip) — wygląd akapitu z kursorem trafia do stylu
+  function styleNameOf(key) {
+    const opt = Array.from(styleSel?.options || []).find((o) => o.value === key && !o.dataset.plus);
+    if (opt) return opt.textContent;
+    return key.startsWith("custom:") && typeof composeStyleDisplayName === "function" ? composeStyleDisplayName(key.slice(7)) : key;
+  }
+  function knownStyleNames() {
+    const names = new Set(Array.from(styleSel?.options || []).filter((o) => !o.value.startsWith("act:") && !o.dataset.plus).map((o) => o.textContent.trim().toLowerCase()));
+    if (typeof docComposeStyleClasses !== "undefined") docComposeStyleClasses.forEach((k) => { if (k.startsWith("custom:")) names.add(k.slice(7).trim().toLowerCase()); });
+    Object.values(typeof COMPOSE_STYLE_DEFS !== "undefined" ? COMPOSE_STYLE_DEFS : {}).forEach((d) => names.add(d.name));
+    return names;
+  }
+  async function styleAction(act, p) {
+    const index = resolveParaIndex(p);
+    if (index < 0) return;
+    if (act === "act:update") {
+      const key = composeStyleKeyOf(p);
+      const name = styleNameOf(key);
+      const n = await applyDocumentEdit({ op: "styleUpdate", index }).catch(() => 0);
+      if (n) toastUndoable(t("styleUpdated", { name }));
+      else toast(t("styleUpdateNothing", { name }), "info");
+      return;
+    }
+    const taken = knownStyleNames();
+    let name = "";
+    for (let k = 1; !name || taken.has(name.toLowerCase()); k++) name = `${t("styleNewDefault")}${k > 1 ? ` ${k}` : ""}`;
+    for (;;) {
+      const val = await appPrompt(t("styleNewMsg"), name, { title: t("styleNewTitle"), ok: t("styleNewOk") });
+      if (val == null) return;
+      name = val.trim().slice(0, 100);
+      if (!name) continue;
+      if (!taken.has(name.toLowerCase())) break;
+      toast(t("styleNewExists", { name }), "info");
+    }
+    pendingInlineCursor = caretState(p);
+    const n = await applyDocumentEdit({ op: "styleCreate", index, name }).catch(() => 0);
+    if (n) toastUndoable(t("styleCreated", { name }));
+    else toast(t("styleNewExists", { name }), "info");
   }
 
   async function applyAlign(key) {
@@ -3669,9 +3711,10 @@ const composeUi = (() => {
     const target = p || lastP;
     if (styleSel && document.activeElement !== styleSel) {
       const key = target && typeof composeStyleKeyOf === "function" ? composeStyleKeyOf(target) : "normal";
-      // własny styl pliku: osobna pozycja z jego nazwą (wybranie „Normalny” wtedy działa)
+      syncStyleGroups(key);
+      // własny styl pliku spoza listy: osobna pozycja z jego nazwą (wybranie „Normalny” wtedy działa)
       let cur = styleSel.querySelector("option[data-cur]");
-      if (key.startsWith("custom:")) {
+      if (key.startsWith("custom:") && !styleSel.querySelector(`optgroup[data-file] option[value="${CSS.escape(key)}"]`)) {
         if (!cur) { cur = document.createElement("option"); cur.dataset.cur = "1"; styleSel.appendChild(cur); }
         cur.value = key;
         cur.textContent = typeof composeStyleDisplayName === "function" ? composeStyleDisplayName(key.slice(7)) : key.slice(7);
@@ -3705,6 +3748,42 @@ const composeUi = (() => {
     if (hit && !marginHas(hit.id)) showCommentCard(hit); else hideCommentCard();
   }
   const marginHas = (id) => typeof dwbMargin !== "undefined" && dwbMargin.hasItem(`c:${id}`);
+
+  // Lista stylów: „Style tego dokumentu” (z galerii Worda — w:qFormat — i używane w tekście) oraz
+  // polecenia „Nowy styl z zaznaczenia…” i „Zaktualizuj „X” do zaznaczenia”. Grupa stylów pliku
+  // budowana raz na render (nowa mapa klas stylów = nowy render).
+  let styleGroupsFor = null;
+  function syncStyleGroups(key) {
+    const map = typeof docComposeStyleClasses !== "undefined" ? docComposeStyleClasses : null;
+    const host = docCanvasEl?.querySelector(".docx-preview-host");
+    if (map && (styleGroupsFor?.map !== map || styleGroupsFor?.host !== host)) {
+      styleGroupsFor = { map, host };
+      styleSel.querySelector("optgroup[data-file]")?.remove();
+      const keys = new Map(); // klucz → nazwa
+      map.forEach((k, cls) => {
+        if (!k.startsWith("custom:") || keys.has(k)) return;
+        if (map.quick?.has(k) || host?.getElementsByClassName(cls).length) keys.set(k, typeof composeStyleDisplayName === "function" ? composeStyleDisplayName(k.slice(7)) : k.slice(7));
+      });
+      if (keys.size) {
+        const g = document.createElement("optgroup");
+        g.dataset.file = "1";
+        g.label = t("styleFileGroup");
+        [...keys].sort((a, b) => a[1].localeCompare(b[1], currentLang)).forEach(([k, name]) => g.appendChild(new Option(name, k)));
+        styleSel.insertBefore(g, styleSel.querySelector("optgroup[data-act]"));
+      }
+    }
+    let act = styleSel.querySelector("optgroup[data-act]");
+    if (!act) {
+      act = document.createElement("optgroup");
+      act.dataset.act = "1";
+      act.label = t("styleActGroup");
+      act.append(new Option(t("styleActNew"), "act:new"), new Option("", "act:update"));
+      styleSel.appendChild(act);
+    }
+    act.label = t("styleActGroup");
+    act.querySelector('option[value="act:new"]').textContent = t("styleActNew");
+    act.querySelector('option[value="act:update"]').textContent = t("styleActUpdate", { name: styleNameOf(key) });
+  }
 
   let syncQueued = false;
   function queueSync() {

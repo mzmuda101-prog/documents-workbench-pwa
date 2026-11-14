@@ -35,6 +35,8 @@ const UNDO_OP_LABEL = {
   placeholderFill: "undoOpPlaceholders",
   snippetExpand: "undoOpSnippets",
   paraFormat: "undoOpParaFormat",
+  styleCreate: "undoOpStyle",
+  styleUpdate: "undoOpStyle",
   tabStop: "undoOpParaFormat",
   pageBreak: "undoOpPageBreak",
   hrule: "undoOpHrule",

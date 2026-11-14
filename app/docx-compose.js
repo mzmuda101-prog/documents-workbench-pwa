@@ -147,6 +147,7 @@ function composeStyleDisplayName(name) {
 // Mapa klasa CSS akapitu (docx-preview) → klucz stylu — stan listy „Styl” na pasku.
 async function readComposeStyleClasses(bytes) {
   const map = new Map();
+  map.quick = new Set(); // style pliku z galerii Worda (w:qFormat) — lista stylów pokazuje je zawsze
   if (!bytes || !window.JSZip) return map;
   try {
     const zip = await loadDocxZipCached(bytes);
@@ -177,6 +178,7 @@ async function readComposeStyleClasses(bytes) {
       if (map.has(cls) || /^(list paragraph|akapit z listą|toc|spis treści)/i.test(name)) return;
       if (typeof docHeadingStyleClasses !== "undefined" && docHeadingStyleClasses.get?.(cls)) return;
       map.set(cls, `custom:${name}`);
+      if (composeDirectChild(st, "qFormat")) map.quick.add(`custom:${name}`); // galeria stylów Worda
     });
   } catch (_) { /* uszkodzony styles.xml — lista pokaże „Normalny” */ }
   return map;
@@ -357,22 +359,31 @@ function composeApplyLayout(p, pPr, edit, layout) {
 // tekstu akapitu (pogrubienie, kolor, krój, rozmiar…). Zostają: język, wyróżnienie, cieniowanie
 // znaków i styl znakowy — oraz cechy na mniejszej części tekstu.
 const COMPOSE_STYLE_RESET_RPR = new Set(["b", "bCs", "i", "iCs", "u", "color", "sz", "szCs", "rFonts", "caps", "smallCaps", "strike", "dstrike", "spacing", "w", "position", "kern", "emboss", "imprint", "outline", "shadow"]);
-function composeDropMajorityRunProps(p) {
+// Cechy tekstu nadane wprost na ponad połowie znaków akapitu: klucz „nazwa|xml” → element (wzór).
+function composeMajorityRunProps(p) {
   const runs = Array.from(p.getElementsByTagNameNS(W_NS, "r")).filter((r) => composeClosestPara(r) === p);
   const len = (r) => Array.from(r.childNodes).reduce((n, c) => n + (c.nodeType === 1 && c.localName === "t" ? c.textContent.length : c.nodeType === 1 && (c.localName === "tab" || c.localName === "sym") ? 1 : 0), 0);
   const total = runs.reduce((n, r) => n + len(r), 0);
-  if (!total) return;
-  const cover = new Map(); // "nazwa|xml" → liczba znaków
+  const out = new Map();
+  if (!total) return { runs, out };
+  const cover = new Map(); // "nazwa|xml" → [liczba znaków, element]
   runs.forEach((r) => {
     const rPr = composeDirectChild(r, "rPr");
     if (!rPr) return;
     Array.from(rPr.childNodes).forEach((c) => {
       if (c.nodeType !== 1 || !COMPOSE_STYLE_RESET_RPR.has(c.localName)) return;
       const k = `${c.localName}|${composeSerialize(c)}`;
-      cover.set(k, (cover.get(k) || 0) + len(r));
+      const cur = cover.get(k) || [0, c];
+      cur[0] += len(r);
+      cover.set(k, cur);
     });
   });
-  const drop = new Set([...cover].filter(([, n]) => n * 2 > total).map(([k]) => k));
+  cover.forEach(([n, el], k) => { if (n * 2 > total) out.set(k, el); });
+  return { runs, out };
+}
+function composeDropMajorityRunProps(p) {
+  const { runs, out } = composeMajorityRunProps(p);
+  const drop = new Set(out.keys());
   if (!drop.size) return;
   runs.forEach((r) => {
     const rPr = composeDirectChild(r, "rPr");
@@ -443,6 +454,100 @@ async function applyParaFormatInZip(zip, xml, edit) {
   });
   if (cache.stylesDirty) zip.file("word/styles.xml", cache.stylesXml);
   return { xml: composeSerialize(doc), count };
+}
+
+// ── op "styleCreate" / "styleUpdate": własne style jak w Wordzie ─────────────
+// Utwórz styl z zaznaczenia (Word: Style → Utwórz styl; tools/word-oracle/probe-style-create.js):
+// styl akapitu z bazowym = styl akapitu, w pPr — formatowanie akapitu nadane wprost, w rPr — cechy
+// tekstu z ponad połowy znaków; bez w:next (Enter zostaje w tym stylu); styleId z liter ASCII nazwy
+// („Mój styl” → „Mjstyl”). Akapit dostaje styl i traci formatowanie, które przeszło do stylu.
+// Zaktualizuj styl do zaznaczenia: to samo formatowanie trafia do stylu akapitu (wszystkie akapity
+// w tym stylu się zmieniają), z tego akapitu schodzi.
+const COMPOSE_STYLE_PPR_KEEP = new Set(["pStyle", "numPr", "sectPr", "rPr", "pPrChange", "framePr", "cnfStyle", "divId", "outlineLvl"]);
+
+function composeStyleIdFromName(name, ids) {
+  const base = String(name).replace(/[^A-Za-z0-9]/g, "") || "Styl";
+  let id = base;
+  for (let n = 1; ids.has(id); n++) id = `${base}${n}`;
+  return id;
+}
+function composeSetRPrChild(rPr, el) {
+  const old = composeDirectChild(rPr, el.localName);
+  if (old) rPr.removeChild(old);
+  const rank = RPR_ORDER.indexOf(el.localName);
+  let before = null;
+  for (let n = rPr.firstChild; n; n = n.nextSibling) {
+    if (n.nodeType === 1 && RPR_ORDER.indexOf(n.localName) > rank) { before = n; break; }
+  }
+  rPr.insertBefore(el, before);
+}
+// formatowanie akapitu nadane wprost (do stylu) — bez rzeczy, które nie są „wyglądem stylu”
+function composeDirectParaLook(p) {
+  const pPr = composeDirectChild(p, "pPr");
+  return pPr ? Array.from(pPr.childNodes).filter((c) => c.nodeType === 1 && !COMPOSE_STYLE_PPR_KEEP.has(c.localName)) : [];
+}
+// akapit po przejściu formatowania do stylu: pStyle, bez tego formatowania wprost
+function composeAbsorbIntoStyle(p, styleId) {
+  const pPr = composeEnsurePPr(p);
+  composeDirectParaLook(p).forEach((c) => pPr.removeChild(c));
+  composeSetPPrChild(pPr, "pStyle", { val: styleId });
+  composeDropMajorityRunProps(p);
+}
+
+async function applyStyleInZip(zip, xml, edit) {
+  const doc = composeParse(xml);
+  const p = collectParagraphElements(doc.documentElement, "all")[edit.index];
+  if (!p) return { xml, count: 0 };
+  const sdoc = composeParse(await composeEnsureStylesPart(zip));
+  const root = sdoc.documentElement;
+  const idx = composeStylesIndex(sdoc);
+  const own = composeDirectChild(composeDirectChild(p, "pPr") || p, "pStyle")?.getAttributeNS(W_NS, "val") || null;
+  const cur = own && idx.ids.has(own) ? own : idx.defaultId;
+  const look = composeDirectParaLook(p);
+  const runLook = [...composeMajorityRunProps(p).out.values()];
+  const fill = (st) => {
+    if (look.length) {
+      let sp = composeDirectChild(st, "pPr");
+      if (!sp) { sp = composeEl(sdoc, "pPr"); st.insertBefore(sp, composeDirectChild(st, "rPr") || composeDirectChild(st, "tblPr") || null); }
+      look.forEach((c) => composeSetPPrChild(sp, c.localName, sdoc.importNode(c, true)));
+    }
+    if (runLook.length) {
+      let sr = composeDirectChild(st, "rPr");
+      if (!sr) { sr = composeEl(sdoc, "rPr"); st.insertBefore(sr, composeDirectChild(st, "tblPr") || null); }
+      runLook.forEach((c) => composeSetRPrChild(sr, sdoc.importNode(c, true)));
+    }
+  };
+  let styleId;
+  if (edit.op === "styleCreate") {
+    const name = String(edit.name || "").trim().slice(0, 100);
+    if (!name || idx.byName.has(name.toLowerCase())) return { xml, count: 0 };
+    styleId = composeStyleIdFromName(name, idx.ids);
+    const st = composeEl(sdoc, "style", { type: "paragraph", customStyle: "1", styleId });
+    st.appendChild(composeEl(sdoc, "name", { val: name }));
+    if (cur) st.appendChild(composeEl(sdoc, "basedOn", { val: cur }));
+    st.appendChild(composeEl(sdoc, "qFormat"));
+    fill(st);
+    root.appendChild(st);
+  } else {
+    // styl akapitu (bez w:pStyle — domyślny „Normalny”); brak definicji domyślnego — dopisz go
+    styleId = cur;
+    let st = Array.from(root.getElementsByTagNameNS(W_NS, "style")).find((x) => x.getAttributeNS(W_NS, "styleId") === styleId);
+    if (!st) {
+      styleId = "Normal";
+      st = composeParse(`<w:styles xmlns:w="${W_NS}">${COMPOSE_NORMAL_STYLE}</w:styles>`).documentElement.firstChild;
+      st = sdoc.importNode(st, true);
+      root.appendChild(st);
+    }
+    if (!look.length && !runLook.length) return { xml, count: 0 };
+    fill(st);
+  }
+  zip.file("word/styles.xml", composeSerialize(sdoc));
+  composeAbsorbIntoStyle(p, styleId);
+  // domyślny styl bez w:pStyle (jak Word)
+  if (edit.op === "styleUpdate" && styleId === (idx.defaultId || "Normal") && !own) composeSetPPrChild(composeEnsurePPr(p), "pStyle", null);
+  const pPr = composeDirectChild(p, "pPr");
+  if (pPr && !pPr.firstChild) p.removeChild(pPr);
+  return { xml: composeSerialize(doc), count: 1 };
 }
 
 // ── op "pageBreak" / "hrule": nowe akapity ───────────────────────────────────
