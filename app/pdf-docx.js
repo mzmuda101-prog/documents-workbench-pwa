@@ -575,6 +575,10 @@
       });
     });
     const finalSect = sections.length ? w.sectPrXml(sections[sections.length - 1]) : "";
+    // Dokument kończy się tabelą (układ kolumn / ramek strony): Word MUSI mieć akapit za tabelą i
+    // dokładał własny — gdy tabela sięga dołu strony, spadał na nową, pustą stronę (mapa-infografika
+    // po OCR: 2 strony zamiast 1). Akapit 1 pt bez odstępów (porada Microsoftu) mieści się pod nią.
+    if (/<\/w:tbl>$/.test(body)) body += '<w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"/><w:rPr><w:sz w:val="2"/><w:szCs w:val="2"/></w:rPr></w:pPr></w:p>';
     meta.suspectChars = w.suspect;
     const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document ${DOC_NS}><w:body>${body}${finalSect}</w:body></w:document>`;

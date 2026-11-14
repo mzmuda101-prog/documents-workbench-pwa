@@ -195,6 +195,16 @@ async function run() {
     const z = await JSZip.loadAsync(w);
     return { doc: await z.file("word/document.xml").async("string"), styles: await z.file("word/styles.xml").async("string") };
   });
+  // strona kończy się tabelą układu (kolumny ramek infografiki): za nią akapit 1 pt — inaczej Word
+  // dokładał własny pusty akapit i ten spadał na drugą, pustą stronę (mapa po OCR: 2 strony zamiast 1)
+  const tail = await page.evaluate(async () => {
+    const para = (text, top) => ({ type: "para", x0: 40, x1: 260, top, bottom: top + 12, lines: 1, tokens: [{ type: "text", text, size: 10 }] });
+    const pages = [{ width: 595, height: 842, margins: { ml: 40, mr: 40, mt: 40, mb: 8 }, floats: [], blocks: [para("Nagłówek", 40), { type: "columns", x0: 40, x1: 555, top: 70, bottom: 830, cells: [{ x0: 40, x1: 290, top: 70, blocks: [para("Lewa", 800)] }, { x0: 300, x1: 555, top: 70, blocks: [para("Prawa", 800)] }] }] }];
+    const z = await JSZip.loadAsync(await DWPdf.buildDocx(pages, new Map(), { title: "", lang: "pl-PL", bodySize: 10, bodyFont: "Arial", fonts: [] }, JSZip));
+    const doc = await z.file("word/document.xml").async("string");
+    return doc.slice(doc.lastIndexOf("</w:tbl>"), doc.indexOf("<w:sectPr", doc.lastIndexOf("</w:tbl>")));
+  });
+  check("dokument kończy się tabelą układu: za nią akapit 1 pt (bez pustej strony w Wordzie)", /^<\/w:tbl><w:p><w:pPr><w:spacing w:before="0" w:after="0" w:line="20" w:lineRule="exact"\/>/.test(tail), tail.slice(0, 200));
   check("konwersja: żółte z OCR ma styl „Do sprawdzenia (OCR)” zdefiniowany w styles.xml", !styled.err && /<w:rPr><w:rStyle w:val="DWBOcrCheck"\/>/.test(styled.doc) && /w:styleId="DWBOcrCheck"/.test(styled.styles), styled.err || "");
 
   await browser.close();

@@ -143,3 +143,10 @@ w aplikacji „zgłoś błąd” zapisujący ostatnie akcje + stan → plik, z k
    tekstu (wtedy też F1).
    Zostało: gęsta infografika po OCR w Wordzie bywa o 2–3 wiersze dłuższa niż strona (tak było
    i wcześniej); kolejność czytania w ramkach infografiki.
+   v1.00.56: pusta druga strona w Wordzie przy dokumencie kończącym się tabelą układu — naprawione
+   (akapit 1 pt za tabelą; mapa Canona B: 2 → 1 strona). Zostaje: w bardzo gęstych tabelach z OCR
+   podgląd jest ~1 pt na wiersz wyższy niż Word (mapa B: +2,9 pt na dole strony → ostatni wiersz
+   w podglądzie na stronie 2, w Wordzie na 1) i mapa A w Wordzie o kilka wierszy dłuższa (krótkie
+   napisy w wąskich komórkach zawijają się). Kolejność czytania: ramki obok siebie z kreskami na tych
+   samych wysokościach sklejają się w jedną tabelę (pdf-layout detectTables) — zmiana dotknęłaby
+   tabel we wszystkich PDF-ach, odłożone świadomie (ryzyko > zysk).
