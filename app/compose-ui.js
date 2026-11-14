@@ -4105,7 +4105,10 @@ const composeUi = (() => {
   async function openHeaderFooterForm(opts = {}) {
     if (readOnlyMode || !originalFileBytes) return;
     let st;
-    try { await mergeInlineEditsIntoBytes(); st = await readHeaderFooterState(originalFileBytes); } catch (err) { log(`Nagłówek: ${err.message || err}`, "error"); return; }
+    // sekcja akapitu z kursorem — przy kilku sekcjach nagłówek każdej jest osobny (albo połączony)
+    const at = activeParagraph() || lastP;
+    const paraIndex = at?.isConnected ? resolveParaIndex(at) : -1;
+    try { await mergeInlineEditsIntoBytes(); st = await readHeaderFooterState(originalFileBytes, paraIndex); } catch (err) { log(`Nagłówek: ${err.message || err}`, "error"); return; }
     if (opts.pageNumber && !st.footer.number) { st.footer.number = "n"; st.footer.numAlign = "center"; }
     hideImageCard();
     closePop();
@@ -4126,6 +4129,14 @@ const composeUi = (() => {
           <label class="compose-field"><span data-k="hfStartAt"></span><input type="text" class="hf-start" inputmode="numeric" autocomplete="off" enterkeyhint="done"></label>
         </div>
         <label class="compose-check"><input type="checkbox" class="hf-first"><span></span></label>
+        <label class="compose-check"><input type="checkbox" class="hf-eo"><span data-k="hfEvenOdd"></span></label>
+        <div class="hf-even">
+          <label class="compose-field"><span data-k="hfEvenHeader"></span><input type="text" class="hf-eh" autocomplete="off" enterkeyhint="next"></label>
+          ${segAlign("eh", st.even.header.align)}
+          <label class="compose-field"><span data-k="hfEvenFooter"></span><input type="text" class="hf-ef" autocomplete="off" enterkeyhint="done"></label>
+          ${segAlign("ef", st.even.footer.align)}
+        </div>
+        <label class="compose-check hf-linkrow"><input type="checkbox" class="hf-link"><span></span></label>
         <p class="compose-note hf-note"></p>
         <div class="compose-actions"><span class="compose-actions-gap"></span><button type="button" class="btn lf-cancel"></button><button type="button" class="btn primary lf-ok"></button></div>`;
       el.querySelector(".compose-cap").textContent = t("hfTitle");
@@ -4138,6 +4149,26 @@ const composeUi = (() => {
       hIn.value = st.header.text; fIn.value = st.footer.text; nSel.value = st.footer.number || ""; first.checked = st.firstDifferent;
       hIn.placeholder = t("hfHeaderPh"); fIn.placeholder = t("hfFooterPh");
       (opts.pageNumber ? nSel : hIn).dataset.autofocus = "1";
+      el.querySelectorAll(".hf-even [data-k], .hf-eo + [data-k]").forEach((x) => { x.textContent = t(x.dataset.k); });
+      const eo = el.querySelector(".hf-eo"); const ehIn = el.querySelector(".hf-eh"); const efIn = el.querySelector(".hf-ef");
+      eo.checked = st.evenOdd; ehIn.value = st.even.header.text; efIn.value = st.even.footer.text;
+      const syncEven = () => { el.querySelector(".hf-even").hidden = !eo.checked; };
+      eo.addEventListener("change", syncEven);
+      syncEven();
+      // „Połącz z poprzednią” jak w Wordzie: tylko od drugiej sekcji
+      const link = el.querySelector(".hf-link");
+      el.querySelector(".hf-linkrow").hidden = st.sections < 2 || st.section < 2;
+      el.querySelector(".hf-linkrow span").textContent = t("hfLink", { n: st.section - 1 });
+      link.checked = st.linked;
+      // jak Word: zaznaczenie „Połącz” pokazuje nagłówek i stopkę poprzedniej sekcji (zapis nie
+      // nadpisze jej tekstem tej sekcji); odznaczenie zostawia kopię do zmiany
+      link.addEventListener("change", () => {
+        if (!link.checked || !st.prev) return;
+        hIn.value = st.prev.header.text; fIn.value = st.prev.footer.text;
+        ehIn.value = st.prev.even.header.text; efIn.value = st.prev.even.footer.text;
+        nSel.value = st.prev.footer.number || ""; syncNum();
+      });
+      if (st.sections > 1) el.querySelector(".compose-cap").textContent = `${t("hfTitle")} — ${t("hfSectionOf", { n: st.section, total: st.sections })}`;
       const notes = [];
       if (st.header.complex || st.footer.complex) notes.push(t("hfComplex"));
       if (st.sections > 1) notes.push(t("hfSections", { n: st.sections }));
@@ -4173,6 +4204,8 @@ const composeUi = (() => {
           footer: { text: fIn.value.trim(), align: segs.f },
           number: { fmt: nSel.value || null, align: segs.n, numFmt: numFmt.value, start: /^\d+$/.test(startIn.value.trim()) ? parseInt(startIn.value.trim(), 10) : null },
           firstDifferent: first.checked,
+          section: st.section - 1, linked: link.checked,
+          evenOdd: eo.checked, even: { header: { text: ehIn.value.trim(), align: segs.eh }, footer: { text: efIn.value.trim(), align: segs.ef } },
         };
         closePop();
         const p = activeParagraph() || lastP;

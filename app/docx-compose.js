@@ -3170,51 +3170,129 @@ function composePageNumberXml(fmt, lang, styleId, total) {
   return page;
 }
 
-// Stan do okienka: { header: { text, align, complex }, footer: {…, number: fmt|null, numAlign}, firstDifferent, sections }
-async function readHeaderFooterState(bytes) {
-  const out = { header: { text: "", align: "left", complex: false }, footer: { text: "", align: "left", complex: false, number: null, numAlign: "center" }, firstDifferent: false, sections: 1, numFmt: "decimal", start: null };
+// Sekcja akapitu `index` jako numer w composeSectPrs (bez tworzenia brakującego w:sectPr —
+// odczyt działa na DOM-ie z pamięci podręcznej); brak indeksu = ostatnia sekcja.
+function composeSectionIndexAt(doc, sects, index) {
+  if (index == null || index < 0) return sects.length - 1;
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  for (let i = index | 0; i < paragraphs.length; i++) {
+    const pPr = composeDirectChild(paragraphs[i], "pPr");
+    const s = pPr && composeDirectChild(pPr, "sectPr");
+    if (s) return Math.max(0, sects.indexOf(s));
+  }
+  return sects.length - 1;
+}
+const composeRid = (ref) => ref && (ref.getAttributeNS(R_NS, "id") || ref.getAttribute("r:id"));
+// Odwołanie widoczne w sekcji i: własne albo dziedziczone z wcześniejszej („Połącz z poprzednim”).
+function composeHfRefSeen(sects, i, kind, type) {
+  for (let k = i; k >= 0; k--) {
+    const ref = composeHfRef(sects[k], kind, type);
+    if (ref) return { ref, owner: k };
+  }
+  return null;
+}
+// Sekcja „połączona z poprzednią”: bez własnych nagłówków i stopek (albo — pliki z dawnych wersji
+// aplikacji — z tymi samymi częściami co poprzednia).
+function composeSectionLinked(sects, i) {
+  if (i <= 0) return false;
+  return ["header", "footer"].every((kind) => ["default", "even"].every((type) => {
+    const own = composeHfRef(sects[i], kind, type);
+    return !own || composeRid(own) === composeRid(composeHfRefSeen(sects, i - 1, kind, type)?.ref);
+  }));
+}
+
+// Treść jednej części nagłówka/stopki do okienka: tekst, wyrównanie, numer strony, „złożona”.
+async function composeReadHfPart(zip, rels, ref) {
+  const st = { text: "", align: "left", complex: false, number: null, numAlign: "center" };
+  const rid = composeRid(ref);
+  const path = rid && Array.from(rels.documentElement.getElementsByTagName("Relationship")).find((r) => r.getAttribute("Id") === rid)?.getAttribute("Target");
+  const file = path && zip.file(`word/${path.replace(/^\/?word\//, "")}`);
+  if (!file) return st;
+  const root = composeParse(await file.async("string")).documentElement;
+  st.complex = ["tbl", "drawing", "pict", "sdt", "txbxContent"].some((tag) => root.getElementsByTagNameNS(W_NS, tag).length)
+    || Array.from(root.childNodes).filter((n) => n.localName === "p").length > 2;
+  Array.from(root.childNodes).filter((n) => n.localName === "p").forEach((p) => {
+    const instr = Array.from(p.getElementsByTagNameNS(W_NS, "instrText")).map((x) => x.textContent).join(" ")
+      + " " + Array.from(p.getElementsByTagNameNS(W_NS, "fldSimple")).map((x) => x.getAttributeNS(W_NS, "instr")).join(" ");
+    const jc = composeDirectChild(composeDirectChild(p, "pPr") || p, "jc")?.getAttributeNS(W_NS, "val") || "left";
+    const align = jc === "both" || jc === "start" ? "left" : jc === "end" ? "right" : jc;
+    if (/\bPAGE\b/.test(instr)) {
+      const plain = Array.from(p.childNodes).filter((r) => r.localName === "r" && !r.getElementsByTagNameNS(W_NS, "fldChar").length && !r.getElementsByTagNameNS(W_NS, "instrText").length).map((r) => Array.from(r.getElementsByTagNameNS(W_NS, "t")).map((x) => x.textContent).join("")).join("");
+      st.number = /\bNUMPAGES\b/.test(instr) ? "pageOf" : /[–-]/.test(plain) ? "dash" : /\S/.test(plain) ? "page" : "n";
+      st.numAlign = align;
+    } else {
+      const text = getParagraphText(p).replace(/\n/g, " ");
+      if (text.trim() && !st.text) { st.text = text; st.align = align; }
+    }
+  });
+  return st;
+}
+
+async function composeEvenOddOn(zip) {
+  const xml = zip.file("word/settings.xml") ? await zip.file("word/settings.xml").async("string") : "";
+  return /<w:evenAndOddHeaders(?![^>]*w:val="(0|false|off)")/.test(xml);
+}
+
+// Stan do okienka dla sekcji akapitu `index`: { header, footer: {…, number, numAlign}, even: { header,
+// footer }, evenOdd, firstDifferent, sections, section (od 1), linked, numFmt, start }
+async function readHeaderFooterState(bytes, index) {
+  const blank = () => ({ text: "", align: "left", complex: false });
+  const out = { header: blank(), footer: { ...blank(), number: null, numAlign: "center" }, even: { header: blank(), footer: blank() }, evenOdd: false, firstDifferent: false, sections: 1, section: 1, linked: false, numFmt: "decimal", start: null };
   if (!bytes || !window.JSZip) return out;
   const zip = await loadDocxZipCached(bytes);
   const doc = await getDocumentXmlDom(bytes);
   if (!doc) return out;
   const sects = composeSectPrs(doc);
-  out.sections = Math.max(1, sects.length);
-  const body = composeDirectChild(doc.getElementsByTagNameNS(W_NS, "body")[0], "sectPr") || sects[sects.length - 1];
-  if (!body) return out;
-  out.firstDifferent = !!composeDirectChild(body, "titlePg");
-  Object.assign(out, composePageNumbering(sects[0] || body)); // numeracja zaczyna się w pierwszej sekcji
+  if (!sects.length) return out;
+  out.sections = sects.length;
+  const si = composeSectionIndexAt(doc, sects, index);
+  out.section = si + 1;
+  out.linked = composeSectionLinked(sects, si);
+  out.firstDifferent = !!composeDirectChild(sects[si], "titlePg");
+  out.evenOdd = await composeEvenOddOn(zip);
+  Object.assign(out, composePageNumbering(sects[0])); // numeracja zaczyna się w pierwszej sekcji
   const rels = (await composeReadRels(zip)).doc;
-  const target = (rid) => Array.from(rels.documentElement.getElementsByTagName("Relationship")).find((r) => r.getAttribute("Id") === rid)?.getAttribute("Target");
-  for (const kind of ["header", "footer"]) {
-    const ref = composeHfRef(body, kind, "default");
-    const path = ref && target(ref.getAttributeNS(R_NS, "id") || ref.getAttribute("r:id"));
-    const file = path && zip.file(`word/${path.replace(/^\/?word\//, "")}`);
-    if (!file) continue;
-    const part = composeParse(await file.async("string"));
-    const root = part.documentElement;
-    const st = out[kind];
-    st.complex = ["tbl", "drawing", "pict", "sdt", "txbxContent"].some((tag) => root.getElementsByTagNameNS(W_NS, tag).length)
-      || Array.from(root.childNodes).filter((n) => n.localName === "p").length > 2;
-    Array.from(root.childNodes).filter((n) => n.localName === "p").forEach((p) => {
-      const instr = Array.from(p.getElementsByTagNameNS(W_NS, "instrText")).map((x) => x.textContent).join(" ")
-        + " " + Array.from(p.getElementsByTagNameNS(W_NS, "fldSimple")).map((x) => x.getAttributeNS(W_NS, "instr")).join(" ");
-      const jc = composeDirectChild(composeDirectChild(p, "pPr") || p, "jc")?.getAttributeNS(W_NS, "val") || "left";
-      const align = jc === "both" || jc === "start" ? "left" : jc === "end" ? "right" : jc;
-      if (/\bPAGE\b/.test(instr)) {
-        const plain = Array.from(p.childNodes).filter((r) => r.localName === "r" && !r.getElementsByTagNameNS(W_NS, "fldChar").length && !r.getElementsByTagNameNS(W_NS, "instrText").length).map((r) => Array.from(r.getElementsByTagNameNS(W_NS, "t")).map((x) => x.textContent).join("")).join("");
-        st.number = /\bNUMPAGES\b/.test(instr) ? "pageOf" : /[–-]/.test(plain) ? "dash" : /\S/.test(plain) ? "page" : "n";
-        st.numAlign = align;
-        if (kind === "header") { out.footer.number = st.number; out.footer.numAlign = align; st.number = null; }
-      } else {
-        const text = getParagraphText(p).replace(/\n/g, " ");
-        if (text.trim() && !st.text) { st.text = text; st.align = align; }
+  // treść widoczna w sekcji k (własna albo odziedziczona) — do pól formularza
+  const readSection = async (k, dst) => {
+    for (const type of ["default", "even"]) {
+      for (const kind of ["header", "footer"]) {
+        const st = await composeReadHfPart(zip, rels, composeHfRefSeen(sects, k, kind, type)?.ref);
+        Object.assign(type === "default" ? dst[kind] : dst.even[kind], { text: st.text, align: st.align, complex: st.complex });
+        // numer strony (w nagłówku czy stopce) pokazujemy przy stopce stron nieparzystych / wszystkich
+        if (type === "default" && st.number) { dst.footer.number = st.number; dst.footer.numAlign = st.numAlign; }
       }
-    });
+    }
+  };
+  await readSection(si, out);
+  // „Połącz z poprzednią” zaznaczone w formularzu — pola pokazują treść poprzedniej sekcji (jak Word)
+  if (si > 0) {
+    out.prev = { header: blank(), footer: { ...blank(), number: null, numAlign: "center" }, even: { header: blank(), footer: blank() } };
+    await readSection(si - 1, out.prev);
   }
   return out;
 }
 
-// op "headerFooter": { header: { text, align }, footer: { text, align }, number: { fmt|null, align }, firstDifferent, lang, total }
+// w:evenAndOddHeaders w settings.xml — w miejscu wg schematu (przed elementami, które idą po nim)
+async function composeSetEvenOdd(zip, on) {
+  const path = "word/settings.xml";
+  if (!zip.file(path)) return;
+  const doc = composeParse(await zip.file(path).async("string"));
+  const root = doc.documentElement;
+  const old = composeDirectChild(root, "evenAndOddHeaders");
+  if (old) root.removeChild(old);
+  if (on) {
+    const later = RL_SETTINGS_AFTER_TRACK.slice(RL_SETTINGS_AFTER_TRACK.indexOf("evenAndOddHeaders") + 1);
+    const at = Array.from(root.childNodes).find((n) => n.nodeType === 1 && later.includes(n.localName));
+    root.insertBefore(composeEl(doc, "evenAndOddHeaders"), at || null);
+  }
+  zip.file(path, composeSerialize(doc));
+}
+
+// op "headerFooter": { section (od 0; brak = ostatnia), linked, header: { text, align }, footer: { text, align },
+// number: { fmt|null, align, numFmt, start }, evenOdd, even: { header, footer }, firstDifferent, lang, total }
+// Jak Word: każda sekcja ma własne nagłówki albo dziedziczy je z poprzedniej („Połącz z poprzednim”);
+// zmiana w sekcji połączonej trafia do sekcji, z której pochodzi nagłówek. Strony parzyste —
+// ustawienie całego dokumentu (settings.xml), osobne części „even”. Inna pierwsza strona — sekcji.
 async function applyHeaderFooterInZip(zip, xml, edit) {
   const doc = composeParse(xml);
   const sects = composeSectPrs(doc);
@@ -3224,7 +3302,6 @@ async function applyHeaderFooterInZip(zip, xml, edit) {
   const relEls = () => Array.from(rels.documentElement.getElementsByTagName("Relationship"));
   const ct = zip.file("[Content_Types].xml") ? await zip.file("[Content_Types].xml").async("string") : "";
   let ctXml = ct;
-  const body = composeDirectChild(doc.getElementsByTagNameNS(W_NS, "body")[0], "sectPr") || sects[sects.length - 1];
   const numStyle = edit.number?.fmt ? await composeEnsureCharStyle(zip, "page number", "PageNumber", "<w:uiPriority w:val=\"99\"/><w:unhideWhenUsed/>") : null;
   const ns = `xmlns:w="${W_NS}" xmlns:r="${R_NS}"`;
   const newPart = (kind, inner) => {
@@ -3246,42 +3323,67 @@ async function applyHeaderFooterInZip(zip, xml, edit) {
     while (at && (at.localName === "headerReference" || at.localName === "footerReference")) at = at.nextSibling;
     sect.insertBefore(ref, at);
   };
-  for (const kind of ["header", "footer"]) {
-    const conf = edit[kind] || {};
-    let inner = conf.text ? composeHfParagraph(composeTextRun(conf.text), conf.align) : "";
-    if (kind === "footer" && edit.number?.fmt) inner += composeHfParagraph(composePageNumberXml(edit.number.fmt, edit.lang, numStyle, edit.total), edit.number.align || "center");
-    if (!inner) { sects.forEach((s) => setRef(s, kind, "default", null)); continue; }
-    // ta sama część dla wszystkich sekcji: istniejąca (z odwołania sekcji końcowej) albo nowa
-    const oldRef = composeHfRef(body, kind, "default");
-    const oldRid = oldRef && (oldRef.getAttributeNS(R_NS, "id") || oldRef.getAttribute("r:id"));
-    const oldTarget = oldRid && relEls().find((r) => r.getAttribute("Id") === oldRid)?.getAttribute("Target");
-    let rid;
-    if (oldTarget && zip.file(`word/${oldTarget.replace(/^\/?word\//, "")}`)) {
-      const path = `word/${oldTarget.replace(/^\/?word\//, "")}`;
+  const TYPES = ["default", "even", "first"];
+  // 1) dawne wersje aplikacji wpisywały tę samą część do każdej sekcji — to jest „połączona z
+  //    poprzednią” (wygląd ten sam), więc zostaje tylko pierwsze odwołanie
+  for (let i = sects.length - 1; i > 0; i--) {
+    for (const kind of ["header", "footer"]) for (const type of TYPES) {
+      const own = composeHfRef(sects[i], kind, type);
+      if (own && composeRid(own) === composeRid(composeHfRefSeen(sects, i - 1, kind, type)?.ref)) sects[i].removeChild(own);
+    }
+  }
+  const si = Math.min(sects.length - 1, Math.max(0, edit.section ?? sects.length - 1));
+  // 2) połączona: bez własnych odwołań, treść idzie do sekcji, z której pochodzi nagłówek
+  let target = si;
+  if (edit.linked && si > 0) {
+    for (const kind of ["header", "footer"]) for (const type of ["default", "even"]) setRef(sects[si], kind, type, null);
+    target = composeHfRefSeen(sects, si - 1, "header", "default")?.owner ?? composeHfRefSeen(sects, si - 1, "footer", "default")?.owner ?? 0;
+  }
+  const usedElsewhere = (rid, k) => sects.some((s, j) => j !== k && Array.from(s.childNodes).some((n) => (n.localName === "headerReference" || n.localName === "footerReference") && composeRid(n) === rid));
+  // 3) treść części sekcji `target` (własna część — nadpisana, wspólna z inną sekcją — nowa)
+  const writePart = async (kind, type, inner) => {
+    const sect = sects[target];
+    if (!inner) {
+      // pusta, ale sekcja wcześniej ma nagłówek: bez odwołania odziedziczyłaby go — pusta część
+      if (target > 0 && composeHfRefSeen(sects, target - 1, kind, type)) inner = "<w:p/>";
+      else { setRef(sect, kind, type, null); return; }
+    }
+    const rid = composeRid(composeHfRef(sect, kind, type));
+    const tgt = rid && relEls().find((r) => r.getAttribute("Id") === rid)?.getAttribute("Target");
+    const path = tgt && `word/${tgt.replace(/^\/?word\//, "")}`;
+    if (path && zip.file(path) && !usedElsewhere(rid, target)) {
       const part = composeParse(await zip.file(path).async("string"));
       const root = part.documentElement;
       while (root.firstChild) root.removeChild(root.firstChild);
-      const frag = composeParse(`<x ${ns}>${inner}</x>`).documentElement;
-      Array.from(frag.childNodes).forEach((n) => root.appendChild(part.importNode(n, true)));
+      Array.from(composeParse(`<x ${ns}>${inner}</x>`).documentElement.childNodes).forEach((n) => root.appendChild(part.importNode(n, true)));
       zip.file(path, composeSerialize(part));
-      rid = oldRid;
-    } else {
-      rid = newPart(kind, inner);
+      return;
     }
-    sects.forEach((s) => setRef(s, kind, "default", rid));
+    setRef(sect, kind, type, newPart(kind, inner));
+  };
+  const content = (kind, conf) => {
+    let inner = conf?.text ? composeHfParagraph(composeTextRun(conf.text), conf.align) : "";
+    if (kind === "footer" && edit.number?.fmt) inner += composeHfParagraph(composePageNumberXml(edit.number.fmt, edit.lang, numStyle, edit.total), edit.number.align || "center");
+    return inner;
+  };
+  for (const kind of ["header", "footer"]) await writePart(kind, "default", content(kind, edit[kind]));
+  // 4) strony parzyste: ustawienie dokumentu; wyłączone — bez części „even” (podgląd brał je i tak)
+  if (edit.evenOdd !== undefined) {
+    await composeSetEvenOdd(zip, !!edit.evenOdd);
+    if (edit.evenOdd) for (const kind of ["header", "footer"]) await writePart(kind, "even", content(kind, edit.even?.[kind]));
+    else sects.forEach((s) => ["header", "footer"].forEach((kind) => setRef(s, kind, "even", null)));
   }
   // rodzaj cyfr na wszystkich sekcjach, początek — tylko w pierwszej (dalsze sekcje kontynuują)
   if (edit.number?.fmt && (edit.number.numFmt || edit.number.start !== undefined)) {
     sects.forEach((s, i) => composeSetPageNumbering(s, edit.number.numFmt || "decimal", i === 0 ? edit.number.start : composePageNumbering(s).start));
   }
-  // inna pierwsza strona: titlePg + puste części „first”
-  let emptyH = null; let emptyF = null;
-  sects.forEach((s) => {
+  // 5) inna pierwsza strona — tej sekcji: titlePg + puste części „first”
+  {
+    const s = sects[si];
     const tp = composeDirectChild(s, "titlePg");
     if (edit.firstDifferent) {
-      if (!emptyH) { emptyH = newPart("header", "<w:p/>"); emptyF = newPart("footer", "<w:p/>"); }
-      setRef(s, "header", "first", emptyH);
-      setRef(s, "footer", "first", emptyF);
+      if (!composeHfRef(s, "header", "first")) setRef(s, "header", "first", newPart("header", "<w:p/>"));
+      if (!composeHfRef(s, "footer", "first")) setRef(s, "footer", "first", newPart("footer", "<w:p/>"));
       if (!tp) {
         const el = composeEl(doc, "titlePg");
         const after = ["textDirection", "bidi", "rtlGutter", "docGrid", "printerSettings", "sectPrChange"].map((n) => composeDirectChild(s, n)).find(Boolean);
@@ -3292,9 +3394,9 @@ async function applyHeaderFooterInZip(zip, xml, edit) {
       setRef(s, "header", "first", null);
       setRef(s, "footer", "first", null);
     }
-  });
+  }
   // osierocone części nagłówków/stopek (nikt się do nich nie odwołuje) — precz z paczki
-  const used = new Set(Array.from(doc.getElementsByTagNameNS(W_NS, "headerReference")).concat(Array.from(doc.getElementsByTagNameNS(W_NS, "footerReference"))).map((r) => r.getAttributeNS(R_NS, "id") || r.getAttribute("r:id")));
+  const used = new Set(Array.from(doc.getElementsByTagNameNS(W_NS, "headerReference")).concat(Array.from(doc.getElementsByTagNameNS(W_NS, "footerReference"))).map(composeRid));
   relEls().forEach((r) => {
     const type = r.getAttribute("Type");
     if ((type !== COMPOSE_REL_HEADER && type !== COMPOSE_REL_FOOTER) || used.has(r.getAttribute("Id"))) return;
