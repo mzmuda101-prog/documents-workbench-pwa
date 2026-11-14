@@ -40,6 +40,7 @@ const UNDO_OP_LABEL = {
   tabStop: "undoOpParaFormat",
   tabsSet: "undoOpTabs",
   pageBreak: "undoOpPageBreak",
+  sectionBreak: "undoOpSectionBreak",
   hrule: "undoOpHrule",
   link: "undoOpLink",
   bookmark: "undoOpBookmark",

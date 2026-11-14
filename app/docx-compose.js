@@ -601,6 +601,49 @@ function applyPageBreakInXml(xml, edit) {
   return { xml: composeSerialize(doc), count: 1 };
 }
 
+// ── op "sectionBreak": Układ → Podziały → Podział sekcji (następna strona / ciągły) ─────────────
+// Jak Word (tools/word-oracle/probe-section-break.js): akapit dzielony w miejscu kursora (mode jak
+// pageBreak: split / after / before); ostatni akapit NOWEJ (wcześniejszej) sekcji dostaje kopię
+// ustawień bieżącej sekcji RAZEM z nagłówkami i stopkami, a sekcja dalej traci odwołania do nich
+// (dziedziczy — „Połącz z poprzednim”) i dostaje rodzaj podziału (w:type, „następna strona” = bez).
+function applySectionBreakInXml(xml, edit) {
+  const kind = edit.kind === "continuous" ? "continuous" : "nextPage";
+  const doc = composeParse(xml);
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  const p = paragraphs[edit.index];
+  if (!p || p.parentNode?.localName !== "body") return { xml, count: 0 }; // w tabeli / polu tekstowym Word też nie wstawia
+  let last; // ostatni akapit wcześniejszej sekcji
+  if (edit.mode === "split") {
+    const np = p.cloneNode(true);
+    applyRunsToParagraphXml(p, edit.beforeRuns || []);
+    applyRunsToParagraphXml(np, edit.afterRuns || []);
+    p.parentNode.insertBefore(np, p.nextSibling);
+    const pPr = composeDirectChild(p, "pPr");
+    const own = pPr && composeDirectChild(pPr, "sectPr");
+    if (own) pPr.removeChild(own); // zostaje na drugiej części (klon)
+    last = p;
+  } else if (edit.mode === "before") {
+    last = composeEl(doc, "p");
+    p.parentNode.insertBefore(last, p);
+  } else {
+    const np = composeNewParagraphAfter(p);
+    composeMoveSectPr(p, np);
+    last = p;
+  }
+  const at = collectParagraphElements(doc.documentElement, "all").indexOf(last);
+  const later = composeSectionAt(doc, at + 1); // sekcja, która teraz zaczyna się za podziałem
+  const earlier = later.cloneNode(true);
+  Array.from(later.childNodes).filter((n) => n.nodeType === 1 && (n.localName === "headerReference" || n.localName === "footerReference")).forEach((n) => later.removeChild(n));
+  const type = composeDirectChild(later, "type");
+  if (type) later.removeChild(type);
+  if (kind === "continuous") {
+    const el = composeEl(doc, "type", { val: "continuous" });
+    later.insertBefore(el, Array.from(later.childNodes).find((n) => n.nodeType === 1 && !["footnotePr", "endnotePr"].includes(n.localName)) || null);
+  }
+  composeSetPPrChild(composeEnsurePPr(last), "sectPr", earlier);
+  return { xml: composeSerialize(doc), count: 1 };
+}
+
 // Linia pozioma = pusty akapit z dolną krawędzią (tak robi to Word: „---” + Enter),
 // a za nim pusty akapit do dalszego pisania.
 function applyHruleInXml(xml, edit) {

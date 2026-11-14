@@ -1950,6 +1950,38 @@ const composeUi = (() => {
     });
     // Word: Ustawienia strony → Układ → Wyrównanie w pionie — w tym samym okienku (dawniej w „Wstaw”)
     buildPageVAlignMenu(el);
+    // Word: Układ → Podziały — podział strony i podziały sekcji (inna orientacja / marginesy / nagłówki dalej)
+    popCap(el, t("breaksCap"));
+    popItem(el, { label: t("insertPageBreak"), desc: "Ctrl/⌘+Enter", icon: ICON('<path d="M6 3h12v6H6z"/><path d="M6 21v-6h12v6"/><line x1="3" y1="12" x2="21" y2="12" stroke-dasharray="2 2"/>'), onPick: () => { closePop(); insertPageBreak(); } }).dataset.brk = "page";
+    popItem(el, { label: t("sectionNextPage"), desc: t("sectionNextPageDesc"), icon: ICON('<path d="M6 3h12v6H6z"/><path d="M6 21v-6h12v6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="12" x2="7" y2="10"/>'), onPick: () => { closePop(); insertSectionBreak("nextPage"); } }).dataset.brk = "nextPage";
+    popItem(el, { label: t("sectionContinuous"), desc: t("sectionContinuousDesc"), icon: ICON('<line x1="5" y1="6" x2="19" y2="6"/><line x1="5" y1="18" x2="19" y2="18"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="12" x2="7" y2="10"/>'), onPick: () => { closePop(); insertSectionBreak("continuous"); } }).dataset.brk = "continuous";
+  }
+  // podział sekcji w miejscu kursora (jak podział strony: tekst za kursorem idzie do nowej sekcji)
+  async function insertSectionBreak(kind) {
+    const p = caretParagraph();
+    if (!p) return;
+    if (p.closest("td, th, .dwb-tb, header, footer")) { toast(t("sectionBreakNoHere"), "info"); return; }
+    const index = resolveParaIndex(p);
+    if (index < 0) return;
+    const { before, after } = textAround(p);
+    let edit;
+    if (!after) edit = { op: "sectionBreak", index, kind, mode: "after" };
+    else if (!before) edit = { op: "sectionBreak", index, kind, mode: "before" };
+    else {
+      const tail = splitParagraphDomAtCaret(p);
+      if (!tail) return;
+      const beforeRuns = extractRunsFromPreviewParagraph(p);
+      const afterRuns = extractRunsFromPreviewParagraph(tail);
+      mergeParagraphDom(p, tail);
+      edit = { op: "sectionBreak", index, kind, mode: "split", beforeRuns, afterRuns };
+    }
+    const n = await applyDocumentEdit(edit, {}).catch(() => 0);
+    pendingInlineCursor = null;
+    if (n) {
+      await whenEditable();
+      focusParagraphAtOffset(edit.mode === "before" ? index + 1 : index + 1, 0);
+      toastUndoable(t("sectionBreakDone"));
+    }
   }
 
   function buildMarginForm(el, ctx, cur) {
