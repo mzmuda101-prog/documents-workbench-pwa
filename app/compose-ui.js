@@ -2039,6 +2039,90 @@ const composeUi = (() => {
       icon: ICON('<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M10 12h6M8 16h8"/>'),
       onPick: () => openPop(spacingBtn, (form) => buildLayoutForm(form, ctx)),
     }).dataset.more = "1";
+    // Tabulatory… (jak przycisk „Tabulatory” w oknie Akapit w Wordzie)
+    const stops = await composeTabsFromBytes(originalFileBytes, ctx.indices[0]).catch(() => []);
+    popItem(el, {
+      label: t("tabsMore"),
+      desc: stops.length ? stops.map((x) => `${cmText(x.pos)} cm`).slice(0, 4).join(" · ") + (stops.length > 4 ? " …" : "") : t("tabsNone"),
+      icon: ICON('<line x1="3" y1="20" x2="21" y2="20"/><path d="M7 20v-6h4"/><path d="M15 20v-6"/><path d="M13 14h4"/><line x1="4" y1="9" x2="20" y2="9" stroke-dasharray="1.5 2.5"/>'),
+      onPick: () => openPop(spacingBtn, (form) => buildTabsForm(form, ctx, stops)),
+    }).dataset.tabs = "1";
+  }
+
+  // Okno „Tabulatory” (Word: Akapit → Tabulatory): lista tabulatorów akapitu, klik = do pól;
+  // pozycja (cm), wyrównanie, wypełnienie → „Ustaw” (ta sama pozycja = zamiana), ✕, „Usuń wszystkie”;
+  // OK zapisuje (op „tabsSet” — jeden krok Cofnij), Anuluj nic nie zmienia.
+  function buildTabsForm(el, ctx, initial) {
+    let stops = initial.map((x) => ({ ...x }));
+    el.classList.add("compose-pop-form", "compose-pop-tabs");
+    el.innerHTML = `<div class="compose-cap"></div>
+      <ul class="tabs-list" role="list"></ul>
+      <div class="mf-grid">
+        <label class="compose-field"><span data-k="tabsPos"></span><input type="text" class="tf-pos" inputmode="decimal" autocomplete="off" enterkeyhint="done"></label>
+        <label class="compose-field"><span data-k="tabsAlign"></span><select class="tf-align"></select></label>
+        <label class="compose-field"><span data-k="tabsLeader"></span><select class="tf-leader"></select></label>
+        <div class="compose-field tabs-set-cell"><button type="button" class="btn tf-set"></button></div>
+      </div>
+      <p class="compose-note mf-warn is-error" hidden></p>
+      <div class="compose-actions"><button type="button" class="btn tf-clear"></button><span class="compose-actions-gap"></span><button type="button" class="btn tf-cancel"></button><button type="button" class="btn primary tf-ok"></button></div>`;
+    el.querySelector(".compose-cap").textContent = t("tabsTitle");
+    el.querySelectorAll("[data-k]").forEach((x) => { x.textContent = t(x.dataset.k); });
+    const $ = (c) => el.querySelector(c);
+    const ALIGN = [["left", "tabsLeft"], ["center", "tabsCenter"], ["right", "tabsRight"], ["decimal", "tabsDecimal"]];
+    const LEAD = [["none", "tabsLeadNone"], ["dot", null, "……………"], ["hyphen", null, "------------"], ["underscore", null, "______"]];
+    ALIGN.forEach(([v, k]) => $(".tf-align").appendChild(new Option(t(k), v)));
+    LEAD.forEach(([v, k, txt]) => $(".tf-leader").appendChild(new Option(k ? t(k) : txt, v)));
+    const list = $(".tabs-list");
+    const alignName = (a) => t((ALIGN.find((x) => x[0] === a) || ALIGN[0])[1]);
+    const leadName = (l) => { const x = LEAD.find((y) => y[0] === l); return x && x[0] !== "none" ? x[2] : ""; };
+    const draw = () => {
+      list.replaceChildren();
+      if (!stops.length) { const li = document.createElement("li"); li.className = "tabs-empty"; li.textContent = t("tabsEmpty"); list.appendChild(li); }
+      stops.forEach((x) => {
+        const li = document.createElement("li");
+        const pick = document.createElement("button");
+        pick.type = "button";
+        pick.className = "tabs-row";
+        pick.textContent = `${cmText(x.pos)} cm · ${alignName(x.align)}${leadName(x.leader) ? ` · ${leadName(x.leader)}` : ""}`;
+        pick.addEventListener("click", () => { $(".tf-pos").value = cmText(x.pos); $(".tf-align").value = x.align; $(".tf-leader").value = x.leader; $(".tf-pos").focus(); });
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "tabs-del";
+        del.setAttribute("aria-label", t("tabsRemove", { pos: `${cmText(x.pos)} cm` }));
+        del.innerHTML = ICON('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>');
+        del.addEventListener("click", () => { stops = stops.filter((y) => y !== x); draw(); });
+        li.append(pick, del);
+        list.appendChild(li);
+      });
+      $(".tf-clear").disabled = !stops.length;
+    };
+    const warn = $(".mf-warn");
+    const set = () => {
+      const pos = Math.round(parseNum($(".tf-pos").value) * TW_PER_CM);
+      if (!(pos > 0 && pos <= 31680)) { warn.hidden = false; warn.textContent = t("tabsBad"); $(".tf-pos").focus(); return false; }
+      warn.hidden = true;
+      stops = stops.filter((y) => Math.abs(y.pos - pos) > 3).concat({ pos, align: $(".tf-align").value, leader: $(".tf-leader").value }).sort((a, b) => a.pos - b.pos);
+      $(".tf-pos").value = "";
+      draw();
+      return true;
+    };
+    $(".tf-set").textContent = t("tabsSet");
+    $(".tf-set").addEventListener("click", set);
+    $(".tf-clear").textContent = t("tabsClearAll");
+    $(".tf-clear").addEventListener("click", () => { stops = []; draw(); });
+    $(".tf-cancel").textContent = t("linkCancel");
+    $(".tf-cancel").addEventListener("click", () => closePop());
+    $(".tf-ok").textContent = t("layoutApply");
+    const submit = () => {
+      // wpisana, a nieustawiona pozycja — jak w Wordzie OK ją ustawia
+      if ($(".tf-pos").value.trim() && !set()) return;
+      closePop();
+      runFileEdit({ op: "tabsSet", indices: ctx.indices, stops }, caretState(ctx.p));
+    };
+    $(".tf-ok").addEventListener("click", submit);
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.closest(".tf-pos")) { e.preventDefault(); set(); } });
+    $(".tf-pos").dataset.autofocus = "1";
+    draw();
   }
 
   // Formularz jak okno Akapit w Wordzie: wcięcia (cm), specjalne (pierwszy wiersz / wysunięcie),
