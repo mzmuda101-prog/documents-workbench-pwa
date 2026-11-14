@@ -2304,6 +2304,53 @@ function composeScopeCells(rows, tr, tc, scope) {
     : [tc];
 }
 
+// Sortowanie wierszy wg kolumny jak w Wordzie (Układ tabeli → Sortuj; tools/word-oracle/probe-table-sort.js):
+// rodzaj sam z 1. akapitów komórek — daty (d.m.r, r-m-d, m/d/r) albo liczby, gdy taka jest ponad połowa niepustych („2,5”, „1.5”, „12 zł”,
+// „(5)” = −5; „1 000” = 1, jak w Wordzie), inaczej tekst po polsku bez
+// wielkości liter. Komórki bez liczby/daty i puste na początku (malejąco: na końcu), remisy w kolejności
+// z pliku. Wiersze nagłówka (powtarzane — tu inaczej niż Word bez „wiersza nagłówka” — albo edit.header
+// pierwszych) zostają na górze. Tabela ze scaleniem pionowym — bez zmian (false).
+function composeTableSortKey(tc) {
+  const p = tc && Array.from(tc.childNodes).find((n) => n.localName === "p" && n.namespaceURI === W_NS); // Word: tylko 1. akapit
+  return p ? Array.from(p.getElementsByTagNameNS(W_NS, "t")).map((t) => t.textContent).join("") : "";
+}
+function composeSortNumber(s) {
+  const m = /^\s*(\()?(-)?(\d+(?:[.,]\d+)?)/.exec(s);
+  return m ? (m[1] || m[2] ? -1 : 1) * parseFloat(m[3].replace(",", ".")) : null;
+}
+function composeSortDate(s) {
+  const t = s.trim();
+  let m, y, mo, d;
+  if ((m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(t))) [d, mo, y] = m.slice(1).map(Number);
+  else if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t))) [y, mo, d] = m.slice(1).map(Number);
+  else if ((m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t))) [mo, d, y] = m.slice(1).map(Number);
+  else return null;
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  return dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d ? dt.getTime() : null;
+}
+function composeTableSort(tbl, col, edit) {
+  const rows = composeRows(tbl);
+  const isHead = (tr) => { const pr = composeDirectChild(tr, "trPr"); const h = pr && composeDirectChild(pr, "tblHeader"); return !!h && !/^(0|false|off)$/.test(composeWAttr(h, "val") || ""); };
+  let head = 0;
+  while (head < rows.length && isHead(rows[head])) head++;
+  head = Math.max(head, Math.min(rows.length, edit.header | 0));
+  const body = rows.slice(head);
+  if (body.length < 2 || body.some((r) => composeCells(r).some((c) => composeVMerge(c)))) return false;
+  const keys = body.map((r) => composeTableSortKey(composeCellAtCol(r, col)));
+  const filled = keys.filter((k) => k.trim());
+  const most = (f) => filled.filter((k) => f(k) != null).length * 2 > filled.length; // „brak” w kolumnie kwot nie psuje
+  const parse = most(composeSortDate) ? composeSortDate : most(composeSortNumber) ? composeSortNumber : null; // daty przed liczbami: „2024-03-05” ≠ 2024
+  const coll = new Intl.Collator("pl", { sensitivity: "base" });
+  const vals = keys.map((k) => (parse ? (k.trim() ? parse(k) : null) : k));
+  const cmp = (x, y) => (!parse ? coll.compare(x, y) : x == null || y == null ? (y == null) - (x == null) : x - y);
+  const sign = edit.order === "desc" ? -1 : 1;
+  const order = body.map((r, i) => i).sort((i, j) => sign * cmp(vals[i], vals[j])); // sort stabilny — remisy jak w pliku
+  if (order.every((v, i) => v === i)) return true;
+  const after = rows[rows.length - 1].nextSibling;
+  order.forEach((i) => tbl.insertBefore(body[i], after));
+  return true;
+}
+
 // op "table": { index, action } — rowAbove / rowBelow / colLeft / colRight / delRow / delCol / delTable
 function applyTableInXml(xml, edit) {
   const doc = composeParse(xml);
@@ -2459,6 +2506,8 @@ function applyTableInXml(xml, edit) {
     composeTableBorders(doc, tbl, edit.kind);
   } else if (a === "evenCols") {
     if (!composeTableEvenCols(tbl)) return { xml, count: 0 };
+  } else if (a === "sort") {
+    if (!composeTableSort(tbl, gridCol, edit)) return { xml, count: 0 };
   } else if (a === "rowHeight") {
     // wysokość wiersza (Word: przeciągnięcie dolnej krawędzi wiersza) — „co najmniej” (wiersz nie
     // staje się niższy niż jego tekst); wiersz z wysokością „dokładnie” zostaje „dokładnie”

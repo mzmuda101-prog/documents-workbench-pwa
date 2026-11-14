@@ -8,6 +8,7 @@
 
 const pw = require("playwright");
 const { APP_URL } = require("./docx-test-helpers");
+const { buildDocx } = require("../tools/word-oracle/build-docx");
 
 const ENGINE = process.env.ENGINE === "webkit" ? "webkit" : "chromium";
 const results = [];
@@ -183,6 +184,30 @@ async function run() {
   await idle(page);
   t = await savedTable(page);
   check("Cofnij: krawędzie wracają do „bez krawędzi”", /insideH:none/.test(t.borders) && /^top:none/.test(t.borders), t.borders);
+
+  // ── Sortuj (kolejność jak w Wordzie: tools/word-oracle/run-tables.js „sortuj-*”) ─────────────
+  // pogrubiony pierwszy wiersz = nagłówek, zostaje na górze; kolumna z kursorem to liczby → 41, 30, 25
+  const tc = (s, b) => `<w:tc><w:p><w:r>${b ? "<w:rPr><w:b/></w:rPr>" : ""}<w:t>${s}</w:t></w:r></w:p></w:tc>`;
+  const sortRows = [["Imię", "Wiek"], ["Ola", "30"], ["Ewa", "25"], ["Adam", "41"]];
+  const sortDoc = await buildDocx({ body: ["Lista:", `<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tblGrid><w:gridCol w:w="3000"/><w:gridCol w:w="3000"/></w:tblGrid>${sortRows.map((r, i) => `<w:tr>${r.map((s) => tc(s, i === 0)).join("")}</w:tr>`).join("")}</w:tbl>`, "Koniec."] });
+  await page.locator("#fileInput").setInputFiles({ name: "sort.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer: sortDoc });
+  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && [...document.querySelectorAll(".docx-preview-host td p")].some((p) => p.textContent === "Adam"), null, { timeout: 30000 });
+  await page.evaluate(() => { if (readOnlyMode) appFrame.setReadOnly(false); });
+  await idle(page);
+  await inCell("30");
+  await menu("sort-desc");
+  t = await savedTable(page);
+  check("Sortuj malejąco wg kolumny z kursorem: nagłówek na górze, liczby 41, 30, 25", text(t) === "Imię ; Wiek / Adam ; 41 / Ola ; 30 / Ewa ; 25", text(t));
+  check("podgląd w nowej kolejności", await page.evaluate(() => [...document.querySelectorAll(".docx-preview-host table tr")].map((tr) => tr.cells[0].textContent.trim()).join(",")) === "Imię,Adam,Ola,Ewa");
+  await inCell("Ola");
+  await menu("sort-asc");
+  t = await savedTable(page);
+  check("Sortuj rosnąco wg 1. kolumny: Adam, Ewa, Ola", text(t) === "Imię ; Wiek / Adam ; 41 / Ewa ; 25 / Ola ; 30", text(t));
+  await settle();
+  await page.click("#undoBtn");
+  await idle(page);
+  t = await savedTable(page);
+  check("Cofnij sortowanie: poprzednia kolejność", text(t) === "Imię ; Wiek / Adam ; 41 / Ola ; 30 / Ewa ; 25", text(t));
 
   if (errors.length) check("brak błędów strony", false, errors.slice(0, 3).join(" | "));
   await browser.close();

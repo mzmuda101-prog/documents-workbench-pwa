@@ -33,6 +33,18 @@ const CASES = [
   { name: "podziel-scalona-pionowo", rows: [[{ t: "A", v: "restart" }, "B1"], [{ t: "", v: "continue" }, "B2"]], op: { split: [1, 1], cols: 1, rows: 2 } },
   { name: "naglowek-pierwszy", rows: G3, op: { header: 1 } },
   { name: "naglowek-wylacz", rows: G3, header: [0, 1], op: { header: 1 } },
+  // sortowanie (Tabela → Sortuj): { sort: kolumna, order, type (dla Worda; apka zgaduje sama), skip: pierwszy wiersz to nagłówek }
+  { name: "sortuj-tekst", rows: [["b", "1"], ["B", "2"], ["Ą", "3"], ["", "4"], ["a", "5"], ["ćma", "6"]], op: { sort: 1, type: "text" } },
+  { name: "sortuj-malejaco", rows: [["b", "1"], ["", "2"], ["a", "3"], ["c", "4"], ["A", "5"]], op: { sort: 1, type: "text", order: "descending" } },
+  { name: "sortuj-liczby", rows: [["x", "10"], ["y", "9"], ["z", "abc"], ["v", "2,5"], ["w", "100"], ["u", ""], ["t", "12 zł"]], op: { sort: 2, type: "num" } },
+  { name: "sortuj-liczby-malejaco", rows: [["x", "10"], ["y", "-3"], ["z", ""], ["v", "2,5"]], op: { sort: 2, type: "num", order: "descending" } },
+  { name: "sortuj-daty", rows: [["a", "15.11.2026"], ["b", "1.02.2025"], ["c", "2024-03-05"], ["d", "3/4/2026"], ["e", ""]], op: { sort: 2, type: "date" } },
+  { name: "sortuj-cyfry-z-tekstem", rows: [["10"], ["9"], ["a"], ["2"]], op: { sort: 1, type: "num" } }, // większość to liczby → apka sama wybiera liczby
+  { name: "sortuj-z-naglowkiem", rows: [["Imię", "Wiek"], ["Ola", "30"], ["Ewa", "25"], ["Adam", "41"]], op: { sort: 1, type: "text", skip: true } },
+  // powtarzany wiersz nagłówka apka zostawia na górze sama (Word przez AppleScript bez „exclude header” go przesuwa)
+  { name: "sortuj-wiersz-naglowka", rows: [["Imię", "Wiek"], ["Ola", "30"], ["Ewa", "25"]], header: [0], op: { sort: 1, type: "text", skip: true, appSkip: false } },
+  { name: "sortuj-kwoty-z-brak", rows: [["a", "brak"], ["b", "100"], ["c", "20"], ["d", "3,5"]], op: { sort: 2, type: "num" } },
+  { name: "sortuj-kilka-akapitow", rows: [[{ paras: ["b", "a"] }, "1"], [{ paras: ["a", "z"] }, "2"], ["a", "3"]], op: { sort: 1, type: "text" } },
 ];
 module.exports = { CASES, tableXml, STYLES };
 

@@ -16,6 +16,7 @@ function wordOp(bytes, c) {
   const o = c.op;
   const cell = (r, k) => `(get cell from table (table 1) row ${r} column ${k})`;
   const body = o.merge ? `merge cell ${cell(o.merge[0], o.merge[1])} with ${cell(o.merge[2], o.merge[3])}`
+    : o.sort ? `sort (text object of table 1) exclude header ${!!o.skip} field number ${o.sort} sort field type ${{ text: "sort field alphanumeric", num: "sort field numeric", date: "sort field date" }[o.type]} sort order sort order ${o.order || "ascending"}`
     : o.split ? `split cell ${cell(o.split[0], o.split[1])} number of rows ${o.rows} number of columns ${o.cols}`
     : `set heading format of row ${o.header} of table 1 to (not (heading format of row ${o.header} of table 1))`;
   const out = { doc: word.saveDocx(bytes, body).parts["word/document.xml"] };
@@ -28,6 +29,7 @@ function appEdit(c) {
   const { cellParaIndex } = require("./cases-tables");
   const o = c.op;
   if (o.merge) return { op: "table", index: cellParaIndex(c.rows, o.merge[0], o.merge[1]), action: "merge", toIndex: cellParaIndex(c.rows, o.merge[2], o.merge[3]) };
+  if (o.sort) return { op: "table", index: cellParaIndex(c.rows, c.rows.length, o.sort), action: "sort", order: o.order === "descending" ? "desc" : "asc", header: (o.appSkip ?? o.skip) ? 1 : 0 };
   if (o.split) return { op: "table", index: cellParaIndex(c.rows, o.split[0], o.split[1]), action: "split" };
   return { op: "table", index: cellParaIndex(c.rows, o.header, 1), action: "headerRow" };
 }

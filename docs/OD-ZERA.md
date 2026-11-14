@@ -40,8 +40,9 @@ orientacja, rozmiar, wyrównanie w pionie), śledzenie zmian i recenzja.
 Bez plików w bazie, ale Word to ma (w kolejce z planu): ✅ kolumny tekstu (Układ → Kolumny: jedna /
 dwie / trzy, linia między kolumnami, zaznaczony fragment z podziałami ciągłymi; kolumny strona po
 stronie w podglądzie i wydruku jak w Wordzie — v1.00.55; kolumny nierównej szerokości na później),
-znak wodny, sortowanie
-tabeli, edytor równań, Alt+X. Jeszcze dalej: inicjał, obramowanie strony, podpisy i odsyłacze
+znak wodny, ✅ sortowanie
+tabeli (Tabela → Sortuj rosnąco / malejąco wg kolumny z kursorem; tekst / liczby / daty jak w Wordzie
+— v1.00.57), edytor równań, Alt+X. Jeszcze dalej: inicjał, obramowanie strony, podpisy i odsyłacze
 („Rysunek 1”), kształty, wykresy, SmartArt.
 
 ## Gdzie co ma być (nawigacja)
@@ -60,7 +61,7 @@ pod prawym przyciskiem. Na telefonie (do 480 px) te same menu, przyciski jako ik
 | **Wstaw** | obiekty: tabela, obraz, pole tekstowe, symbol, przypis, link, spis treści… | równanie, podpis „Rysunek 1” |
 | **Układ** | strona: marginesy, orientacja, rozmiar, kolumny ✅, wyrównanie w pionie, podziały ✅ | „Znak wodny”, obramowanie strony |
 | **Karta obrazu** (przy zaznaczonym obrazie) | rozmiar, opis, zamiana | „Zawijanie” — jak przycisk „Opcje układu” obok obrazu w Wordzie |
-| **Tabela** (gdy kursor w tabeli) | wiersze, kolumny, scalanie, nagłówek, cieniowanie, krawędzie; szerokość kolumn i wysokość wierszy przeciąganiem krawędzi (mysz) | wyrównanie w komórce (góra / środek / dół), kierunek tekstu, sortowanie, tabela w komórce |
+| **Tabela** (gdy kursor w tabeli) | wiersze, kolumny, scalanie, nagłówek, cieniowanie, krawędzie; szerokość kolumn i wysokość wierszy przeciąganiem krawędzi (mysz) | wyrównanie w komórce (góra / środek / dół), kierunek tekstu, sortowanie ✅, tabela w komórce |
 | **Recenzja** (panel + tryb Sugerowanie) | zmiany, komentarze, przegląd po kolei ✅ | — |
 | **Prawy przycisk** | najczęstsze: wytnij / kopiuj / wklej, styl, lista, komentarz, recenzja | „Akapit…”, „Czcionka…” (jak w Wordzie) |
 

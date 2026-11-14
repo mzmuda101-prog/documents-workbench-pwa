@@ -1558,11 +1558,11 @@ const composeUi = (() => {
     const index = resolveParaIndex(p);
     const firstIdx = firstParaIndexIn(cell.table);
     const n = await applyDocumentEdit({ op: "table", index, action, ...extra }).catch((err) => { log(`Tabela: ${err.message || err}`, "error"); return 0; });
-    if (!n && ["merge", "split", "evenCols"].includes(action)) toast(t(action === "merge" ? "tableMergeNo" : action === "split" ? "tableSplitNo" : "tableEvenNo"), "info");
+    if (!n && ["merge", "split", "evenCols", "sort"].includes(action)) toast(t({ merge: "tableMergeNo", split: "tableSplitNo", evenCols: "tableEvenNo", sort: "tableSortNo" }[action]), "info");
     await whenEditable();
     if (readOnlyMode) return;
     const { ti, r, c } = cell;
-    const target = { rowAbove: [r, c], rowBelow: [r + 1, c], colLeft: [r, c], colRight: [r, c + 1], delRow: [r, c], delCol: [r, c - 1], merge: [Math.min(r, extra.toR ?? r), Math.min(c, extra.toC ?? c)], split: [r, c], headerRow: [r, c], shade: [r, c], borders: [r, c], evenCols: [r, c] }[action];
+    const target = { rowAbove: [r, c], rowBelow: [r + 1, c], colLeft: [r, c], colRight: [r, c + 1], delRow: [r, c], delCol: [r, c - 1], merge: [Math.min(r, extra.toR ?? r), Math.min(c, extra.toC ?? c)], split: [r, c], headerRow: [r, c], shade: [r, c], borders: [r, c], evenCols: [r, c], sort: [r, c] }[action];
     if (target) focusCell(ti, target[0], Math.max(0, target[1]));
     else if (action === "delTable" && firstIdx >= 0) focusParagraphAtOffset(firstIdx, 0); // akapit, który był pod tabelą
   }
@@ -1579,6 +1579,15 @@ const composeUi = (() => {
     const other = a === p || ca.td === cellOf(p)?.td ? b : a;
     const co = cellOf(other);
     return { toIndex: resolveParaIndex(other), toR: co.r, toC: co.c };
+  }
+  // Pierwszy wiersz tabeli z kursorem cały pogrubiony (z tekstem) — nagłówek przy sortowaniu
+  function boldFirstRow(p) {
+    const tr = cellOf(p)?.table?.rows[0];
+    if (!tr) return false;
+    const w = document.createTreeWalker(tr, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.data.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT) });
+    let n, any = false;
+    while ((n = w.nextNode())) { any = true; if (parseInt(getComputedStyle(n.parentElement).fontWeight, 10) < 600) return false; }
+    return any;
   }
   // Wiersz z kursorem powtarzany jako nagłówek (w:tblHeader) — z pliku
   async function rowIsHeader(p) {
@@ -1639,6 +1648,13 @@ const composeUi = (() => {
       popItem(el, { label: t(key), icon: ICON(svg), onPick: () => tableAction("borders", { kind }) }).dataset.tbl = `borders-${kind}`;
     });
     popItem(el, { label: t("tableEvenCols"), icon: ICON('<rect x="3" y="4" width="18" height="16" rx="1.5"/><line x1="9" y1="4" x2="9" y2="20"/><line x1="15" y1="4" x2="15" y2="20"/>'), onPick: () => tableAction("evenCols") }).dataset.tbl = "evenCols";
+    // ── sortowanie (Word: Układ tabeli → Dane → Sortuj): wg kolumny z kursorem, rodzaj (tekst/liczby/daty)
+    // rozpoznaje plik; pogrubiony pierwszy wiersz to nagłówek (zostaje na górze, jak powtarzany)
+    popCap(el, t("tableSortGroup"));
+    [["asc", "tableSortAsc", '<path d="M4 6h3M4 12h5M4 18h7"/><path d="M17 5v14M14 16l3 3 3-3"/>'],
+      ["desc", "tableSortDesc", '<path d="M4 6h7M4 12h5M4 18h3"/><path d="M17 5v14M14 16l3 3 3-3"/>']].forEach(([order, key, svg]) => {
+      popItem(el, { label: t(key), desc: t("tableSortHint"), icon: ICON(svg), onPick: () => tableAction("sort", { order, header: caretP && boldFirstRow(caretP) ? 1 : 0 }) }).dataset.tbl = `sort-${order}`;
+    });
     // kolor (cieniowanie) komórki — zakres jak przy wyrównaniu
     popCap(el, t("tableShadeGroup"));
     let shadeScope = "cell";
