@@ -82,7 +82,7 @@ async function run() {
   await caretIn(page, "Drugi akapit");
   await openMenu();
   const items = await page.evaluate(() => [...document.querySelectorAll(".compose-pop-spacing .compose-item")].map((b) => b.textContent.trim()));
-  check("menu: 6 interlinii, odstępy, wcięcia, „Odstępy i wcięcia…”", items.length === 11 && items[0].startsWith("1,0") && items[1].startsWith("1,15"), items.join(" | "));
+  check("menu: 6 interlinii, odstępy, wcięcia, „Odstępy i wcięcia…”, „Tabulatory…”", items.length === 12 && items[0].startsWith("1,0") && items[1].startsWith("1,15") && items[11].startsWith("Tabulatory…"), items.join(" | "));
   const lhBefore = await page.evaluate(() => getComputedStyle([...document.querySelectorAll(".docx-editable-p")].find((x) => x.textContent.includes("Drugi"))).lineHeight);
   await pick('[data-line="360"]');
   let pp = await savedPPr(page, "Drugi akapit");

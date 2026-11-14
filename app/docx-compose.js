@@ -2511,6 +2511,86 @@ function applyTabStopInXml(xml, edit) {
   return { xml: composeSerialize(doc), count: 1 };
 }
 
+// ── tabulatory akapitu (okno „Tabulatory…”, jak w Wordzie: Akapit → Tabulatory) ─────────────
+// Widoczne = ze stylu (łańcuch w:basedOn, styl domyślny gdy brak w:pStyle) + własne akapitu
+// (własne „clear” wyłącza tabulator stylu). Zapis jak w Wordzie: w akapicie tylko różnica wobec
+// stylu — własne pozycje i „clear” dla tabulatorów stylu, których nie ma być.
+const COMPOSE_TAB_ALIGNS = ["left", "center", "right", "decimal"];
+const COMPOSE_TAB_LEADERS = ["none", "dot", "hyphen", "underscore"];
+const composeTabOf = (t) => ({ pos: parseInt(t.getAttributeNS(W_NS, "pos"), 10), align: t.getAttributeNS(W_NS, "val") || "left", leader: t.getAttributeNS(W_NS, "leader") || "none" });
+function composeTabsApply(map, tabsEl) {
+  if (!tabsEl) return;
+  Array.from(tabsEl.childNodes).filter((n) => n.nodeType === 1 && n.localName === "tab").forEach((n) => {
+    const tab = composeTabOf(n);
+    if (!Number.isFinite(tab.pos)) return;
+    [...map.keys()].filter((k) => Math.abs(k - tab.pos) <= 3).forEach((k) => map.delete(k));
+    if (tab.align !== "clear") map.set(tab.pos, tab);
+  });
+}
+function composeStyleTabs(stylesDoc, styleId) {
+  const map = new Map();
+  if (!stylesDoc) return map;
+  const all = Array.from(stylesDoc.getElementsByTagNameNS(W_NS, "style"));
+  const chain = [];
+  for (let id = styleId, guard = 0; id && guard < 20; guard++) {
+    const st = all.find((x) => x.getAttributeNS(W_NS, "styleId") === id && x.getAttributeNS(W_NS, "type") === "paragraph");
+    if (!st) break;
+    chain.unshift(st);
+    id = composeDirectChild(st, "basedOn")?.getAttributeNS(W_NS, "val");
+  }
+  chain.forEach((st) => composeTabsApply(map, composeDirectChild(composeDirectChild(st, "pPr") || st, "tabs")));
+  return map;
+}
+function composeParaStyleId(p, stylesDoc) {
+  const own = composeDirectChild(composeDirectChild(p, "pPr") || p, "pStyle")?.getAttributeNS(W_NS, "val");
+  return own || (stylesDoc ? composeStylesIndex(stylesDoc).defaultId : null);
+}
+function composeEffectiveTabs(p, stylesDoc) {
+  const map = composeStyleTabs(stylesDoc, composeParaStyleId(p, stylesDoc));
+  composeTabsApply(map, composeDirectChild(composeDirectChild(p, "pPr") || p, "tabs"));
+  return [...map.values()].sort((a, b) => a.pos - b.pos);
+}
+async function composeTabsFromBytes(bytes, index) {
+  const zip = await JSZip.loadAsync(bytes);
+  const doc = composeParse(await zip.file("word/document.xml").async("string"));
+  const p = collectParagraphElements(doc.documentElement, "all")[index];
+  const stylesXml = await zip.file("word/styles.xml")?.async("string");
+  return p ? composeEffectiveTabs(p, stylesXml ? composeParse(stylesXml) : null) : [];
+}
+// op "tabsSet": { indices, stops: [{ pos (twips), align, leader }] } — docelowa lista tabulatorów
+async function applyTabsSetInZip(zip, xml, edit) {
+  const doc = composeParse(xml);
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  const targets = (edit.indices || []).map((i) => paragraphs[i]).filter(Boolean);
+  const stops = (edit.stops || []).map((x) => ({ pos: Math.round(Number(x.pos)), align: COMPOSE_TAB_ALIGNS.includes(x.align) ? x.align : "left", leader: COMPOSE_TAB_LEADERS.includes(x.leader) ? x.leader : "none" }))
+    .filter((x) => x.pos > 0 && x.pos <= 31680).sort((a, b) => a.pos - b.pos);
+  if (!targets.length) return { xml, count: 0 };
+  const stylesXml = await zip.file("word/styles.xml")?.async("string");
+  const stylesDoc = stylesXml ? composeParse(stylesXml) : null;
+  let count = 0;
+  targets.forEach((p) => {
+    const before = JSON.stringify(composeEffectiveTabs(p, stylesDoc));
+    const fromStyle = composeStyleTabs(stylesDoc, composeParaStyleId(p, stylesDoc));
+    const own = [];
+    stops.forEach((x) => {
+      const st = [...fromStyle.values()].find((y) => Math.abs(y.pos - x.pos) <= 3);
+      if (!st || st.align !== x.align || st.leader !== x.leader) own.push(x);
+    });
+    fromStyle.forEach((y) => { if (!stops.some((x) => Math.abs(x.pos - y.pos) <= 3)) own.push({ pos: y.pos, align: "clear", leader: "none" }); });
+    own.sort((a, b) => a.pos - b.pos);
+    const pPr = composeEnsurePPr(p);
+    if (!own.length) composeSetPPrChild(pPr, "tabs", null);
+    else {
+      const tabs = composeEl(doc, "tabs");
+      own.forEach((x) => tabs.appendChild(composeEl(doc, "tab", x.leader !== "none" ? { val: x.align, leader: x.leader, pos: x.pos } : { val: x.align, pos: x.pos })));
+      composeSetPPrChild(pPr, "tabs", tabs);
+    }
+    if (!pPr.firstChild) p.removeChild(pPr);
+    if (JSON.stringify(composeEffectiveTabs(p, stylesDoc)) !== before) count++;
+  });
+  return { xml: count ? composeSerialize(doc) : xml, count };
+}
+
 // op "image": { index, action: "size" (widthPct) | "align" (align) | "alt" (descr) | "delete" }
 // Działa na pierwszym obrazie akapitu — także z plików z Worda (wp:inline albo wp:anchor).
 function applyImageInXml(xml, edit) {

@@ -3895,3 +3895,18 @@ body.dwb-painting .docx-preview-host * {
 @media (hover: hover) { .list-chip:hover { border-color: var(--accent); background: var(--accent-light); } }
 .list-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 @media (pointer: coarse) { .list-chip { min-height: 44px; } }
+
+/* Okno „Tabulatory” (compose-ui.js buildTabsForm) */
+.tabs-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 4px; max-height: 180px; overflow-y: auto; }
+.tabs-list li { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.tabs-row {
+  flex: 1; min-width: 0; min-height: 36px; padding: 0 10px; text-align: left; border: 1px solid var(--border-subtle); border-radius: 8px;
+  background: var(--panel); color: var(--ink); font: inherit; font-size: 13px; font-variant-numeric: tabular-nums; cursor: pointer; overflow-wrap: anywhere;
+}
+.tabs-del { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 0; border-radius: 8px; background: none; color: var(--muted); cursor: pointer; flex: none; }
+@media (hover: hover) { .tabs-row:hover { border-color: var(--accent); background: var(--accent-light); } .tabs-del:hover { color: var(--danger); background: var(--danger-bg); } }
+.tabs-row:focus-visible, .tabs-del:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tabs-empty { padding: 6px 2px; font-size: 13px; color: var(--muted); }
+.tabs-set-cell { justify-content: flex-end; }
+.tabs-set-cell .btn { width: 100%; }
+@media (pointer: coarse) { .tabs-row, .tabs-del { min-height: 44px; } .tabs-del { width: 44px; height: 44px; } }
