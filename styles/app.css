@@ -1029,20 +1029,31 @@ html.is-mobile .dwb-page-margin-guide { display: none; }
 .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border); border-top-color: var(--accent); animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.toast-container { position: fixed; right: 16px; bottom: 16px; z-index: 10001; display: flex; flex-direction: column; gap: 8px; max-width: calc(100vw - 32px); }
+/* stos dymków jak Sonner (core.js layoutToasts): dymki leżą absolutnie od dołu kontenera (telefon:
+   od góry), kontener ma wysokość przedniego dymka albo całej rozłożonej listy */
+.toast-container { position: fixed; right: 16px; bottom: 16px; z-index: 10001; width: min(360px, calc(100vw - 32px)); transition: height 300ms var(--ease-out); }
 .toast {
-  display: flex; gap: 10px; align-items: flex-start; min-width: 220px; max-width: 360px;
+  position: absolute; left: 0; right: 0; bottom: 0; box-sizing: border-box;
+  display: flex; gap: 10px; align-items: flex-start;
   padding: 12px 14px; border-radius: var(--r); background: var(--glass-bg-strong);
-  border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow); transition: opacity 240ms var(--ease-out), transform 240ms var(--ease-out);
+  border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow);
+  transform-origin: 50% 100%;
+  transform: translateY(calc(var(--ty, 0px) + var(--swipe, 0px))) scale(var(--ts, 1));
+  transition: opacity 240ms var(--ease-out), transform 300ms var(--ease-out);
   touch-action: pan-x; /* pion należy do gestu „w dół = zamknij” (core.js) */
 }
-.toast.out { opacity: 0; transform: translateY(6px); transition: opacity 150ms var(--ease-out), transform 150ms var(--ease-out); }
+/* schowany w stosie: widać tylko jego brzeg — treść znika, nie da się w nią trafić */
+.toast > * { transition: opacity 200ms var(--ease-out); }
+.toast.is-behind { overflow: hidden; }
+.toast.is-behind > * { opacity: 0; pointer-events: none; }
+.toast.is-hidden { opacity: 0; pointer-events: none; }
+.toast.out { opacity: 0; pointer-events: none; transition: opacity 150ms var(--ease-out), transform 150ms var(--ease-out); }
 .toast.success { border-color: color-mix(in srgb, var(--success) 40%, var(--border)); }
 .toast.error { border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); }
 .toast.warning { border-color: color-mix(in srgb, var(--warning) 40%, var(--border)); }
 .toast-icon { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; background: var(--accent-light); color: var(--accent); flex-shrink: 0; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-@starting-style { .toast { opacity: 0; transform: translateY(8px); } }
+@starting-style { .toast { opacity: 0; transform: translateY(calc(var(--ty, 0px) + 8px)) scale(var(--ts, 1)); } }
 
 .log-line { padding: 2px 0; }
 
@@ -1178,7 +1189,7 @@ html.is-mobile body.has-document .doc-panel {
     left: max(12px, var(--safe-left));
     right: max(12px, var(--safe-right));
     bottom: max(12px, var(--safe-bottom));
-    max-width: none;
+    width: auto;
   }
   .doc-canvas:not(.doc-reflow-mode) {
     padding: 12px 8px 28px;
@@ -1427,6 +1438,7 @@ details.panel > summary .panel-title { flex: 1; }
   .sidebar { transition: opacity var(--t); }
   .sidebar-handle { transition: opacity var(--t), color var(--t), border-color var(--t), background var(--t), box-shadow var(--t); }
   .toast, .toast.out { transition-property: opacity; }
+  .toast-container { transition: none; }
   .read-hint { animation-name: dwb-fade-in; }
   .lang-switch.is-ready .lang-switch-indicator { transition: none; }
 }
@@ -1876,9 +1888,11 @@ body.kb-open .doc-island:not(:focus-within) > * { pointer-events: none; }
 @media (max-width: 768px) and (pointer: coarse) {
   .toast-container {
     top: calc(max(8px, var(--safe-top)) + 4px); bottom: auto;
-    left: max(10px, var(--safe-left)); right: max(10px, var(--safe-right));
+    left: max(10px, var(--safe-left)); right: max(10px, var(--safe-right)); width: auto;
   }
-  .toast { max-width: none; }
+  /* u góry: dymek zjeżdża z góry, starsze wystają spod niego w dół */
+  .toast { top: 0; bottom: auto; transform-origin: 50% 0; }
+  @starting-style { .toast { opacity: 0; transform: translateY(calc(var(--ty, 0px) - 8px)) scale(var(--ts, 1)); } }
 }
 /* telefon: długi tytuł nie może zająć całego rzędu skrótów */
 @media (max-width: 768px) { .section-chip { max-width: 62vw; } }

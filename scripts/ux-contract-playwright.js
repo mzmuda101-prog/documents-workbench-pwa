@@ -99,6 +99,29 @@ async function main() {
   check("dymki: błąd role=alert, info role=status, ✕ zamyka", toasts.role === "alert" && toasts.infoRole === "status" && toasts.errGone, JSON.stringify(toasts));
   check("dymki: przycisk akcji woła onAction i zamyka dymek", toasts.acted === 1 && toasts.actGone, JSON.stringify(toasts));
 
+  // ── stos dymków (jak Sonner): złożony — przedni na wierzchu, starsze wystają; najechanie rozkłada
+  // bez nakładania i wstrzymuje znikanie; zjechanie składa ───────────────────────────────────────
+  await page.evaluate(() => {
+    document.querySelectorAll(".toast").forEach((x) => x.remove());
+    toast("stos A", "warning", { duration: 60000 }); toast("stos B", "error", { duration: 60000 }); toast("stos C krótki", "warning", { duration: 2000 });
+  });
+  await page.waitForTimeout(800); // przejścia + jednorazowa podpowiedź
+  const geo = () => page.evaluate(() => [...document.querySelectorAll(".toast:not(.out)")].reverse().map((el) => { const r = el.getBoundingClientRect(); return { t: el.textContent, top: Math.round(r.top), bottom: Math.round(r.bottom), behind: el.classList.contains("is-behind") }; }));
+  let g = await geo();
+  check("stos złożony: przedni bez is-behind, starsze schowane i wystają najwyżej ~25 px", g.length === 3 && !g[0].behind && g[1].behind && g[2].behind && g[0].top - g[2].top <= 25 && g[0].top - g[2].top > 0, JSON.stringify(g));
+  await page.mouse.move(0, 0);
+  const box = await page.locator(".toast:not(.out)").last().boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.waitForTimeout(2200); // dłużej niż 2 s „stosu C” — rozłożony stos nie znika
+  g = await geo();
+  const apart = g.every((x, i) => i === 0 || x.bottom <= g[i - 1].top);
+  check("najechanie: stos rozłożony, dymki się nie nakładają, krótki dymek nie zniknął", g.length === 3 && apart && g.every((x) => !x.behind), JSON.stringify(g));
+  await page.mouse.move(5, 5);
+  await page.waitForTimeout(500);
+  g = await geo();
+  check("zjechanie: stos znów złożony", g.length >= 2 && g.slice(1).every((x) => x.behind), JSON.stringify(g));
+  await page.evaluate(() => document.querySelectorAll(".toast").forEach((x) => x.remove()));
+
   // ── ekran startowy: zdjęcie ──────────────────────────────────────────────
   check("ekran startowy: przycisk „Zdjęcie dokumentu”", await page.evaluate(() => !!document.getElementById("emptyPhotoBtn")?.offsetParent));
 
