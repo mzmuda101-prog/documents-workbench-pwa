@@ -796,7 +796,8 @@ html.is-mobile .dwb-page-margin-guide { display: none; }
 .compose-cellalign-scope, .compose-shade-scope { margin: 2px 8px 6px; }
 .compose-cellalign-scope button, .compose-shade-scope button { padding: 5px 6px; font-size: 12px; }
 .compose-cellalign { display: grid; grid-template-columns: repeat(3, 36px); gap: 4px; padding: 0 8px 6px; }
-.compose-cellalign .compose-align { width: 36px; height: 32px; }
+.compose-textdir { display: grid; grid-template-columns: repeat(3, 36px); gap: 4px; padding: 0 8px 6px; } /* kierunek tekstu w komórce — jak siatka wyrównania */
+.compose-cellalign .compose-align, .compose-textdir .compose-align { width: 36px; height: 32px; }
 /* bieżące ustawienie (marginesy, orientacja, rozmiar…) — widać od razu, nie tylko po kolorze napisu */
 .compose-item.is-current { background: var(--accent-light); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent); }
 .compose-item.is-current .compose-item-label { font-weight: 700; color: var(--accent); }

@@ -32,9 +32,9 @@ orientacja, rozmiar, wyrównanie w pionie), śledzenie zmian i recenzja.
 | 3 | **Tabulatory od zera** ✅ okno „Tabulatory…” w menu odstępów (v1.00.47; Word zapisuje to samo) — linijka na później | 10 z 24 (3 prawe / środkowe / dziesiętne, 2 z kropkami) | Linijka, Akapit → Tabulatory | Dziś da się tylko przesunąć istniejące kropki. Potrzebne okienko „Tabulatory” (pozycja, wyrównanie, wypełnienie) i może linijka. |
 | 4 | **Obraz pływający i zawijanie tekstu** ✅ karta obrazu → „Zawijanie tekstu” (w linii / przyległe / góra i dół / za / przed tekstem), prawy przycisk → „Zaznacz obraz” (v1.00.48; Word widzi te same tryby) — przeciąganie obrazu myszą na później | 5 (4 za tekstem) | Zawijanie: przyległe, za tekstem, przed tekstem | Już w planie (punkt 4). Pliki z PDF mają tło-skan „za tekstem”. |
 | 5 | **Czcionka zaawansowana** ✅ okno „Czcionka…” (Ctrl/⌘+D): kapitaliki, wersaliki, odstęp znaków, położenie, style podkreślenia (v1.00.50; Word czyta te same cechy) — przekreślenie podwójne i skala na później (podgląd ich nie rysuje) | 5 | Czcionka → Zaawansowane | Odstęp między znakami, kapitaliki, wersaliki, przekreślenie podwójne. |
-| 6 | **Komórka tabeli: wyrównanie w pionie, kierunek tekstu** | 2 + 1 | Układ tabeli → Wyrównanie, Kierunek | Proste w XML (w:vAlign, w:textDirection). |
+| 6 | **Komórka tabeli: wyrównanie w pionie, kierunek tekstu** ✅ wyrównanie było już (siatka 3×3 w menu tabeli); kierunek tekstu dodany (v1.00.51). Przegląd liczył też kierunek sekcji (L1) — poprawione w inventory | 2 | Układ tabeli → Wyrównanie, Kierunek | Proste w XML (w:vAlign, w:textDirection). |
 | 7 | **Sekcje** | 2 | Układ → Podziały → Następna strona | Inne nagłówki w sekcji, parzyste/nieparzyste, strona pozioma w środku pionowego dokumentu. |
-| 8 | **Tabela w tabeli** | 2 | Wstaw tabelę w komórce | Mapy z PDF tak wyglądają. |
+| 8 | **Tabela w tabeli** ✅ już działało (Wstaw → Tabela z kursorem w komórce); test table-cell pilnuje | 2 | Wstaw tabelę w komórce | Mapy z PDF tak wyglądają. |
 | 9 | **Style tabel (galeria)** | 12 (zwykle sama „Tabela – siatka”) | Projekt tabeli → Style | Niski zysk: pliki rzadko mają coś ponad siatkę. |
 
 Bez plików w bazie, ale Word to ma (w kolejce z planu): kolumny tekstu, znak wodny, sortowanie

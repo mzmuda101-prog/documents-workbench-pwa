@@ -2354,6 +2354,10 @@ function applyTableInXml(xml, edit) {
   } else if (a === "shade") {
     const fill = /^[0-9A-F]{6}$/i.test(edit.fill || "") ? edit.fill.toUpperCase() : null;
     composeScopeCells(rows, tr, tc, edit.scope).forEach((c) => composeSetTcPrChild(doc, c, "shd", fill ? { val: "clear", color: "auto", fill } : null));
+  } else if (a === "textDir") {
+    // kierunek tekstu w komórce (Word: Układ tabeli → Kierunek tekstu): poziomo / w dół 90° / w górę 270°
+    if (!["lrTb", "tbRl", "btLr"].includes(edit.dir)) return { xml, count: 0 };
+    composeScopeCells(rows, tr, tc, edit.scope).forEach((c) => composeSetTcPrChild(doc, c, "textDirection", edit.dir === "lrTb" ? null : { val: edit.dir }));
   } else if (a === "borders") {
     if (!["all", "outside", "none"].includes(edit.kind)) return { xml, count: 0 };
     composeTableBorders(doc, tbl, edit.kind);

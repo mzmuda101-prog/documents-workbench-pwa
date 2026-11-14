@@ -1730,6 +1730,41 @@ const composeUi = (() => {
       grid.appendChild(b);
     }));
     el.appendChild(grid);
+    // Kierunek tekstu (Word: Układ tabeli → Kierunek tekstu) — ten sam zakres co wyrównanie
+    const td = (activeParagraph() || lastP)?.closest?.("td, th");
+    const wm = td ? getComputedStyle(td).writingMode : "horizontal-tb";
+    const curDir = /vertical/.test(wm) ? (/rotate\(180/.test(td.style.transform || getComputedStyle(td).transform) || getComputedStyle(td).transform === "matrix(-1, 0, 0, -1, 0, 0)" ? "btLr" : "tbRl") : "lrTb";
+    const dirs = document.createElement("div");
+    dirs.className = "compose-textdir";
+    dirs.setAttribute("role", "group");
+    dirs.setAttribute("aria-label", t("tableTextDir"));
+    [["lrTb", "textDirH", '<line x1="5" y1="8" x2="19" y2="8"/><line x1="5" y1="12" x2="19" y2="12"/><line x1="5" y1="16" x2="13" y2="16"/>'],
+      ["tbRl", "textDirDown", '<line x1="16" y1="5" x2="16" y2="19"/><line x1="12" y1="5" x2="12" y2="19"/><line x1="8" y1="5" x2="8" y2="13"/><polyline points="14 16 16 19 18 16"/>'],
+      ["btLr", "textDirUp", '<line x1="8" y1="5" x2="8" y2="19"/><line x1="12" y1="5" x2="12" y2="19"/><line x1="16" y1="11" x2="16" y2="19"/><polyline points="6 8 8 5 10 8"/>']].forEach(([dir, key, svg]) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "tb-btn compose-align";
+      b.dataset.dir = dir;
+      const on = dir === curDir;
+      b.classList.toggle("is-on", on);
+      b.setAttribute("aria-pressed", String(on));
+      b.setAttribute("aria-label", t(key));
+      b.dataset.hint = t(key);
+      b.dataset.hintDelay = "0.3";
+      b.innerHTML = ICON(svg);
+      b.addEventListener("click", () => { closePop(); tableTextDir(dir, scope); });
+      dirs.appendChild(b);
+    });
+    popCap(el, t("tableTextDir"));
+    el.appendChild(dirs);
+  }
+  async function tableTextDir(dir, scope) {
+    const p = caretParagraph();
+    const cell = cellOf(p);
+    if (!cell) { toast(t("tableNoCaret"), "info"); return; }
+    await applyDocumentEdit({ op: "table", index: resolveParaIndex(p), action: "textDir", dir, scope }).catch((err) => log(`Tabela: ${err.message || err}`, "error"));
+    await whenEditable();
+    if (!readOnlyMode) focusCell(cell.ti, cell.r, cell.c);
   }
   async function tableAlign(h, v, scope) {
     const p = caretParagraph();

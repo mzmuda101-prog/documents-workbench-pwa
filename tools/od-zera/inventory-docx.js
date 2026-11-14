@@ -54,7 +54,7 @@ async function inspect(file) {
   set("cieniowanie komórek", count(doc, /<w:tcPr>(?:(?!<\/w:tcPr>).)*<w:shd [^>]*w:fill="(?!auto|FFFFFF)/g));
   set("obramowania komórek", count(doc, /<w:tcBorders>/g));
   set("wyrównanie w pionie w komórce", count(doc, /<w:vAlign w:val="(center|bottom)"/g));
-  set("kierunek tekstu w komórce", count(doc, /<w:textDirection /g));
+  set("kierunek tekstu w komórce", count(doc, /<w:tcPr>(?:(?!<\/w:tcPr>).)*<w:textDirection w:val="(?!lrTb)/gs)); // nie sekcja (sectPr), nie zwykły poziomy
   set("powtarzany wiersz nagłówka", count(doc, /<w:tblHeader\/>/g));
   set("tabela pływająca (tblpPr)", count(doc, /<w:tblpPr /g));
   // obiekty
