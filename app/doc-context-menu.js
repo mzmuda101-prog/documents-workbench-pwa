@@ -171,6 +171,7 @@ const dwbDocMenu = (() => {
     add("paste", "ctxPaste", () => pasteFromClipboard(false), { kbd: "Mod+V" });
     add("pastePlain", "ctxPastePlain", () => pasteFromClipboard(true)); // Ctrl/⌘+Shift+V = malarz formatów, nie podpowiadamy
     sep();
+    add("font", "ctxFont", () => { restoreRange(); composeUi.openFontForm(); }, { kbd: "Mod+D" });
     add("link", "ctxLink", () => { restoreRange(); composeUi.openLinkForm(); }, { kbd: "Mod+K" });
     add("comment", "ctxComment", () => { restoreRange(); composeUi.openCommentForm(); }, { kbd: "Mod+Alt+M" });
     // propozycja zmiany zaznaczonego tekstu (bez włączania trybu Sugerowanie) — obok komentarza

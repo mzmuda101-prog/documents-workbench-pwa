@@ -3067,6 +3067,173 @@ const composeUi = (() => {
     if (!readOnlyMode) reselect(ctx.index, ctx.start, ctx.end, ctx.ranges.length > 1 ? ctx.last : null); // zaznaczenie zostaje — można dodać wyróżnienie
   }
 
+  // ── okno „Czcionka…” (Ctrl/⌘+D, jak w Wordzie): krój, rozmiar, styl, podkreślenie, efekty,
+  // odstęp znaków, położenie; podgląd próbki. Zmienia tylko to, co w oknie zmieniono (op „runStyle”
+  // z font: …; jeden krok Cofnij). Bez zaznaczenia — format dalszego pisania (jak kolor).
+  const FONT_U = [["", "fontUNone"], ["single", "fontUSingle"], ["double", "fontUDouble"], ["dotted", "fontUDotted"], ["dash", "fontUDash"], ["wave", "fontUWave"]];
+  function fontStateAt(range) {
+    // pierwszy ZNAK zaznaczenia (początek bywa na końcu poprzedniego fragmentu — cechy sąsiada)
+    let node = range?.startContainer;
+    if (range && !range.collapsed) {
+      const root = range.commonAncestorContainer.nodeType === 1 ? range.commonAncestorContainer : range.commonAncestorContainer.parentElement;
+      const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      for (let t = tw.nextNode(); t; t = tw.nextNode()) {
+        if (!range.intersectsNode(t)) continue;
+        const from = t === range.startContainer ? range.startOffset : 0;
+        const to = t === range.endContainer ? range.endOffset : t.data.length;
+        if (to > from) { node = t; break; }
+      }
+    }
+    const p = (node?.nodeType === 1 ? node : node?.parentElement)?.closest?.("p");
+    const st = {};
+    if (!p) return st;
+    const chain = [];
+    for (let el = node.nodeType === 1 ? node : node.parentElement; el && el !== p; el = el.parentElement) chain.unshift(el);
+    chain.forEach((el) => accumulateElementStyle(el, st));
+    const el = (node.nodeType === 1 ? node : node.parentElement) || p;
+    const cs = getComputedStyle(el);
+    st.shownFamily = st.fontFamily || cs.fontFamily.split(",")[0].replace(/["']/g, "").trim();
+    st.shownSize = st.fontSize ? parseFloat(st.fontSize) : Math.round(parseFloat(cs.fontSize) * 0.75 * 2) / 2;
+    st.shownBold = st.bold ?? parseInt(cs.fontWeight, 10) >= 600;
+    st.shownItalic = st.italic ?? cs.fontStyle === "italic";
+    return st;
+  }
+  function openFontForm() {
+    const p = caretParagraph();
+    if (!p || readOnlyMode) return;
+    const sel = window.getSelection();
+    const range = sel?.rangeCount ? sel.getRangeAt(0).cloneRange() : null;
+    const fam = document.getElementById("fmtFontFamily");
+    const anchor = fam && fam.getBoundingClientRect().width && fam.getBoundingClientRect().right <= innerWidth ? fam : document.getElementById("fmtParaStyle") || p;
+    openPop(anchor, (el) => buildFontForm(el, range));
+  }
+  function buildFontForm(el, range) {
+    const cur = fontStateAt(range);
+    const sample = (range && !range.collapsed ? range.toString() : "").replace(/\s+/g, " ").trim().slice(0, 40) || t("fontSample");
+    el.classList.add("compose-pop-form", "compose-pop-font");
+    el.innerHTML = `<div class="compose-cap"></div>
+      <div class="mf-grid">
+        <label class="compose-field"><span data-k="fontFamilyLabel"></span><input type="text" class="ff-family" list="ffFamilies" autocomplete="off" enterkeyhint="done"><datalist id="ffFamilies"></datalist></label>
+        <label class="compose-field"><span data-k="fontSizeLabel"></span><input type="text" class="ff-size" inputmode="decimal" autocomplete="off" enterkeyhint="done"></label>
+        <label class="compose-field"><span data-k="fontUnderline"></span><select class="ff-underline"></select></label>
+        <div class="compose-field ff-checks"><label class="compose-check"><input type="checkbox" class="ff-bold"><span data-k="fontBold"></span></label><label class="compose-check"><input type="checkbox" class="ff-italic"><span data-k="fontItalic"></span></label></div>
+      </div>
+      <div class="compose-cap ff-cap2" data-k="fontEffects"></div>
+      <div class="ff-effects">
+        <label class="compose-check"><input type="checkbox" class="ff-super"><span data-k="fontSuper"></span></label>
+        <label class="compose-check"><input type="checkbox" class="ff-smallcaps"><span data-k="fontSmallCaps"></span></label>
+        <label class="compose-check"><input type="checkbox" class="ff-sub"><span data-k="fontSub"></span></label>
+        <label class="compose-check"><input type="checkbox" class="ff-caps"><span data-k="fontCaps"></span></label>
+        <label class="compose-check"><input type="checkbox" class="ff-strike"><span data-k="fontStrike"></span></label>
+      </div>
+      <div class="compose-cap ff-cap2" data-k="fontAdvanced"></div>
+      <div class="mf-grid">
+        <label class="compose-field"><span data-k="fontSpacing"></span><select class="ff-spacing"></select></label>
+        <label class="compose-field"><span data-k="fontBy"></span><input type="text" class="ff-spacing-by" inputmode="decimal" autocomplete="off" enterkeyhint="done"></label>
+        <label class="compose-field"><span data-k="fontPosition"></span><select class="ff-position"></select></label>
+        <label class="compose-field"><span data-k="fontBy"></span><input type="text" class="ff-position-by" inputmode="decimal" autocomplete="off" enterkeyhint="done"></label>
+      </div>
+      <div class="ff-sample" aria-hidden="true"><span></span></div>
+      <p class="compose-note mf-warn is-error" hidden></p>
+      <div class="compose-actions"><span class="compose-actions-gap"></span><button type="button" class="btn ff-cancel"></button><button type="button" class="btn primary ff-ok"></button></div>`;
+    el.querySelector(".compose-cap").textContent = t("fontTitle");
+    el.querySelectorAll("[data-k]").forEach((x) => { x.textContent = t(x.dataset.k); });
+    const $ = (c) => el.querySelector(c);
+    const famSel = document.getElementById("fmtFontFamily");
+    const dl = $("#ffFamilies");
+    Array.from(famSel?.options || []).map((o) => o.value || o.textContent).filter(Boolean).forEach((v) => { const o = document.createElement("option"); o.value = v; dl.appendChild(o); });
+    FONT_U.forEach(([v, k]) => $(".ff-underline").appendChild(new Option(t(k), v)));
+    [["normal", "fontSpNormal"], ["expanded", "fontSpExpanded"], ["condensed", "fontSpCondensed"]].forEach(([v, k]) => $(".ff-spacing").appendChild(new Option(t(k), v)));
+    [["normal", "fontPosNormal"], ["raised", "fontPosRaised"], ["lowered", "fontPosLowered"]].forEach(([v, k]) => $(".ff-position").appendChild(new Option(t(k), v)));
+    const num = (n) => (Math.round(Math.abs(n) * 100) / 100).toLocaleString(currentLang === "en" ? "en-GB" : "pl-PL", { maximumFractionDigits: 2 });
+    // stan początkowy (to, co dziś jest w miejscu zaznaczenia)
+    $(".ff-family").value = cur.shownFamily || "";
+    $(".ff-size").value = cur.shownSize ? num(cur.shownSize) : "";
+    $(".ff-bold").checked = !!cur.shownBold;
+    $(".ff-italic").checked = !!cur.shownItalic;
+    $(".ff-underline").value = cur.underline ? cur.uStyle || "single" : "";
+    $(".ff-strike").checked = !!cur.strike;
+    $(".ff-super").checked = cur.vertAlign === "superscript";
+    $(".ff-sub").checked = cur.vertAlign === "subscript";
+    $(".ff-smallcaps").checked = !!cur.smallCaps;
+    $(".ff-caps").checked = !!cur.caps;
+    $(".ff-spacing").value = cur.spacing > 0 ? "expanded" : cur.spacing < 0 ? "condensed" : "normal";
+    $(".ff-spacing-by").value = cur.spacing ? num(cur.spacing) : "";
+    $(".ff-position").value = cur.position > 0 ? "raised" : cur.position < 0 ? "lowered" : "normal";
+    $(".ff-position-by").value = cur.position ? num(cur.position) : "";
+    // wykluczające się pary (jak w Wordzie): indeks górny / dolny, kapitaliki / wersaliki
+    [[".ff-super", ".ff-sub"], [".ff-smallcaps", ".ff-caps"]].forEach(([a, b]) => {
+      $(a).addEventListener("change", () => { if ($(a).checked) $(b).checked = false; });
+      $(b).addEventListener("change", () => { if ($(b).checked) $(a).checked = false; });
+    });
+    const parse = (v) => { const n = parseFloat(String(v || "").trim().replace(",", ".")); return Number.isFinite(n) ? n : NaN; };
+    const read = () => {
+      const size = parse($(".ff-size").value);
+      const sp = $(".ff-spacing").value === "normal" ? 0 : parse($(".ff-spacing-by").value || "1");
+      const pos = $(".ff-position").value === "normal" ? 0 : parse($(".ff-position-by").value || "3");
+      if ($(".ff-size").value.trim() && !(size >= 1 && size <= 1638)) return null;
+      if (!(sp >= 0 && sp <= 1584) || !(pos >= 0 && pos <= 1584)) return null;
+      const u = $(".ff-underline").value;
+      return {
+        fontFamily: $(".ff-family").value.trim(), fontSize: $(".ff-size").value.trim() ? `${Math.round(size * 2) / 2}pt` : "",
+        bold: $(".ff-bold").checked, italic: $(".ff-italic").checked, underline: !!u, uStyle: u && u !== "single" ? u : "",
+        strike: $(".ff-strike").checked, vertAlign: $(".ff-super").checked ? "superscript" : $(".ff-sub").checked ? "subscript" : "",
+        smallCaps: $(".ff-smallcaps").checked, caps: $(".ff-caps").checked,
+        spacing: $(".ff-spacing").value === "condensed" ? -sp : sp, position: $(".ff-position").value === "lowered" ? -pos : pos,
+      };
+    };
+    const initial = JSON.stringify(read());
+    const warn = $(".mf-warn");
+    const preview = () => {
+      const v = read();
+      warn.hidden = !!v;
+      warn.textContent = v ? "" : t("fontBad");
+      if (!v) return;
+      const s = $(".ff-sample span");
+      s.textContent = sample;
+      s.setAttribute("style", runStyleToCss({ ...v, bold: v.bold || undefined, italic: v.italic || undefined, fontFamily: v.fontFamily || undefined, fontSize: v.fontSize || undefined, vertAlign: v.vertAlign || undefined }));
+    };
+    el.addEventListener("input", preview);
+    el.addEventListener("change", preview);
+    preview();
+    $(".ff-cancel").textContent = t("linkCancel");
+    $(".ff-cancel").addEventListener("click", () => closePop());
+    $(".ff-ok").textContent = t("layoutApply");
+    const submit = async () => {
+      const v = read();
+      if (!v) { preview(); return; }
+      closePop();
+      // tylko zmienione w oknie (reszta fragmentów zostaje, np. różne kroje w zaznaczeniu)
+      const before = JSON.parse(initial);
+      const font = {};
+      Object.keys(v).forEach((k) => {
+        if (JSON.stringify(v[k]) === JSON.stringify(before[k])) return;
+        const val = v[k];
+        font[k] = (val === "" || val === 0) ? null : val === false ? (k === "bold" || k === "italic" ? false : null) : val;
+        if (k === "underline" && !val) font.uStyle = null;
+      });
+      if (font.uStyle !== undefined && font.underline === undefined && v.underline) font.underline = true;
+      if (!Object.keys(font).length) return;
+      const r = range;
+      if (r) { const s2 = window.getSelection(); s2.removeAllRanges(); s2.addRange(r); }
+      const ctx = selectionInParagraph();
+      if (!ctx) return;
+      if (ctx.collapsed) {
+        restoreDocCaret();
+        const typing = {};
+        Object.entries(font).forEach(([k, val]) => { typing[k] = val == null ? undefined : val; });
+        setTypingStyle(typing);
+        return;
+      }
+      await applyDocumentEdit({ op: "runStyle", ranges: ctx.ranges, font }).catch((err) => log(`Czcionka: ${err.message || err}`, "error"));
+      await whenEditable();
+      if (!readOnlyMode) reselect(ctx.index, ctx.start, ctx.end, ctx.ranges.length > 1 ? ctx.last : null);
+    };
+    $(".ff-ok").addEventListener("click", submit);
+    el.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.closest("input")) { e.preventDefault(); submit(); } });
+    $(".ff-family").dataset.autofocus = "1";
+  }
+
   function swatch(hex, label, onPick, extraClass = "") {
     const b = document.createElement("button");
     b.type = "button";
@@ -4377,5 +4544,5 @@ const composeUi = (() => {
     document.getElementById(id)?.addEventListener("click", openNewDialog);
   });
 
-  return { commentAction, commentById, showCommentById, commentRanges, richRunEl: (r) => richRunEl(r), openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, stampPageNumbers, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, clearIndentAt, hasTextRule, clearRuleAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
+  return { openFontForm, commentAction, commentById, showCommentById, commentRanges, richRunEl: (r) => richRunEl(r), openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, stampPageNumbers, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, clearIndentAt, hasTextRule, clearRuleAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
 })();

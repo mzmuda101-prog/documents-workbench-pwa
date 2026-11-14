@@ -2707,6 +2707,7 @@ function applyImageInXml(xml, edit) {
 // Przez model akapitu (te same zasady co pisanie): linki i pola-wyspy zostają nietknięte.
 // edit.ranges = [{ index, start, end }] — zaznaczenie przez kilka akapitów (jak w Wordzie);
 // stara postać { index, start, end } = jeden akapit
+const COMPOSE_FONT_KEYS = ["fontFamily", "fontSize", "bold", "italic", "underline", "uStyle", "strike", "vertAlign", "caps", "smallCaps", "spacing", "position", "color"];
 function applyRunStyleInXml(xml, edit) {
   const doc = composeParse(xml);
   const paragraphs = collectParagraphElements(doc.documentElement, "all");
@@ -2726,6 +2727,13 @@ function applyRunStyleInXml(xml, edit) {
       const out = { ...r };
       if (edit.color !== undefined) { if (!edit.color || edit.color === "auto") delete out.color; else out.color = edit.color; }
       if (edit.highlight !== undefined) { if (!edit.highlight) delete out.highlight; else out.highlight = edit.highlight; }
+      // okno „Czcionka…”: tylko cechy zmienione w oknie; null = zdejmij (wraca do stylu akapitu)
+      Object.entries(edit.font || {}).forEach(([k, v]) => {
+        if (!COMPOSE_FONT_KEYS.includes(k)) return;
+        if (v == null || v === "") delete out[k]; else out[k] = v;
+      });
+      if (out.underline === false || !out.underline) delete out.uStyle;
+      if (out.vertAlign) delete out.position; // indeks górny / dolny wyklucza podniesienie
       return out;
     });
     applyRunsToParagraphXml(p, [...before, ...styled, ...after]);

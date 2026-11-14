@@ -41,6 +41,16 @@ function cssFontSizeToPt(val) {
 const VERT_ALIGN_BY_CSS = { super: "superscript", sub: "subscript", baseline: "baseline" };
 const VERT_ALIGN_CSS = { superscript: "super", subscript: "sub", baseline: "baseline" };
 const normVertAlign = (v) => (v === "superscript" || v === "subscript" ? v : "");
+// Czcionka → efekty i zaawansowane (okno „Czcionka…”, compose-ui.js): wersaliki (w:caps), kapitaliki
+// (w:smallCaps), odstęp znaków (w:spacing, pt), położenie (w:position, pt), styl podkreślenia (w:u):
+// plik ↔ podgląd (docx-preview: text-transform, font-variant, letter-spacing, vertical-align w pt,
+// text-decoration „underline double|dotted|dashed|wavy”). Liczby zaokrąglone tak samo po obu stronach.
+const U_STYLE_BY_WORD = { double: "double", dotted: "dotted", dottedHeavy: "dotted", dash: "dash", dashLong: "dash", dashedHeavy: "dash", dashLongHeavy: "dash", dotDash: "dash", dotDotDash: "dash", dashDotHeavy: "dash", dashDotDotHeavy: "dash", wave: "wave", wavyDouble: "wave", wavyHeavy: "wave" };
+const U_STYLE_CSS = { double: "double", dotted: "dotted", dash: "dashed", wave: "wavy" };
+const U_STYLE_BY_CSS = { double: "double", dotted: "dotted", dashed: "dash", wavy: "wave" };
+const round2 = (n) => Math.round(n * 100) / 100;
+const cssLenPt = (val) => { const m = String(val || "").trim().match(/^(-?[\d.]+)(pt|px)?$/i); if (!m) return null; const n = parseFloat(m[1]); return Number.isFinite(n) ? round2(m[2]?.toLowerCase() === "px" ? n * 0.75 : n) : null; };
+const underlineKey = (s) => (s?.underline ? s.uStyle || "single" : "");
 
 function parseSpanStyle(cssText) {
   const style = {};
@@ -52,11 +62,23 @@ function parseSpanStyle(cssText) {
     const val = chunk.slice(idx + 1).trim();
     if (key === "font-weight") { if (val === "bold" || parseInt(val, 10) >= 600) style.bold = true; else if (val === "normal" || parseInt(val, 10) < 600) style.bold = false; }
     if (key === "font-style") { if (val === "italic") style.italic = true; else if (val === "normal") style.italic = false; }
-    if ((key === "text-decoration" || key === "text-decoration-line") && val.includes("underline")) style.underline = true;
+    if ((key === "text-decoration" || key === "text-decoration-line") && val.includes("underline")) {
+      style.underline = true;
+      const us = val.split(/\s+/).map((w) => U_STYLE_BY_CSS[w]).find(Boolean);
+      if (us) style.uStyle = us;
+    }
+    if (key === "text-decoration-style" && U_STYLE_BY_CSS[val]) style.uStyle = U_STYLE_BY_CSS[val];
+    if (key === "text-transform" && val === "uppercase") style.caps = true;
+    if ((key === "font-variant" || key === "font-variant-caps") && /small-caps/.test(val)) style.smallCaps = true; // Safari: font-variant-caps
+    if (key === "letter-spacing") { const n = cssLenPt(val); if (n) style.spacing = n; }
     if ((key === "text-decoration" || key === "text-decoration-line") && val.includes("line-through")) style.strike = true;
     if (key === "color") style.color = val;
     // indeks górny / dolny (w:vertAlign); „baseline” = jawnie wyłączony (pisanie za indeksem)
-    if (key === "vertical-align") { const va = VERT_ALIGN_BY_CSS[val.toLowerCase()]; if (va) style.vertAlign = va; }
+    if (key === "vertical-align") {
+      const va = VERT_ALIGN_BY_CSS[val.toLowerCase()];
+      if (va) style.vertAlign = va;
+      else { const n = cssLenPt(val); if (n) style.position = n; } // podniesione / obniżone (w:position)
+    }
     if (key === "background-color" || key === "background") { const h = normHighlight(val); if (h) style.highlight = h; }
     // pierwsza rodzina z listy, bez cudzysłowów z OBU stron: podgląd ma „"DM Sans", sans-serif” —
     // dawniej obcinany był tylko początkowy cudzysłów i do pliku szła nazwa kroju „DM Sans"”
@@ -75,7 +97,11 @@ function runStyleToCss(run) {
   else if (run.bold === false) parts.push("font-weight:normal"); // wyłączone w środku pogrubionego fragmentu
   if (run.italic) parts.push("font-style:italic");
   else if (run.italic === false) parts.push("font-style:normal");
-  if (run.underline || run.strike) parts.push(`text-decoration:${[run.underline && "underline", run.strike && "line-through"].filter(Boolean).join(" ")}`);
+  if (run.underline || run.strike) parts.push(`text-decoration:${[run.underline && "underline", run.strike && "line-through", run.underline && U_STYLE_CSS[run.uStyle]].filter(Boolean).join(" ")}`);
+  if (run.caps) parts.push("text-transform:uppercase");
+  if (run.smallCaps) parts.push("font-variant:small-caps");
+  if (run.spacing) parts.push(`letter-spacing:${run.spacing}pt`);
+  if (run.position && !VERT_ALIGN_CSS[run.vertAlign]) parts.push(`vertical-align:${run.position}pt`);
   if (run.color) parts.push(`color:${run.color}`);
   if (run.fontFamily) {
     // z rodziną ogólną (bezszeryfowy/szeryfowy) — krój spoza urządzenia nie spada na Times
@@ -97,8 +123,12 @@ function runsStyleEqual(a, b) {
   // (w:u w:val="none" rysuje jak brak podkreślenia), więc porównanie i tak by się rozjechało
   return tri(a.bold) === tri(b.bold)
     && tri(a.italic) === tri(b.italic)
-    && !!a.underline === !!b.underline
+    && underlineKey(a) === underlineKey(b)
     && !!a.strike === !!b.strike
+    && !!a.caps === !!b.caps
+    && !!a.smallCaps === !!b.smallCaps
+    && (a.spacing || 0) === (b.spacing || 0)
+    && (a.position || 0) === (b.position || 0)
     && (parseCssColorToWordHex(a.color) || "") === (parseCssColorToWordHex(b.color) || "") // „rgb(5, 99, 193)” z podglądu = „#0563C1” z pliku
     && (a.fontFamily || "") === (b.fontFamily || "")
     && (a.fontSize || "") === (b.fontSize || "")
@@ -346,7 +376,17 @@ function xmlRunStyle(r) {
     if (v !== undefined) style[k] = v;
   }
   const u = kid("u");
-  if (u) style.underline = !/^none$/i.test(getWVal(u) || "single");
+  if (u) {
+    const uv = getWVal(u) || "single";
+    style.underline = !/^none$/i.test(uv);
+    if (style.underline && U_STYLE_BY_WORD[uv]) style.uStyle = U_STYLE_BY_WORD[uv];
+  }
+  if (wOnOff(kid("caps"))) style.caps = true;
+  if (wOnOff(kid("smallCaps"))) style.smallCaps = true;
+  const csp = parseInt(getWVal(kid("spacing")) || "0", 10);
+  if (csp) style.spacing = round2(csp / 20);
+  const pos = parseInt(getWVal(kid("position")) || "0", 10);
+  if (pos) style.position = round2(pos / 2);
   const colorEl = kid("color");
   const hex = colorEl ? getWVal(colorEl) : null;
   if (hex && hex !== "auto") style.color = `#${hex.replace(/^#/, "")}`;
@@ -456,7 +496,7 @@ function createRunElement(doc, run) {
   }
   if (run.underline != null) {
     const u = doc.createElementNS(W_NS, "u");
-    setWVal(u, run.underline ? "single" : "none");
+    setWVal(u, run.underline ? ({ double: "double", dotted: "dotted", dash: "dash", wave: "wave" }[run.uStyle] || "single") : "none");
     rPr.appendChild(u);
     hasPr = true;
   }
@@ -512,6 +552,10 @@ function createRunElement(doc, run) {
     }
     hasPr = true;
   }
+  if (run.caps) { rPr.appendChild(doc.createElementNS(W_NS, "caps")); hasPr = true; }
+  if (run.smallCaps) { rPr.appendChild(doc.createElementNS(W_NS, "smallCaps")); hasPr = true; }
+  if (run.spacing) { const sp = doc.createElementNS(W_NS, "spacing"); setWVal(sp, String(Math.round(run.spacing * 20))); rPr.appendChild(sp); hasPr = true; }
+  if (run.position && !VERT_ALIGN_CSS[run.vertAlign]) { const po = doc.createElementNS(W_NS, "position"); setWVal(po, String(Math.round(run.position * 2))); rPr.appendChild(po); hasPr = true; }
   if (VERT_ALIGN_CSS[run.vertAlign] && run.vertAlign !== "baseline") {
     const va = doc.createElementNS(W_NS, "vertAlign");
     setWVal(va, run.vertAlign);
@@ -520,8 +564,7 @@ function createRunElement(doc, run) {
   }
   if (hasPr) {
     // kolejność dzieci w:rPr wg schematu Worda (dawniej u przed color, rFonts po color)
-    const order = ["rStyle", "rFonts", "b", "bCs", "i", "iCs", "strike", "color", "sz", "szCs", "highlight", "u", "shd", "vertAlign"];
-    Array.from(rPr.childNodes).sort((x, y) => order.indexOf(x.localName) - order.indexOf(y.localName)).forEach((n) => rPr.appendChild(n));
+    Array.from(rPr.childNodes).sort((x, y) => RPR_ORDER.indexOf(x.localName) - RPR_ORDER.indexOf(y.localName)).forEach((n) => rPr.appendChild(n));
     r.appendChild(rPr);
   }
   // Tekst z tabulatorami: „\t” → <w:tab/> (w <w:t> Word pokazałby go jako spację). Bez względu
@@ -582,7 +625,7 @@ function originalRunProps(pEl) {
   walk(pEl);
   return out;
 }
-const TOGGLE_TAGS = { bold: ["b", "bCs"], italic: ["i", "iCs"], strike: ["strike"], underline: ["u"], color: ["color"], highlight: ["highlight", "shd"], vertAlign: ["vertAlign"] };
+const TOGGLE_TAGS = { bold: ["b", "bCs"], italic: ["i", "iCs"], strike: ["strike"], underline: ["u"], color: ["color"], highlight: ["highlight", "shd"], vertAlign: ["vertAlign"], caps: ["caps"], smallCaps: ["smallCaps"], spacing: ["spacing"], position: ["position"] };
 const RPR_ORDER = ["rStyle", "rFonts", "b", "bCs", "i", "iCs", "caps", "smallCaps", "strike", "dstrike", "outline", "shadow", "emboss", "imprint", "noProof", "snapToGrid", "vanish", "webHidden", "color", "spacing", "w", "kern", "position", "sz", "szCs", "highlight", "u", "effect", "bdr", "shd", "fitText", "vertAlign", "rtl", "cs", "em", "lang", "eastAsianLayout", "specVanish", "oMath"];
 function runFromOriginal(doc, run, originals) {
   if (run.link) return null; // link: styl Hiperłącze zakłada createRunElement
@@ -601,7 +644,9 @@ function runFromOriginal(doc, run, originals) {
       // pogrubienie/kursywa trójstanowo jak w runsStyleEqual: jawne „wyłączone” (false) ≠ nieustawione —
       // inaczej Ctrl+B w pogrubionym nagłówku zostawiało w pliku rPr bez w:b w:val="0" i Word pogrubiał dalej
       const eq = (k === "color" || k === "highlight" || k === "vertAlign") ? (want || "") === (had || "")
-        : (k === "bold" || k === "italic") ? tri(want) === tri(had) : !!want === !!had;
+        : (k === "bold" || k === "italic") ? tri(want) === tri(had)
+        : k === "underline" ? underlineKey(run) === underlineKey(near.style) // styl podkreślenia też (pojedyncze ≠ podwójne)
+        : (k === "spacing" || k === "position") ? (want || 0) === (had || 0) : !!want === !!had;
       if (eq) continue;
       Array.from(rPr.childNodes).filter((c) => tags.includes(c.localName)).forEach((c) => rPr.removeChild(c));
       if (freshPr) Array.from(freshPr.childNodes).filter((c) => tags.includes(c.localName)).forEach((c) => rPr.appendChild(c.cloneNode(true)));
@@ -709,7 +754,7 @@ function applyRunsToPreviewParagraph(pEl, runs) {
 const docLinkHrefs = new Map();
 
 function runStyleHasProps(style) {
-  return !!(style?.bold || style?.italic || style?.underline || style?.strike || style?.color || style?.fontFamily || style?.fontSize || style?.highlight || normVertAlign(style?.vertAlign))
+  return !!(style?.bold || style?.italic || style?.underline || style?.strike || style?.color || style?.fontFamily || style?.fontSize || style?.highlight || normVertAlign(style?.vertAlign) || style?.caps || style?.smallCaps || style?.spacing || style?.position)
     || styleTurnsOff(style); // np. pogrubienie WYŁĄCZONE (Ctrl/⌘+B bez zaznaczenia) — też format do wstawienia
 }
 

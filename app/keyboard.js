@@ -161,6 +161,12 @@
     }
     if (!originalFileBytes) return;
 
+    // Ctrl/⌘+D — okno „Czcionka…” (jak w Wordzie), gdy kursor stoi w tekście (Edycja)
+    if (mod && !e.altKey && !e.shiftKey && e.code === "KeyD" && !readOnlyMode && typeof composeUi !== "undefined" && docCanvasEl?.contains(document.activeElement)) {
+      e.preventDefault();
+      composeUi.openFontForm();
+      return;
+    }
     if (mod && !e.altKey && e.code === "KeyF") {
       e.preventDefault();
       focusToolbar();

@@ -3910,3 +3910,13 @@ body.dwb-painting .docx-preview-host * {
 .tabs-set-cell { justify-content: flex-end; }
 .tabs-set-cell .btn { width: 100%; }
 @media (pointer: coarse) { .tabs-row, .tabs-del { min-height: 44px; } .tabs-del { width: 44px; height: 44px; } }
+
+/* Okno „Czcionka…” (compose-ui.js buildFontForm) */
+.compose-pop-font { min-width: min(420px, calc(100vw - 16px)); }
+.ff-cap2 { margin-top: 6px; }
+.ff-checks { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding-top: 18px; }
+.ff-effects { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 12px; padding: 0 2px 4px; }
+.ff-sample {
+  margin: 8px 0 4px; padding: 10px 12px; min-height: 44px; border: 1px solid var(--border-subtle); border-radius: 10px;
+  background: #fff; color: #000; overflow: hidden; text-align: center; overflow-wrap: anywhere;
+}
