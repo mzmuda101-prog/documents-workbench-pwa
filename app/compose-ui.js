@@ -2657,6 +2657,7 @@ const composeUi = (() => {
     el.innerHTML = `<label class="image-size"><span class="image-size-val"></span><input type="range" min="10" max="100" step="5"></label>
       <span class="tb-sep" aria-hidden="true"></span>
       <button type="button" class="tb-btn" data-align="left"></button><button type="button" class="tb-btn" data-align="center"></button><button type="button" class="tb-btn" data-align="right"></button>
+      <button type="button" class="tb-btn ic-wrap" aria-haspopup="menu"></button>
       <span class="tb-sep" aria-hidden="true"></span>
       <button type="button" class="tb-btn ic-replace"></button><button type="button" class="tb-btn ic-fit" hidden></button>
       <span class="tb-sep" aria-hidden="true"></span>
@@ -2713,6 +2714,11 @@ const composeUi = (() => {
       b.innerHTML = alignSvg(b.dataset.align);
       b.addEventListener("click", () => imageEdit(imgCard.index, { action: "align", align: b.dataset.align }));
     });
+    // Zawijanie tekstu (jak „Opcje układu” obok obrazu w Wordzie)
+    const wrapBtn = el.querySelector(".ic-wrap");
+    hint(wrapBtn, "imageWrap");
+    wrapBtn.innerHTML = ICON(WRAP_ICONS.square);
+    wrapBtn.addEventListener("click", () => openPop(wrapBtn, (pop) => buildWrapMenu(pop, imgCard.index, imgCard.img)));
     const repl = el.querySelector(".ic-replace");
     hint(repl, "imageReplace");
     repl.innerHTML = ICON('<rect x="3" y="5" width="13" height="11" rx="1.5"/><path d="m3 14 4-4 3 3"/><path d="M14 20h5a2 2 0 0 0 2-2v-5"/><polyline points="18 16 21 13 24 16" transform="translate(-3 0)"/>');
@@ -2861,6 +2867,36 @@ const composeUi = (() => {
   }
   // Zmiana obrazu w pliku + przerysowanie. Karta zostaje TA SAMA (bez znikania i ponownego
   // „wjazdu”) i po przerysowaniu przypina się do nowego elementu obrazu.
+  const WRAP_ICONS = {
+    inline: '<rect x="9" y="8" width="6" height="6" rx="1"/><line x1="3" y1="11" x2="8" y2="11"/><line x1="16" y1="11" x2="21" y2="11"/><line x1="3" y1="18" x2="21" y2="18"/><line x1="3" y1="4" x2="21" y2="4"/>',
+    square: '<rect x="3" y="7" width="8" height="8" rx="1"/><line x1="14" y1="7" x2="21" y2="7"/><line x1="14" y1="11" x2="21" y2="11"/><line x1="14" y1="15" x2="21" y2="15"/><line x1="3" y1="19" x2="21" y2="19"/><line x1="3" y1="3" x2="21" y2="3"/>',
+    topBottom: '<rect x="7" y="8" width="10" height="8" rx="1"/><line x1="3" y1="4" x2="21" y2="4"/><line x1="3" y1="20" x2="21" y2="20"/>',
+    behind: '<rect x="6" y="5" width="12" height="14" rx="1" fill="currentColor" opacity=".25" stroke="none"/><line x1="3" y1="8" x2="21" y2="8"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="16" x2="21" y2="16"/>',
+    front: '<line x1="3" y1="8" x2="21" y2="8"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="16" x2="21" y2="16"/><rect x="6" y="5" width="12" height="14" rx="1" fill="var(--surface)"/>',
+  };
+  // bieżący tryb z podglądu (docx-preview: data-dwb-anchor { w, b } na obrazie pływającym)
+  function wrapModeOf(img) {
+    const a = img?.closest?.("[data-dwb-anchor]");
+    if (!a) return "inline";
+    let d = {};
+    try { d = JSON.parse(a.dataset.dwbAnchor); } catch (_) { /* nic */ }
+    if (d.w === "wrapTopAndBottom") return "topBottom";
+    if (d.w === "wrapNone") return d.b ? "behind" : "front";
+    return "square";
+  }
+  function buildWrapMenu(el, index, img) {
+    el.classList.add("compose-pop-insert", "compose-pop-wrap");
+    popCap(el, t("imageWrap"));
+    const cur = wrapModeOf(img);
+    [["inline", "wrapInline", "wrapInlineDesc"], ["square", "wrapSquare", "wrapSquareDesc"], ["topBottom", "wrapTopBottom", "wrapTopBottomDesc"], ["behind", "wrapBehind", "wrapBehindDesc"], ["front", "wrapFront", "wrapFrontDesc"]].forEach(([mode, key, desc]) => {
+      const b = popItem(el, { label: t(key), desc: t(desc), icon: ICON(WRAP_ICONS[mode]), onPick: () => imageEdit(index, { action: "wrap", wrap: mode }) });
+      b.dataset.wrap = mode;
+      b.setAttribute("role", "menuitemradio");
+      b.setAttribute("aria-checked", String(mode === cur));
+      b.classList.toggle("is-current", mode === cur);
+    });
+  }
+
   async function imageEdit(index, edit, reselect = true) {
     if (imgCard && reselect) imgCard.busy = true;
     await applyDocumentEdit({ op: "image", index, ...edit }).catch((err) => log(`Obraz: ${err.message || err}`, "error"));

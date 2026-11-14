@@ -2591,7 +2591,61 @@ async function applyTabsSetInZip(zip, xml, edit) {
   return { xml: count ? composeSerialize(doc) : xml, count };
 }
 
-// op "image": { index, action: "size" (widthPct) | "align" (align) | "alt" (descr) | "delete" }
+// ── zawijanie obrazu (op "image" action "wrap") ─────────────────────────────────────────────
+const COMPOSE_ANCHOR_ORDER = ["simplePos", "positionH", "positionV", "extent", "effectExtent", "wrapNone", "wrapSquare", "wrapTight", "wrapThrough", "wrapTopAndBottom", "docPr", "cNvGraphicFramePr", "graphic"];
+function composeWpEl(doc, name, attrs, text) {
+  const el = doc.createElementNS(COMPOSE_NS.wp, `wp:${name}`);
+  Object.entries(attrs || {}).forEach(([k, v]) => el.setAttribute(k, String(v)));
+  if (text != null) el.textContent = String(text);
+  return el;
+}
+function composeAnchorPositionH(doc, anchor, align) {
+  const old = Array.from(anchor.childNodes).find((n) => n.nodeType === 1 && n.localName === "positionH");
+  const ph = composeWpEl(doc, "positionH", { relativeFrom: "column" });
+  if (align === "center" || align === "right") ph.appendChild(composeWpEl(doc, "align", null, align));
+  else ph.appendChild(composeWpEl(doc, "posOffset", null, 0));
+  if (old) anchor.replaceChild(ph, old);
+  else anchor.insertBefore(ph, Array.from(anchor.childNodes).find((n) => n.nodeType === 1 && COMPOSE_ANCHOR_ORDER.indexOf(n.localName) > 1) || null);
+}
+function composeWrapDrawing(doc, p, box, mode) {
+  const kids = Array.from(box.childNodes).filter((n) => n.nodeType === 1);
+  const keep = (name) => kids.find((n) => n.localName === name);
+  if (mode === "inline") {
+    if (box.localName === "inline") return null;
+    const inl = composeWpEl(doc, "inline", { distT: 0, distB: 0, distL: 0, distR: 0 });
+    ["extent", "effectExtent", "docPr", "cNvGraphicFramePr", "graphic"].forEach((n) => { const x = keep(n); if (x) inl.appendChild(x); });
+    box.parentNode.replaceChild(inl, box);
+    return inl;
+  }
+  let anchor = box;
+  if (box.localName === "inline") {
+    const zs = Array.from(doc.getElementsByTagNameNS(COMPOSE_NS.wp, "anchor")).map((a) => parseInt(a.getAttribute("relativeHeight"), 10) || 0);
+    anchor = composeWpEl(doc, "anchor", { distT: 0, distB: 0, distL: 114300, distR: 114300, simplePos: 0, relativeHeight: Math.max(251659264, ...zs) + 1, behindDoc: 0, locked: 0, layoutInCell: 1, allowOverlap: 1 });
+    anchor.appendChild(composeWpEl(doc, "simplePos", { x: 0, y: 0 }));
+    // obraz zostaje tam, gdzie stał: wyrównanie akapitu → wyrównanie w kolumnie. Wyjątek: przyległe
+    // z obrazem na środku — Word puściłby tekst z obu stron, czego podgląd (float) nie narysuje;
+    // obraz idzie do lewej krawędzi kolumny, tekst opływa go z prawej (podgląd = plik = Word)
+    const jc = composeDirectChild(composeDirectChild(p, "pPr") || p, "jc")?.getAttributeNS(W_NS, "val");
+    const h = jc === "right" || jc === "end" ? "right" : jc === "center" && mode !== "square" ? "center" : "left";
+    composeAnchorPositionH(doc, anchor, h);
+    const pv = composeWpEl(doc, "positionV", { relativeFrom: "paragraph" });
+    pv.appendChild(composeWpEl(doc, "posOffset", null, 0));
+    anchor.appendChild(pv);
+    ["extent", "effectExtent", "docPr", "cNvGraphicFramePr", "graphic"].forEach((n) => {
+      let x = keep(n);
+      if (!x && n === "effectExtent") x = composeWpEl(doc, "effectExtent", { l: 0, t: 0, r: 0, b: 0 });
+      if (x) anchor.appendChild(x);
+    });
+    box.parentNode.replaceChild(anchor, box);
+  }
+  Array.from(anchor.childNodes).filter((n) => n.nodeType === 1 && /^wrap/.test(n.localName)).forEach((n) => anchor.removeChild(n));
+  const wrap = mode === "square" ? composeWpEl(doc, "wrapSquare", { wrapText: "bothSides" }) : mode === "topBottom" ? composeWpEl(doc, "wrapTopAndBottom") : composeWpEl(doc, "wrapNone");
+  anchor.insertBefore(wrap, Array.from(anchor.childNodes).find((n) => n.nodeType === 1 && COMPOSE_ANCHOR_ORDER.indexOf(n.localName) > COMPOSE_ANCHOR_ORDER.indexOf("wrapTopAndBottom")) || null);
+  anchor.setAttribute("behindDoc", mode === "behind" ? "1" : "0");
+  return anchor;
+}
+
+// op "image": { index, action: "size" (widthPct) | "align" (align) | "alt" (descr) | "delete" | "wrap" (wrap) }
 // Działa na pierwszym obrazie akapitu — także z plików z Worda (wp:inline albo wp:anchor).
 function applyImageInXml(xml, edit) {
   const doc = composeParse(xml);
@@ -2615,7 +2669,17 @@ function applyImageInXml(xml, edit) {
     });
   } else if (edit.action === "align") {
     if (!COMPOSE_ALIGNS.includes(edit.align)) return { xml, count: 0 };
-    composeSetPPrChild(composeEnsurePPr(p), "jc", { val: edit.align });
+    // obraz pływający: wyrównanie w kolumnie (jak Word: Położenie → Wyrównanie względem kolumny)
+    if (box.localName === "anchor") composeAnchorPositionH(doc, box, edit.align);
+    else composeSetPPrChild(composeEnsurePPr(p), "jc", { val: edit.align });
+  } else if (edit.action === "wrap") {
+    // Zawijanie tekstu (Word: Opcje układu; tools/word-oracle/probe-image-wrap.js): w linii = wp:inline;
+    // inaczej wp:anchor względem kolumny (poziomo) i akapitu (pionowo), odstęp z boków 0,32 cm;
+    // przyległe = wrapSquare, góra i dół = wrapTopAndBottom, za / przed tekstem = wrapNone + behindDoc
+    const mode = edit.wrap;
+    if (!["inline", "square", "topBottom", "behind", "front"].includes(mode)) return { xml, count: 0 };
+    const out = composeWrapDrawing(doc, p, box, mode);
+    if (!out) return { xml, count: 0 };
   } else if (edit.action === "alt") {
     Array.from(box.getElementsByTagNameNS(COMPOSE_NS.wp, "docPr")).forEach((d) => d.setAttribute("descr", String(edit.descr || "")));
     Array.from(box.getElementsByTagNameNS(COMPOSE_NS.pic, "cNvPr")).forEach((d) => d.setAttribute("descr", String(edit.descr || "")));

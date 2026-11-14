@@ -147,6 +147,10 @@ const dwbDocMenu = (() => {
       sep();
     }
     // ── recenzja na górze menu (jak w Wordzie): zmiana w tym akapicie, komentarz pod kursorem ──
+    if (ctx.image) {
+      add("image", "ctxSelectImage", () => composeUi.showImageCard(ctx.image), { primary: true });
+      sep();
+    }
     if (ctx.revisions.length) {
       const ids = ctx.revisions.map((c) => c.id);
       add("revAccept", ctx.revisions.length > 1 ? "ctxAcceptChanges" : "ctxAcceptChange", () => dwbMargin.revisions("accept", ids), { primary: true });
@@ -238,7 +242,7 @@ const dwbDocMenu = (() => {
     const hit = composeUi.commentRanges().find(({ id, range }) => { try { return overlaps(range) && !composeUi.commentById(id)?.parentId; } catch (_) { return false; } });
     return hit ? hit.id : null;
   }
-  function context() {
+  function context(point) {
     const r = selRange();
     const p = paraOf(r?.startContainer);
     return {
@@ -252,13 +256,20 @@ const dwbDocMenu = (() => {
       // recenzja: komentarz pod kursorem i śledzone zmiany w akapicie (review-margin.js)
       commentId: commentAt(r),
       revisions: typeof dwbMargin !== "undefined" && p ? dwbMargin.revisionsAt(p) : [],
+      // obraz w akapicie (też „za tekstem” — tekst leży nad nim i klik go nie łapie; Word: Zaznacz obiekty)
+      image: readOnlyMode ? null : imageAt(point) || p?.querySelector("img") || null,
     };
+  }
+  // obraz pod wskazanym miejscem (także pływający pod tekstem innego akapitu)
+  function imageAt(point) {
+    if (!point || !Number.isFinite(point.x)) return null;
+    return [...(host()?.querySelectorAll("img") || [])].find((im) => { const b = im.getBoundingClientRect(); return b.width && point.x >= b.left && point.x <= b.right && point.y >= b.top && point.y <= b.bottom; }) || null;
   }
   function open(point, { viaKeyboard = false } = {}) {
     if (!originalFileBytes) return false;
     const r = selRange();
     savedRange = r ? r.cloneRange() : null;
-    const ctx = context();
+    const ctx = context(point);
     const list = items(ctx);
     const el = ensureMenu();
     const frag = document.createDocumentFragment();
