@@ -102,6 +102,7 @@ const SHELL_ASSETS = [
   `./app/export-panel.js?v=${ASSET_V}`,
   `./app/stats-panel.js?v=${ASSET_V}`,
   `./app/review-panel.js?v=${ASSET_V}`,
+  `./app/review-walk.js?v=${ASSET_V}`,
   `./app/forms-panel.js?v=${ASSET_V}`,
   `./app/spell-check.js?v=${ASSET_V}`,
   `./app/spell-worker.js?v=${ASSET_V}`,

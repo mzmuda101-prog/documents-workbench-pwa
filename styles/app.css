@@ -3826,3 +3826,61 @@ body.dwb-painting .docx-preview-host * {
 .mk-row-replace .mk-new { text-decoration: underline; text-decoration-color: var(--mk-c); }
 /* jedna decyzja: ✓ / ✗ w nagłówku zawsze widoczne (to jedyne przyciski dymka) */
 .mk-card .mk-tools-main { opacity: 1 !important; }
+
+/* ── Przegląd zmian po kolei (review-walk.js) ─────────────────────────────────
+   Pasek na dole obszaru dokumentu: karta (licznik, autor, co się zmieniło — przesuwana palcem),
+   ‹ › ✓ ✗ i „Gotowe”. Wyszukiwarka na dole chowa się na czas przeglądu. */
+.walk-bar {
+  position: fixed; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 60;
+  transform: translateX(-50%); width: min(560px, calc(100vw - 24px));
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "card nav" "card close";
+  gap: 6px 10px; align-items: center; padding: 10px 12px;
+  border: 1px solid var(--border); border-radius: 16px; background: var(--surface); color: var(--ink);
+  box-shadow: 0 14px 40px rgba(8, 14, 28, 0.22); outline: none;
+  animation: walk-in 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.walk-bar[hidden] { display: none; }
+.walk-bar:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 45%, transparent), 0 14px 40px rgba(8, 14, 28, 0.22); }
+@keyframes walk-in { from { opacity: 0; transform: translate(-50%, 8px); } }
+.walk-card { grid-area: card; position: relative; min-width: 0; touch-action: pan-y; user-select: none; -webkit-user-select: none; border-radius: 10px; padding: 2px 4px; }
+.walk-top { display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; }
+.walk-count { font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; }
+.walk-who { font-size: 12px; color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+.walk-what { margin-top: 2px; font-size: 13.5px; line-height: 1.4; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.walk-swipe { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; pointer-events: none; border-radius: 10px; }
+.walk-swipe:empty { display: none; }
+.walk-card.is-ok .walk-swipe { background: var(--success-bg); color: var(--success); }
+.walk-card.is-no .walk-swipe { background: var(--danger-bg); color: var(--danger); }
+.walk-nav { grid-area: nav; display: flex; gap: 6px; }
+.walk-btn {
+  display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; padding: 0;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--field); color: var(--ink); cursor: pointer;
+}
+.walk-btn:disabled { opacity: 0.5; cursor: default; }
+.walk-btn.walk-ok { color: var(--success); }
+.walk-btn.walk-no { color: var(--danger); }
+@media (hover: hover) {
+  .walk-btn:not(:disabled):hover { border-color: var(--accent); background: var(--accent-light); }
+  .walk-btn.walk-ok:hover { border-color: var(--success); background: var(--success-bg); }
+  .walk-btn.walk-no:hover { border-color: var(--danger); background: var(--danger-bg); }
+}
+.walk-btn:focus-visible, .walk-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.walk-btn:active:not(:disabled) { transform: scale(0.96); }
+.walk-close { grid-area: close; justify-self: end; min-height: 32px; padding: 0 12px; border: 0; border-radius: 8px; background: none; color: var(--accent); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.walk-bar.is-busy .walk-nav { pointer-events: none; }
+.walk-on .doc-island { visibility: hidden; }
+/* akapit z bieżącą zmianą: delikatne tło (obwódkę przycinała kartka); wstawiony tekst — mocniej (jak dymek w fokusie) */
+.walk-para { --walk-tint: color-mix(in srgb, var(--accent) 9%, transparent); background-color: var(--walk-tint); box-shadow: -6px 0 0 var(--walk-tint), 6px 0 0 var(--walk-tint); border-radius: 2px; }
+::highlight(dwb-walk) { background-color: rgba(255, 196, 0, 0.55); }
+@media (pointer: coarse) {
+  .walk-btn { width: 44px; height: 44px; }
+  .walk-close { min-height: 44px; }
+}
+@media (max-width: 480px) {
+  .walk-bar { grid-template-columns: minmax(0, 1fr); grid-template-areas: "card" "nav"; }
+  .walk-nav { justify-content: space-between; }
+  .walk-close { position: absolute; top: 6px; right: 6px; min-height: 36px; }
+  .walk-card { padding-right: 72px; }
+}
+@media (prefers-reduced-motion: reduce) { .walk-bar { animation: none; } .walk-btn:active:not(:disabled) { transform: none; } }
+@media print { .walk-bar { display: none !important; } .walk-para { background: none; box-shadow: none; } }
