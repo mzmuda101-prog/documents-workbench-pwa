@@ -2304,12 +2304,15 @@ function composeScopeCells(rows, tr, tc, scope) {
     : [tc];
 }
 
-// Sortowanie wierszy wg kolumny jak w Wordzie (Układ tabeli → Sortuj; tools/word-oracle/probe-table-sort.js):
-// rodzaj sam z 1. akapitów komórek — daty (d.m.r, r-m-d, m/d/r) albo liczby, gdy taka jest ponad połowa niepustych („2,5”, „1.5”, „12 zł”,
-// „(5)” = −5; „1 000” = 1, jak w Wordzie), inaczej tekst po polsku bez
-// wielkości liter. Komórki bez liczby/daty i puste na początku (malejąco: na końcu), remisy w kolejności
-// z pliku. Wiersze nagłówka (powtarzane — tu inaczej niż Word bez „wiersza nagłówka” — albo edit.header
-// pierwszych) zostają na górze. Tabela ze scaleniem pionowym — bez zmian (false).
+// Sortowanie wierszy jak w Wordzie (Układ tabeli → Sortuj; tools/word-oracle/probe-table-sort.js).
+// edit.keys: [{ col (kolumna siatki), type: "text"|"num"|"date"|"auto", order: "asc"|"desc" }] — do 2
+// kluczy (okno „Sortuj…”); bez keys: kolumna z kursorem, edit.order, rodzaj „auto” (szybkie przyciski).
+// Liczby: „2,5”, „1.5”, „12 zł”, „(5)” = −5, „1 000” = 1 (jak Word); daty d.m.r, r-m-d, m/d/r; tekst po
+// polsku bez wielkości liter; liczy się 1. akapit komórki. Komórki bez liczby/daty i puste na początku
+// (malejąco na końcu), remisy w kolejności z pliku. „auto”: daty albo liczby, gdy taka jest ponad
+// połowa niepustych komórek, inaczej tekst. Na górze zostają wiersze powtarzane (w:tblHeader — inaczej
+// niż Word bez „wiersza nagłówka”) albo edit.header pierwszych; edit.noHeader — żaden.
+// Tabela ze scaleniem pionowym w sortowanej części — bez zmian (false).
 function composeTableSortKey(tc) {
   const p = tc && Array.from(tc.childNodes).find((n) => n.localName === "p" && n.namespaceURI === W_NS); // Word: tylko 1. akapit
   return p ? Array.from(p.getElementsByTagNameNS(W_NS, "t")).map((t) => t.textContent).join("") : "";
@@ -2328,23 +2331,44 @@ function composeSortDate(s) {
   const dt = new Date(Date.UTC(y, mo - 1, d));
   return dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d ? dt.getTime() : null;
 }
+// rodzaj kolumny z jej tekstów: daty przed liczbami („2024-03-05” ≠ 2024); „brak” w kolumnie kwot nie psuje
+function composeSortGuess(texts) {
+  const filled = texts.filter((k) => k.trim());
+  const most = (f) => filled.length > 0 && filled.filter((k) => f(k) != null).length * 2 > filled.length;
+  return most(composeSortDate) ? "date" : most(composeSortNumber) ? "num" : "text";
+}
+const composeRowIsHeader = (tr) => { const pr = composeDirectChild(tr, "trPr"); const h = pr && composeDirectChild(pr, "tblHeader"); return !!h && !/^(0|false|off)$/.test(composeWAttr(h, "val") || ""); };
+// do okna „Sortuj…”: { cols: liczba kolumn siatki, texts: [wiersz][kolumna] (1. akapity), headRows: powtarzane na górze }
+function composeTableSortInfo(tbl) {
+  const rows = composeRows(tbl);
+  const cols = rows.reduce((n, r) => Math.max(n, composeCells(r).reduce((k, c) => k + composeSpan(c), 0)), 0);
+  let headRows = 0;
+  while (headRows < rows.length && composeRowIsHeader(rows[headRows])) headRows++;
+  return { cols, headRows, texts: rows.map((r) => Array.from({ length: cols }, (_, c) => composeTableSortKey(composeCellAtCol(r, c)))) };
+}
 function composeTableSort(tbl, col, edit) {
   const rows = composeRows(tbl);
-  const isHead = (tr) => { const pr = composeDirectChild(tr, "trPr"); const h = pr && composeDirectChild(pr, "tblHeader"); return !!h && !/^(0|false|off)$/.test(composeWAttr(h, "val") || ""); };
   let head = 0;
-  while (head < rows.length && isHead(rows[head])) head++;
-  head = Math.max(head, Math.min(rows.length, edit.header | 0));
+  if (!edit.noHeader) {
+    while (head < rows.length && composeRowIsHeader(rows[head])) head++;
+    head = Math.max(head, Math.min(rows.length, edit.header | 0));
+  }
   const body = rows.slice(head);
   if (body.length < 2 || body.some((r) => composeCells(r).some((c) => composeVMerge(c)))) return false;
-  const keys = body.map((r) => composeTableSortKey(composeCellAtCol(r, col)));
-  const filled = keys.filter((k) => k.trim());
-  const most = (f) => filled.filter((k) => f(k) != null).length * 2 > filled.length; // „brak” w kolumnie kwot nie psuje
-  const parse = most(composeSortDate) ? composeSortDate : most(composeSortNumber) ? composeSortNumber : null; // daty przed liczbami: „2024-03-05” ≠ 2024
   const coll = new Intl.Collator("pl", { sensitivity: "base" });
-  const vals = keys.map((k) => (parse ? (k.trim() ? parse(k) : null) : k));
-  const cmp = (x, y) => (!parse ? coll.compare(x, y) : x == null || y == null ? (y == null) - (x == null) : x - y);
-  const sign = edit.order === "desc" ? -1 : 1;
-  const order = body.map((r, i) => i).sort((i, j) => sign * cmp(vals[i], vals[j])); // sort stabilny — remisy jak w pliku
+  const PARSE = { num: composeSortNumber, date: composeSortDate };
+  const keys = (Array.isArray(edit.keys) && edit.keys.length ? edit.keys.slice(0, 3) : [{ col, type: "auto", order: edit.order }]).map((k) => {
+    const texts = body.map((r) => composeTableSortKey(composeCellAtCol(r, k.col | 0)));
+    const type = ["text", "num", "date"].includes(k.type) ? k.type : composeSortGuess(texts);
+    const parse = PARSE[type];
+    const vals = texts.map((x) => (parse ? (x.trim() ? parse(x) : null) : x));
+    const cmp = (x, y) => (!parse ? coll.compare(x, y) : x == null || y == null ? (y == null) - (x == null) : x - y);
+    return { vals, cmp, sign: k.order === "desc" ? -1 : 1 };
+  });
+  const order = body.map((r, i) => i).sort((i, j) => { // sort stabilny — remisy jak w pliku
+    for (const k of keys) { const c = k.sign * k.cmp(k.vals[i], k.vals[j]); if (c) return c; }
+    return 0;
+  });
   if (order.every((v, i) => v === i)) return true;
   const after = rows[rows.length - 1].nextSibling;
   order.forEach((i) => tbl.insertBefore(body[i], after));

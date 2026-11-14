@@ -1560,11 +1560,120 @@ const composeUi = (() => {
     const n = await applyDocumentEdit({ op: "table", index, action, ...extra }).catch((err) => { log(`Tabela: ${err.message || err}`, "error"); return 0; });
     if (!n && ["merge", "split", "evenCols", "sort"].includes(action)) toast(t({ merge: "tableMergeNo", split: "tableSplitNo", evenCols: "tableEvenNo", sort: "tableSortNo" }[action]), "info");
     await whenEditable();
-    if (readOnlyMode) return;
+    if (readOnlyMode) return n;
     const { ti, r, c } = cell;
     const target = { rowAbove: [r, c], rowBelow: [r + 1, c], colLeft: [r, c], colRight: [r, c + 1], delRow: [r, c], delCol: [r, c - 1], merge: [Math.min(r, extra.toR ?? r), Math.min(c, extra.toC ?? c)], split: [r, c], headerRow: [r, c], shade: [r, c], borders: [r, c], evenCols: [r, c], sort: [r, c] }[action];
     if (target) focusCell(ti, target[0], Math.max(0, target[1]));
     else if (action === "delTable" && firstIdx >= 0) focusParagraphAtOffset(firstIdx, 0); // akapit, który był pod tabelą
+    return n;
+  }
+
+  // ── sortowanie: rozpoznanie z pliku (kolumny, nagłówek, rodzaj) wspólne dla przycisków i okna ──
+  async function sortInfo() {
+    const p = caretParagraph();
+    if (!p || !cellOf(p)) { if (p) toast(t("tableNoCaret"), "info"); return null; }
+    await mergeInlineEditsIntoBytes().catch(() => {});
+    const doc = await getDocumentXmlDom(originalFileBytes).catch(() => null);
+    const xp = doc && collectParagraphElements(doc.documentElement, "all")[resolveParaIndex(p)];
+    const cell = xp && composeCellOf(xp);
+    if (!cell) return null;
+    const info = composeTableSortInfo(cell.tbl);
+    const head = info.headRows > 0 || boldFirstRow(p);
+    return { ...info, col: cell.gridCol, head };
+  }
+  // treść pod nagłówkiem (1 wiersz albo powtarzane) — z niej rodzaj; nazwa kolumny z nagłówka
+  const sortBody = (info, head) => info.texts.slice(head ? Math.max(1, info.headRows) : 0);
+  const sortGuess = (info, head, col) => composeSortGuess(sortBody(info, head).map((r) => r[col]));
+  const sortColName = (info, head, col) => (head && info.texts[0][col]?.trim()) || t("tableSortCol", { n: col + 1 });
+  const sortHeadEdit = (head) => (head ? { header: 1 } : { noHeader: true });
+  // szybkie przyciski: kolumna z kursorem, rodzaj rozpoznany — i komunikat, jak posortowano, z „Zmień…”
+  async function quickSort(order) {
+    const info = await sortInfo();
+    if (!info) return;
+    const type = sortGuess(info, info.head, info.col);
+    const n = await tableAction("sort", { keys: [{ col: info.col, type, order }], ...sortHeadEdit(info.head) });
+    if (n) toast(t("tableSortDone", { col: sortColName(info, info.head, info.col), type: t(`tableSortType_${type}`).toLowerCase(), order: t(order === "desc" ? "tableSortOrderDesc" : "tableSortOrderAsc").toLowerCase() }), "success",
+      { action: t("tableSortChange"), onAction: () => openSortForm({ order, type }) });
+  }
+  // okno „Sortuj…” (Word: Układ tabeli → Sortuj): dwa klucze, rodzaj, kierunek, wiersz nagłówka —
+  // wszystko z góry ustawione na to, co rozpoznano; zmiana nagłówka przelicza nazwy i nieruszone rodzaje
+  function openSortForm(prev = {}) {
+    if (readOnlyMode) return;
+    closePop();
+    openPop(tableBtn, async (el) => {
+      el.classList.add("compose-pop-form", "compose-pop-sort");
+      el.setAttribute("role", "dialog");
+      el.setAttribute("aria-label", t("tableSortTitle"));
+      const info = await sortInfo();
+      if (!info) { closePop(); return; }
+      let head = info.head;
+      const keyHtml = (i) => `
+        <div class="compose-cap"></div>
+        <div class="mf-grid">
+          <label class="compose-field"><span></span><select class="srt-col"></select></label>
+          <label class="compose-field"><span></span><select class="srt-type"></select></label>
+        </div>
+        <div class="seg srt-order" role="group"><button type="button" data-v="asc"></button><button type="button" data-v="desc"></button></div>`;
+      el.innerHTML = `<div class="srt-key" data-k="0">${keyHtml(0)}</div><div class="srt-key" data-k="1">${keyHtml(1)}</div>
+        <label class="compose-check"><input type="checkbox" class="srt-head"><span></span></label>
+        <div class="compose-actions"><span class="compose-actions-gap"></span><button type="button" class="btn lf-cancel"></button><button type="button" class="btn primary lf-ok"></button></div>`;
+      const keys = [0, 1].map((k) => {
+        const box = el.querySelector(`.srt-key[data-k="${k}"]`);
+        box.querySelector(".compose-cap").textContent = t(k ? "tableSortThen" : "tableSortBy");
+        const [colLbl, typeLbl] = box.querySelectorAll(".compose-field > span");
+        colLbl.textContent = t("tableSortColumn");
+        typeLbl.textContent = t("tableSortType");
+        const col = box.querySelector(".srt-col"), type = box.querySelector(".srt-type");
+        ["text", "num", "date"].forEach((v) => type.add(new Option(t(`tableSortType_${v}`), v)));
+        const st = { box, col, type, touched: false, order: k ? "asc" : prev.order || "asc" };
+        box.querySelectorAll(".srt-order button").forEach((b) => {
+          b.textContent = t(b.dataset.v === "desc" ? "tableSortOrderDesc" : "tableSortOrderAsc");
+          b.addEventListener("click", () => { st.order = b.dataset.v; paint(); });
+        });
+        col.addEventListener("change", () => { st.touched = false; paint(); });
+        type.addEventListener("change", () => { st.touched = true; });
+        return st;
+      });
+      const headBox = el.querySelector(".srt-head");
+      headBox.checked = head;
+      el.querySelector(".srt-head + span").textContent = t("tableSortHeader");
+      headBox.addEventListener("change", () => { head = headBox.checked; paint(true); });
+      const fillCols = () => keys.forEach((st, k) => {
+        const v = st.col.value;
+        st.col.replaceChildren(...(k ? [new Option(t("tableSortNone"), "")] : []),
+          ...Array.from({ length: info.cols }, (_, c) => new Option(sortColName(info, head, c), String(c))));
+        st.col.value = v;
+      });
+      function paint(names) {
+        if (names) fillCols();
+        keys.forEach((st, k) => {
+          const off = k === 1 && st.col.value === "";
+          st.type.disabled = off;
+          st.box.querySelectorAll(".srt-order button").forEach((b) => {
+            const on = b.dataset.v === st.order;
+            b.classList.toggle("is-on", on);
+            b.setAttribute("aria-pressed", String(on));
+            b.disabled = off;
+          });
+          if (!off && !st.touched) st.type.value = sortGuess(info, head, Number(st.col.value));
+        });
+      }
+      fillCols();
+      keys[0].col.value = String(info.col);
+      keys[1].col.value = "";
+      if (prev.type) { keys[0].type.value = prev.type; keys[0].touched = true; }
+      paint();
+      el.querySelector(".lf-cancel").textContent = t("linkCancel");
+      el.querySelector(".lf-cancel").addEventListener("click", () => closePop(true));
+      const ok = el.querySelector(".lf-ok");
+      ok.textContent = t("tableSortOk");
+      ok.addEventListener("click", () => {
+        const ks = keys.filter((st) => st.col.value !== "").map((st) => ({ col: Number(st.col.value), type: st.type.value, order: st.order }));
+        closePop();
+        tableAction("sort", { keys: ks, ...sortHeadEdit(head) });
+      });
+      keys[0].col.focus({ preventScroll: true });
+    });
   }
 
   // Zaznaczenie przez kilka komórek tej samej tabeli → { toIndex, toR, toC } drugiego rogu (scalanie)
@@ -1653,8 +1762,9 @@ const composeUi = (() => {
     popCap(el, t("tableSortGroup"));
     [["asc", "tableSortAsc", '<path d="M4 6h3M4 12h5M4 18h7"/><path d="M17 5v14M14 16l3 3 3-3"/>'],
       ["desc", "tableSortDesc", '<path d="M4 6h7M4 12h5M4 18h3"/><path d="M17 5v14M14 16l3 3 3-3"/>']].forEach(([order, key, svg]) => {
-      popItem(el, { label: t(key), desc: t("tableSortHint"), icon: ICON(svg), onPick: () => tableAction("sort", { order, header: caretP && boldFirstRow(caretP) ? 1 : 0 }) }).dataset.tbl = `sort-${order}`;
+      popItem(el, { label: t(key), desc: t("tableSortHint"), icon: ICON(svg), onPick: () => quickSort(order) }).dataset.tbl = `sort-${order}`;
     });
+    popItem(el, { label: t("tableSortMore"), desc: t("tableSortMoreDesc"), icon: ICON('<path d="M4 6h16M4 12h10M4 18h6"/><circle cx="18" cy="16" r="3"/>'), onPick: () => openSortForm() }).dataset.tbl = "sort-form";
     // kolor (cieniowanie) komórki — zakres jak przy wyrównaniu
     popCap(el, t("tableShadeGroup"));
     let shadeScope = "cell";

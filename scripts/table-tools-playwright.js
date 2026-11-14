@@ -186,9 +186,9 @@ async function run() {
   check("Cofnij: krawędzie wracają do „bez krawędzi”", /insideH:none/.test(t.borders) && /^top:none/.test(t.borders), t.borders);
 
   // ── Sortuj (kolejność jak w Wordzie: tools/word-oracle/run-tables.js „sortuj-*”) ─────────────
-  // pogrubiony pierwszy wiersz = nagłówek, zostaje na górze; kolumna z kursorem to liczby → 41, 30, 25
+  // pogrubiony pierwszy wiersz = nagłówek, zostaje na górze; kolumna z kursorem to liczby → 41, 30, 25, 9
   const tc = (s, b) => `<w:tc><w:p><w:r>${b ? "<w:rPr><w:b/></w:rPr>" : ""}<w:t>${s}</w:t></w:r></w:p></w:tc>`;
-  const sortRows = [["Imię", "Wiek"], ["Ola", "30"], ["Ewa", "25"], ["Adam", "41"]];
+  const sortRows = [["Imię", "Wiek"], ["Ola", "30"], ["Ewa", "25"], ["Adam", "41"], ["Ewa", "9"]];
   const sortDoc = await buildDocx({ body: ["Lista:", `<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tblGrid><w:gridCol w:w="3000"/><w:gridCol w:w="3000"/></w:tblGrid>${sortRows.map((r, i) => `<w:tr>${r.map((s) => tc(s, i === 0)).join("")}</w:tr>`).join("")}</w:tbl>`, "Koniec."] });
   await page.locator("#fileInput").setInputFiles({ name: "sort.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer: sortDoc });
   await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && [...document.querySelectorAll(".docx-preview-host td p")].some((p) => p.textContent === "Adam"), null, { timeout: 30000 });
@@ -197,17 +197,54 @@ async function run() {
   await inCell("30");
   await menu("sort-desc");
   t = await savedTable(page);
-  check("Sortuj malejąco wg kolumny z kursorem: nagłówek na górze, liczby 41, 30, 25", text(t) === "Imię ; Wiek / Adam ; 41 / Ola ; 30 / Ewa ; 25", text(t));
-  check("podgląd w nowej kolejności", await page.evaluate(() => [...document.querySelectorAll(".docx-preview-host table tr")].map((tr) => tr.cells[0].textContent.trim()).join(",")) === "Imię,Adam,Ola,Ewa");
+  check("Sortuj malejąco wg kolumny z kursorem: nagłówek na górze, liczby 41, 30, 25, 9", text(t) === "Imię ; Wiek / Adam ; 41 / Ola ; 30 / Ewa ; 25 / Ewa ; 9", text(t));
+  check("podgląd w nowej kolejności", await page.evaluate(() => [...document.querySelectorAll(".docx-preview-host table tr")].map((tr) => tr.cells[0].textContent.trim()).join(",")) === "Imię,Adam,Ola,Ewa,Ewa");
+  const toastTxt = await page.evaluate(() => [...document.querySelectorAll(".toast")].map((x) => x.textContent).join(" | "));
+  check("komunikat mówi, jak posortowano (kolumna z nagłówka, liczby) i ma „Zmień…”", /„Wiek” jako liczby, malejąco/.test(toastTxt) && /Zmień…/.test(toastTxt), toastTxt);
+  // „Zmień…” z komunikatu otwiera okno z tym, co rozpoznano
+  await page.locator(".toast .toast-action", { hasText: "Zmień…" }).last().click();
+  await page.waitForSelector(".compose-pop-sort .srt-col option", { state: "attached", timeout: 8000 });
+  const form = () => page.evaluate(() => {
+    const el = document.querySelector(".compose-pop-sort");
+    const k = [...el.querySelectorAll(".srt-key")].map((b) => ({ col: b.querySelector(".srt-col").selectedOptions[0]?.text, type: b.querySelector(".srt-type").value, order: b.querySelector(".srt-order .is-on")?.dataset.v, typeOff: b.querySelector(".srt-type").disabled }));
+    return { k, head: el.querySelector(".srt-head").checked, cols: [...el.querySelector(".srt-col").options].map((o) => o.text).join(",") };
+  });
+  let f = await form();
+  check("okno z „Zmień…”: Wiek, liczby, malejąco, nagłówek zaznaczony, drugi klucz pusty", f.k[0].col === "Wiek" && f.k[0].type === "num" && f.k[0].order === "desc" && f.head && f.k[1].col === "(brak)" && f.k[1].typeOff, JSON.stringify(f));
+  await page.click(".compose-pop-sort .lf-cancel");
+  // ── okno z menu: dwa klucze — Imię rosnąco, potem Wiek rosnąco (Ewa 9 przed Ewa 25) ──
   await inCell("Ola");
-  await menu("sort-asc");
+  await menu("sort-form");
+  await page.waitForSelector(".compose-pop-sort .srt-col option", { state: "attached", timeout: 8000 });
+  f = await form();
+  check("okno z menu: kolumna z kursorem (Imię) jako tekst, nazwy kolumn z nagłówka", f.k[0].col === "Imię" && f.k[0].type === "text" && f.cols === "Imię,Wiek", JSON.stringify(f));
+  await page.locator(".compose-pop-sort .srt-head").uncheck();
+  f = await form();
+  check("bez nagłówka: kolumny „Kolumna 1, 2”", f.cols === "Kolumna 1,Kolumna 2" && !f.head, JSON.stringify(f));
+  await page.locator(".compose-pop-sort .srt-head").check();
+  await page.locator('.compose-pop-sort .srt-key[data-k="1"] .srt-col').selectOption("1");
+  f = await form();
+  check("drugi klucz Wiek: typ sam ustawiony na liczby", f.k[1].col === "Wiek" && f.k[1].type === "num" && !f.k[1].typeOff, JSON.stringify(f));
+  await page.click(".compose-pop-sort .lf-ok");
+  await idle(page);
   t = await savedTable(page);
-  check("Sortuj rosnąco wg 1. kolumny: Adam, Ewa, Ola", text(t) === "Imię ; Wiek / Adam ; 41 / Ewa ; 25 / Ola ; 30", text(t));
+  check("Sortuj… dwa klucze: Adam, Ewa 9, Ewa 25, Ola", text(t) === "Imię ; Wiek / Adam ; 41 / Ewa ; 9 / Ewa ; 25 / Ola ; 30", text(t));
+  // typ wybrany ręcznie: Wiek jako tekst malejąco
+  await inCell("Ola");
+  await menu("sort-form");
+  await page.waitForSelector(".compose-pop-sort .srt-col option", { state: "attached", timeout: 8000 });
+  await page.locator('.compose-pop-sort .srt-key[data-k="0"] .srt-col').selectOption("1");
+  await page.locator('.compose-pop-sort .srt-key[data-k="0"] .srt-type').selectOption("text");
+  await page.click('.compose-pop-sort .srt-key[data-k="0"] .srt-order [data-v="desc"]');
+  await page.click(".compose-pop-sort .lf-ok");
+  await idle(page);
+  t = await savedTable(page);
+  check("Sortuj… typ ręcznie (tekst, malejąco): „9” przed „41” jak w Wordzie", text(t) === "Imię ; Wiek / Ewa ; 9 / Adam ; 41 / Ola ; 30 / Ewa ; 25", text(t));
   await settle();
   await page.click("#undoBtn");
   await idle(page);
   t = await savedTable(page);
-  check("Cofnij sortowanie: poprzednia kolejność", text(t) === "Imię ; Wiek / Adam ; 41 / Ola ; 30 / Ewa ; 25", text(t));
+  check("Cofnij sortowanie: poprzednia kolejność", text(t) === "Imię ; Wiek / Adam ; 41 / Ewa ; 9 / Ewa ; 25 / Ola ; 30", text(t));
 
   if (errors.length) check("brak błędów strony", false, errors.slice(0, 3).join(" | "));
   await browser.close();

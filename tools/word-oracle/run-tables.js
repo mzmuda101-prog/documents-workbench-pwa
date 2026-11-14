@@ -9,6 +9,7 @@ const app = require("./app");
 const { CASES, tableXml, STYLES, cellParaIndex, normalizeTable } = require("./cases-tables");
 
 const docOf = (c) => ({ styles: STYLES, body: ["Przed.", tableXml(c.rows, { header: c.header }), "Po."] });
+const SORT_TYPE = { text: "sort field alphanumeric", num: "sort field numeric", date: "sort field date" };
 function wordOp(bytes, c) {
   const key = crypto.createHash("sha1").update(bytes).update(JSON.stringify(c.op)).digest("hex").slice(0, 16);
   const f = path.join(word.DIR, "cache", `tables-${key}.json`);
@@ -16,7 +17,7 @@ function wordOp(bytes, c) {
   const o = c.op;
   const cell = (r, k) => `(get cell from table (table 1) row ${r} column ${k})`;
   const body = o.merge ? `merge cell ${cell(o.merge[0], o.merge[1])} with ${cell(o.merge[2], o.merge[3])}`
-    : o.sort ? `sort (text object of table 1) exclude header ${!!o.skip} field number ${o.sort} sort field type ${{ text: "sort field alphanumeric", num: "sort field numeric", date: "sort field date" }[o.type]} sort order sort order ${o.order || "ascending"}`
+    : o.sort ? `sort (text object of table 1) exclude header ${!!o.skip} field number ${o.sort} sort field type ${SORT_TYPE[o.type]} sort order sort order ${o.order || "ascending"}${o.then ? ` field number two ${o.then.sort} sort field type two ${SORT_TYPE[o.then.type]} sort order two sort order ${o.then.order || "ascending"}` : ""}`
     : o.split ? `split cell ${cell(o.split[0], o.split[1])} number of rows ${o.rows} number of columns ${o.cols}`
     : `set heading format of row ${o.header} of table 1 to (not (heading format of row ${o.header} of table 1))`;
   const out = { doc: word.saveDocx(bytes, body).parts["word/document.xml"] };
@@ -29,7 +30,9 @@ function appEdit(c) {
   const { cellParaIndex } = require("./cases-tables");
   const o = c.op;
   if (o.merge) return { op: "table", index: cellParaIndex(c.rows, o.merge[0], o.merge[1]), action: "merge", toIndex: cellParaIndex(c.rows, o.merge[2], o.merge[3]) };
-  if (o.sort) return { op: "table", index: cellParaIndex(c.rows, c.rows.length, o.sort), action: "sort", order: o.order === "descending" ? "desc" : "asc", header: (o.appSkip ?? o.skip) ? 1 : 0 };
+  const ord = (x) => (x === "descending" ? "desc" : "asc");
+  if (o.sort && o.explicit) return { op: "table", index: cellParaIndex(c.rows, c.rows.length, 1), action: "sort", keys: [{ col: o.sort - 1, type: o.type, order: ord(o.order) }, ...(o.then ? [{ col: o.then.sort - 1, type: o.then.type, order: ord(o.then.order) }] : [])], ...(o.noHeader ? { noHeader: true } : { header: o.skip ? 1 : 0 }) };
+  if (o.sort) return { op: "table", index: cellParaIndex(c.rows, c.rows.length, o.sort), action: "sort", order: ord(o.order), header: (o.appSkip ?? o.skip) ? 1 : 0 };
   if (o.split) return { op: "table", index: cellParaIndex(c.rows, o.split[0], o.split[1]), action: "split" };
   return { op: "table", index: cellParaIndex(c.rows, o.header, 1), action: "headerRow" };
 }

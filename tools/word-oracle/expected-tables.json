@@ -1079,6 +1079,257 @@
    }
   ]
  },
+ "sortuj-okno-dwa-klucze": {
+  "grid": [
+   2000,
+   2000
+  ],
+  "rows": [
+   {
+    "h": false,
+    "cells": [
+     "Ćwik",
+     "Zoe"
+    ],
+    "w": [
+     2000,
+     2000
+    ]
+   },
+   {
+    "h": false,
+    "cells": [
+     "Kowal",
+     "Bea"
+    ],
+    "w": [
+     2000,
+     2000
+    ]
+   },
+   {
+    "h": false,
+    "cells": [
+     "Kowal",
+     "Ola"
+    ],
+    "w": [
+     2000,
+     2000
+    ]
+   },
+   {
+    "h": false,
+    "cells": [
+     "Nowak",
+     "Adam"
+    ],
+    "w": [
+     2000,
+     2000
+    ]
+   },
+   {
+    "h": false,
+    "cells": [
+     "Nowak",
+     "Ewa"
+    ],
+    "w": [
+     2000,
+     2000
+    ]
+   }
+  ]
+ },
+ "sortuj-okno-drugi-liczby-malejaco": {
+  "grid": [
+   2000,
+   2000
+  ],
+  "rows": [
+   {
+    "h": false,
+    "cells": [
+     "A",
+     "100"
+    ],
+    "w": [
+     2000,
+     2000
+    ]
+   },
+   {
+    "h": false,
+    "cells": [
+     "A",
+     "10"
+    ],
+    "w": [
+     2000,
+     2000
+    ]
+   },
+   {
+    "h": false,
+    "cells": [
+     "A",
+     "x"
+    ],
+    "w": [
+     2000,
+     2000
+    ]
+   },
+   {
+    "h": false,
+    "cells": [
+     "B",
+     "20"
+    ],
+    "w": [
+     2000,
+     2000
+    ]
+   },
+   {
+    "h": false,
+    "cells": [
+     "B",
+     "9"
+    ],
+    "w": [
+     2000,
+     2000
+    ]
+   }
+  ]
+ },
+ "sortuj-okno-liczby-jako-tekst": {
+  "grid": [
+   2000
+  ],
+  "rows": [
+   {
+    "h": false,
+    "cells": [
+     "10"
+    ],
+    "w": [
+     2000
+    ]
+   },
+   {
+    "h": false,
+    "cells": [
+     "100"
+    ],
+    "w": [
+     2000
+    ]
+   },
+   {
+    "h": false,
+    "cells": [
+     "2"
+    ],
+    "w": [
+     2000
+    ]
+   },
+   {
+    "h": false,
+    "cells": [
+     "9"
+    ],
+    "w": [
+     2000
+    ]
+   }
+  ]
+ },
+ "sortuj-okno-daty-jako-liczby": {
+  "grid": [
+   2000,
+   2000
+  ],
+  "rows": [
+   {
+    "h": false,
+    "cells": [
+     "y",
+     "1.02.2025"
+    ],
+    "w": [
+     2000,
+     2000
+    ]
+   },
+   {
+    "h": false,
+    "cells": [
+     "z",
+     "3.4.2024"
+    ],
+    "w": [
+     2000,
+     2000
+    ]
+   },
+   {
+    "h": false,
+    "cells": [
+     "x",
+     "15.11.2026"
+    ],
+    "w": [
+     2000,
+     2000
+    ]
+   }
+  ]
+ },
+ "sortuj-okno-bez-naglowka": {
+  "grid": [
+   2000,
+   2000
+  ],
+  "rows": [
+   {
+    "h": false,
+    "cells": [
+     "Ewa",
+     "25"
+    ],
+    "w": [
+     2000,
+     2000
+    ]
+   },
+   {
+    "h": true,
+    "cells": [
+     "Imię",
+     "Wiek"
+    ],
+    "w": [
+     2000,
+     2000
+    ]
+   },
+   {
+    "h": false,
+    "cells": [
+     "Ola",
+     "30"
+    ],
+    "w": [
+     2000,
+     2000
+    ]
+   }
+  ]
+ },
  "sortuj-kwoty-z-brak": {
   "grid": [
    2000,

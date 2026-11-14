@@ -41,8 +41,9 @@ Bez plików w bazie, ale Word to ma (w kolejce z planu): ✅ kolumny tekstu (Uk�
 dwie / trzy, linia między kolumnami, zaznaczony fragment z podziałami ciągłymi; kolumny strona po
 stronie w podglądzie i wydruku jak w Wordzie — v1.00.55; kolumny nierównej szerokości na później),
 znak wodny, ✅ sortowanie
-tabeli (Tabela → Sortuj rosnąco / malejąco wg kolumny z kursorem; tekst / liczby / daty jak w Wordzie
-— v1.00.57), edytor równań, Alt+X. Jeszcze dalej: inicjał, obramowanie strony, podpisy i odsyłacze
+tabeli (Tabela → Sortuj rosnąco / malejąco wg kolumny z kursorem, komunikat „jak posortowano” z
+„Zmień…”; Tabela → Sortuj… — okno: dwa klucze, typ tekst / liczby / daty, wiersz nagłówka; kolejność
+jak w Wordzie — v1.00.57–58), edytor równań, Alt+X. Jeszcze dalej: inicjał, obramowanie strony, podpisy i odsyłacze
 („Rysunek 1”), kształty, wykresy, SmartArt.
 
 ## Gdzie co ma być (nawigacja)

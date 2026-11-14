@@ -43,6 +43,12 @@ const CASES = [
   { name: "sortuj-z-naglowkiem", rows: [["Imię", "Wiek"], ["Ola", "30"], ["Ewa", "25"], ["Adam", "41"]], op: { sort: 1, type: "text", skip: true } },
   // powtarzany wiersz nagłówka apka zostawia na górze sama (Word przez AppleScript bez „exclude header” go przesuwa)
   { name: "sortuj-wiersz-naglowka", rows: [["Imię", "Wiek"], ["Ola", "30"], ["Ewa", "25"]], header: [0], op: { sort: 1, type: "text", skip: true, appSkip: false } },
+  // okno „Sortuj…”: typ podany wprost (explicit), drugi klucz (then), bez nagłówka mimo powtarzanego (noHeader)
+  { name: "sortuj-okno-dwa-klucze", rows: [["Nowak", "Ewa"], ["Kowal", "Ola"], ["Nowak", "Adam"], ["Kowal", "Bea"], ["Ćwik", "Zoe"]], op: { sort: 1, type: "text", explicit: true, then: { sort: 2, type: "text" } } },
+  { name: "sortuj-okno-drugi-liczby-malejaco", rows: [["A", "10"], ["B", "9"], ["A", "100"], ["B", "20"], ["A", "x"]], op: { sort: 1, type: "text", explicit: true, then: { sort: 2, type: "num", order: "descending" } } },
+  { name: "sortuj-okno-liczby-jako-tekst", rows: [["10"], ["9"], ["100"], ["2"]], op: { sort: 1, type: "text", explicit: true } },
+  { name: "sortuj-okno-daty-jako-liczby", rows: [["x", "15.11.2026"], ["y", "1.02.2025"], ["z", "3.4.2024"]], op: { sort: 2, type: "num", explicit: true } },
+  { name: "sortuj-okno-bez-naglowka", rows: [["Imię", "Wiek"], ["Ola", "30"], ["Ewa", "25"]], header: [0], op: { sort: 1, type: "text", explicit: true, noHeader: true } },
   { name: "sortuj-kwoty-z-brak", rows: [["a", "brak"], ["b", "100"], ["c", "20"], ["d", "3,5"]], op: { sort: 2, type: "num" } },
   { name: "sortuj-kilka-akapitow", rows: [[{ paras: ["b", "a"] }, "1"], [{ paras: ["a", "z"] }, "2"], ["a", "3"]], op: { sort: 1, type: "text" } },
 ];
