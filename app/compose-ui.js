@@ -156,6 +156,23 @@ const composeUi = (() => {
     await runFileEdit({ op: "list", indices: selectedParagraphIndices(p), kind, toggle }, caretState(p));
   }
 
+  async function applyListFormat(kind, variant) {
+    const p = caretParagraph();
+    if (!p) return;
+    const sel = window.getSelection();
+    const whole = isListParagraph(p) && (!sel?.rangeCount || sel.isCollapsed);
+    await runFileEdit({ op: "list", indices: selectedParagraphIndices(p), kind, toggle: false, variant, wholeList: whole }, caretState(p));
+  }
+  async function listNumbering(op) {
+    const p = caretParagraph();
+    if (!p) return;
+    const index = resolveParaIndex(p);
+    if (index < 0) return;
+    pendingInlineCursor = caretState(p);
+    const n = await applyDocumentEdit({ op, index }).catch(() => 0);
+    if (!n && op === "listContinue") toast(t("listContinueNone"), "info");
+  }
+
   async function changeListLevel(delta) {
     const p = caretParagraph();
     if (!p) return;
@@ -607,8 +624,38 @@ const composeUi = (() => {
     });
     const p = activeParagraph() || lastP;
     const inList = !!p && isListParagraph(p);
+    // biblioteka formatów (jak strzałka przy numeracji / punktorach w Wordzie): przy kursorze w liście —
+    // zmienia całą listę, inaczej zaczyna nową w tym formacie
+    const chips = (cap, items) => {
+      popCap(el, t(cap));
+      const g = document.createElement("div");
+      g.className = "list-chips";
+      g.setAttribute("role", "group");
+      g.setAttribute("aria-label", t(cap));
+      items.forEach(([label, kind, variant, aria]) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "list-chip";
+        b.textContent = label;
+        b.setAttribute("aria-label", aria ? t(aria) : label);
+        b.addEventListener("click", () => { closePop(); applyListFormat(kind, variant); });
+        g.appendChild(b);
+      });
+      el.appendChild(g);
+    };
+    chips("listFormats", [
+      ["1.", "number", null], ["1)", "number", { fmt: "decimal", punct: ")" }], ["a)", "number", { fmt: "lowerLetter", punct: ")" }],
+      ["a.", "number", { fmt: "lowerLetter", punct: "." }], ["A.", "number", { fmt: "upperLetter", punct: "." }],
+      ["i.", "number", { fmt: "lowerRoman", punct: "." }], ["I.", "number", { fmt: "upperRoman", punct: "." }],
+      ["1.1.1", "number", { legal: true }, "listLegal"],
+    ]);
+    chips("listBullets", [["•", "bullet", null], ["○", "bullet", { char: "○" }], ["■", "bullet", { char: "■" }], ["➢", "bullet", { char: "➢" }], ["✓", "bullet", { char: "✓" }], ["–", "bullet", { char: "–" }]]);
     if (inList) {
       popItem(el, { label: t("listNone"), icon: ICON('<line x1="5" y1="12" x2="19" y2="12"/>'), onPick: () => applyList("none", false) });
+      if (p.hasAttribute("data-dwb-num") || p.classList.contains("docx-list-numbered-fixed")) { // numerowana (numer liczy list-numbering.js)
+        popItem(el, { label: t("listRestart"), icon: ICON('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><polyline points="3 3 3 8 8 8"/>'), onPick: () => listNumbering("listRestart") });
+        popItem(el, { label: t("listContinue"), icon: ICON('<polyline points="13 7 18 12 13 17"/><line x1="4" y1="12" x2="18" y2="12"/>'), onPick: () => listNumbering("listContinue") });
+      }
       popCap(el, t("listLevel"));
       const row = document.createElement("div");
       row.className = "compose-row";

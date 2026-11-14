@@ -3884,3 +3884,14 @@ body.dwb-painting .docx-preview-host * {
 }
 @media (prefers-reduced-motion: reduce) { .walk-bar { animation: none; } .walk-btn:active:not(:disabled) { transform: none; } }
 @media print { .walk-bar { display: none !important; } .walk-para { background: none; box-shadow: none; } }
+
+/* Biblioteka list (compose-ui.js buildListMenu): format numeracji i punktory jak w Wordzie —
+   krój jak w dokumencie (numery wyglądają tak, jak wyjdą na stronie) */
+.list-chips { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 4px 8px 6px; }
+.list-chip {
+  min-height: 36px; padding: 0 6px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--panel);
+  color: var(--ink); font-family: Calibri, Carlito, Arial, sans-serif; font-size: 15px; cursor: pointer; white-space: nowrap;
+}
+@media (hover: hover) { .list-chip:hover { border-color: var(--accent); background: var(--accent-light); } }
+.list-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (pointer: coarse) { .list-chip { min-height: 44px; } }

@@ -1193,6 +1193,12 @@ async function buildPatchedDocx(bytes, edits, lastEditOpts = {}) {
       total += res.count;
       continue;
     }
+    if (normalized.op === "listRestart" || normalized.op === "listContinue") { // docx-compose.js — numerowanie od nowa / dalej
+      const res = await applyListNumberingInZip(zip, xml, normalized);
+      xml = res.xml;
+      total += res.count;
+      continue;
+    }
     if (normalized.op === "styleCreate" || normalized.op === "styleUpdate") { // docx-compose.js — własne style
       const res = await applyStyleInZip(zip, xml, normalized);
       xml = res.xml;

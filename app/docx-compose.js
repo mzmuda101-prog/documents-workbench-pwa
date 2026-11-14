@@ -1040,6 +1040,7 @@ const COMPOSE_NUMFMT = [["decimal", "%L."], ["lowerLetter", "%L."], ["lowerRoman
 // głębsze — zwykły cykl. Każda odmiana to osobna definicja („DWB Numbering lowerLetter)”).
 function composeListName(kind, variant) {
   if (!variant) return COMPOSE_LIST_NAMES[kind];
+  if (variant.legal) return `${COMPOSE_LIST_NAMES[kind]} 1.1.1`;
   return `${COMPOSE_LIST_NAMES[kind]} ${kind === "bullet" ? variant.char : `${variant.fmt}${variant.punct}`}`;
 }
 
@@ -1053,6 +1054,12 @@ function composeAbstractNumXml(kind, id, variant = null) {
       lvls += `<w:lvl w:ilvl="${i}"><w:start w:val="1"/><w:numFmt w:val="bullet"/><w:lvlText w:val="${ch}"/><w:lvlJc w:val="left"/>${ind}<w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:hint="default"/></w:rPr></w:lvl>`;
     } else {
       let [fmt, text] = COMPOSE_NUMFMT[i % 3];
+      // wielopoziomowa „1. / 1.1. / 1.1.1.” (biblioteka list Worda): każdy poziom z numerami wyższych
+      if (variant?.legal) {
+        const lvlText = Array.from({ length: i + 1 }, (_, k) => `%${k + 1}.`).join("");
+        lvls += `<w:lvl w:ilvl="${i}"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="${lvlText}"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="${360 + i * 432}" w:hanging="${360 + i * 72}"/></w:pPr></w:lvl>`;
+        continue;
+      }
       if (variant) {
         if (i === 0) fmt = variant.fmt;
         text = `%L${variant.punct}`;
@@ -1060,7 +1067,49 @@ function composeAbstractNumXml(kind, id, variant = null) {
       lvls += `<w:lvl w:ilvl="${i}"><w:start w:val="1"/><w:numFmt w:val="${fmt}"/><w:lvlText w:val="${text.replace("L", i + 1)}"/><w:lvlJc w:val="left"/>${ind}</w:lvl>`;
     }
   }
-  return `<w:abstractNum w:abstractNumId="${id}"><w:nsid w:val="${nsid}"/><w:multiLevelType w:val="hybridMultilevel"/><w:name w:val="${composeListName(kind, variant)}"/>${lvls}</w:abstractNum>`;
+  return `<w:abstractNum w:abstractNumId="${id}"><w:nsid w:val="${nsid}"/><w:multiLevelType w:val="${variant?.legal ? "multilevel" : "hybridMultilevel"}"/><w:name w:val="${composeListName(kind, variant)}"/>${lvls}</w:abstractNum>`;
+}
+
+// ── op "listRestart" / "listContinue": numerowanie od nowa / dalej (Word: prawy przycisk na
+// numerze → „Rozpocznij od nowa od 1” / „Kontynuuj numerowanie”) ─────────────────────────────
+// Od nowa: ten akapit i kolejne akapity tej listy (ten sam w:num) dostają nowy w:num z tą samą
+// definicją i startOverride 1. Dalej: akapity tej listy od tego miejsca przechodzą do najbliższej
+// wcześniejszej listy z tą samą definicją — numery liczą się dalej.
+async function applyListNumberingInZip(zip, xml, edit) {
+  const numPath = "word/numbering.xml";
+  if (!zip.file(numPath)) return { xml, count: 0 };
+  const doc = composeParse(xml);
+  const paragraphs = collectParagraphElements(doc.documentElement, "all");
+  const p = paragraphs[edit.index];
+  const numId = p && composeNumIdOf(p);
+  if (!numId) return { xml, count: 0 };
+  const numDoc = composeParse(await zip.file(numPath).async("string"));
+  const idx = composeNumberingIndex(numDoc);
+  const absId = idx.nums.get(numId);
+  if (absId == null) return { xml, count: 0 };
+  const from = paragraphs.indexOf(p);
+  const run = paragraphs.slice(from).filter((x) => composeNumIdOf(x) === numId);
+  const ilvl = composeDirectChild(composeDirectChild(composeDirectChild(p, "pPr"), "numPr"), "ilvl")?.getAttributeNS(W_NS, "val") || "0";
+  let target;
+  if (edit.op === "listRestart") {
+    target = String(Array.from(idx.nums.keys()).reduce((m, k) => Math.max(m, parseInt(k, 10) || 0), 0) + 1);
+    const num = composeEl(numDoc, "num", { numId: target });
+    num.appendChild(composeEl(numDoc, "abstractNumId", { val: absId }));
+    const ov = composeEl(numDoc, "lvlOverride", { ilvl });
+    ov.appendChild(composeEl(numDoc, "startOverride", { val: 1 }));
+    num.appendChild(ov);
+    composeNumberingInsert(numDoc.documentElement, num);
+    zip.file(numPath, composeSerialize(numDoc));
+  } else {
+    const prev = paragraphs.slice(0, from).reverse().map(composeNumIdOf).find((id) => id && id !== numId && idx.nums.get(id) === absId);
+    if (!prev) return { xml, count: 0 };
+    target = prev;
+  }
+  run.forEach((x) => {
+    const n = composeDirectChild(composeDirectChild(composeDirectChild(x, "pPr"), "numPr"), "numId");
+    n.setAttributeNS(W_NS, "w:val", target);
+  });
+  return { xml: composeSerialize(doc), count: run.length };
 }
 
 async function composeEnsurePart(zip, path, rootXml, contentType, relType) {
@@ -1113,11 +1162,16 @@ function composeParagraphListKind(p, idx) {
   return fmt === "bullet" ? "bullet" : fmt && fmt !== "none" ? "number" : "number";
 }
 
+const composeNumIdOf = (p) => composeDirectChild(composeDirectChild(composeDirectChild(p, "pPr") || p, "numPr") || p, "numId")?.getAttributeNS(W_NS, "val") || null;
+
 async function applyListInZip(zip, xml, edit) {
   const doc = composeParse(xml);
   const paragraphs = collectParagraphElements(doc.documentElement, "all");
-  const targets = (edit.indices || []).map((i) => paragraphs[i]).filter(Boolean);
+  let targets = (edit.indices || []).map((i) => paragraphs[i]).filter(Boolean);
   if (!targets.length) return { xml, count: 0 };
+  // format z biblioteki przy kursorze w liście: cała lista (wszystkie akapity tego w:num), jak w Wordzie
+  const wholeId = edit.wholeList ? composeNumIdOf(targets[0]) : null;
+  if (wholeId) targets = paragraphs.filter((p) => composeNumIdOf(p) === wholeId);
   const numPath = "word/numbering.xml";
   let numXml = zip.file(numPath) ? await zip.file(numPath).async("string") : null;
   const numDoc = composeParse(numXml || `<w:numbering xmlns:w="${W_NS}"/>`);
@@ -1151,7 +1205,7 @@ async function applyListInZip(zip, xml, edit) {
     return { xml: n ? composeSerialize(doc) : xml, count: n, kind };
   }
   // definicja (abstractNum) tego rodzaju
-  const variant = edit.variant && (kind === "bullet" ? edit.variant.char : edit.variant.fmt) ? edit.variant : null;
+  const variant = edit.variant && (kind === "bullet" ? edit.variant.char : edit.variant.fmt || edit.variant.legal) ? edit.variant : null;
   const listName = composeListName(kind, variant);
   let absId = Array.from(idx.abstracts.entries()).find(([, a]) => a.name === listName)?.[0];
   const root = numDoc.documentElement;
@@ -1177,9 +1231,9 @@ async function applyListInZip(zip, xml, edit) {
   const first = paragraphs.indexOf(targets[0]);
   const prev = first > 0 ? paragraphs[first - 1] : null;
   const prevNumId = prev && composeDirectChild(composeDirectChild(composeDirectChild(prev, "pPr") || prev, "numPr") || prev, "numId")?.getAttributeNS(W_NS, "val");
-  let numId = prevNumId && idx.nums.get(prevNumId) === absId ? prevNumId : null;
+  let numId = !wholeId && prevNumId && idx.nums.get(prevNumId) === absId ? prevNumId : null;
   if (!numId && kind === "bullet") numId = Array.from(idx.nums.entries()).find(([, a]) => a === absId)?.[0] || null;
-  if (!numId) numId = newNum(kind === "number");
+  if (!numId) numId = newNum(kind === "number" && !wholeId);
   targets.forEach((p) => {
     const pPr = composeEnsurePPr(p);
     const old = composeDirectChild(pPr, "numPr");

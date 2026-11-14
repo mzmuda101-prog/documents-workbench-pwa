@@ -43,6 +43,8 @@ const UNDO_OP_LABEL = {
   link: "undoOpLink",
   bookmark: "undoOpBookmark",
   list: "undoOpList",
+  listRestart: "undoOpList",
+  listContinue: "undoOpList",
   toc: "undoOpToc",
   formInsert: "undoOpFormInsert",
   snippetInsert: "undoOpSnippet",
