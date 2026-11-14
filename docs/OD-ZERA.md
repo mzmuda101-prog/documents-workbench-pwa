@@ -57,7 +57,7 @@ pod prawym przyciskiem. Na telefonie (do 480 px) te same menu, przyciski jako ik
 | **Wstaw** | obiekty: tabela, obraz, pole tekstowe, symbol, przypis, link, spis treści… | równanie, podpis „Rysunek 1” |
 | **Układ** | strona: marginesy, orientacja, rozmiar, wyrównanie w pionie | „Podziały” (sekcja: następna strona), „Kolumny”, „Znak wodny”, obramowanie strony |
 | **Karta obrazu** (przy zaznaczonym obrazie) | rozmiar, opis, zamiana | „Zawijanie” — jak przycisk „Opcje układu” obok obrazu w Wordzie |
-| **Tabela** (gdy kursor w tabeli) | wiersze, kolumny, scalanie, nagłówek, cieniowanie, krawędzie | wyrównanie w komórce (góra / środek / dół), kierunek tekstu, sortowanie, tabela w komórce |
+| **Tabela** (gdy kursor w tabeli) | wiersze, kolumny, scalanie, nagłówek, cieniowanie, krawędzie; szerokość kolumn i wysokość wierszy przeciąganiem krawędzi (mysz) | wyrównanie w komórce (góra / środek / dół), kierunek tekstu, sortowanie, tabela w komórce |
 | **Recenzja** (panel + tryb Sugerowanie) | zmiany, komentarze, przegląd po kolei ✅ | — |
 | **Prawy przycisk** | najczęstsze: wytnij / kopiuj / wklej, styl, lista, komentarz, recenzja | „Akapit…”, „Czcionka…” (jak w Wordzie) |
 

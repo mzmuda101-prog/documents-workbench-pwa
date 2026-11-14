@@ -2325,11 +2325,17 @@ const composeUi = (() => {
   const colCm = (tw) => `${cmText(tw)} cm`; // cmText — ustawienia strony (wyżej)
   docCanvasEl?.addEventListener("pointermove", (e) => {
     if (colDrag || readOnlyMode || e.pointerType === "touch" || e.buttons) { if (!colDrag && colHit && e.buttons) clearColHit(); return; }
-    const table = e.target.closest?.("table");
+    // tabela z krawędzią pod myszą: najbliższa, a gdy jej krawędzi tu nie ma — obejmująca (granica
+    // kolumn zewnętrznej tabeli tuż przy tabeli zagnieżdżonej w sąsiedniej komórce)
+    // tuż za prawą krawędzią tabeli mysz jest już poza nią — sprawdzamy też kilka px w lewo
+    let table = e.target.closest?.("table") || document.elementFromPoint(e.clientX - 4, e.clientY)?.closest?.("table"), g = null, k = -1;
+    for (; table; table = table.parentElement?.closest("table")) {
+      g = tableGrid(table);
+      k = g ? g.bounds.findIndex((x) => Math.abs(e.clientX - x) <= 4) : -1;
+      if (k >= 0) break;
+    }
     if (!table || !host()?.contains(table) || !table.closest(".docx-edit-root")) { if (colHit && !colHit.el.contains(e.target)) clearColHit(); return; }
-    const g = tableGrid(table);
     const tr = table.getBoundingClientRect();
-    const k = g ? g.bounds.findIndex((x) => Math.abs(e.clientX - x) <= 4) : -1;
     if (k < 0) { clearColHit(); return; }
     if (colHit?.table === table && colHit.k === k) return;
     clearColHit();
@@ -2389,6 +2395,8 @@ const composeUi = (() => {
   window.addEventListener("pointermove", (e) => {
     const d = colDrag;
     if (!d || e.pointerId !== d.id) return;
+    // przycisk puszczony poza oknem (pointerup nie dotarł) — koniec przeciągania, zapis jak po puszczeniu
+    if (e.pointerType === "mouse" && e.buttons === 0) { endColDrag(e); return; }
     const prevX = d.k > 0 ? d.g.bounds[d.k - 1] : d.g.left;
     const minX = prevX + COL_MIN_TW / d.twPerPx;
     const maxX = d.k < d.g.bounds.length - 1 ? d.g.bounds[d.k + 1] - COL_MIN_TW / d.twPerPx : Infinity;
@@ -2423,6 +2431,100 @@ const composeUi = (() => {
   };
   window.addEventListener("pointerup", endColDrag, true);
   window.addEventListener("pointercancel", endColDrag, true);
+
+  // ── wysokość wierszy: przeciąganie dolnej krawędzi wiersza (jak w Wordzie) ───
+  // Jak kolumny: najechanie na poziomą krawędź = kursor ↕, przerywana linia z wysokością, puszczenie
+  // zapisuje w:trHeight „co najmniej” (op table/rowHeight). Niżej niż tekst wiersza się nie da
+  // (jak w Wordzie przy „co najmniej”). Alt — bez przyciągania do 0,5 cm. Tylko mysz / rysik.
+  const ROW_MIN_TW = 115; // ~0,2 cm
+  let rowHit = null, rowDrag = null;
+  function clearRowHit() { rowHit?.el.remove(); rowHit = null; }
+  function rowEdges(table) {
+    // dolne krawędzie wierszy TEJ tabeli (bez wierszy tabel zagnieżdżonych)
+    return Array.from(table.rows).map((tr) => ({ tr, bottom: tr.getBoundingClientRect().bottom, top: tr.getBoundingClientRect().top }));
+  }
+  docCanvasEl?.addEventListener("pointermove", (e) => {
+    if (rowDrag || colDrag || colHit || readOnlyMode || e.pointerType === "touch" || e.buttons) { if (!rowDrag && rowHit && e.buttons) clearRowHit(); return; }
+    // tuż pod dolną krawędzią (ostatni wiersz, akapit pod tabelą) — sprawdzamy też kilka px wyżej
+    let table = e.target.closest?.("table") || document.elementFromPoint(e.clientX, e.clientY - 4)?.closest?.("table"), k = -1;
+    for (; table; table = table.parentElement?.closest("table")) { // jak kolumny: także tabela obejmująca
+      k = rowEdges(table).findIndex((r) => Math.abs(e.clientY - r.bottom) <= 3);
+      if (k >= 0) break;
+    }
+    if (!table || !host()?.contains(table) || !table.closest(".docx-edit-root")) { if (rowHit && !rowHit.el.contains(e.target)) clearRowHit(); return; }
+    if (k < 0) { clearRowHit(); return; }
+    if (rowHit?.table === table && rowHit.k === k) return;
+    clearRowHit();
+    const tr = table.getBoundingClientRect();
+    const edge = rowEdges(table)[k].bottom;
+    const el = document.createElement("div");
+    el.className = "tbl-row-hit";
+    el.style.left = `${tr.left}px`; el.style.top = `${edge - 4}px`; el.style.width = `${tr.width}px`;
+    el.setAttribute("aria-hidden", "true");
+    document.body.appendChild(el);
+    rowHit = { el, table, k };
+    el.addEventListener("pointerleave", () => { if (!rowDrag) clearRowHit(); });
+    el.addEventListener("pointerdown", startRowDrag);
+  });
+  docViewportEl?.addEventListener("scroll", () => { if (!rowDrag) clearRowHit(); }, { passive: true });
+  function rowGuide(y, left, w, label) {
+    let g = document.querySelector(".tbl-row-guide");
+    if (!g) { g = document.createElement("div"); g.className = "tbl-row-guide"; g.setAttribute("aria-hidden", "true"); g.innerHTML = "<span></span>"; document.body.appendChild(g); }
+    g.style.top = `${y}px`; g.style.left = `${left}px`; g.style.width = `${w}px`;
+    g.querySelector("span").textContent = label || "";
+    return g;
+  }
+  function startRowDrag(e) {
+    if (!rowHit || e.button > 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const { table, k } = rowHit;
+    const row = table.rows[k];
+    const p = row && Array.from(row.querySelectorAll("p")).find((q) => q.closest("tr") === row);
+    const index = p ? resolveParaIndex(p) : -1;
+    if (index < 0 || !originalFileBytes) { clearRowHit(); return; }
+    rowHit.el.setPointerCapture?.(e.pointerId);
+    const r = row.getBoundingClientRect();
+    const sec = table.closest("section.docx");
+    const scale = sec && sec.offsetWidth ? sec.getBoundingClientRect().width / sec.offsetWidth : 1;
+    // najniżej: wysokość treści wiersza (co najmniej) — wiersz tymczasowo bez wysokości, pomiar, powrót
+    const prevH = row.style.height;
+    row.style.height = "auto";
+    const contentPx = row.getBoundingClientRect().height;
+    row.style.height = prevH;
+    const twPerPx = 15 / scale; // 1 px CSS = 15 twipów przy 100%
+    rowDrag = { id: e.pointerId, table, k, index, top: r.top, y0: r.bottom, y: r.bottom, twPerPx, minY: r.top + Math.max(contentPx, ROW_MIN_TW / twPerPx), tr: table.getBoundingClientRect() };
+    document.documentElement.classList.add("is-row-dragging");
+    rowGuide(r.bottom, rowDrag.tr.left, rowDrag.tr.width, `${cmText((r.bottom - r.top) * twPerPx)} cm`);
+  }
+  window.addEventListener("pointermove", (e) => {
+    const d = rowDrag;
+    if (!d || e.pointerId !== d.id) return;
+    if (e.pointerType === "mouse" && e.buttons === 0) { endRowDrag(e); return; } // puszczony poza oknem
+    let y = Math.max(d.minY, e.clientY);
+    // przyciąganie do pełnych 0,5 cm (Alt — bez)
+    if (!e.altKey) {
+      const tw = (y - d.top) * d.twPerPx;
+      const step = 1440 / 2.54 / 2;
+      const snap = Math.round(tw / step) * step;
+      const sy = d.top + snap / d.twPerPx;
+      if (Math.abs(sy - y) <= 4 && sy >= d.minY) y = sy;
+    }
+    d.y = y;
+    rowGuide(y, d.tr.left, d.tr.width, `${cmText((y - d.top) * d.twPerPx)} cm`);
+  });
+  const endRowDrag = (e) => {
+    const d = rowDrag;
+    if (!d || e.pointerId !== d.id) return;
+    rowDrag = null;
+    document.documentElement.classList.remove("is-row-dragging");
+    document.querySelector(".tbl-row-guide")?.remove();
+    clearRowHit();
+    if (e.type === "pointercancel" || Math.abs(d.y - d.y0) < 1) return;
+    runFileEdit({ op: "table", index: d.index, action: "rowHeight", height: Math.round((d.y - d.top) * d.twPerPx) });
+  };
+  window.addEventListener("pointerup", endRowDrag, true);
+  window.addEventListener("pointercancel", endRowDrag, true);
 
   // ── obrazy ────────────────────────────────────────────────────────────────
   const IMG_MAX_PX = 2400;

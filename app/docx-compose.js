@@ -2363,6 +2363,18 @@ function applyTableInXml(xml, edit) {
     composeTableBorders(doc, tbl, edit.kind);
   } else if (a === "evenCols") {
     if (!composeTableEvenCols(tbl)) return { xml, count: 0 };
+  } else if (a === "rowHeight") {
+    // wysokość wiersza (Word: przeciągnięcie dolnej krawędzi wiersza) — „co najmniej” (wiersz nie
+    // staje się niższy niż jego tekst); wiersz z wysokością „dokładnie” zostaje „dokładnie”
+    const h = Math.round(Number(edit.height));
+    if (!(h >= 20 && h <= 31680)) return { xml, count: 0 };
+    let trPr = composeDirectChild(tr, "trPr");
+    if (!trPr) { trPr = composeEl(doc, "trPr"); tr.insertBefore(trPr, composeDirectChild(tr, "tblPrEx") ? composeDirectChild(tr, "tblPrEx").nextSibling : tr.firstChild); }
+    const old = composeDirectChild(trPr, "trHeight");
+    const rule = old?.getAttributeNS(W_NS, "hRule") === "exact" ? "exact" : "atLeast";
+    const el = composeEl(doc, "trHeight", { val: h, hRule: rule });
+    if (old) trPr.replaceChild(el, old);
+    else trPr.insertBefore(el, Array.from(trPr.childNodes).find((n) => n.nodeType === 1 && ["jc", "hidden", "ins", "del", "trPrChange"].includes(n.localName)) || null);
   } else if (a === "colWidths") {
     if (!composeTableSetWidths(doc, tbl, edit.widths)) return { xml, count: 0 };
   } else if (a === "delTable") {
