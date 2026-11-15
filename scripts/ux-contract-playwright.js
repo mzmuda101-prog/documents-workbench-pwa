@@ -120,6 +120,19 @@ async function main() {
   await page.waitForTimeout(500);
   g = await geo();
   check("zjechanie: stos znów złożony", g.length >= 2 && g.slice(1).every((x) => x.behind), JSON.stringify(g));
+  // kursor stoi tam, gdzie wyskakują nowe dymki (np. po kliknięciu przycisku) — bez ruchu stos się
+  // nie rozkłada i dymki znikają same (inaczej wisiałyby nad przyciskami bez końca)
+  await page.evaluate(() => document.querySelectorAll(".toast").forEach((x) => x.remove()));
+  await page.evaluate(() => toast("pod kursorem 1", "warning", { duration: 60000 }));
+  await page.waitForTimeout(400);
+  const under = await page.locator(".toast:not(.out)").last().boundingBox();
+  await page.mouse.move(under.x + under.width / 2, under.y + under.height / 2);
+  await page.evaluate(() => document.querySelectorAll(".toast").forEach((x) => x.remove()));
+  await page.evaluate(() => { toast("pod kursorem 2", "warning", { duration: 700 }); toast("pod kursorem 3", "error", { duration: 700 }); });
+  await page.waitForTimeout(1600);
+  const left = await page.evaluate(() => document.querySelectorAll(".toast:not(.out)").length);
+  check("dymki pod nieruchomym kursorem: stos się nie rozkłada, znikają same", left === 0, left);
+  await page.mouse.move(5, 5);
   await page.evaluate(() => document.querySelectorAll(".toast").forEach((x) => x.remove()));
 
   // ── ekran startowy: zdjęcie ──────────────────────────────────────────────

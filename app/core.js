@@ -187,7 +187,9 @@ function setToastStack(open) {
 }
 new MutationObserver(layoutToasts).observe(toastContainerEl, { childList: true }); // także testy usuwające dymki
 toastTopEdge.addEventListener?.("change", layoutToasts);
-toastContainerEl.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") setToastStack(true); });
+// RUCH myszy nad stosem, nie samo wejście: dymek, który pojawił się pod nieruchomym kursorem, też
+// dostaje „enter” — rozłożony stos nie znika, więc wisiałby bez końca nad przyciskami pod spodem
+toastContainerEl.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse") setToastStack(true); });
 toastContainerEl.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") setToastStack(false); });
 toastContainerEl.addEventListener("focusin", () => setToastStack(true));
 toastContainerEl.addEventListener("focusout", (e) => { if (!toastContainerEl.contains(e.relatedTarget)) setToastStack(false); });
@@ -301,16 +303,19 @@ function toast(msg, type = "info", opts = {}) {
   }
   // mysz nad pojedynczym dymkiem = czytam / sięgam po „Cofnij” — nie znikaj spod kursora
   // (przy kilku dymkach pauzę robi rozłożony stos: setToastStack)
-  toastEl.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse" && !toastStackOpen) clearTimeout(toastEl._dwbTimer); });
+  // RUCH, nie wejście — dymek, który wyskoczył pod nieruchomym kursorem, nie może wisieć bez końca (jak Sheet)
+  let held = false;
+  toastEl.addEventListener("pointermove", (e) => { if (e.pointerType === "mouse" && !held && !toastStackOpen) { held = true; clearTimeout(toastEl._dwbTimer); } });
   toastEl.addEventListener("pointerleave", (e) => {
-    if (e.pointerType !== "mouse" || toastEl.classList.contains("out") || toastStackOpen) return;
+    if (e.pointerType !== "mouse" || !held) return;
+    held = false;
+    if (toastEl.classList.contains("out") || toastStackOpen) return;
     toastEl._dwbTimer = scheduleToastOut(toastEl, 1600);
   });
   attachToastSwipe(toastEl);
   toastContainerEl.appendChild(toastEl);
-  if (toastContainerEl.matches(":hover") && liveToasts().length > 1) setToastStack(true); // nowy dymek pod kursorem — od razu rozłożone
   // pierwszy stos w sesji: brzegi pod spodem raz się lekko rozchodzą i wracają (sam transform)
-  else if (!toastNudged && liveToasts().length === 2 && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  if (!toastNudged && liveToasts().length === 2 && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
     toastNudged = true;
     setTimeout(() => {
       if (toastStackOpen || liveToasts().length < 2) return;
