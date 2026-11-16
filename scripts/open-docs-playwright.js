@@ -78,7 +78,7 @@ async function run() {
   await page.setInputFiles("#fileInput", S("headings-sample"));
   await idle(page);
   let st = await tabs(page);
-  check("jeden dokument: karty schowane", !st.visible && st.list.length === 1, JSON.stringify(st));
+  check("jeden dokument przy wstążce: karta jest na dolnym pasku (jak w Wordzie)", st.visible && st.dom.length === 1 && st.dom[0].active && st.list.length === 1, JSON.stringify(st));
   await typeAtEnd(page, " KARTA-A");
   await page.evaluate(() => applyDocumentEdit({ op: "replace", find: "Kaucja", replace: "Depozyt", regex: false, scope: "all" }));
   await idle(page);
@@ -152,19 +152,24 @@ async function run() {
   st = await tabs(page);
   check("odzyskany + 2 nowe = 3 karty", st.dom.length === 3, JSON.stringify(st.dom));
   dialogs.length = 0;
+  await page.hover('#docTabsRow .doc-tab:has(.doc-tab-name:text-is("headings-sample"))'); // × pokazuje się pod kursorem (dolny pasek przy wstążce)
   await page.click('#docTabsRow .doc-tab:has(.doc-tab-name:text-is("headings-sample")) .doc-tab-close');
   await idle(page);
   st = await tabs(page);
   check("zamknięcie niezapisanej karty w tle: pyta, karta znika, bieżący bez zmian", dialogs.length === 1 && st.dom.length === 2 && st.file === "sample.docx", JSON.stringify({ dialogs, dom: st.dom, file: st.file }));
+  await page.hover('#docTabsRow .doc-tab.is-active'); // × pokazuje się pod kursorem (dolny pasek przy wstążce)
   await page.click('#docTabsRow .doc-tab.is-active .doc-tab-close');
   await idle(page);
   st = await tabs(page);
-  check("zamknięcie karty na wierzchu: na wierzch wchodzi sąsiednia, karty chowają się przy 1", st.file === "review-sample.docx" && !st.visible && st.list.length === 1, JSON.stringify(st));
+  check("zamknięcie karty na wierzchu: na wierzch wchodzi sąsiednia, zostaje jedna karta", st.file === "review-sample.docx" && st.visible && st.dom.length === 1 && st.list.length === 1, JSON.stringify(st));
   const noDrafts = await page.evaluate(async () => (await dwbDrafts.recoverable()).length);
   check("zamknięte karty nie zostawiają szkiców", noDrafts === 0, String(noDrafts));
 
   // ── 8. telefon: rząd kart przewija się w bok z wygaszeniem ─────────────────
   await page.setViewportSize({ width: 390, height: 800 });
+  await sleep(300);
+  st = await tabs(page);
+  check("telefon, jeden dokument: karty schowane (miejsce na dokument)", !st.visible && st.list.length === 1, JSON.stringify(st));
   await page.setInputFiles("#fileInput", ["sample", "links-sample", "forms-sample", "styled-sample", "przewodnik"].map(S));
   await idle(page);
   const phone = await page.evaluate(() => {
@@ -173,6 +178,18 @@ async function run() {
     return { under: document.getElementById("docTabs").parentElement !== document.querySelector(".hero"), n: row.children.length, scroll: row.scrollWidth > row.clientWidth, fade: row.classList.contains("more-r") || row.classList.contains("more-l"), fits: r.right <= innerWidth + 0.5, pageScrollX: document.documentElement.scrollWidth <= innerWidth };
   });
   check("telefon: 6 kart w jednym rzędzie pod nagłówkiem, przewijanie w bok z wygaszeniem, bez poziomego przewijania strony", phone.under && phone.n === 6 && phone.scroll && phone.fade && phone.fits && phone.pageScrollX, JSON.stringify(phone));
+
+  // ── 9. wstążka, wąsko: karty na dolnym pasku przewijają się ze strzałką „+N” (jak rzędy wstążki) ──
+  await page.setViewportSize({ width: 900, height: 800 });
+  await page.evaluate(() => { document.getElementById("docTabsRow").scrollLeft = 0; });
+  await sleep(500);
+  const bar = await page.evaluate(() => {
+    const strip = document.querySelector(".doc-tabs-strip");
+    const nudge = strip.querySelector(".rb-nudge-r");
+    const sb = document.querySelector(".status-bar").getBoundingClientRect();
+    return { inBar: !!document.getElementById("docTabs").closest(".status-bar"), r: strip.classList.contains("has-r"), shown: getComputedStyle(nudge).display !== "none", cnt: nudge.textContent.trim(), fits: sb.right <= innerWidth + 0.5 && document.documentElement.scrollWidth <= innerWidth };
+  });
+  check("wstążka 900 px: karty na dolnym pasku, strzałka z liczbą schowanych, pasek się mieści", bar.inBar && bar.r && bar.shown && /^\+\d+$/.test(bar.cnt) && bar.fits, JSON.stringify(bar));
 
   await browser.close();
   const real = errors.filter((e) => !/ResizeObserver/.test(e));

@@ -4041,8 +4041,44 @@ body.rb-on .status-bar .zoom-now { height: 24px; min-width: 46px; }
 /* dziennik techniczny: przy wstążce schowany (trafia do zgłoszenia: Plik → Zgłoś błąd); ?debug go pokazuje */
 body.rb-on .status-bar .log-panel { display: none; }
 html.dwb-debug body.rb-on .status-bar .log-panel { display: block; margin-left: 8px; }
-/* otwarte dokumenty: na dolnym pasku, jak w makiecie (etap 4 doda resztę) */
-body.rb-on .status-bar .doc-tabs:not([hidden]) { display: flex; flex: 0 1 auto; min-width: 0; margin: 0; padding: 0; border: 0; background: none; box-shadow: none; }
+/* ── Dolny pasek przy wstążce (etap 4, makieta v4 .b3) ─────────────────────────────────────
+   [karty dokumentów — zawsze, przewijane ze strzałkami] … Sugerowanie · Str. · wyrazy · błędy ·
+   język · powiększenie. Poza wstążką (telefon) te dodatki są schowane. */
+.doc-tab-ico, .doc-tab-ext, .status-chip, .zoom-group .zg-i { display: none; }
+.doc-tabs-strip { flex: 0 1 auto; }
+body.rb-on .status-bar > *, body.rb-on .status-bar .zoom-group { flex-shrink: 0; }
+body.rb-on .status-bar .doc-tabs:not([hidden]) { display: flex; align-items: center; gap: 2px; flex: 1 1 0; min-width: 0; margin: 0 0 0 -6px; padding: 0; border: 0; background: none; box-shadow: none; }
+body.rb-on .status-bar .doc-tabs-row { gap: 2px; padding: 0; }
+body.rb-on .status-bar .rb-nudge { height: 22px; min-width: 22px; }
+body.rb-on .status-bar .doc-tab { position: relative; height: 24px; max-width: 220px; border: 0; border-radius: 5px; background: none; box-shadow: none; }
+body.rb-on .status-bar .doc-tab.is-active { background: var(--surface); box-shadow: 0 0 0 1px var(--border-subtle); }
+body.rb-on .status-bar .doc-tab-btn { gap: 6px; padding: 0 8px; border-radius: 5px; font-size: 12px; font-weight: 400; color: var(--muted); }
+body.rb-on .status-bar .doc-tab.is-active .doc-tab-btn { color: var(--ink); font-weight: 600; }
+body.rb-on .status-bar .doc-tab-ico { display: flex; flex: none; }
+body.rb-on .status-bar .doc-tab-ext { display: inline; flex: none; margin-left: -6px; }
+body.rb-on .status-bar .doc-tab-dot { order: 5; width: 6px; height: 6px; }
+body.rb-on .status-bar .doc-tab.is-dirty .doc-tab-dot { background: var(--accent); }
+/* × jak w makiecie niewidoczne w spoczynku: kładzie się na końcu karty pod kursorem albo fokusie
+   (bez rozpychania sąsiednich kart); na dotyku stoi zawsze */
+@media (hover: hover) {
+  body.rb-on .status-bar .doc-tab-close { position: absolute; right: 2px; top: 2px; width: 20px; height: 20px; margin: 0; border-radius: 4px; background: var(--surface); opacity: 0; pointer-events: none; }
+  body.rb-on .status-bar .doc-tab:not(.is-active) .doc-tab-close { background: var(--panel); }
+  body.rb-on .status-bar .doc-tab:hover .doc-tab-close, body.rb-on .status-bar .doc-tab:focus-within .doc-tab-close { opacity: 1; pointer-events: auto; }
+}
+body.rb-on .status-bar .doc-tab-add { width: 24px; height: 24px; border: 0; border-radius: 5px; color: var(--muted); }
+@media (hover: hover) { body.rb-on .status-bar .doc-tab:not(.is-active):hover { background: color-mix(in srgb, var(--muted) 12%, transparent); } }
+body.rb-on.has-document .status-bar #status, body.rb-on .status-bar .status-font { display: none; }
+body.rb-on .status-bar .status-track { padding: 0; background: none; color: var(--warning); font-size: 12px; font-weight: 600; }
+body.rb-on .status-bar .status-track::before { display: none; }
+body.rb-on .status-bar .status-page { font-size: 12px; }
+body.rb-on.has-document .status-bar .status-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px; border: 0; border-radius: 4px; background: none; color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
+body.rb-on .status-bar .status-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (hover: hover) { body.rb-on .status-bar .status-chip:hover { background: color-mix(in srgb, var(--muted) 14%, transparent); color: var(--ink); } }
+body.rb-on .status-bar .status-proof.has-n { color: var(--ink); }
+body.rb-on .status-bar .zoom-group .zg-t, body.rb-on .status-bar .zoom-now .zn-icon { display: none; }
+body.rb-on .status-bar .zoom-group .zg-i { display: block; }
+/* wąsko (jak w makiecie poniżej 1000 px): wyrazy i język ustępują kartom */
+@media (max-width: 999px) { body.rb-on .status-bar .status-words, body.rb-on.has-document .status-bar .status-lang { display: none; } }
 .ribbon .format-toolbar, .ribbon .undo-group { border: 0; padding: 0; }
 /* pełne menu „Wstaw” i całe okienko „Układ” dublowały przyciski karty — przy wstążce schowane
    (zostają w DOM dla skrótów i telefonu); ich pozycje mają własne przyciski */
@@ -4206,7 +4242,8 @@ body.rb-on .main { margin-left: 56px; }
 /* panel: zawsze kartą za szyną (przypięty czy nie), jeden widoczny panel */
 body.rb-on #toolsPanel {
   top: var(--rail-top, 120px); left: var(--rail-x, 70px);
-  height: calc(100dvh - var(--rail-top, 120px) - 16px); max-height: calc(100dvh - var(--rail-top, 120px) - 16px);
+  /* kończy się nad dolnym paskiem (karty dokumentów zostają widoczne, jak w makiecie) */
+  height: calc(100dvh - var(--rail-top, 120px) - var(--rail-bottom, 16px)); max-height: calc(100dvh - var(--rail-top, 120px) - var(--rail-bottom, 16px));
   width: clamp(288px, 22vw, 340px); padding: 10px; border-radius: var(--r-xl);
   background: var(--glass-sheen), var(--glass-bg); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow);
 }

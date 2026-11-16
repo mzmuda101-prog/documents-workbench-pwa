@@ -155,7 +155,7 @@ const dwbComfort = (() => {
     const total = documentStructure.words.toLocaleString(I18N[currentLang].locale);
     const inDoc = sel && !sel.isCollapsed && sel.rangeCount && docCanvasEl?.contains(sel.anchorNode);
     const n = inDoc && typeof wordTextStats === "function" ? wordTextStats(sel.toString().split("\n")).words : 0;
-    statusWordsEl.textContent = n ? t("statusWordsSel", { n: n.toLocaleString(I18N[currentLang].locale), total }) : t("metaWords", { n: total });
+    statusWordsEl.textContent = n ? t("statusWordsSel", { n: n.toLocaleString(I18N[currentLang].locale), total }) : wordsLabel(documentStructure.words);
   }
   document.addEventListener("selectionchange", () => {
     if (selQueued) return;

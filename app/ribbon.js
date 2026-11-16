@@ -110,12 +110,12 @@ const dwbRibbon = (() => {
   function hinted() { try { return JSON.parse(sessionStorage.getItem(HINT_KEY) || "[]"); } catch (_) { return []; } }
   function markHinted(key) { try { sessionStorage.setItem(HINT_KEY, JSON.stringify([...hinted(), key])); } catch (_) {} }
   function makeStrip(el) {
-    const sc = el.querySelector(".rb-sc");
+    const sc = el.querySelector(".rb-sc, .doc-tabs-row"); // karty dokumentów: dolny pasek (open-docs.js)
     const left = el.querySelector(".rb-nudge-l");
     const right = el.querySelector(".rb-nudge-r");
     const cnt = right?.querySelector(".rb-cnt");
     const key = el.dataset.strip;
-    const items = () => Array.from(sc.querySelectorAll(key === "tabs" ? ".rb-tab:not([hidden])" : ".rb-panel:not([hidden]) > .rb-g > *"));
+    const items = () => Array.from(sc.querySelectorAll(key === "tabs" ? ".rb-tab:not([hidden])" : key === "docs" ? ".doc-tab" : ".rb-panel:not([hidden]) > .rb-g > *"));
     function sync(first) {
       if (!on) return;
       const max = sc.scrollWidth - sc.clientWidth;
@@ -145,7 +145,7 @@ const dwbRibbon = (() => {
     }
     sc.addEventListener("scroll", () => sync(), { passive: true });
     // pionowe kółko przewija rząd w bok (Shift+kółko działa natywnie)
-    sc.addEventListener("wheel", (e) => {
+    if (!sc._dwbFade) sc.addEventListener("wheel", (e) => { // rząd z attachOverflowFade ma już własne
       if (Math.abs(e.deltaY) <= Math.abs(e.deltaX) || sc.scrollWidth <= sc.clientWidth + 1) return;
       sc.scrollLeft += e.deltaY;
       e.preventDefault();
@@ -155,10 +155,12 @@ const dwbRibbon = (() => {
     // fokus z klawiatury na schowanym przycisku — rząd sam do niego dojeżdża
     sc.addEventListener("focusin", (e) => { const n = e.target.closest(".rb-tab, .rb-g > *"); if (n) reveal(n); });
     let rq = 0;
-    if (typeof ResizeObserver === "function") new ResizeObserver(() => { cancelAnimationFrame(rq); rq = requestAnimationFrame(() => sync()); }).observe(sc);
+    const later = () => { cancelAnimationFrame(rq); rq = requestAnimationFrame(() => sync()); };
+    if (typeof ResizeObserver === "function") new ResizeObserver(later).observe(sc);
+    if (key === "docs") new MutationObserver(later).observe(sc, { childList: true }); // karta doszła/odeszła
     return { key, sc, sync, reveal };
   }
-  const strips = Array.from(root.querySelectorAll(".rb-strip")).map(makeStrip);
+  const strips = Array.from(document.querySelectorAll(".rb-strip")).map(makeStrip);
   const tabStrip = strips.find((s) => s.key === "tabs");
 
   // ── tryb: Czytanie / Edycja / Sugerowanie ──────────────────────────────────

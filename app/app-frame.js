@@ -106,7 +106,7 @@ const appFrame = (() => {
         return span;
       }));
     }
-    if (statusWordsEl) statusWordsEl.textContent = words;
+    if (statusWordsEl) statusWordsEl.textContent = hasFile && s ? wordsLabel(s.words) : "";
     const closeDoc = document.getElementById("closeDocBtn");
     if (closeDoc) closeDoc.classList.toggle("hidden", !hasFile);
     syncSave();
@@ -394,6 +394,29 @@ const appFrame = (() => {
     }
     badge.textContent = n > 999 ? "999+" : String(n);
   }
+  // ── dolny pasek przy wstążce: błędy (po sprawdzeniu w Korekcie) i język sprawdzania ─────────
+  const statusProofEl = document.getElementById("statusProof");
+  const statusProofNEl = document.getElementById("statusProofN");
+  const statusLangEl = document.getElementById("statusLang");
+  const grammarLangSel = document.getElementById("grammarLang");
+  function syncStatusProof(n) {
+    if (!statusProofEl) return;
+    statusProofNEl.textContent = n ? fmtNum(n) : "";
+    statusProofEl.classList.toggle("has-n", !!n);
+    statusProofEl.setAttribute("aria-label", n ? t("statusProofN", { n }) : t("statusProof"));
+  }
+  function syncStatusLang() {
+    if (!statusLangEl) return;
+    const lang = t(grammarLangSel?.value === "en" ? "statusLangEn" : "statusLangPl");
+    document.getElementById("statusLangTxt").textContent = lang;
+    statusLangEl.setAttribute("aria-label", t("statusLang", { lang }));
+  }
+  const openProof = (focusEl) => { if (typeof dwbShortcuts !== "undefined") dwbShortcuts.openToolPanel("panel-grammar", focusEl); };
+  statusProofEl?.addEventListener("click", () => openProof());
+  statusLangEl?.addEventListener("click", () => openProof(grammarLangSel));
+  grammarLangSel?.addEventListener("change", syncStatusLang);
+  syncStatusLang();
+
   function syncPanelCounts() {
     const hits = typeof frMatches !== "undefined" ? frMatches.length : 0;
     const pos = typeof frActiveIndex !== "undefined" ? frActiveIndex : -1;
@@ -410,6 +433,7 @@ const appFrame = (() => {
       searchPosEl.textContent = !q ? "" : hits ? `${pos + 1} / ${hits}` : "0";
       searchPosEl.classList.toggle("is-empty", !!q && !hits);
     }
+    syncStatusProof(grammar);
     // ⚙: to, co czeka w panelu (sugestie korekty + pola do wypełnienia); trafienia są na pasku
     const waiting = grammar + fields;
     if (panelCountEl) {
@@ -974,6 +998,7 @@ const appFrame = (() => {
     syncFile();
     syncZoomNow();
     syncPanelCounts();
+    syncStatusLang();
     renderSectionChips();
   }
 

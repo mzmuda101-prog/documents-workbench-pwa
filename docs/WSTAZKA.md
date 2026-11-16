@@ -14,7 +14,7 @@ nie zmienia motywu.
 | 1 | Rama: dwa rzędy u góry (1a v1.01.00, 1b v1.01.01) | Wiersz 1: logo, Plik, karty, Szukaj, tryb (menu), Zapisz, ⋯. Wiersz 2: Cofnij/Ponów + polecenia karty w jednej linii (wstążka uproszczona). Karty: Narzędzia główne, Wstaw, Układ, Recenzja, Korespondencja, Widok, Asystent, kontekstowa Tabela. Przewijany rząd z podpowiedzią (wygaszenie, strzałka „+N”, jednorazowe drgnięcie). Komputer (≥ 769 px). | w toku |
 | 2 | Plik za kulisami (v1.01.02) | Ekran Plik: Nowy, Otwórz, Zdjęcie, Informacje, Zapisz jako, Eksportuj, Drukuj, Porównaj, Zamknij, Opcje, Pomoc, Zgłoś błąd. Menu ⋯ odchudzone (aktualizacja, wersja, inne aplikacje). | — |
 | 3 | Szyna i panele (v1.01.04) | Szyna 44 px (Nawigacja, Znajdź i zamień, Komentarze, Korekta, Asystent) z licznikami; panel wysuwany na margines albo przypięty. Zastępuje stały panel boczny. | — |
-| 4 | Dolny pasek | Karty otwartych dokumentów (przewijane) + strona, wyrazy, błędy, język, powiększenie, „Sugerowanie”. | — |
+| 4 | Dolny pasek (v1.01.06) | Karty otwartych dokumentów (przewijane) + strona, wyrazy, błędy, język, powiększenie, „Sugerowanie”. | — |
 | 5 | Mini pasek | Nad zaznaczeniem, pod nim gdy brak miejsca, gaśnie przy przewijaniu. | — |
 | 6 | Opcje wstążki | Klasyczna (duże przyciski, nazwy grup) / Uproszczona; Zawsze / Chowaj przy przewijaniu / Tylko karty (Ctrl+F1); gęstość Mysz/Dotyk. | — |
 | 7 | Telefon | Pasek u góry (wstecz, cofnij, nazwa, tryb, ⋯); rząd poleceń nad klawiaturą; arkusz kart w miejscu klawiatury; Czytanie bez dodatkowych przycisków. | — |
@@ -114,6 +114,24 @@ Mateusza), Usuń ▾, Scal i podziel ▾, Wiersz nagłówka, Obramowanie ▾, Ko
 komórce ▾, Kierunek tekstu ▾, Rozłóż kolumny, Sortuj ▾ — części menu tabeli; pełne „Tabela ▾”
 schowane.
 
+## Etap 4 — dolny pasek (v1.01.06)
+
+- Karty dokumentów przy wstążce zawsze (też jeden plik), z ikoną pliku i rozszerzeniem jak w
+  makiecie; rząd przewija się ze strzałkami „+N” tym samym kodem co rzędy wstążki
+  (`ribbon.js` makeStrip, `data-strip="docs"`). Telefon bez zmian: karty od drugiego pliku.
+- Kolejność: karty … Sugerowanie · Str. X/Y · N wyrazów · błędy (Korekta) · język · powiększenie.
+  „Str. X/Y” i „N wyrazy/wyrazów” jak w makiecie; „Śledzenie zmian” nazywa się „Sugerowanie”
+  (jak tryb) — też w pigułce na telefonie.
+- Błędy: liczba z Korekty (pojawia się po sprawdzeniu, wcześniej sama ikona); klik → Korekta.
+  Język: język sprawdzania z Korekty (PL/EN); klik → Korekta z wyborem języka.
+- Schowane przy wstążce (duble): „Dokument wczytany” (gdy plik jest otwarty), krój/rozmiar przy
+  kursorze (jest we wstążce), „niezapisane: N zmian” (licznik na Zapisz — już wcześniej).
+- Poniżej 1000 px chowają się wyrazy i język.
+- Odstępstwa: × zamknięcia karty pokazuje się pod kursorem (w makiecie go nie ma, a karty trzeba
+  zamykać; na dotyku stoi zawsze); przycisk „Dopasuj” zostaje przy powiększeniu (Widok nie ma
+  grupy Powiększenie — decyzja z przeglądu); bez ikonki widoku mobilnego/desktopowego przy „100%”.
+- Wysuwany panel kończy się nad dolnym paskiem (wcześniej zasłaniał karty dokumentów).
+
 ## Zasady techniczne
 
 - Identyfikatory istniejących przycisków zostają (moduły i testy z nich korzystają); element
@@ -126,7 +144,7 @@ schowane.
 
 Zrobione i wydane: 1a, 1b, 2, 3 (+ karta Tabela, sprzątanie dubli). Zostało:
 
-**4. Dolny pasek** (`.status-bar`, `app/open-docs.js`, `app/ribbon.js`)
+**4. Dolny pasek** — zrobione (v1.01.06, wyżej). (`.status-bar`, `app/open-docs.js`, `app/ribbon.js`)
 - Karty otwartych dokumentów widoczne ZAWSZE przy wstążce (też jeden plik) — dziś `#docTabs`
   pokazuje się od drugiego pliku; przewijane z podpowiedzią jak rzędy wstążki (`.rb-strip`).
 - Kolejność jak w makiecie: [karty dokumentów] … „Sugerowanie” (gdy tryb) · Str. 1/4 · wyrazy ·

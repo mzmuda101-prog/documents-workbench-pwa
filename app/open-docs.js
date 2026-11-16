@@ -32,6 +32,7 @@ const dwbOpenDocs = (() => {
   let inner = 0; // >0 = trwa nasze wczytywanie (zagnieżdżone ingestFile przechodzą bez kart)
   let job = Promise.resolve();
   let tabsEl = null, rowEl = null, addBtn = null;
+  const deskMq = matchMedia("(min-width: 769px)"); // ten sam próg co wstążka (ribbon.js)
 
   const active = () => docs.find((d) => d.id === activeId) || null;
   const byId = (id) => docs.find((d) => d.id === id) || null;
@@ -231,7 +232,8 @@ const dwbOpenDocs = (() => {
       cur.name = currentFileName || cur.name;
       cur.dirty = !!hasUnsavedChanges;
     }
-    const show = docs.length > 1;
+    // przy wstążce (dolny pasek, jak w Wordzie) karta jest zawsze, też przy jednym pliku
+    const show = docs.length > (deskMq.matches ? 0 : 1);
     if (tabsEl.hidden === show) {
       tabsEl.hidden = !show;
       document.body.classList.toggle("has-doc-tabs", show);
@@ -263,8 +265,20 @@ const dwbOpenDocs = (() => {
       dot.setAttribute("aria-hidden", "true");
       const name = document.createElement("span");
       name.className = "doc-tab-name";
-      name.textContent = d.name.replace(/\.(docx|pdf|jpe?g|png|webp|heic|heif)$/i, "");
-      btn.append(dot, name);
+      const ext = d.name.match(/\.(docx|pdf|jpe?g|png|webp|heic|heif)$/i);
+      name.textContent = ext ? d.name.slice(0, -ext[0].length) : d.name;
+      // rozszerzenie i ikona pliku widać tylko na dolnym pasku przy wstążce (makieta)
+      const ico = document.createElement("span");
+      ico.className = "doc-tab-ico";
+      ico.setAttribute("aria-hidden", "true");
+      ico.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>';
+      btn.append(ico, dot, name);
+      if (ext) {
+        const e = document.createElement("span");
+        e.className = "doc-tab-ext";
+        e.textContent = ext[0];
+        btn.append(e);
+      }
       if (d.pdf && d.file) {
         const badge = document.createElement("span");
         badge.className = "doc-tab-kind";
@@ -305,6 +319,7 @@ const dwbOpenDocs = (() => {
     addBtn = document.getElementById("docTabAdd");
     if (!tabsEl || !rowEl) return;
     if (typeof attachOverflowFade === "function") attachOverflowFade(rowEl);
+    deskMq.addEventListener("change", renderSoon);
     rowEl.addEventListener("click", (e) => {
       const wrap = e.target.closest(".doc-tab");
       if (!wrap) return;

@@ -214,7 +214,7 @@ const I18N = {
     trackOffToast: "Śledzenie wyłączone — poprawki w dokumencie (akapity: {n}), zobacz Recenzja",
     trackOffNone: "Śledzenie wyłączone — bez zmian",
     trackAutoOn: "Ten dokument ma włączone śledzenie zmian (z Worda) — Twoje zmiany będą oznaczone",
-    statusTrack: "Śledzenie zmian",
+    statusTrack: "Sugerowanie",
     undoOpTrack: "poprawki",
     undoOpRewrite: "przepisanie (AI)",
     rewriteBtn: "Przepisz",
@@ -1784,7 +1784,7 @@ const I18N = {
     trackOffToast: "Tracking off — revisions are in the document (paragraphs: {n}), see Review",
     trackOffNone: "Tracking off — no changes",
     trackAutoOn: "This document has track changes on (from Word) — your changes will be marked",
-    statusTrack: "Track changes",
+    statusTrack: "Suggesting",
     undoOpTrack: "revisions",
     undoOpRewrite: "rewrite (AI)",
     rewriteBtn: "Rewrite",
@@ -3192,8 +3192,16 @@ Object.assign(I18N.pl, {
   versionCopied: "Skopiowano: wersja {v}",
   readHintText: "Tryb Czytanie",
   readHintEdit: "Edytuj",
-  statusWordsSel: "{n} z {total} słów",
-  statusPage: "Strona {n} z {total}",
+  statusWordsSel: "{n} z {total} wyrazów",
+  statusWordsOne: "{n} wyraz",
+  statusWordsFew: "{n} wyrazy",
+  statusWordsMany: "{n} wyrazów",
+  statusPage: "Str. {n}/{total}",
+  statusProof: "Korekta — sprawdź pisownię",
+  statusProofN: "Do poprawy: {n} — otwórz Korektę",
+  statusLang: "Język sprawdzania: {lang} — zmień w Korekcie",
+  statusLangPl: "Polski",
+  statusLangEn: "Angielski",
   goToPageTitle: "Przejdź do strony",
   goToPageAsk: "Numer strony (1–{total})",
   goToPageOk: "Przejdź",
@@ -3253,7 +3261,15 @@ Object.assign(I18N.en, {
   readHintText: "Reading mode",
   readHintEdit: "Edit",
   statusWordsSel: "{n} of {total} words",
-  statusPage: "Page {n} of {total}",
+  statusWordsOne: "{n} word",
+  statusWordsFew: "{n} words",
+  statusWordsMany: "{n} words",
+  statusPage: "Page {n}/{total}",
+  statusProof: "Proofing — check spelling",
+  statusProofN: "To fix: {n} — open Proofing",
+  statusLang: "Proofing language: {lang} — change in Proofing",
+  statusLangPl: "Polish",
+  statusLangEn: "English",
   goToPageTitle: "Go to page",
   goToPageAsk: "Page number (1–{total})",
   goToPageOk: "Go",
@@ -3271,6 +3287,13 @@ Object.assign(I18N.en, {
 // toLocaleString() bez języka dawał w angielskiej przeglądarce „5,043” i „10.1”.
 function fmtNum(n, opts) {
   return Number(n || 0).toLocaleString(currentLang === "en" ? "en-US" : "pl-PL", opts);
+}
+
+// „1 wyraz / 2 wyrazy / 5 wyrazów” (dolny pasek, jak w Wordzie)
+function wordsLabel(n) {
+  const d = n % 10, h = n % 100;
+  const key = n === 1 ? "statusWordsOne" : d >= 2 && d <= 4 && (h < 12 || h > 14) ? "statusWordsFew" : "statusWordsMany";
+  return t(key, { n: fmtNum(n) });
 }
 
 function t(key, vars) {

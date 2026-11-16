@@ -108,6 +108,9 @@ const dwbRail = (() => {
     const r = rail.getBoundingClientRect();
     document.documentElement.style.setProperty("--rail-x", `${Math.round(r.right + 12)}px`);
     document.documentElement.style.setProperty("--rail-top", `${Math.round(r.top)}px`);
+    const bar = document.querySelector(".status-bar");
+    const bt = bar?.offsetParent ? bar.getBoundingClientRect().top : 0;
+    document.documentElement.style.setProperty("--rail-bottom", bt ? `${Math.round(innerHeight - bt + 8)}px` : "16px");
   }
   if (typeof ResizeObserver === "function") new ResizeObserver(() => requestAnimationFrame(place)).observe(rail);
   window.addEventListener("resize", () => requestAnimationFrame(place), { passive: true });

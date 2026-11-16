@@ -171,13 +171,13 @@ async function main() {
   await page.locator(".docx-preview-host p").filter({ hasText: /\S+\s+\S+\s+\S+/ }).first().dblclick({ position: { x: 12, y: 6 } });
   await until(page, () => / z /.test(document.getElementById("statusWords").textContent));
   const words = await page.evaluate(() => document.getElementById("statusWords").textContent);
-  check("pasek stanu: „N z M słów” przy zaznaczeniu", /^\d+ z [\d\s  ]+ słów$/.test(words), words);
+  check("pasek stanu: „N z M wyrazów” przy zaznaczeniu", /^\d+ z [\d\s  ]+ wyrazów$/.test(words), words);
   await page.evaluate(() => getSelection().removeAllRanges());
 
   // strona X z Y
   await until(page, () => !document.getElementById("statusPage").hidden);
   const pg = await page.evaluate(() => document.getElementById("statusPage").textContent);
-  check("pasek stanu: „Strona X z Y” w Widoku desktopowym", /^Strona \d+ z \d+$/.test(pg), pg);
+  check("pasek stanu: „Str. X/Y” w Widoku desktopowym", /^Str\. \d+\/\d+$/.test(pg), pg);
 
   // Ctrl/⌘+H — panel zamiany, kursor w „Zamień na”
   await page.fill("#searchQuery", "Najemca");
