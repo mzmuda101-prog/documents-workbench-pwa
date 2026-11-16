@@ -11,7 +11,7 @@ async function run() {
   await loadDocxFile(page, "docs/samples/headings-sample.docx");
   await page.evaluate(async () => {
     setSidebarOpen(true);
-    document.getElementById("panel-compare").open = true;
+    if (typeof dwbBackstage !== "undefined" && dwbBackstage?.isOpen?.() === false && document.getElementById("panel-compare").closest("[data-bs-sec]")) dwbShortcuts.openToolPanel("panel-compare"); document.getElementById("panel-compare").open = true;
     await ensureLazyFeature("compare");
     const texts = await extractParagraphTextsFromDocx(originalFileBytes);
     const idx = texts.map((t, i) => (t && t.trim() ? i : -1)).filter((i) => i >= 0).slice(1, 4);

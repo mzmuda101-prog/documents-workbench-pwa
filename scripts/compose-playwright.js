@@ -230,8 +230,14 @@ async function run() {
   ps = await paras(page);
   const structure = await page.evaluate(() => (documentStructure?.headings || []).map((h) => h.text || h.title));
   check("szablon Notatka: tytuł + nagłówki widoczne w strukturze", ps[0].style === "title" && ps.filter((p) => p.style === "h1").length === 3 && structure.length >= 3, JSON.stringify({ s: ps.map((p) => p.style), structure }));
-  await page.click("#appMenuBtn");
-  await page.click("#newDocMenuItem");
+  // wstążka: Plik → Pusty dokument; bez wstążki (telefon): menu ⋯ → Nowy dokument…
+  if (await page.evaluate(() => document.body.classList.contains("rb-on"))) {
+    await page.click(".rb-file");
+    await page.click('#backstage [data-bs-do="newDocMenuItem"]');
+  } else {
+    await page.click("#appMenuBtn");
+    await page.click("#newDocMenuItem");
+  }
   await page.click('.newdoc-card[data-template="letter"]');
   await page.waitForFunction(() => currentFileName === "Pismo.docx", null, { timeout: 15000 });
   await idle(page);

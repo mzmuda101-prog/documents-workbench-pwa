@@ -12,7 +12,7 @@ nie zmienia motywu.
 | # | Etap | Co wchodzi | Stan |
 |---|------|------------|------|
 | 1 | Rama: dwa rzędy u góry (1a: v1.01.00) | Wiersz 1: logo, Plik, karty, Szukaj, tryb (menu), Zapisz, ⋯. Wiersz 2: Cofnij/Ponów + polecenia karty w jednej linii (wstążka uproszczona). Karty: Narzędzia główne, Wstaw, Układ, Recenzja, Korespondencja, Widok, Asystent, kontekstowa Tabela. Przewijany rząd z podpowiedzią (wygaszenie, strzałka „+N”, jednorazowe drgnięcie). Komputer (≥ 769 px). | w toku |
-| 2 | Plik za kulisami | Ekran Plik: Nowy, Otwórz, Zdjęcie, Informacje, Zapisz jako, Eksportuj, Drukuj, Porównaj, Zamknij, Opcje, Pomoc, Zgłoś błąd. Menu ⋯ odchudzone (aktualizacja, wersja, inne aplikacje). | — |
+| 2 | Plik za kulisami (v1.01.02) | Ekran Plik: Nowy, Otwórz, Zdjęcie, Informacje, Zapisz jako, Eksportuj, Drukuj, Porównaj, Zamknij, Opcje, Pomoc, Zgłoś błąd. Menu ⋯ odchudzone (aktualizacja, wersja, inne aplikacje). | — |
 | 3 | Szyna i panele | Szyna 44 px (Nawigacja, Znajdź i zamień, Komentarze, Korekta, Asystent) z licznikami; panel wysuwany na margines albo przypięty. Zastępuje stały panel boczny. | — |
 | 4 | Dolny pasek | Karty otwartych dokumentów (przewijane) + strona, wyrazy, błędy, język, powiększenie, „Sugerowanie”. | — |
 | 5 | Mini pasek | Nad zaznaczeniem, pod nim gdy brak miejsca, gaśnie przy przewijaniu. | — |
@@ -57,6 +57,33 @@ Rozstrzygnięcia, których makieta nie pokazywała:
 - Skróty w dymkach nowych przycisków (Ctrl/⌘+V/X/C, Enter, K, H, Alt+M, Alt+F, Alt+D).
 
 Wciąż brakuje: Język i Dostępność w Recenzji (osobny etap — wymagają nowych okienek).
+
+## Etap 2 — ekran Plik
+
+`app/backstage.js` + `#backstage` w `index.html`. Wjeżdża pod rzędem kart tym samym ruchem co dawny
+panel boczny (280 ms, `--ease-drawer`). Sekcje: Nowy (kafelki + ostatnio otwierane), Informacje
+(panele Statystyki i Metadane), Eksportuj, Porównaj wersje, Opcje (motyw, język, Asystent AI),
+Pomoc i skróty (Skróty, Przewodnik, panel informacji). Akcje (Otwórz, Zdjęcie, Zapisz jako, Drukuj,
+Zamknij, Zgłoś błąd) klikają te same przyciski co dawne menu ⋯. `openToolPanel()` dla panelu,
+który mieszka na ekranie Plik, otwiera właściwą sekcję. Menu ⋯: Odśwież, inne aplikacje, stan,
+wersja (+ „Aktualizuj” w rzędzie 1).
+
+Odstępstwo: czwarty kafelek „Nowy” to „Przewodnik po aplikacji” (istniejąca funkcja) zamiast
+„Pismo z placeholderami” z makiety — takiego szablonu jeszcze nie ma; szablony są w oknie
+„Pusty dokument”.
+
+## Poprawki po przeglądzie (decyzje Mateusza, 2026-11-16)
+
+- Widok bez „Czytanie” (tryb jest w przycisku u góry) i bez grupy Powiększenie (zoom jest na
+  dolnym pasku) — odstępstwo od makiety na prośbę Mateusza: bez dublowania.
+- Pełny ekran ma własną ikonę (inną niż Tryb skupienia i Dopasuj); przy samych ikonach podpisy
+  (Skupienie, Pełny ekran, Struktura, Pasek sekcji, Widok, Statystyki, Recenzja).
+- Snippety tylko na karcie Wstaw (nie dublują się w Korespondencji).
+- „Przepisz” z ikoną zamiast znaku ✦; pole Szukaj szersze (napis się nie ucina).
+- Dziennik techniczny („Log”) przy wstążce schowany (trafia do zgłoszenia: Plik → Zgłoś błąd),
+  widać go z `?debug`; powiadomienia stoją nad dolnym paskiem.
+- Zasada na dalej: jedna funkcja = jedno miejsce na wstążce (wyjątek jak w Wordzie: Komentarz
+  na kartach Wstaw i Recenzja).
 
 ## Zasady techniczne
 

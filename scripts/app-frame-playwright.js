@@ -167,18 +167,22 @@ async function desktop(browser) {
   await page.click("#appMenuBtn");
   const menu = await page.evaluate(() => {
     const m = document.getElementById("appMenu");
-    return { open: !m.hidden, lang: m.contains(document.getElementById("langSwitch")), theme: m.contains(document.getElementById("themeSeg")), close: !document.getElementById("closeDocBtn").classList.contains("hidden"), inBody: m.parentElement === document.body };
+    const bs = document.getElementById("backstage"); // wstążka: język i motyw w Plik → Opcje
+    return { open: !m.hidden, lang: m.contains(document.getElementById("langSwitch")) || !!bs?.contains(document.getElementById("langSwitch")), theme: m.contains(document.getElementById("themeSeg")) || !!bs?.contains(document.getElementById("themeSeg")), close: !document.getElementById("closeDocBtn").classList.contains("hidden"), inBody: m.parentElement === document.body };
   });
   await page.keyboard.press("Escape");
   const menuClosed = await page.evaluate(() => document.getElementById("appMenu").hidden);
   check("menu ⋯: język, motyw, zamknij dokument; Esc zamyka", menu.open && menu.lang && menu.theme && menu.close && menu.inBody && menuClosed, JSON.stringify(menu));
 
   // Znajdź ustawienie…
-  await page.fill("#sidebarFinder", "kluczowe"); // „autor” jest też w Recenzji („Autor zmian”)
+  // wstążka: Metadane są na ekranie Plik — sprawdzamy panel, który został w panelu bocznym (CSV → Placeholdery)
+  const rbOn = await page.evaluate(() => document.body.classList.contains("rb-on"));
+  const finderWant = rbOn ? "panel-placeholders" : "panel-metadata";
+  await page.fill("#sidebarFinder", rbOn ? "CSV" : "kluczowe"); // „autor” jest też w Recenzji („Autor zmian”)
   const finder = await page.evaluate(() => [...document.querySelectorAll(".sidebar details.panel")].filter((d) => !d.hidden).map((d) => d.id));
   await page.fill("#sidebarFinder", "");
   const finderReset = await page.evaluate(() => [...document.querySelectorAll(".sidebar details.panel")].every((d) => !d.hidden));
-  check("„Znajdź ustawienie…”: „kluczowe” → tylko Metadane, po wyczyszczeniu wszystko", finder.length === 1 && finder[0] === "panel-metadata" && finderReset, finder.join(","));
+  check("„Znajdź ustawienie…”: „kluczowe” → tylko Metadane, po wyczyszczeniu wszystko", finder.length === 1 && finder[0] === finderWant && finderReset, finder.join(","));
 
   // × chowa skróty sekcji — na stałe (opcja w Widok)
   await page.click("#sectionStripHide");

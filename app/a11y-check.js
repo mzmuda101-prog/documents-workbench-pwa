@@ -177,9 +177,15 @@ function a11yJump(item) {
 
 async function a11yFix(item) {
   if (item.fix === "title") {
-    if (typeof setSidebarOpen === "function") setSidebarOpen(true);
     const panel = document.getElementById("panel-metadata");
-    if (panel) { panel.open = true; panel.scrollIntoView({ block: "start", behavior: "smooth" }); }
+    // wstążka: Metadane mieszkają na ekranie Plik → Informacje (backstage.js)
+    const sec = panel?.closest("[data-bs-sec]");
+    if (sec && typeof dwbBackstage !== "undefined" && dwbBackstage?.open(sec.dataset.bsSec)) {
+      await new Promise((r) => setTimeout(r, 300)); // ekran wjeżdża — fokus po przejściu
+    } else {
+      if (typeof setSidebarOpen === "function") setSidebarOpen(true);
+      if (panel) { panel.open = true; panel.scrollIntoView({ block: "start", behavior: "smooth" }); }
+    }
     // po doładowaniu sekcji (lazy) — inaczej w tłoku fokus trafiał przed jej gotowością
     if (typeof ensureLazyFeature === "function") await ensureLazyFeature("metadata").catch(() => {});
     await new Promise((r) => requestAnimationFrame(() => r()));

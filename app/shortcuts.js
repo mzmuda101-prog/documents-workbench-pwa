@@ -167,6 +167,14 @@ const dwbShortcuts = (() => {
 
   // ── akcje pliku (menu ⋯ i skróty) ───────────────────────────────────────
   function openToolPanel(panelId, focusEl) {
+    // panel przeniesiony na ekran Plik (backstage.js: Informacje, Eksportuj, Porównaj, Pomoc)
+    const sec = document.getElementById(panelId)?.closest("[data-bs-sec]");
+    if (sec && typeof dwbBackstage !== "undefined" && dwbBackstage?.open(sec.dataset.bsSec)) {
+      if (focusEl && lastInputModality === "keyboard") setTimeout(() => { focusEl.focus(); focusEl.select?.(); }, 320);
+      return;
+    }
+    // panel w panelu bocznym — ekran Plik nie może go zasłaniać (np. Ctrl+H przy otwartym Plik)
+    if (typeof dwbBackstage !== "undefined" && dwbBackstage?.isOpen()) dwbBackstage.close({ refocus: false });
     if (typeof setSidebarOpen === "function") setSidebarOpen(true);
     const panel = document.getElementById(panelId);
     if (!panel) return;

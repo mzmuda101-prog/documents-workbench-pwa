@@ -56,7 +56,9 @@ async function main() {
 
   // ── motyw ────────────────────────────────────────────────────────────────
   await page.emulateMedia({ colorScheme: "dark" });
-  await page.click("#appMenuBtn");
+  // wstążka: motyw w Plik → Opcje; bez wstążki — w menu ⋯
+  if (await page.evaluate(() => document.body.classList.contains("rb-on"))) await page.evaluate(() => dwbBackstage.open("opts"));
+  else await page.click("#appMenuBtn");
   const menu = await page.evaluate(() => ({
     segs: [...document.querySelectorAll("#themeSeg [data-theme-pref]")].map((b) => b.textContent.trim()),
     system: document.querySelector('#themeSeg [data-theme-pref="system"]').getAttribute("aria-pressed"),

@@ -76,8 +76,9 @@ async function run() {
   };
   const openPanel = async (id) => {
     await page.evaluate((id) => {
-      if (!document.documentElement.classList.contains("sidebar-open")) document.getElementById("panelToggle").click();
       const d = document.getElementById(id);
+      if (d.closest("[data-bs-sec]")) { dwbShortcuts.openToolPanel(id); return; } // wstążka: ekran Plik
+      if (!document.documentElement.classList.contains("sidebar-open")) document.getElementById("panelToggle").click();
       d.scrollIntoView({ block: "start" });
     }, id);
     await page.waitForTimeout(250);

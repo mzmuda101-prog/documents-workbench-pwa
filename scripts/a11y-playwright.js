@@ -125,6 +125,8 @@ async function run() {
   await page.fill("#metaTitle", "Dokument testowy");
   await page.click("#metaApplyBtn");
   await idle(page);
+  await page.evaluate(() => typeof dwbBackstage !== "undefined" && dwbBackstage?.close()); // wstążka: z ekranu Plik z powrotem do dokumentu
+  await page.waitForTimeout(350);
   found = await scan();
   check("po nadaniu tytułu — bez uwagi o tytule", !found.docTitle, JSON.stringify(found));
 

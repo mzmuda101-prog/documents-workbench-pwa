@@ -14,12 +14,16 @@ async function download(page, click) {
 }
 async function openPanel(page, id) {
   await page.evaluate(async (id) => {
-    setSidebarOpen(true);
+    dwbShortcuts.openToolPanel(id); // ta sama droga co w aplikacji (ekran Plik albo panel boczny)
     document.getElementById(id).open = true;
     await ensureLazyFeature(PANEL_LAZY_FEATURE[id]);
   }, id);
   // panel się wysuwa — kliknięcia dopiero, gdy stoi na miejscu
-  await page.waitForFunction(() => document.getElementById("toolsPanel").getBoundingClientRect().left >= 0, null, { timeout: 5000 });
+  if (await page.evaluate((id) => !!document.getElementById(id).closest("[data-bs-sec]"), id)) {
+    await page.waitForFunction(() => document.getElementById("backstage").classList.contains("is-open"), null, { timeout: 5000 }); // wstążka: ekran Plik
+  } else {
+    await page.waitForFunction(() => document.getElementById("toolsPanel").getBoundingClientRect().left >= 0, null, { timeout: 5000 });
+  }
   await page.waitForTimeout(300);
 }
 

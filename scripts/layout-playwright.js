@@ -173,8 +173,8 @@ async function run() {
   // menu ⋯ → Marginesy i układ strony (także z trybu Czytanie)
   await page.evaluate(() => appFrame.setReadOnly(true));
   await sleep(300);
-  await page.click("#appMenuBtn");
-  await page.click("#pageSetupMenuItem");
+  // wstążka chowa pozycję w menu ⋯ (Marginesy są na karcie Układ) — ta sama akcja kliknięta wprost
+  await page.evaluate(() => document.getElementById("pageSetupMenuItem").click());
   await page.waitForSelector('.compose-pop [data-preset="narrow"]', { timeout: 5000 }).catch(() => {});
   check("menu ⋯ → Marginesy i układ strony: okienko z marginesami (z Czytania przełącza na Edycję)", await page.evaluate(() => !!document.querySelector('.compose-pop [data-preset="narrow"]') && !readOnlyMode));
   await page.keyboard.press("Escape");

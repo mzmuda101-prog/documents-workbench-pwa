@@ -17,6 +17,8 @@ const dwbRibbon = (() => {
   const deskMq = matchMedia("(min-width: 769px)");
   const reduceMq = matchMedia("(prefers-reduced-motion: reduce)");
   const HINT_KEY = "dwb-rb-hinted-v1";
+  // ?debug — dziennik techniczny na dolnym pasku (przy wstążce domyślnie schowany)
+  if (new URLSearchParams(location.search).has("debug")) document.documentElement.classList.add("dwb-debug");
 
   // ── przenoszenie kontrolek ────────────────────────────────────────────────
   const moves = Array.from(document.querySelectorAll("[data-rb]")).map((slot) => {
@@ -220,7 +222,10 @@ const dwbRibbon = (() => {
     none: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
   };
   const ACT = {
-    file: () => dwbShortcuts?.openToolPanel("panel-file"),
+    file: () => {
+      if (typeof dwbBackstage === "undefined" || !dwbBackstage) { dwbShortcuts?.openToolPanel("panel-file"); return; }
+      if (dwbBackstage.isOpen()) dwbBackstage.close(); else dwbBackstage.open();
+    },
     replace: () => dwbShortcuts?.openReplace(),
     pageBreak: () => cu()?.insertPageBreak(),
     hf: () => cu()?.openHeaderFooterForm(),

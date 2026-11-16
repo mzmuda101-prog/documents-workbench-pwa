@@ -344,13 +344,14 @@ const dwbComfort = (() => {
     return d.toLocaleDateString(loc, d.getFullYear() === today.getFullYear() ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" });
   }
   let recentJob = 0;
-  async function renderRecent() {
-    const host = document.getElementById("recentFiles");
+  // target: inne miejsce na listę (ekran Plik — backstage.js) — tam lista jest też przy otwartym pliku
+  async function renderRecent(target) {
+    const host = target || document.getElementById("recentFiles");
     if (!host) return;
-    const job = ++recentJob;
-    if (originalFileBytes) { host.hidden = true; return; }
+    const job = target ? 0 : ++recentJob;
+    if (!target && originalFileBytes) { host.hidden = true; return; }
     const list = await recentAll();
-    if (job !== recentJob || originalFileBytes) return;
+    if (!target && (job !== recentJob || originalFileBytes)) return;
     host.replaceChildren();
     host.hidden = !list.length;
     if (!list.length) return;
@@ -389,10 +390,10 @@ const dwbComfort = (() => {
       del.dataset.hintEn = "Remove from the list (the file on disk stays)";
       del.addEventListener("click", async () => {
         await rtx("readwrite", (s) => s.delete(rec.id)).catch(() => {});
-        renderRecent();
+        renderRecent(target);
         toast(t("recentRemoved", { name: rec.name }), "success", {
           action: t("undoAction"),
-          onAction: () => rtx("readwrite", (s) => s.put(rec)).catch(() => {}).then(renderRecent),
+          onAction: () => rtx("readwrite", (s) => s.put(rec)).catch(() => {}).then(() => renderRecent(target)),
         });
       });
       li.append(open, del);

@@ -142,7 +142,7 @@ async function run() {
 
   // ── Porównaj wersje → dokument z poprawkami ─────────────────────────────────
   await page.evaluate(async () => {
-    document.getElementById("panel-compare").open = true;
+    if (typeof dwbBackstage !== "undefined" && dwbBackstage?.isOpen?.() === false && document.getElementById("panel-compare").closest("[data-bs-sec]")) dwbShortcuts.openToolPanel("panel-compare"); document.getElementById("panel-compare").open = true;
     await ensureLazyFeature("compare");
     const b = await (await fetch("docs/samples/headings-sample.docx")).arrayBuffer();
     const dt = new DataTransfer();
