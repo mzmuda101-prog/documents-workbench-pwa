@@ -4169,7 +4169,7 @@ body.rb-on #appMenu > .app-menu-row,
 body.rb-on #appMenu > .app-menu-cap,
 body.rb-on #appMenu > .app-menu-item:not(#brandRefresh):not([href]) { display: none; }
 body.rb-on #appMenu > .app-menu-sep { display: none; }
-body.rb-on #appMenu > .app-menu-sep:has(+ .app-menu-cap + [href]), body.rb-on #appMenu > .app-menu-sep:has(+ .app-menu-state) { display: block; }
+body.rb-on #appMenu > .app-menu-sep:has(+ .app-menu-cap + [href]), body.rb-on #appMenu > .app-menu-sep:has(+ .app-menu-state), body.rb-on #appMenu > .app-menu-sep:has(+ .app-menu-offline) { display: block; }
 .bs-opts .lang-switch, .bs-opts .theme-seg { width: auto; min-width: 0; flex: none; justify-self: start; }
 .bs-opts .theme-seg button { padding: 6px 14px; }
 /* wstążka: powiadomienia nad dolnym paskiem (tam stoi powiększenie i karty dokumentów) */
@@ -4232,3 +4232,12 @@ body.rb-on .rb-fly-pin:focus-visible { outline: 2px solid var(--accent); outline
    (Śledź zmiany = Sugerowanie, Znaczniki ▾, Akceptuj / Odrzuć wszystkie, Przejrzyj po kolei, Usuń komentarze);
    przyciski zostają w DOM — karta Recenzja je wywołuje */
 body.rb-on #panel-review :is(label:has(#rvTrack), #rvTrackInfo, #rvMarkupLabel, #rvMarkup, #rvMarkupHint, .btn-row:has(#rvAcceptAllBtn), #rvWalkBtn, #rvRemoveCommentsBtn) { display: none !important; }
+
+/* menu ⋯: czy aplikacja wstanie bez internetu (app/offline-status.js) */
+.app-menu-offline { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 8px 10px 4px; font-size: 12.5px; line-height: 1.4; color: var(--ink-2); }
+.app-menu-offline[hidden] { display: none; }
+.app-menu-offline svg { flex: none; margin-top: 1px; }
+.app-menu-offline[data-state="ready"] svg { color: var(--success); }
+.app-menu-offline[data-state="preparing"] svg { color: var(--muted); }
+.app-menu-offline[data-state="volatile"] svg, .app-menu-offline[data-state="blocked"] svg { color: var(--warning); }
+.app-menu-offline b { font-weight: 600; color: var(--ink); }

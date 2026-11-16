@@ -561,7 +561,7 @@ function registerServiceWorker() {
       if (document.visibilityState === "visible") checkForUpdate();
     });
     window.setInterval(checkForUpdate, 30 * 60 * 1000);
-  }).catch(() => {});
+  }).catch(() => { window.dispatchEvent(new Event("dwb:sw-failed")); }); // offline-status.js: „nie zadziała bez internetu”
 }
 
 if (brandRefresh) brandRefresh.addEventListener("click", hardRefreshApp);

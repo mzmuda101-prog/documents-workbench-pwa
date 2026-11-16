@@ -128,11 +128,13 @@
             </button>
             <div class="app-menu-sep" role="separator"></div>
             <div class="app-menu-cap" data-i18n="menuOtherApps">Inne aplikacje</div>
-            <a class="app-menu-item" href="https://excel-workbench-pwa.vercel.app" target="_blank" rel="noopener">
+            <a class="app-menu-item" href="https://sheet-workbench-pwa.vercel.app" target="_blank" rel="noopener">
               <span class="app-menu-app-icon" aria-hidden="true"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.4"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M10 4v16"/></svg></span>
               <span class="app-menu-item-text">Sheet Workbench</span><span aria-hidden="true">↗</span>
             </a>
             <div class="app-menu-sep" role="separator"></div>
+            <!-- Czy aplikacja wstanie bez internetu (app/offline-status.js) -->
+            <p class="app-menu-offline" id="offlineState" role="status" hidden></p>
             <div class="app-menu-state hero-badges">
               <span class="hero-badge pwa-badge">PWA</span>
               <span class="hero-badge network-badge" id="networkBadge">Online</span>
@@ -1329,6 +1331,7 @@
     <script defer src="app/edit-tools.js?v=v1.01.04"></script>
     <script defer src="app/mobile-doc-zoom.js?v=v1.01.04"></script>
     <script defer src="app/ui-controls.js?v=v1.01.04"></script>
+    <script defer src="app/offline-status.js?v=v1.01.04"></script>
     <script defer src="app/lazy-features.js?v=v1.01.04"></script>
     <script defer src="app/app-frame.js?v=v1.01.04"></script>
     <script defer src="app/touch.js?v=v1.01.04"></script>

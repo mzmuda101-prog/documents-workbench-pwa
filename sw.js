@@ -63,6 +63,7 @@ const SHELL_ASSETS = [
   `./app/edit-tools.js?v=${ASSET_V}`,
   `./app/mobile-doc-zoom.js?v=${ASSET_V}`,
   `./app/ui-controls.js?v=${ASSET_V}`,
+  `./app/offline-status.js?v=${ASSET_V}`,
   `./app/lazy-features.js?v=${ASSET_V}`,
   `./app/app-frame.js?v=${ASSET_V}`,
   `./app/touch.js?v=${ASSET_V}`,
