@@ -198,7 +198,7 @@ async function run() {
   s = await state();
   check("szerokie okno: pasek w układzie jak dawniej (bez tb-float, bez odstępu)", !s.float && !s.tucked && s.pad === 0, JSON.stringify(s));
   const back = await page.evaluate(() => ({
-    search: document.querySelector("#docToolbar > .doc-toolbar-row:first-child")?.contains(document.getElementById("searchQuery")),
+    search: !!(document.querySelector("#docToolbar > .doc-toolbar-row:first-child")?.contains(document.getElementById("searchQuery")) || document.querySelector("#ribbon")?.contains(document.getElementById("searchQuery"))),
     dirtyInStatus: document.querySelector(".status-bar").contains(document.getElementById("statusDirty")),
     trackInStatus: document.querySelector(".status-bar").contains(document.getElementById("statusTrack")),
     island: document.getElementById("docIsland").hidden,

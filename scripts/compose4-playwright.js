@@ -47,7 +47,7 @@ async function run() {
   // ── kolor czcionki i wyróżnienie ───────────────────────────────────────────
   await page.keyboard.type("Ala ma kota, a kot ma Alę.");
   await select(page, 0, 4, 6);
-  await page.click("#fmtColorBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtColorBtn").then(async () => page.click("#fmtColorBtn"));
   const pal = await page.evaluate(() => ({ theme: document.querySelectorAll(".color-grid-theme .color-swatch").length, std: document.querySelectorAll(".compose-pop-color .color-grid:not(.color-grid-theme):not(.color-grid-hl) .color-swatch").length, hl: document.querySelectorAll(".color-grid-hl .color-swatch").length, more: !!document.querySelector(".color-more input[type=color]") }));
   check("paleta jak w Wordzie: 60 kolorów motywu, 10 standardowych, wyróżnienia, „Więcej kolorów”", pal.theme === 60 && pal.std === 10 && pal.hl >= 14 && pal.more, JSON.stringify(pal));
   await page.click('.compose-pop-color .color-swatch[aria-label="Czerwony"] >> nth=0');
@@ -56,7 +56,7 @@ async function run() {
   check("kolor czerwony na zaznaczeniu „ma”, reszta bez zmian", /color: rgb\(255, 0, 0\);?">ma</.test(html) && (html.match(/rgb\(255, 0, 0\)/g) || []).length === 1, html);
   check("zaznaczenie zostaje po zmianie koloru", (await page.evaluate(() => getSelection().toString())) === "ma");
   check("pasek pod „A” pokazuje ostatni kolor", (await page.evaluate(() => getComputedStyle(document.getElementById("fmtColorBar")).backgroundColor)) === "rgb(255, 0, 0)");
-  await page.click("#fmtColorBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtColorBtn").then(async () => page.click("#fmtColorBtn"));
   await page.click('.color-grid-hl .color-swatch[aria-label="Żółty"]');
   await idle(page);
   html = await paraHtml(page, 0);
@@ -70,17 +70,17 @@ async function run() {
   xml = await docXml(page);
   check("pisanie w akapicie: wyróżnienie i kolor zostają w pliku", /<w:highlight w:val="yellow"\/>/.test(xml) && /Dopisane\./.test(xml), "");
   await select(page, 0, 4, 6);
-  await page.click("#fmtColorBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtColorBtn").then(async () => page.click("#fmtColorBtn"));
   await page.click(".color-auto");
   await idle(page);
-  await page.click("#fmtColorBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtColorBtn").then(async () => page.click("#fmtColorBtn"));
   await page.click(".color-grid-hl .color-swatch.is-none");
   await idle(page);
   xml = await docXml(page);
   check("„Automatyczny” i „Bez wyróżnienia” zdejmują kolor i wyróżnienie", !/FF0000/.test(xml) && !/w:highlight/.test(xml), "");
   // bez zaznaczenia — kolor dla dalszego pisania
   await page.evaluate(() => focusParagraphAtOffset(0, 0));
-  await page.click("#fmtColorBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtColorBtn").then(async () => page.click("#fmtColorBtn"));
   await page.click('.compose-pop-color .color-swatch[aria-label="Niebieski"] >> nth=0');
   await page.keyboard.type("Nowe ");
   await page.waitForTimeout(250);
@@ -150,7 +150,7 @@ async function run() {
   await page.evaluate(() => focusParagraphAtOffset(1, 0));
   await page.evaluate(() => composeUi.insertPageBreak());
   await idle(page);
-  await page.click("#insertMenuBtn");
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.click("#insertMenuBtn"));
   await page.click(".compose-pop-insert .compose-item-label:text-is('Nagłówek, stopka, numer strony…')");
   await page.fill(".hf-h", "Firma XYZ");
   await page.click('[data-seg="h"] button[data-v="right"]');
@@ -178,7 +178,7 @@ async function run() {
   const footer = await zip.file(parts.find((f) => f.includes("footer") && !/<w:p\/>/.test(""))).async("string");
   check("plik: numer strony to pola PAGE i NUMPAGES", /instrText[^>]*> PAGE </.test(footer + (await Promise.all(parts.map((f) => zip.file(f).async("string")))).join("")) && /NUMPAGES/.test((await Promise.all(parts.map((f) => zip.file(f).async("string")))).join("")), "");
   // rodzaj cyfr i „Zacznij od” (w:pgNumType): I, II… od 3 — 2. strona = IV
-  await page.click("#insertMenuBtn");
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.click("#insertMenuBtn"));
   await page.click(".compose-pop-insert .compose-item-label:text-is('Nagłówek, stopka, numer strony…')");
   await page.waitForSelector(".compose-pop-hf .hf-numfmt");
   check("okienko: „Cyfry” i „Zacznij od” przy numerze strony", await page.evaluate(() => !document.querySelector(".hf-numopts").hidden && document.querySelector(".hf-numfmt").value === "decimal" && document.querySelector(".hf-start").value === ""));
@@ -191,7 +191,7 @@ async function run() {
   zip = await savedZip(page);
   const sect2 = ((await zip.file("word/document.xml").async("string")).match(/<w:sectPr>.*?<\/w:sectPr>/) || [""])[0];
   check("plik: w:pgNumType fmt=upperRoman start=3 przed titlePg", /<w:pgNumType w:fmt="upperRoman" w:start="3"\/>.*<w:titlePg\/>/.test(sect2), sect2.slice(0, 400));
-  await page.click("#insertMenuBtn");
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.click("#insertMenuBtn"));
   await page.click(".compose-pop-insert .compose-item-label:text-is('Nagłówek, stopka, numer strony…')");
   await page.waitForSelector(".compose-pop-hf .hf-numfmt");
   check("okienko pokazuje zapisane: I, II, III od 3", await page.evaluate(() => document.querySelector(".hf-numfmt").value === "upperRoman" && document.querySelector(".hf-start").value === "3"));
@@ -202,7 +202,7 @@ async function run() {
   zip = await savedZip(page);
   check("powrót do 1, 2, 3 i kontynuacji: w:pgNumType znika", !/pgNumType/.test(await zip.file("word/document.xml").async("string")));
   // usunięcie: puste pola, bez numeru, bez pierwszej
-  await page.click("#insertMenuBtn");
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.click("#insertMenuBtn"));
   await page.click(".compose-pop-insert .compose-item-label:text-is('Nagłówek, stopka, numer strony…')");
   await page.fill(".hf-h", ""); await page.fill(".hf-f", ""); await page.selectOption(".hf-n", ""); await page.click(".hf-first");
   await page.click(".compose-pop-hf .lf-ok");

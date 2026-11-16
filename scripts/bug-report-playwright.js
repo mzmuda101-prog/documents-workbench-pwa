@@ -63,12 +63,12 @@ async function main() {
   await idle(page);
   // Cofnij i Ponów przyciskami (droga przez dwbUndo — w dzienniku jako osobne działania)
   await page.waitForTimeout(1700);
-  await page.click("#undoBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#undoBtn").then(async () => page.click("#undoBtn"));
   await idle(page);
-  await page.click("#redoBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#redoBtn").then(async () => page.click("#redoBtn"));
   await idle(page);
   await page.waitForTimeout(300);
-  await page.click("#undoBtn"); // sam Cofnij — bez odtworzenia tego kroku wynik byłby inny
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#undoBtn").then(async () => page.click("#undoBtn")); // sam Cofnij — bez odtworzenia tego kroku wynik byłby inny
   await idle(page);
   const before = await page.evaluate(async () => (await extractParagraphTextsFromDocx(await buildDocumentForSave())).map(String));
 

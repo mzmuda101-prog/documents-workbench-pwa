@@ -738,7 +738,10 @@ function placeViewPop() {
   const vw = document.documentElement.clientWidth;
   const width = Math.min(320, vw - 16);
   viewPopEl.style.width = `${width}px`;
-  viewPopEl.style.top = `${Math.round(r.bottom + 6)}px`;
+  // pod przyciskiem, a gdy tam brak miejsca (procent na dolnym pasku — wstążka, ribbon.js) — nad nim
+  const h = viewPopEl.offsetHeight;
+  const up = r.bottom + 6 + h > window.innerHeight - 8 && r.top - 6 - h >= 8;
+  viewPopEl.style.top = `${Math.round(up ? r.top - 6 - h : r.bottom + 6)}px`;
   viewPopEl.style.left = `${Math.round(Math.max(8, Math.min(vw - width - 8, r.left + r.width / 2 - width / 2)))}px`;
 }
 

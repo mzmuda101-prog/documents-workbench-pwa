@@ -27,7 +27,7 @@ async function openDoc(browser) {
   await page.goto(`${APP_URL}?sample=headings-sample`, { waitUntil: "load" });
   await page.waitForSelector(".docx-preview-host p", { timeout: 20000 });
   await page.waitForTimeout(500);
-  await page.click('.mode-btn[data-mode="edit"]');
+  await page.evaluate(() => document.querySelector('.mode-btn[data-mode="edit"]').click());
   await page.waitForTimeout(300);
   await page.evaluate(() => {
     const orig = buildPatchedDocx;

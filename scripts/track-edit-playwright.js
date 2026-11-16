@@ -192,10 +192,10 @@ async function run() {
     return page.evaluate(() => [...document.querySelectorAll(".doc-menu button")].filter((b) => !b.closest(".doc-menu-row")).map((b) => b.textContent.trim()).filter(Boolean));
   };
   const clickMenu = (re) => page.evaluate((src) => { const re = new RegExp(src); [...document.querySelectorAll(".doc-menu button")].find((b) => re.test(b.textContent))?.click(); }, re.source);
-  await page.click('.mode-btn[data-mode="suggest"]');
+  await page.evaluate(() => document.querySelector('.mode-btn[data-mode="suggest"]').click());
   await idle(page);
   check("przełącznik „Sugerowanie”: Edycja ze śledzeniem zmian", await page.evaluate(() => dwbTrack.isOn() && !readOnlyMode && document.querySelector(".mode-btn.is-active")?.dataset.mode === "suggest"));
-  await page.click('.mode-btn[data-mode="edit"]');
+  await page.evaluate(() => document.querySelector('.mode-btn[data-mode="edit"]').click());
   await idle(page);
   check("…„Edycja” kończy śledzenie", await page.evaluate(() => !dwbTrack.isOn() && document.querySelector(".mode-btn.is-active")?.dataset.mode === "edit"));
 

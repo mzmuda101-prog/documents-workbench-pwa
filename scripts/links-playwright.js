@@ -107,7 +107,7 @@ async function run() {
   check("link do brakującej zakładki: komunikat zamiast niczego", /nie ma w dokumencie/.test(toastMissing), toastMissing);
 
   // ── w trybie Edycja też działa ─────────────────────────────────────────────
-  await page.click('.mode-btn[data-mode="edit"]');
+  await page.evaluate(() => document.querySelector('.mode-btn[data-mode="edit"]').click());
   await page.evaluate(() => docViewportEl.scrollTo({ top: 0 }));
   await clickLink(page, '.docx-preview-host a[href="#_Toc1"]');
   check("Edycja: klik w spis treści też skacze", await inView(page, "Bezpieczeństwo"));
@@ -141,7 +141,8 @@ async function run() {
   });
   check("przed poprawką ramka zaczynała się za pierwszą literą (warunek testu)", !hang0.hang && hang0.box > hang0.char + 5, JSON.stringify(hang0));
   check("po fokusie podświetlenie obejmuje cały 1. wiersz (ramka ≤ pierwsza litera)", hang.editable && hang.hang === "1" && hang.boxAfter <= hang.charAfter + 1, JSON.stringify(hang));
-  check("tekst nie przesunął się ani o piksel", Math.abs(hang.charAfter - hang0.char) < 0.5, JSON.stringify({ hang0, hang }));
+  // pomiar przed i po kursorze w tym samym trybie (wstążka: Edycja ma drugi rząd — inny układ niż w Czytaniu)
+  check("tekst nie przesunął się ani o piksel", Math.abs(hang.charAfter - hang.charBefore) < 0.5, JSON.stringify({ hang0, hang }));
 
   // ── nic z tego nie trafia do pliku ─────────────────────────────────────────
   const same = await page.evaluate(async () => { inlineDirtyValid = false; const n = collectInlineParagraphEdits().length; inlineDirtyValid = true; return { n, same: (await buildDocumentForSave()) === originalFileBytes }; });

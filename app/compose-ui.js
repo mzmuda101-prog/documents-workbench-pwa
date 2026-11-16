@@ -4896,5 +4896,10 @@ const composeUi = (() => {
     document.getElementById(id)?.addEventListener("click", openNewDialog);
   });
 
-  return { openFontForm, commentAction, commentById, showCommentById, commentRanges, richRunEl: (r) => richRunEl(r), openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, stampPageNumbers, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, clearIndentAt, hasTextRule, clearRuleAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
+  // wstążka (ribbon.js): te same okienka co w menu „Wstaw”, zaczepione przy przycisku karty
+  const openTablePicker = (anchor) => openPop(anchor, buildTablePicker);
+  const openSymbolPicker = (anchor) => openPop(anchor, buildSymbolPicker);
+  const insertToday = () => insertText(todayText());
+
+  return { openTablePicker, openSymbolPicker, pickImage, insertToday, openFontForm, commentAction, commentById, showCommentById, commentRanges, richRunEl: (r) => richRunEl(r), openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, stampPageNumbers, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, clearIndentAt, hasTextRule, clearRuleAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
 })();

@@ -32,7 +32,7 @@ const TAB = (t) => `<w:r><w:t>${t[0]}</w:t></w:r><w:r><w:tab/></w:r><w:r><w:t>${
   const caret = (i) => page.evaluate((i) => { const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[i]; p.closest(".docx-edit-root").focus(); placeCaret(p, 1); document.dispatchEvent(new Event("selectionchange")); }, i);
   const openTabs = async (i) => {
     await caret(i);
-    await page.click("#fmtSpacingBtn");
+    await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtSpacingBtn").then(async () => page.click("#fmtSpacingBtn"));
     await page.waitForSelector('.compose-pop [data-tabs="1"]');
     const desc = await page.locator('.compose-pop [data-tabs="1"]').textContent();
     await page.click('.compose-pop [data-tabs="1"]');

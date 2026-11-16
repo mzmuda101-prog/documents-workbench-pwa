@@ -59,7 +59,7 @@ async function run() {
   await page.keyboard.press(`${MOD}+KeyB`);
   await page.keyboard.type(" tekst.");
   await page.keyboard.press("Enter");
-  await page.click("#fmtItalic"); // przycisk I na pasku Edycji — działa na komentarz
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtItalic").then(async () => page.click("#fmtItalic")); // przycisk I na pasku Edycji — działa na komentarz
   await page.keyboard.type("Drugi akapit");
   check("klik „I” na pasku: okienko zostaje, fokus w komentarzu", await page.evaluate(() => !!document.querySelector(".compose-pop-comment") && document.activeElement?.classList.contains("cf-rich")));
   await page.click(".compose-pop-form .lf-ok");

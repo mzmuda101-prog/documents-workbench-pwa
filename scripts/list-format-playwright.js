@@ -37,13 +37,13 @@ const idle = (page) => page.waitForFunction(() => document.getElementById("loadi
     document.dispatchEvent(new Event("selectionchange"));
   }, [a, b]);
   const chip = async (label) => {
-    await page.click("#fmtListBtn");
+    await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtListBtn").then(async () => page.click("#fmtListBtn"));
     await page.waitForSelector(".list-chip");
     await page.locator(".list-chip", { hasText: new RegExp(`^${label.replace(/[.)]/g, "\\$&")}$`) }).click();
     await idle(page);
   };
   const menuItem = async (re) => {
-    await page.click("#fmtListBtn");
+    await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtListBtn").then(async () => page.click("#fmtListBtn"));
     await page.waitForSelector(".compose-pop");
     await page.locator(".compose-pop .compose-item", { hasText: re }).click();
     await idle(page);

@@ -40,8 +40,8 @@ const idle = (page) => page.waitForFunction(() => document.getElementById("loadi
   });
   const wm = () => page.evaluate(() => [...document.querySelector(".docx-preview-host table").rows].map((r) => [...r.cells].map((c) => getComputedStyle(c).writingMode)));
   const openTableMenu = async () => {
-    await page.waitForSelector("#tableToolsBtn:not([hidden])");
-    await page.click("#tableToolsBtn");
+    await page.waitForFunction(() => !document.getElementById("tableToolsBtn").hidden);
+    await page.waitForFunction(() => !document.getElementById("tableToolsBtn").hidden).then(() => page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("table"))).then(() => page.click("#tableToolsBtn"));
     await page.waitForSelector(".compose-textdir");
   };
 

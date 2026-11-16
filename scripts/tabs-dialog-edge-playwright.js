@@ -54,7 +54,7 @@ const TCELL = (inner) => `<w:tc><w:tcPr><w:tcW w:w="4500" w:type="dxa"/></w:tcPr
   }, [a, b]);
   const idx = (page, re) => page.evaluate((src) => { const re = new RegExp(src); return collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).findIndex((p) => re.test(p.textContent)); }, re.source);
   const openTabs = async (page) => {
-    await page.click("#fmtSpacingBtn");
+    await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtSpacingBtn").then(async () => page.click("#fmtSpacingBtn"));
     await page.waitForSelector('.compose-pop [data-tabs="1"]');
     await page.click('.compose-pop [data-tabs="1"]');
     await page.waitForSelector(".compose-pop-tabs");

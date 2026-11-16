@@ -120,7 +120,7 @@ async function run() {
   await typeAtEnd(page, " COFNIJ");
   await page.evaluate(async () => { document.dispatchEvent(new Event("visibilitychange")); await new Promise((r) => setTimeout(r, 1800)); await dwbDrafts._flush(); });
   const before = await dbCount(page);
-  await page.click("#undoBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#undoBtn").then(async () => page.click("#undoBtn"));
   await idle(page);
   await sleep(300);
   check("Cofnij do stanu z pliku usuwa szkic (nie ma czego odzyskiwać)", before === 1 && (await dbCount(page)) === 0 && !(await page.evaluate(() => hasUnsavedChanges)), `${before} → ${await dbCount(page)}`);

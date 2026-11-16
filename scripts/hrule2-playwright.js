@@ -104,7 +104,7 @@ async function main() {
   await idle(page);
   f = await fileState(page);
   check("Backspace na początku tekstu z linią: skleja z akapitem wyżej (jak w Wordzie)", !f.texts.includes("Podpis") && f.texts.some((x) => x.endsWith("Podpis")), JSON.stringify(f.texts.slice(0, 4)));
-  await page.click("#undoBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#undoBtn").then(async () => page.click("#undoBtn"));
   await idle(page);
   f = await fileState(page);
   check("Cofnij przywraca linię pod tekstem", f.rules.includes("Podpis"), JSON.stringify(f.rules));

@@ -24,7 +24,7 @@ async function session(browser, loadDoc, anchorText, delay, label) {
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await loadDoc(page);
-  await page.click('.mode-btn[data-mode="edit"]');
+  await page.evaluate(() => document.querySelector('.mode-btn[data-mode="edit"]').click());
   await page.locator(".docx-preview-host p", { hasText: anchorText }).first().click();
   // kursor na KOŃCU akapitu (End w długim akapicie idzie tylko na koniec wiersza)
   await page.evaluate((anchor) => {

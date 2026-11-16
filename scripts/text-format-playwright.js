@@ -94,11 +94,11 @@ async function run() {
   // ── 1. indeks na zaznaczeniu ────────────────────────────────────────────────
   await page.keyboard.type("Pole 20 m2 i woda H2O koniec");
   await selectText(page, "Pole 20", "2", 1); // „2” w „m2”
-  await page.click("#fmtSuper");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtSuper").then(async () => page.click("#fmtSuper"));
   await page.waitForTimeout(150);
   check("x² wciśnięty na zaznaczonym indeksie", (await pressed(page)).sup === "true", JSON.stringify(await pressed(page)));
   await selectText(page, "Pole 20", "2", 2); // „2” w „H2O”
-  await page.click("#fmtSub");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtSub").then(async () => page.click("#fmtSub"));
   await page.waitForTimeout(150);
   let saved = await savedRuns(page, "Pole 20");
   check("zapis: „2” w m² = superscript, w H₂O = subscript, reszta bez indeksu",
@@ -117,7 +117,7 @@ async function run() {
   check("pole rozmiaru przy indeksie = rozmiar tekstu obok (jak Word), nie pomniejszony", sizeAtSub !== "" && sizeAtSub === sizeAtText, JSON.stringify({ sizeAtSub, sizeAtText }));
   // drugi klik zdejmuje
   await selectText(page, "Pole 20", "2", 1);
-  await page.click("#fmtSuper");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtSuper").then(async () => page.click("#fmtSuper"));
   await page.waitForTimeout(150);
   saved = await savedRuns(page, "Pole 20");
   check("drugi klik x² zdejmuje indeks (H₂O zostaje)", saved.runs.filter((r) => r[1]).map((r) => r[1]).join() === "subscript", JSON.stringify(saved));
@@ -146,7 +146,7 @@ async function run() {
   await selectText(page, "Pole 20", "2", 2);
   await page.waitForTimeout(200); // stan paska nadąża za selectionchange
   check("x₂ wciśnięty w <sub> z pliku", (await pressed(page)).sub === "true", JSON.stringify(await pressed(page)));
-  await page.click("#fmtSuper");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtSuper").then(async () => page.click("#fmtSuper"));
   await page.waitForTimeout(150);
   saved = await savedRuns(page, "Pole 20");
   check("x² na <sub> z pliku: dolny → górny", saved.runs.some((r) => r[0] === "2" && r[1] === "superscript") && !saved.runs.some((r) => r[1] === "subscript"), JSON.stringify(saved.runs));
@@ -160,7 +160,7 @@ async function run() {
   await page.keyboard.press(`${MOD}+b`);
   await page.keyboard.type(" i dalej");
   await selectText(page, "Słowo gruby", "gruby");
-  await page.click("#fmtClearBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtClearBtn").then(async () => page.click("#fmtClearBtn"));
   await page.waitForTimeout(300);
   saved = await savedRuns(page, "Słowo gruby");
   check("gumka: zaznaczone słowo bez pogrubienia", saved && !saved.runs.some((r) => r[2]), JSON.stringify(saved));
@@ -170,13 +170,13 @@ async function run() {
   await caretEnd(page, "Słowo gruby");
   await page.keyboard.press("Enter");
   await page.keyboard.type("Tytuł rozdziału");
-  await page.selectOption("#fmtParaStyle", "h1");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtParaStyle").then(async () => page.selectOption("#fmtParaStyle", "h1"));
   await idle(page);
   saved = await savedRuns(page, "Tytuł rozdziału");
   const hadStyle = saved?.style;
   await selectText(page, "Tytuł rozdziału", "rozdz");
   await page.evaluate(() => getSelection().collapseToStart());
-  await page.click("#fmtClearBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtClearBtn").then(async () => page.click("#fmtClearBtn"));
   await idle(page);
   saved = await savedRuns(page, "Tytuł rozdziału");
   check("gumka bez zaznaczenia w nagłówku → styl Normalny", !!hadStyle && !saved.style, JSON.stringify({ hadStyle, after: saved }));
@@ -186,7 +186,7 @@ async function run() {
   await caretEnd(page, "Tytuł rozdziału");
   await page.keyboard.press("Enter");
   await page.keyboard.type("Drugi rozdział");
-  await page.selectOption("#fmtParaStyle", "h1");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtParaStyle").then(async () => page.selectOption("#fmtParaStyle", "h1"));
   await idle(page);
   await caretEnd(page, "Drugi rozdział");
   await page.keyboard.press("Enter");
@@ -214,7 +214,7 @@ async function run() {
     a.closest(".docx-edit-root")?.focus?.({ preventScroll: true });
     getSelection().removeAllRanges(); getSelection().addRange(r);
   });
-  await page.click("#fmtClearBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtClearBtn").then(async () => page.click("#fmtClearBtn"));
   await idle(page);
   const after = [await pXml("Drugi rozdział"), await pXml("Akapit środkowy")];
   check("gumka (jak Word): nagłówek zaznaczony w części → Normalny", /<w:pStyle /.test(before[0]) && !/<w:pStyle /.test(after[0]), after[0]);
@@ -233,7 +233,7 @@ async function run() {
   }));
   const pickCase = async (key) => {
     await scrollSettled();
-    await page.click("#fmtCaseBtn");
+    await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtCaseBtn").then(async () => page.click("#fmtCaseBtn"));
     await page.waitForSelector(".compose-pop-case .compose-item");
     const info = await page.evaluate((k) => {
       const b = [...document.querySelectorAll(".compose-pop-case .compose-item")].find((x) => x.textContent.trim() === t(k));
@@ -255,7 +255,7 @@ async function run() {
   check("Aa: Jak Nazwa Własna", await paraText() === "Ala Ma Kota. Ala Ma Psa", await paraText());
   await pickCase("caseToggle");
   check("Aa: zAMIANA", await paraText() === "aLA mA kOTA. aLA mA pSA", await paraText());
-  await page.click("#undoBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#undoBtn").then(async () => page.click("#undoBtn"));
   await idle(page);
   check("Cofnij przywraca poprzednią wielkość liter", await paraText() === "Ala Ma Kota. Ala Ma Psa", await paraText());
   // bez zaznaczenia: słowo przy kursorze

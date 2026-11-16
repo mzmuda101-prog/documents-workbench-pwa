@@ -28,6 +28,7 @@ const dwbView = (() => {
 
   function moveHeroControls(intoToolbar) {
     if (!slot || !heroRight || !saveBtn || !menuBtn) return;
+    if (document.body.classList.contains("rb-on")) return; // wstążka (ribbon.js): Zapisz i ⋯ zostają w rzędzie 1
     if (intoToolbar) {
       slot.append(saveBtn, menuBtn);
     } else {

@@ -60,17 +60,17 @@ async function run() {
   const label = await page.getAttribute("#undoBtn", "aria-label");
   check("zamiana z panelu zrobiona, „Cofnij: zamiana tekstu”", afterReplace === "§4 Depozyt" && /Cofnij: zamiana tekstu/.test(label), `${afterReplace} | ${label}`);
   check("licznik „Zapisz” = 1", (await saveState(page)).count === "1");
-  await page.click("#undoBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#undoBtn").then(async () => page.click("#undoBtn"));
   await idle(page);
   check("Cofnij przywraca tekst", (await paraText(page, "§4")) === "§4 Kaucja");
   const clean = await saveState(page);
   check("powrót do stanu z wczytania gasi „Zapisz”", !clean.dirty, JSON.stringify(clean));
-  await page.click("#redoBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#redoBtn").then(async () => page.click("#redoBtn"));
   await idle(page);
   check("Ponów przywraca zamianę", (await paraText(page, "§4")) === "§4 Depozyt");
 
   // 2) pisanie z Enterem = jeden krok
-  await page.click('.mode-btn[data-mode="edit"]');
+  await page.evaluate(() => document.querySelector('.mode-btn[data-mode="edit"]').click());
   await placeCaretEnd(page, "Dane Najemcy");
   await page.keyboard.type(" X", { delay: 20 });
   await page.keyboard.press("Enter");
@@ -111,11 +111,11 @@ async function run() {
     const r = document.createRange(); r.selectNodeContents(el);
     const s = getSelection(); s.removeAllRanges(); s.addRange(r);
   });
-  await page.click("#fmtBold");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtBold").then(async () => page.click("#fmtBold"));
   await page.waitForTimeout(200);
   const boldLabel = await page.getAttribute("#undoBtn", "aria-label");
   const bolded = await page.evaluate(() => !![...document.querySelectorAll(".docx-preview-host p")].find((p) => p.textContent.startsWith("Dokument testowy"))?.querySelector("b, strong, [style*='bold'], [style*='700']"));
-  await page.click("#undoBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#undoBtn").then(async () => page.click("#undoBtn"));
   await idle(page);
   const unbolded = await page.evaluate(() => ![...document.querySelectorAll(".docx-preview-host p")].find((p) => p.textContent.startsWith("Dokument testowy"))?.querySelector("b, strong, [style*='bold'], [style*='700']"));
   check("B = osobny krok „formatowanie”, Cofnij zdejmuje pogrubienie", /formatowanie/.test(boldLabel) && bolded && unbolded, `${boldLabel} ${bolded} ${unbolded}`);
@@ -124,10 +124,10 @@ async function run() {
   await page.evaluate(() => setDirtyState(false)); // to samo, co robi udany zapis
   await page.waitForTimeout(100);
   const saved = await saveState(page);
-  await page.click("#undoBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#undoBtn").then(async () => page.click("#undoBtn"));
   await idle(page);
   const afterUndoSaved = await saveState(page);
-  await page.click("#redoBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#redoBtn").then(async () => page.click("#redoBtn"));
   await idle(page);
   const backToSaved = await saveState(page);
   check("po zapisie: licznik 0 → Cofnij = 1 zmiana → Ponów = znów zapisane", !saved.dirty && afterUndoSaved.dirty && afterUndoSaved.count === "1" && !backToSaved.dirty, JSON.stringify({ saved, afterUndoSaved, backToSaved }));

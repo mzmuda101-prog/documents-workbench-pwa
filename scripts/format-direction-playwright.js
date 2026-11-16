@@ -63,7 +63,7 @@ const MODES = {
         const [a, ao, b, bo] = m;
         getSelection().setBaseAndExtent(...pt(a, ao), ...pt(b, bo));
       }, m);
-      if (act.menu) { await page.click("#fmtColorBtn"); await page.waitForSelector(".compose-pop-color .color-swatch"); await page.click(".compose-pop-color .color-swatch >> nth=3"); }
+      if (act.menu) { await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtColorBtn").then(async () => page.click("#fmtColorBtn")); await page.waitForSelector(".compose-pop-color .color-swatch"); await page.click(".compose-pop-color .color-swatch >> nth=3"); }
       else if (act.click) await page.click(act.click);
       else if (act.select) await page.selectOption(act.select[0], act.select[1]);
       else await page.evaluate(act.js);

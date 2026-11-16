@@ -42,7 +42,7 @@ const savedZip = async (page) => {
   return JSZip.loadAsync(Buffer.from(b64, "base64"));
 };
 const insertMenu = async (page, label) => {
-  await page.click("#insertMenuBtn");
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.click("#insertMenuBtn"));
   await page.click(`.compose-pop-insert .compose-item-label:text-is("${label}")`);
 };
 
@@ -69,7 +69,7 @@ async function run() {
   await page.keyboard.type("Zakupy:");
   await page.keyboard.press("Enter");
   await page.keyboard.type("mleko");
-  await page.click("#fmtListBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtListBtn").then(async () => page.click("#fmtListBtn"));
   await page.click(".compose-pop-list .compose-item-label:text-is('Lista punktowana')");
   await idle(page);
   await caretEnd(page, 1);
@@ -79,7 +79,7 @@ async function run() {
   let ps = await paras(page);
   check("lista punktowana z przycisku „Lista”, Enter = kolejny punkt, Tab = głębiej", ps[1].list && ps[2].list && ps[3].list && ps[3].level === 1 && !ps[0].list, JSON.stringify(ps.map((p) => [p.text, p.list, p.level])));
   // poziom z okienka (tablet bez Tab)
-  await page.click("#fmtListBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtListBtn").then(async () => page.click("#fmtListBtn"));
   await page.click(".compose-pop-list .compose-row-btn:has-text('Płycej')");
   await page.waitForTimeout(400);
   ps = await paras(page);
@@ -93,7 +93,7 @@ async function run() {
   ps = await paras(page);
   check("Enter w pustym punkcie kończy listę (dalej zwykły akapit)", ps.length === 5 && !ps[4].list && ps[4].text === "Kroki:", JSON.stringify(ps.map((p) => [p.text, p.list])));
   await page.keyboard.press("Enter"); await page.keyboard.type("Krok pierwszy");
-  await page.click("#fmtListBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtListBtn").then(async () => page.click("#fmtListBtn"));
   await page.click(".compose-pop-list .compose-item-label:text-is('Lista numerowana')");
   await idle(page);
   await caretEnd(page, 5);
@@ -108,7 +108,7 @@ async function run() {
   ps = await paras(page);
   check("Backspace na początku punktu zdejmuje numerację, tekst zostaje", !ps[6].list && ps[6].text === "Krok drugi" && ps[5].list, JSON.stringify(ps.slice(5).map((p) => [p.text, p.list])));
   await caretEnd(page, 1);
-  await page.click("#fmtListBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtListBtn").then(async () => page.click("#fmtListBtn"));
   await page.click(".compose-pop-list .compose-item-label:text-is('Lista punktowana')"); // drugi raz = zdejmij
   await idle(page);
   ps = await paras(page);
@@ -152,7 +152,7 @@ async function run() {
   await caretEnd(page, i);
   await page.keyboard.press("Enter");
   await page.keyboard.type("Rozdział");
-  await page.selectOption("#fmtParaStyle", "h1");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtParaStyle").then(async () => page.selectOption("#fmtParaStyle", "h1"));
   await idle(page);
   await caretEnd(page, i);
   await page.keyboard.press(`${MOD}+KeyK`);
@@ -232,9 +232,9 @@ async function run() {
   await caretEnd(page, last);
   await page.keyboard.press("Enter");
   await page.keyboard.type("Zakończenie");
-  await page.selectOption("#fmtParaStyle", "h2");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtParaStyle").then(async () => page.selectOption("#fmtParaStyle", "h2"));
   await idle(page);
-  await page.click("#insertMenuBtn");
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.click("#insertMenuBtn"));
   const tocLabel = await page.evaluate(() => [...document.querySelectorAll(".compose-pop-insert .compose-item-label")].map((x) => x.textContent).find((x) => /spis/i.test(x)));
   check("gdy spis jest — w menu „Zaktualizuj spis treści”", tocLabel === "Zaktualizuj spis treści", tocLabel);
   await page.click(`.compose-pop-insert .compose-item-label:text-is("Zaktualizuj spis treści")`);

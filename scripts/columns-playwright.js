@@ -43,7 +43,7 @@ const idle = (page) => page.waitForFunction(() => document.getElementById("loadi
     document.dispatchEvent(new Event("selectionchange"));
   }, [paraEl(a), paraEl(b)]);
   const pick = async (val) => {
-    await page.click("#pageLayoutBtn");
+    await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("layout")).then(() => page.click("#pageLayoutBtn"));
     await page.waitForSelector(`.compose-pop [data-cols="${val}"]`);
     await page.click(`.compose-pop [data-cols="${val}"]`);
     await idle(page);

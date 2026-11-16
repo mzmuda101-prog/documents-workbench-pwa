@@ -94,11 +94,11 @@ async function main() {
     await page.keyboard.press("Enter");
     await idle(page);
     check(`…pisanie i Enter w akapicie z komentarzem: znaczniki zostają`, (await marks()) === m0, `${m0} → ${await marks()}`);
-    await page.click("#undoBtn");
+    await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#undoBtn").then(async () => page.click("#undoBtn"));
     await idle(page);
     // Cofnij — przywraca stan sprzed operacji
     await page.waitForTimeout(300);
-    await page.click("#undoBtn");
+    await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#undoBtn").then(async () => page.click("#undoBtn"));
     await idle(page);
     const back = await comments();
     if (op.ok) check(`…Cofnij przywraca`, JSON.stringify(back) === JSON.stringify(textsBefore), JSON.stringify(back.slice(0, 4)));

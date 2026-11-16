@@ -80,7 +80,7 @@ async function main() {
   await page.keyboard.type("xyz");
   await page.waitForTimeout(400);
   await page.evaluate(() => { window.__renders = 0; });
-  await page.click("#undoBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#undoBtn").then(async () => page.click("#undoBtn"));
   await idle(page);
   check("pisanie → Cofnij: bez przerysowania dokumentu", (await page.evaluate(() => window.__renders)) === 0 && (await page.evaluate(() => collectInlineParagraphEdits().length)) === 0, String(await page.evaluate(() => window.__renders)));
 
@@ -160,7 +160,7 @@ async function main() {
   });
   check("podgląd = plik po serii zmian", same);
   const alignBefore = await page.evaluate((ix) => getComputedStyle(collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[ix[0]]).textAlign, span || [targets[0]]);
-  await page.click("#undoBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#undoBtn").then(async () => page.click("#undoBtn"));
   await idle(page);
   const alignAfter = await page.evaluate((ix) => getComputedStyle(collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[ix[0]]).textAlign, span || [targets[0]]);
   check("Cofnij cofa ostatnią zmianę wyglądu", alignBefore !== alignAfter, `${alignBefore} → ${alignAfter}`);

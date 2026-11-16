@@ -68,7 +68,7 @@ async function run() {
   // wybranie „Normalny” z listy w ramce zdejmuje ramkę
   idx = await tipEnd();
   await page.waitForTimeout(250);
-  await page.selectOption("#fmtParaStyle", "normal");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtParaStyle").then(async () => page.selectOption("#fmtParaStyle", "normal"));
   await idle(page);
   check("w ramce: wybranie „Normalny” z listy stylów zdejmuje ramkę", (await keyOfCaret(page)) === "normal", await keyOfCaret(page));
 
@@ -77,7 +77,7 @@ async function run() {
   await page.waitForSelector(".docx-preview-host p.docx-editable-p", { timeout: 20000 });
   await idle(page);
   await page.keyboard.type("Ważne: termin mija w piątek.");
-  await page.selectOption("#fmtParaStyle", "callout");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtParaStyle").then(async () => page.selectOption("#fmtParaStyle", "callout"));
   await idle(page);
   const box = await page.evaluate(() => { const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[0]; const cs = getComputedStyle(p); return { key: composeStyleKeyOf(p), border: cs.borderLeftStyle, bg: cs.backgroundColor }; });
   check("styl „Ramka”: pasek z lewej i tło w podglądzie", box.key === "callout" && box.border === "solid" && box.bg !== "rgba(0, 0, 0, 0)", JSON.stringify(box));

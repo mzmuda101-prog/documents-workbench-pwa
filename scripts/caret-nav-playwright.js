@@ -18,7 +18,7 @@ async function run() {
   await page.evaluate(() => document.getElementById("heroSplash")?.remove());
   await page.waitForSelector(".docx-preview-host p", { timeout: 20000 });
   await page.waitForTimeout(500);
-  await page.click('.mode-btn[data-mode="edit"]');
+  await page.evaluate(() => document.querySelector('.mode-btn[data-mode="edit"]').click());
   await page.waitForTimeout(400);
 
   const where = () => page.evaluate(() => {
@@ -58,7 +58,7 @@ async function run() {
   w = await where();
   check("Delete na końcu akapitu dołącza następny (w pliku)", after.length === before.length - 1 && after[1] === before[1] + before[2], `${before.length}→${after.length}: ${after[1]}`);
   check("…kursor w miejscu połączenia", w.i === 1 && w.o === before[1].length, JSON.stringify(w));
-  await page.click("#undoBtn"); await page.waitForTimeout(800);
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#undoBtn").then(async () => page.click("#undoBtn")); await page.waitForTimeout(800);
   after = await fileTexts();
   check("↶ cofa połączenie", after.length === before.length && after[2] === before[2], String(after.length));
 

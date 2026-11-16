@@ -84,8 +84,8 @@ async function run() {
     if (!(await page.evaluate((id) => document.getElementById(id).open, id))) await page.click(`#${id} > summary`);
     await page.waitForTimeout(400);
   };
-  const editMode = async () => { await page.click('.mode-btn[data-mode="edit"]'); await page.waitForTimeout(400); };
-  const readMode = async () => { await page.click('.mode-btn[data-mode="read"]'); await page.waitForTimeout(300); };
+  const editMode = async () => { await page.evaluate(() => document.querySelector('.mode-btn[data-mode="edit"]').click()); await page.waitForTimeout(400); };
+  const readMode = async () => { await page.evaluate(() => document.querySelector('.mode-btn[data-mode="read"]').click()); await page.waitForTimeout(300); };
   const lastToast = () => toasts[toasts.length - 1] || "";
 
   // ── 1. placeholder: kursor w tekście → pole nazwy → „Wstaw” ─────────────────
@@ -135,12 +135,12 @@ async function run() {
   // ── 3. formatowanie: dwuklik słowa → B na pasku; rozmiar z listy ────────────
   await editMode();
   await dblWord(6, "Najemca");
-  await page.click("#fmtBold");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtBold").then(async () => page.click("#fmtBold"));
   await page.waitForTimeout(200);
   f = await fileParas();
   check("B na pasku pogrubia zaznaczone słowo (w pliku)", /<w:b( w:val="(1|true)")?\/><\/w:rPr><w:t[^>]*>Najemca</.test(f[6].xml), f[6].xml.slice(0, 300));
   await dblWord(6, "lokalu");
-  await page.selectOption("#fmtFontSize", "18");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtFontSize").then(async () => page.selectOption("#fmtFontSize", "18"));
   await page.waitForTimeout(200);
   f = await fileParas();
   check("rozmiar z listy (18) zmienia zaznaczone słowo (w pliku)", /<w:sz w:val="36"\/>/.test(f[6].xml), f[6].xml.slice(0, 400));
@@ -149,11 +149,11 @@ async function run() {
   await clickEndOf(8);
   await page.keyboard.type(" DOPISEK");
   await page.waitForTimeout(300);
-  await page.click("#undoBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#undoBtn").then(async () => page.click("#undoBtn"));
   await page.waitForTimeout(600);
   f = await fileParas();
   check("↶ cofa wpisany tekst", !f[8].text.includes("DOPISEK"), f[8].text.slice(-30));
-  await page.click("#redoBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#redoBtn").then(async () => page.click("#redoBtn"));
   await page.waitForTimeout(600);
   f = await fileParas();
   check("↷ przywraca wpisany tekst", f[8].text.endsWith(" DOPISEK"), f[8].text.slice(-30));
@@ -193,7 +193,7 @@ async function run() {
     await page.waitForTimeout(800);
     f = await fileParas();
     check("Narzędzia edycji: prefiks „» ” dodany do akapitów", f.filter((p) => p.text.trim()).every((p) => p.text.startsWith("» ")), f.slice(0, 3).map((p) => p.text.slice(0, 20)).join(" | "));
-    await page.click("#undoBtn");
+    await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#undoBtn").then(async () => page.click("#undoBtn"));
     await page.waitForTimeout(800);
     f = await fileParas();
     check("…i ↶ to cofa", !f.some((p) => p.text.startsWith("» ")), f[0].text.slice(0, 20));

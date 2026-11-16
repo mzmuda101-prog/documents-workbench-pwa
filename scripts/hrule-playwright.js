@@ -86,9 +86,9 @@ async function main() {
   check("…na ekranie też bez linii", (await viewRuleIdx(page)) === -1, String(await viewRuleIdx(page)));
 
   // 4. Cofnij przywraca linię
-  await page.click("#undoBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#undoBtn").then(async () => page.click("#undoBtn"));
   await idle(page);
-  if ((await fileState(page, NEXT)).rules === base.rules) { await page.click("#undoBtn"); await idle(page); }
+  if ((await fileState(page, NEXT)).rules === base.rules) { await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#undoBtn").then(async () => page.click("#undoBtn")); await idle(page); }
   f = await fileState(page, NEXT);
   check("Cofnij przywraca linię", f.rules === base.rules + 1, JSON.stringify(f));
 

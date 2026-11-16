@@ -124,10 +124,10 @@ async function run() {
   // ── 3a. przekreślenie: przycisk z paska używa modelu runów, nie tylko CSS podglądu ───────
   await page.keyboard.press("Enter");
   await page.keyboard.type("Korekta: ");
-  await page.click("#fmtStrike");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtStrike").then(async () => page.click("#fmtStrike"));
   await page.keyboard.type("skreślone");
   const strikeOn = await page.evaluate(() => document.getElementById("fmtStrike").getAttribute("aria-pressed") === "true");
-  await page.click("#fmtStrike");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtStrike").then(async () => page.click("#fmtStrike"));
   await page.keyboard.type(" zostaje");
   await page.waitForTimeout(300);
   const strikeRuns = await page.evaluate(async () => {
@@ -139,7 +139,7 @@ async function run() {
   check("przekreślenie z paska: przycisk świeci, a .docx ma w:strike tylko na zaznaczonym fragmencie", strikeOn && JSON.stringify(strikeRuns) === JSON.stringify([["Korekta: ", false], ["skreślone", true], [" zostaje", false]]), JSON.stringify({ strikeOn, strikeRuns }));
 
   // ¶ jest wyłącznie widokiem: nie zapisuje danych, a po przeładowaniu nadal odpowiada przyciskowi.
-  await page.click("#formatMarksBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#formatMarksBtn").then(async () => page.click("#formatMarksBtn"));
   check("¶ na pasku włącza znaki niedrukowalne bez dodania operacji do kolejki pliku", await page.evaluate(() => document.getElementById("formatMarksBtn").getAttribute("aria-pressed") === "true" && docCanvasEl.classList.contains("show-formatting-marks") && pendingDocEdits.length === 0));
 
   // ── 3b. kursywa: Ctrl/⌘+I za pochylonym słowem; w Cytacie (pochylony ze stylu) → w:i w:val="0" ──
@@ -161,7 +161,7 @@ async function run() {
   });
   check("kursywa: przycisk I świeci po Ctrl/⌘+I i gaśnie po drugim", iOn && !iOff, JSON.stringify({ iOn, iOff }));
   check("kursywa: „pochyłe” pochylone, „proste” zaraz za nim (bez spacji) NIE, bez zbędnego w:i w:val=\"0\"", JSON.stringify(iRuns) === JSON.stringify([["Zdanie ", false, false], ["pochyłe", true, false], ["proste", false, false]]), JSON.stringify(iRuns));
-  await page.selectOption("#fmtParaStyle", "quote"); // Cytat = pochylony ze stylu
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtParaStyle").then(async () => page.selectOption("#fmtParaStyle", "quote")); // Cytat = pochylony ze stylu
   await idle(page);
   await page.evaluate(() => { const p = [...document.querySelectorAll(".docx-preview-host p.docx-editable-p")].find((x) => x.textContent.includes("proste")); placeCaret(p, p.textContent.length); });
   await page.keyboard.press(`${MOD}+i`);
@@ -186,7 +186,7 @@ async function run() {
   });
   await page.waitForTimeout(250);
   check("zaznaczone pogrubione słowo: przycisk B „wciśnięty”", (await btn(page)).b, JSON.stringify(await btn(page)));
-  await page.click("#fmtBold");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtBold").then(async () => page.click("#fmtBold"));
   await page.waitForTimeout(300);
   runs = await savedRuns(page, "Zwykły");
   check("przycisk B na zaznaczeniu zdejmuje pogrubienie, przycisk gaśnie", !(await btn(page)).b && runs.every((r) => !r[1]), JSON.stringify({ runs, b: await btn(page) }));
@@ -194,11 +194,11 @@ async function run() {
   // ── 5. rozmiar przy kursorze (zgłoszenie: klik w słowo 8 pt pokazywał 9 pt) ─────────────
   await page.evaluate(() => { const ps = document.querySelectorAll(".docx-preview-host p.docx-editable-p"); const p = ps[ps.length - 1]; placeCaret(p, p.textContent.length); });
   await page.keyboard.press("Enter");
-  await page.selectOption("#fmtFontSize", "12");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtFontSize").then(async () => page.selectOption("#fmtFontSize", "12"));
   await page.keyboard.type("Duże litery ");
-  await page.selectOption("#fmtFontSize", "8");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtFontSize").then(async () => page.selectOption("#fmtFontSize", "8"));
   await page.keyboard.type("malutkie");
-  await page.selectOption("#fmtFontSize", "12");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtFontSize").then(async () => page.selectOption("#fmtFontSize", "12"));
   await page.keyboard.type(" i dalej duże");
   await page.waitForTimeout(300);
   const edge = await page.evaluate(() => {
@@ -229,7 +229,7 @@ async function run() {
     const r = document.createRange(); r.selectNodeContents(p); const s = getSelection(); s.removeAllRanges(); s.addRange(r);
   });
   await page.waitForTimeout(200);
-  await page.click("#fmtGrow");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtGrow").then(async () => page.click("#fmtGrow"));
   await page.waitForTimeout(400);
   const sizes = await page.evaluate(async () => {
     const z = await JSZip.loadAsync(await buildDocumentForSave());

@@ -91,9 +91,9 @@ async function run() {
       enter: async () => { const i = await target(); await caretAt(i, "mid"); await page.keyboard.press("Enter"); return `Enter w ${i}`; },
       backspace: async () => { const i = await target(); await caretAt(i, "start"); await page.keyboard.press("Backspace"); return `Backspace na początku ${i}`; },
       bold: async () => { const i = await target(); const w = await selectWord(i); if (!w) return null; await page.keyboard.press(`${MOD}+b`); return `pogrubienie „${w}”`; },
-      style: async () => { const i = await target(); await caretAt(i, "mid"); const st = pick(["h2", "normal", "callout", "quote"]); await page.selectOption("#fmtParaStyle", st); return `styl ${st} w ${i}`; },
+      style: async () => { const i = await target(); await caretAt(i, "mid"); const st = pick(["h2", "normal", "callout", "quote"]); await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtParaStyle").then(async () => page.selectOption("#fmtParaStyle", st)); return `styl ${st} w ${i}`; },
       list: async () => { const i = await target(); await caretAt(i, "mid"); await page.evaluate(() => composeUi.applyList("bullet")); return `lista w ${i}`; },
-      grow: async () => { const i = await target(); const w = await selectWord(i); if (!w) return null; await page.click("#fmtGrow"); return `A+ „${w}”`; },
+      grow: async () => { const i = await target(); const w = await selectWord(i); if (!w) return null; await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtGrow").then(async () => page.click("#fmtGrow")); return `A+ „${w}”`; },
       paste: async () => {
         const i = await target(); await caretAt(i, "mid");
         await page.evaluate(() => { const dt = new DataTransfer(); dt.setData("text/plain", "WKLEJONE zdanie"); docCanvasEl.querySelector(".docx-edit-root, .docx-preview-host")?.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true })); });

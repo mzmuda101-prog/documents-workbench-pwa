@@ -125,7 +125,7 @@ async function run() {
   check("lista odświeżona po zmianie (11)", (await page.$$eval("#rvChanges .rv-row", (e) => e.length)) === 11);
 
   // Cofnij przywraca
-  await page.click("#undoBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#undoBtn").then(async () => page.click("#undoBtn"));
   await page.waitForTimeout(700);
   s = await fileState(page);
   check("Cofnij przywraca zmianę (11 znaczników w treści)", s.marks === 11 && s.body[1] === "Termin płatności wynosi 30 dni.", `${s.body[1]} / ${s.marks}`);

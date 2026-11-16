@@ -82,7 +82,7 @@ async function run() {
 
   // ── 1. pędzel raz: zaznaczenie celu ─────────────────────────────────────────
   await selectText(page, "Uwaga", 2);
-  await page.click("#fmtPainterBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtPainterBtn").then(async () => page.click("#fmtPainterBtn"));
   check("klik w pędzel — aktywny", (await pressed(page)) === "true");
   await selectText(page, "beta");
   await release(page, "beta");
@@ -100,7 +100,7 @@ async function run() {
 
   // ── 3. dwuklik: pędzel przyklejony, klik w słowo maluje całe słowo ─────────
   await selectText(page, "Uwaga", 2);
-  await page.dblclick("#fmtPainterBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtPainterBtn").then(async () => page.dblclick("#fmtPainterBtn"));
   await page.waitForTimeout(150);
   check("dwuklik — pędzel zostaje", (await pressed(page)) === "true");
   await selectText(page, "delta", 2); // kursor w środku słowa, bez zaznaczenia
@@ -117,7 +117,7 @@ async function run() {
 
   // ── 4. zwykły format przenosi się też na sformatowany tekst (cel traci swój) ─
   await selectText(page, "koniec", 2);
-  await page.click("#fmtPainterBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtPainterBtn").then(async () => page.click("#fmtPainterBtn"));
   await selectText(page, "Uwaga");
   await release(page, "Uwaga");
   look = await savedLook(page, "Uwaga");

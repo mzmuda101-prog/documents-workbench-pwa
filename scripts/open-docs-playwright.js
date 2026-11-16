@@ -92,11 +92,17 @@ async function run() {
   check("otwieranie nie pyta o porzucenie zmian (A zostaje w karcie)", dialogs.length === 0, JSON.stringify(dialogs));
   check("karta A: kropka „niezapisane”", st.dom[0].name === "headings-sample" && st.dom[0].dirty && !st.dom[1].dirty, JSON.stringify(st.dom));
   const place = await page.evaluate(() => {
+    // wstążka (ribbon.js): od 769 px karty stoją na dolnym pasku (makieta v4), stary nagłówek schowany
+    if (document.body.classList.contains("rb-on")) {
+      const t = document.getElementById("docTabs"), sb = document.querySelector(".status-bar");
+      const tr = t.getBoundingClientRect(), br = sb.getBoundingClientRect();
+      return { inHero: sb.contains(t), inside: tr.top >= br.top - 1 && tr.bottom <= br.bottom + 1 && tr.height > 0, gap: 0 };
+    }
     const t = document.getElementById("docTabs"), h = document.querySelector(".hero");
     const tr = t.getBoundingClientRect(), hr = h.getBoundingClientRect(), ws = document.querySelector(".workspace").getBoundingClientRect();
     return { inHero: t.parentElement === h, inside: tr.top >= hr.top && tr.bottom <= hr.bottom, gap: Math.round(ws.top - hr.bottom) };
   });
-  check("szeroki ekran: karty w nagłówku (bez osobnego pasa nad dokumentem)", place.inHero && place.inside && place.gap <= 20, JSON.stringify(place));
+  check("szeroki ekran: karty w nagłówku / na dolnym pasku wstążki (bez osobnego pasa nad dokumentem)", place.inHero && place.inside && place.gap <= 20, JSON.stringify(place));
   check("nowy dokument czysty, nagłówek z jego nazwą", !st.dirty && st.title === "sample.docx", JSON.stringify({ dirty: st.dirty, title: st.title }));
 
   // ── 3. powrót do A: zmiany i „niezapisane” na miejscu ──────────────────────

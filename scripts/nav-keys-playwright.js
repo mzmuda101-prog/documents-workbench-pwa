@@ -56,7 +56,7 @@ async function run() {
   await page.evaluate(() => document.getElementById("heroSplash")?.remove());
   await page.locator("#fileInput").setInputFiles(file);
   await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && !!document.querySelector(".docx-preview-host p"), null, { timeout: 30000 });
-  await page.click('.mode-btn[data-mode="edit"]');
+  await page.evaluate(() => document.querySelector('.mode-btn[data-mode="edit"]').click());
   await page.waitForSelector(".docx-edit-root");
   await page.waitForTimeout(800);
   const fails = [];

@@ -240,7 +240,7 @@ async function run() {
   await select(iAlfa, 0, iGamma, 5);
   await page.keyboard.press(`${MOD}+KeyB`);
   await sleep(200);
-  await page.selectOption("#fmtFontSize", "16");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtFontSize").then(async () => page.selectOption("#fmtFontSize", "16"));
   await sleep(200);
   const xmlF = await fileXml();
   const parasF = xmlF.split("</w:p>");
@@ -284,7 +284,7 @@ async function run() {
 
   // „przyklejony” rozmiar (zgłoszenie): 9 ustawione w jednym zdaniu nie idzie do innego akapitu
   await select(iAlfa, 0, iAlfa, 4);
-  await page.selectOption("#fmtFontSize", "9");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtFontSize").then(async () => page.selectOption("#fmtFontSize", "9"));
   await sleep(150);
   await page.evaluate((i) => focusParagraphAtOffset(i, 4), iBeta);
   await sleep(150);
@@ -294,7 +294,7 @@ async function run() {
   const qSize = await page.evaluate((i) => { const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[i]; return extractRunsFromPreviewParagraph(p).find((r) => r.text.includes("Q"))?.fontSize || "dziedziczony"; }, iBeta);
   check("po zmianie na 9 w jednym akapicie: w innym pole pokazuje 11, pisanie bez 9", afterMove.size === "11" && qSize === "dziedziczony", JSON.stringify({ afterMove, qSize }));
   // rozmiar bez zaznaczenia: tylko w tym miejscu kursora
-  await page.selectOption("#fmtFontSize", "20");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtFontSize").then(async () => page.selectOption("#fmtFontSize", "20"));
   await sleep(100);
   check("rozmiar bez zaznaczenia: pole od razu pokazuje 20", (await fmt()).size === "20");
   await page.keyboard.type("W");

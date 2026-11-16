@@ -118,7 +118,7 @@ async function run() {
     heroHidden: getComputedStyle(document.querySelector(".hero")).display === "none",
     statusHidden: getComputedStyle(document.querySelector(".status-bar")).display === "none",
     panelClosed: !isSidebarOpen(),
-    saveInToolbar: !!document.querySelector("#docToolbar #heroSaveBtn"),
+    saveInToolbar: !!document.querySelector("#docToolbar #heroSaveBtn, .ribbon #heroSaveBtn"),
     h: Math.round(document.getElementById("docViewport").getBoundingClientRect().height),
   }));
   check("Ctrl+Alt+F → tryb skupienia: bez nagłówka, paska stanu i panelu; „Zapisz” na pasku", fm.on && fm.heroHidden && fm.statusHidden && fm.panelClosed && fm.saveInToolbar, JSON.stringify(fm));
@@ -128,7 +128,7 @@ async function run() {
   await page.waitForTimeout(400);
   const back = await page.evaluate(() => ({
     on: document.documentElement.classList.contains("focus-mode"),
-    saveInHero: !!document.querySelector(".hero #heroSaveBtn") && !!document.querySelector(".hero #appMenuBtn"),
+    saveInHero: !!document.querySelector(".hero #heroSaveBtn, .ribbon #heroSaveBtn") && !!document.querySelector(".hero #appMenuBtn, .ribbon #appMenuBtn"),
     panelOpen: isSidebarOpen(),
   }));
   check("Esc wychodzi z trybu skupienia; „Zapisz”/⋯ wracają do nagłówka, panel wraca", !back.on && back.saveInHero && back.panelOpen, JSON.stringify(back));
@@ -136,9 +136,10 @@ async function run() {
   // podpowiedź (tylko mysz; WebKit z Playwrighta nie emuluje hover tak samo — Chromium)
   if (ENGINE === "chromium") {
     await page.waitForFunction(() => !!window.MateuszCursorHint, null, { timeout: 6000 }).catch(() => {});
-    await page.hover("#focusModeBtn");
+    await page.evaluate(() => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.select("view"); } }); // wstążka: „Tryb skupienia” na karcie Widok, w Edycji (w Czytaniu wstążka bez poleceń)
+    await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("view")).then(() => page.hover("#focusModeBtn"));
     await page.mouse.move(0, 0);
-    await page.hover("#focusModeBtn", { position: { x: 10, y: 10 } });
+    await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("view")).then(() => page.hover("#focusModeBtn", { position: { x: 10, y: 10 } }));
     await page.waitForTimeout(1200);
     const hint = await page.evaluate(() => ({ vis: document.getElementById("cursorHint").classList.contains("is-visible"), text: document.getElementById("cursorHintText").textContent }));
     check("najechanie myszą → podpowiedź z opisem i skrótem", hint.vis && /Tryb skupienia.*Ctrl\/⌘\+Alt\+F/.test(hint.text), JSON.stringify(hint));

@@ -62,13 +62,13 @@ const settle = async (page) => {
     await page.locator("#fileInput").setInputFiles(file);
     await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && !!document.querySelector(".docx-preview-host section.docx p"), null, { timeout: 60000 });
     await page.evaluate((read) => { if (readModeEl.checked !== read) { readModeEl.checked = read; readModeEl.dispatchEvent(new Event("change")); } }, mode === "read");
-    if (await page.evaluate(() => docCanvasEl.classList.contains("show-formatting-marks"))) await page.click("#formatMarksBtn");
+    if (await page.evaluate(() => docCanvasEl.classList.contains("show-formatting-marks"))) await page.evaluate(() => document.getElementById("formatMarksBtn").click());
     await page.waitForTimeout(3000); // przewodnik w WebKit dokłada ostatni piksel jeszcze ~2–3 s po wczytaniu
     const off = await settle(page);
-    await page.click("#formatMarksBtn");
+    await page.evaluate(() => document.getElementById("formatMarksBtn").click());
     const on = await settle(page);
     const shown = await page.evaluate(() => { const p = [...document.querySelectorAll(".docx-preview-host section.docx p")].find((x) => x.textContent.trim()); return p ? getComputedStyle(p, "::after").content : ""; });
-    await page.click("#formatMarksBtn");
+    await page.evaluate(() => document.getElementById("formatMarksBtn").click());
     const back = await settle(page);
     const d = diff(off, on);
     check(`${name}: ¶ widać, a ${off.paras.length} akapitów i ${off.pages.length} stron stoi jak bez ¶`, /¶/.test(shown) && d.length === 0, `${shown} ${d.slice(0, 6).join(" | ")}${d.length > 6 ? ` … (+${d.length - 6})` : ""}`);

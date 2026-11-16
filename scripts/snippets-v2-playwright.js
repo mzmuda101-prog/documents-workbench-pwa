@@ -61,7 +61,7 @@ async function run() {
   check("pusty panel: „Dodaj przykładowe snippety” → 5 snippetów z podglądem", rows.length === 5 && rows.includes("!pozdrawiam"), rows.join(" "));
 
   // ── podpowiedzi po „!” + pytanie o pola ─────────────────────────────────────
-  await page.click('.mode-btn[data-mode="edit"]');
+  await page.evaluate(() => document.querySelector('.mode-btn[data-mode="edit"]').click());
   await page.waitForTimeout(400);
   await clickEndOf(1);
   await page.keyboard.type(" !po");
@@ -79,7 +79,7 @@ async function run() {
     /Struktura\. Z poważaniem<\/w:t>(<\/w:r><w:r>)?<w:br\/>(<\/w:r><w:r>)?<w:t[^>]*>Jan Nowak/.test(f[1].xml) || (/Z poważaniem/.test(f[1].text) && /<w:br\/>/.test(f[1].xml) && /Jan Nowak/.test(f[1].text) && !/!po/.test(f[1].text)),
     f[1].xml.slice(-240));
   check("Enter nie tworzy przy tym nowego akapitu", f.length === 32, String(f.length));
-  await page.click("#undoBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#undoBtn").then(async () => page.click("#undoBtn"));
   await page.waitForTimeout(700);
   f = await fileParas();
   check("↶ cofa wstawienie snippetu (zostaje wpisane „!po”)", / !po$/.test(f[1].text) && !/poważaniem/.test(f[1].text), f[1].text.slice(-30));

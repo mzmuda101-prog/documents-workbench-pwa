@@ -90,7 +90,7 @@ async function run() {
   await page.waitForTimeout(400);
 
   // pisanie przesuwa granice: dopisany długi tekst na stronie 1 → str. 2 zaczyna się wcześniej w treści
-  await page.click('.mode-btn[data-mode="edit"]');
+  await page.evaluate(() => document.querySelector('.mode-btn[data-mode="edit"]').click());
   await page.evaluate(() => {
     const ps = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).filter((p) => p.isContentEditable && p.textContent.trim().length > 40);
     placeCaret(ps[0], ps[0].textContent.length);

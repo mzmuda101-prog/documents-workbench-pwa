@@ -121,7 +121,7 @@ async function run() {
   await page.waitForTimeout(400); // przewinięcie do akapitu (scroll zamyka okienka)
   await page.keyboard.press("Control+Alt+KeyM");
   await page.keyboard.type("Ważne: ");
-  await page.click("#fmtBold");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtBold").then(async () => page.click("#fmtBold"));
   await page.keyboard.type("pogrubione");
   await page.fill(".cf-author", "Ola");
   await page.click(".compose-pop-form .lf-ok");
@@ -133,7 +133,7 @@ async function run() {
   await page.waitForTimeout(400);
   // szeroki ekran: komentarz w dymku na marginesie (review-margin.js), wąski — w karcie nad tekstem
   check("rozdz. 13: karta komentarza z ołówkiem (poprawianie treści)", await page.evaluate(() => !!document.querySelector('.comment-card .cc-edit, .mk-comment.is-active .mk-actions .mk-btn[aria-label="Edytuj komentarz"], .mk-comment.is-active .mk-actions .mk-btn[aria-label="Edit comment"]')));
-  await page.click("#pageLayoutBtn");
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("layout")).then(() => page.click("#pageLayoutBtn"));
   await page.click('.compose-pop [data-preset="narrow"]');
   await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 10000 });
   await page.waitForTimeout(500);
@@ -199,7 +199,7 @@ async function run() {
   const src = await span("fragment");
   await page.mouse.click((src.x0 + src.x1) / 2, src.y0);
   await page.waitForTimeout(200);
-  await page.click("#fmtPainterBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtPainterBtn").then(async () => page.click("#fmtPainterBtn"));
   await page.waitForTimeout(350);
   const dst = await span("ten jest zwykły");
   await page.mouse.move(dst.x0, dst.y0);

@@ -38,7 +38,7 @@ const idle = (page) => page.waitForFunction(() => document.getElementById("loadi
     p.closest(".docx-edit-root").focus(); placeCaret(p, at === "end" ? p.textContent.length : at); document.dispatchEvent(new Event("selectionchange"));
   }, [re.source, at]);
   const pick = async (key) => {
-    await page.click("#pageLayoutBtn");
+    await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("layout")).then(() => page.click("#pageLayoutBtn"));
     await page.waitForSelector(`.compose-pop [data-brk="${key}"]`);
     await page.click(`.compose-pop [data-brk="${key}"]`);
     await idle(page);
@@ -63,7 +63,7 @@ const idle = (page) => page.waitForFunction(() => document.getElementById("loadi
   check("1c: nagłówek na obu stronach (druga dziedziczy)", v.every((x) => x.hdr === "NAGŁÓWEK FIRMY"), JSON.stringify(v.map((x) => x.hdr)));
   // 2. orientacja pozioma tylko drugiej sekcji
   await caret(/^akapit do podzia/, 2);
-  await page.click("#pageLayoutBtn");
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("layout")).then(() => page.click("#pageLayoutBtn"));
   await page.waitForSelector('.compose-pop [data-orient="landscape"]');
   await page.click('.compose-pop [data-orient="landscape"]');
   await idle(page);

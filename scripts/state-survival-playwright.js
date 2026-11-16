@@ -30,7 +30,7 @@ async function run() {
   await page.waitForSelector(".docx-preview-host p", { timeout: 20000 });
   await page.evaluate(() => document.getElementById("heroSplash")?.remove());
   await idle(page);
-  await page.click('.mode-btn[data-mode="edit"]');
+  await page.evaluate(() => document.querySelector('.mode-btn[data-mode="edit"]').click());
 
   const markers = [];
   let n = 0;
@@ -86,10 +86,10 @@ async function run() {
   });
   await step("język PL → EN → PL", async () => { await page.evaluate(() => { setLanguage("en"); setLanguage("pl"); }); });
   await step("motyw jasny ⇄ ciemny", async () => { await page.evaluate(() => { toggleTheme(); toggleTheme(); }); });
-  await step("Czytanie → Edycja", async () => { await page.click('.mode-btn[data-mode="read"]'); await page.waitForTimeout(200); await page.click('.mode-btn[data-mode="edit"]'); });
+  await step("Czytanie → Edycja", async () => { await page.evaluate(() => document.querySelector('.mode-btn[data-mode="read"]').click()); await page.waitForTimeout(200); await page.evaluate(() => document.querySelector('.mode-btn[data-mode="edit"]').click()); });
   await step("zoom +, −, Dopasuj (komputer)", async () => { await page.click("#zoomInBtn"); await page.click("#zoomOutBtn"); await page.evaluate(() => applyFitToWidth()); });
   await step("pinch (zatwierdzenie zoomu)", async () => { await page.evaluate(() => { commitDocZoom(1.4); commitDocZoom(1); }); });
-  await step("tryb skupienia wł./wył.", async () => { await page.click("#focusModeBtn"); await page.waitForTimeout(300); await page.keyboard.press("Escape"); await page.waitForTimeout(300); });
+  await step("tryb skupienia wł./wył.", async () => { await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("view")).then(() => page.click("#focusModeBtn")); await page.waitForTimeout(300); await page.keyboard.press("Escape"); await page.waitForTimeout(300); });
   await step("panel otwarty / zamknięty", async () => { await page.evaluate(() => { setSidebarOpen(true); setSidebarOpen(false); setSidebarOpen(true); }); });
   await step("panele z leniwym kodem (Statystyki, Recenzja, Formularz, Eksport, Metadane)", async () => {
     await page.evaluate(async () => {

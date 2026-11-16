@@ -53,7 +53,7 @@ async function run() {
     if (!(await page.evaluate((id) => document.getElementById(id).open, id))) await page.click(`#${id} > summary`);
     await page.waitForTimeout(400);
   };
-  const editMode = async () => { await page.click('.mode-btn[data-mode="edit"]'); await page.waitForTimeout(400); };
+  const editMode = async () => { await page.evaluate(() => document.querySelector('.mode-btn[data-mode="edit"]').click()); await page.waitForTimeout(400); };
 
   // ── 1. cofanie wstawienia z panelu (placeholder) — pisanie przed nim zostaje ──
   await editMode();
@@ -66,7 +66,7 @@ async function run() {
   await page.waitForTimeout(300);
   let f = await fileParas();
   const withPh = f[1].text;
-  await page.click("#undoBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#undoBtn").then(async () => page.click("#undoBtn"));
   await page.waitForTimeout(700);
   f = await fileParas();
   check("↶ po „Wstaw placeholder” usuwa sam placeholder, wpisane wcześniej „PRZED” zostaje",
@@ -91,7 +91,7 @@ async function run() {
   check("wklejenie HTML: pogrubienie zostaje, akapity jako akapity, bez obcych krojów/kolorów/skryptów",
     /Wklejony tekst$/.test(f[3].text) && /<w:b w:val="1"\/><\/w:rPr><w:t>Wklejony/.test(f[3].xml) && f[4]?.text === "drugi akapit" && !/Comic|alert|color/.test(f[3].xml + f[4]?.xml) && f.length === parasBefore + 1,
     `${parasBefore} → ${f.length} akapitów; ${f[3].xml.slice(-300)}`);
-  await page.click("#undoBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#undoBtn").then(async () => page.click("#undoBtn"));
   await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 15000 });
   await page.waitForTimeout(700);
   f = await fileParas();
@@ -114,7 +114,7 @@ async function run() {
     const r = document.createRange(); r.setStart(n, 0); r.setEnd(n, 7);
     const s = getSelection(); s.removeAllRanges(); s.addRange(r); p.focus();
   });
-  await page.click("#fmtBold");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtBold").then(async () => page.click("#fmtBold"));
   await page.waitForTimeout(300);
   await openPanel("panel-structure");
   const picked = await page.evaluate(() => {
@@ -203,7 +203,7 @@ async function run() {
   await page.waitForTimeout(150);
   const z1 = await page.textContent("#zoomNow");
   check("zoom +: procent rośnie", parseInt(z1, 10) > parseInt(z0, 10), `${z0} → ${z1}`);
-  await page.click("#focusModeBtn");
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("view")).then(() => page.click("#focusModeBtn"));
   await page.waitForTimeout(300);
   const focus = await page.evaluate(() => document.documentElement.classList.contains("focus-mode") || document.body.classList.contains("focus-mode"));
   await page.keyboard.press("Escape");

@@ -67,7 +67,7 @@ async function run() {
   }));
   const openMenu = async () => {
     await settle();
-    await page.click("#fmtSpacingBtn");
+    await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtSpacingBtn").then(async () => page.click("#fmtSpacingBtn"));
     await page.waitForSelector(".compose-pop-spacing .compose-item", { timeout: 8000 });
   };
   const pick = async (sel) => {
@@ -179,7 +179,7 @@ async function run() {
   const p1 = await savedPPr(page, "Pierwszy akapit"), p2 = await savedPPr(page, "Drugi akapit");
   check("zaznaczenie 2 akapitów → oba podwójna interlinia (480)", p1?.spacing?.line === "480" && p2?.spacing?.line === "480", JSON.stringify({ p1, p2 }));
   await settle();
-  await page.click("#undoBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#undoBtn").then(async () => page.click("#undoBtn"));
   await idle(page);
   check("Cofnij → interlinia 1,5 wraca w drugim akapicie", (await savedPPr(page, "Drugi akapit"))?.spacing?.line === "360", JSON.stringify(await savedPPr(page, "Drugi akapit")));
 
@@ -187,7 +187,7 @@ async function run() {
   await caretIn(page, "Pierwszy akapit");
   await page.evaluate(() => composeUi.applyList ? composeUi.applyList("bullet") : null);
   if (!(await page.evaluate(() => typeof composeUi.applyList === "function"))) {
-    await page.click("#fmtListBtn");
+    await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtListBtn").then(async () => page.click("#fmtListBtn"));
     await page.waitForSelector(".compose-pop .compose-item");
     await page.evaluate(() => [...document.querySelectorAll(".compose-pop .compose-item")][0].click());
   }

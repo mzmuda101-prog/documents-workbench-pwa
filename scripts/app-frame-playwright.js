@@ -93,9 +93,11 @@ async function desktop(browser) {
 
   // „Aktualizuj”/„Zapisz” klikalne przy otwartym panelu — nic ich nie zasłania
   const heroClickable = await page.evaluate(() => {
-    const b = document.getElementById("heroSaveBtn").getBoundingClientRect();
+    // wstążka (ribbon.js): w Czytaniu w miejscu „Zapisz” stoi „Edytuj”
+    const el = document.querySelector("body.rb-reading.has-document .rb-edit") || document.getElementById("heroSaveBtn");
+    const b = el.getBoundingClientRect();
     const top = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
-    return !!top && !!top.closest("#heroSaveBtn");
+    return !!top && !!top.closest("#heroSaveBtn, .rb-edit");
   });
   check("nagłówek klikalny przy otwartym panelu", heroClickable);
 
@@ -130,7 +132,7 @@ async function desktop(browser) {
 
   // Czytanie / Edycja
   const ro = await page.evaluate(() => ({ fmtHidden: document.getElementById("formatToolbar").classList.contains("hidden"), editable: document.querySelector(".docx-preview-host p")?.isContentEditable }));
-  await page.click('.mode-btn[data-mode="edit"]');
+  await page.evaluate(() => document.querySelector('.mode-btn[data-mode="edit"]').click());
   const ed = await page.evaluate(() => ({ fmtHidden: document.getElementById("formatToolbar").classList.contains("hidden"), editable: document.querySelector(".docx-preview-host p")?.isContentEditable, pressed: document.querySelector('.mode-btn[data-mode="edit"]').getAttribute("aria-pressed") }));
   check("Czytanie → Edycja: edycja w podglądzie, B/I/U widoczne", ro.fmtHidden && !ro.editable && !ed.fmtHidden && ed.editable && ed.pressed === "true", JSON.stringify({ ro, ed }));
 

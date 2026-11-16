@@ -26,7 +26,7 @@ async function run() {
   await page.keyboard.type("Nadrzędny punkt");
   await page.keyboard.press("Enter");
   await page.keyboard.type("Podpunkt");
-  await page.click("#fmtListBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtListBtn").then(async () => page.click("#fmtListBtn"));
   await page.click('.compose-pop-list .compose-item-label:text-is("Lista punktowana")');
   await page.waitForTimeout(500);
 

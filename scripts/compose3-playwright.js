@@ -29,7 +29,7 @@ const savedZip = async (page) => {
   return JSZip.loadAsync(Buffer.from(b64, "base64"));
 };
 const tableTool = async (page, label) => {
-  await page.click("#tableToolsBtn");
+  await page.waitForFunction(() => !document.getElementById("tableToolsBtn").hidden).then(() => page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("table"))).then(() => page.click("#tableToolsBtn"));
   await page.click(`.compose-pop-tabletools .compose-item-label:text-is("${label}")`);
   await idle(page);
 };
@@ -59,7 +59,7 @@ async function run() {
   // ── tabela ─────────────────────────────────────────────────────────────────
   await page.keyboard.type("Tabela poniżej:");
   check("poza tabelą przycisku „Tabela” nie ma", await page.evaluate(() => document.getElementById("tableToolsBtn").hidden));
-  await page.click("#insertMenuBtn");
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.click("#insertMenuBtn"));
   await page.click(".compose-pop-insert .compose-item-label:text-is('Tabela')");
   await page.hover(".table-pick button[data-r='2'][data-c='3']");
   const label = await page.textContent(".table-pick-size");
@@ -93,7 +93,7 @@ async function run() {
   check("„Usuń wiersz”, „Usuń kolumnę”", JSON.stringify(await tables(page)) === JSON.stringify(["A1|B1|C1 / A2|B2|C2 / ||"]), JSON.stringify(await tables(page)));
   const undoLabel = await page.getAttribute("#undoBtn", "aria-label");
   check("Cofnij nazywa krok „tabela”", /tabela/.test(undoLabel || ""), undoLabel);
-  await page.click("#undoBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#undoBtn").then(async () => page.click("#undoBtn"));
   await idle(page);
   check("Cofnij przywraca kolumnę", JSON.stringify(await tables(page)) === JSON.stringify(["A1|B1|X|C1 / A2|B2||C2 / |||"]) || (await tables(page))[0].split(" / ")[0].split("|").length === 4, JSON.stringify(await tables(page)));
   let zip = await savedZip(page);

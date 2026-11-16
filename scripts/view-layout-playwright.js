@@ -109,7 +109,7 @@ async function run() {
   check("Esc zamyka dymek", await page.evaluate(() => document.getElementById("viewPop").hidden));
 
   // niezapisany tekst + miejsce w dokumencie
-  await page.click('.mode-btn[data-mode="edit"]');
+  await page.evaluate(() => document.querySelector('.mode-btn[data-mode="edit"]').click());
   await page.evaluate(() => {
     const ps = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).filter((p) => p.isContentEditable && p.textContent.trim().length > 20);
     const el = ps[3];

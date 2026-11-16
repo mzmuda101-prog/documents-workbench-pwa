@@ -346,6 +346,7 @@ const dwbOpenDocs = (() => {
     const hero = document.querySelector(".hero");
     const right = hero?.querySelector(".hero-right");
     if (!tabsEl || !right) return;
+    if (document.body.classList.contains("rb-on")) return; // wstążka (ribbon.js): karty stoją na dolnym pasku
     if (!tabsHome) {
       tabsHome = document.createComment(" miejsce kart pod nagłówkiem ");
       tabsEl.before(tabsHome);

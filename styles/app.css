@@ -1869,12 +1869,12 @@ body.kb-open .doc-island:not(:focus-within) > * { pointer-events: none; }
      z liczbą elementów (w Sheet: cień na przełączniku × wiersze = lag przewijania; blur na
      komórkach = 2,5× dłuższa klatka). NIE gasimy po wykryciu Safari — PWA z ekranu
      głównego nie ma „Safari” w UA — tylko dla całego dotyku. */
-  .hero, .panel, .status-bar, .sidebar-handle, .loading-overlay, .sidebar-scrim, .lang-switch {
+  .hero, .ribbon, .panel, .status-bar, .sidebar-handle, .loading-overlay, .sidebar-scrim, .lang-switch {
     -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
   }
   /* Szkło bez rozmycia = zwykła przezroczystość (na iPhonie przez karty panelu było widać
      tekst dokumentu). Na dotyku tła pełne. */
-  .hero, .status-bar { background: var(--glass-sheen), var(--surface); }
+  .hero, .ribbon, .status-bar { background: var(--glass-sheen), var(--surface); }
   .panel { background: var(--surface); }
   /* toast bez rozmycia był przezroczysty i nachodził na pasek — nieczytelny */
   .toast, .loading-card { background: var(--surface); }
@@ -3948,3 +3948,150 @@ body.dwb-painting .docx-preview-host * {
   margin: 8px 0 4px; padding: 10px 12px; min-height: 44px; border: 1px solid var(--border-subtle); border-radius: 10px;
   background: #fff; color: #000; overflow: hidden; text-align: center; overflow-wrap: anywhere;
 }
+
+/* ── Wstążka (app/ribbon.js; docs/WSTAZKA.md, makieta docs/makiety/wstazka-v4.html) ──────────
+   Od 769 px: dwa rzędy zamiast nagłówka i paska nad dokumentem. Te same kontrolki (te same id)
+   przenoszą się do gniazd .rb-slot; tu tylko ich wygląd w nowym miejscu. */
+.ribbon { --rb-ctx: #7a3fb5; --rb-ctx-bg: #f1e8fa; }
+[data-theme="dark"] .ribbon { --rb-ctx: #c49af5; --rb-ctx-bg: #2c2140; }
+.ribbon[hidden] { display: none; }
+body.rb-on .hero, body.rb-on .hero-grip { display: none !important; }
+body.rb-on .doc-toolbar-row { display: none; }
+body.rb-on .doc-toolbar { padding: 0; border-bottom: 0; gap: 0; }
+body.rb-on .doc-toolbar .section-strip:not([hidden]) { padding: 6px 12px; border-bottom: 1px solid var(--border-subtle); }
+.rb-slot { display: contents; }
+.ribbon {
+  position: relative; z-index: 30; margin-bottom: 12px; border-radius: var(--r-xl);
+  background: var(--glass-sheen), var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass); backdrop-filter: var(--glass);
+  border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow);
+}
+.rb-r1 { display: flex; align-items: center; gap: 6px; height: 44px; padding: 0 8px; border-bottom: 1px solid var(--border-subtle); }
+.rb-r2 { display: flex; align-items: center; gap: 2px; height: 44px; padding: 0 6px; }
+body.rb-reading .rb-r2, body:not(.has-document) .rb-r2 { display: none; }
+body.rb-reading .rb-r1, body:not(.has-document) .rb-r1 { border-bottom: 0; }
+.rb-logo { display: inline-flex; flex: none; }
+.rb-file {
+  flex: none; height: 28px; padding: 0 12px; border: 0; border-radius: 8px; cursor: pointer;
+  background: var(--accent); color: var(--on-accent); font: inherit; font-size: 13px; font-weight: 600;
+}
+@media (hover: hover) { .rb-file:hover { background: var(--accent-h); } }
+.rb-file:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* nazwa pliku: w Czytaniu i bez dokumentu (zamiast kart, jak w makiecie) */
+.rb-name { display: none; flex: 1 1 auto; min-width: 0; align-items: baseline; gap: 10px; padding-left: 6px; }
+body.rb-reading .rb-name, body:not(.has-document) .rb-name { display: flex; }
+body.rb-reading .rb-r1 > .rb-strip, body:not(.has-document) .rb-r1 > .rb-strip { display: none; }
+.rb-name .hero-title { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0; }
+.rb-name .hero-meta { display: flex; font-size: 12px; }
+/* karty */
+.rb-r1 > .rb-strip { flex: 1 1 auto; height: 44px; }
+.rb-r1 .rb-sc { align-items: stretch; }
+.rb-tab {
+  position: relative; flex: none; padding: 0 10px; border: 0; background: none; cursor: pointer;
+  color: var(--ink-2); font: inherit; font-size: 13px; font-weight: 500; white-space: nowrap; border-radius: 8px 8px 0 0;
+}
+@media (hover: hover) { .rb-tab:hover { background: var(--accent-light); } }
+.rb-tab[aria-selected="true"] { color: var(--accent); font-weight: 600; }
+.rb-tab[aria-selected="true"]::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: currentColor; }
+.rb-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.rb-tab[hidden] { display: none; }
+.rb-tab.rb-ctx { color: var(--rb-ctx); }
+.rb-tab.rb-ctx::before { content: ""; position: absolute; top: 0; left: 6px; right: 6px; height: 3px; border-radius: 0 0 3px 3px; background: var(--rb-ctx); }
+.rb-tab.rb-ctx.is-fresh { animation: rb-ctx-in .6s ease-out 2; }
+@keyframes rb-ctx-in { 50% { background: var(--rb-ctx-bg); } }
+/* przewijany rząd z podpowiedzią */
+.rb-strip { display: flex; align-items: stretch; min-width: 0; }
+.rb-sc { position: relative; display: flex; align-items: center; gap: 2px; flex: 1 1 auto; min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; scroll-snap-type: x proximity; }
+.rb-sc::-webkit-scrollbar { display: none; }
+.rb-sc > *, .rb-panel > .rb-g { scroll-snap-align: start; }
+.rb-strip.has-r .rb-sc { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent); }
+.rb-strip.has-l .rb-sc { -webkit-mask-image: linear-gradient(90deg, transparent, #000 40px); mask-image: linear-gradient(90deg, transparent, #000 40px); }
+.rb-strip.has-l.has-r .rb-sc { -webkit-mask-image: linear-gradient(90deg, transparent, #000 40px, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(90deg, transparent, #000 40px, #000 calc(100% - 40px), transparent); }
+.rb-nudge {
+  display: none; align-self: center; align-items: center; gap: 2px; flex: none; height: 26px; min-width: 26px; padding: 0 5px;
+  border: 1px solid var(--border); border-radius: 13px; background: var(--surface); color: var(--accent); cursor: pointer;
+  font: inherit; font-size: 11px; font-weight: 700; box-shadow: 0 1px 3px rgba(16, 32, 64, .12);
+}
+.rb-strip.has-l .rb-nudge-l, .rb-strip.has-r .rb-nudge-r { display: inline-flex; }
+.rb-nudge-l { margin-right: 4px; } .rb-nudge-r { margin-left: 4px; }
+@media (hover: hover) { .rb-nudge:hover { background: var(--accent-light); } }
+.rb-nudge.is-hint { animation: rb-nudge .5s ease-in-out 2; }
+@keyframes rb-nudge { 50% { transform: translateX(3px); background: var(--accent-light); } }
+@media (prefers-reduced-motion: reduce) { .rb-nudge.is-hint, .rb-tab.rb-ctx.is-fresh { animation: none; } .rb-sc { scroll-behavior: auto; } }
+/* rząd poleceń */
+.rb-r2 > .rb-strip { flex: 1 1 auto; height: 44px; }
+.rb-panel { display: flex; align-items: center; gap: 0; }
+.rb-panel[hidden] { display: none; }
+.rb-g { display: flex; align-items: center; gap: 2px; flex: none; padding: 0 6px; border-right: 1px solid var(--border-subtle); }
+.rb-panel > .rb-g:last-child { border-right: 0; }
+.rb-qa { display: flex; align-items: center; flex: none; padding-right: 6px; margin-right: 2px; border-right: 1px solid var(--border); }
+.ribbon .tb-btn { height: 32px; min-width: 32px; border-color: transparent; background: none; }
+@media (hover: hover) { .ribbon .tb-btn:hover { border-color: transparent; background: var(--accent-light); } }
+.ribbon .tb-btn.is-on, .ribbon .tb-btn[aria-pressed="true"] { border-color: var(--accent-border); background: var(--accent-light); color: var(--accent); }
+.ribbon .tb-btn:disabled { background: none; }
+.rb-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 500; white-space: nowrap; }
+.rb-btn.rb-ic { padding: 0; width: 32px; justify-content: center; }
+.rb-btn svg { flex: none; color: var(--ink-2); }
+.rb-btn[aria-pressed="true"] svg { color: var(--accent); }
+.rb-dd { opacity: .6; margin-left: -2px; }
+.ribbon .tb-select { height: 30px; }
+body.rb-on .status-bar .zoom-group { margin-left: auto; padding: 0; border: 0; background: none; }
+body.rb-on .status-bar .zoom-group .tb-btn { min-width: 26px; height: 24px; font-size: 13px; }
+body.rb-on .status-bar .zoom-now { height: 24px; min-width: 46px; }
+body.rb-on .status-bar .log-panel { margin-left: 8px; }
+/* otwarte dokumenty: na dolnym pasku, jak w makiecie (etap 4 doda resztę) */
+body.rb-on .status-bar .doc-tabs:not([hidden]) { display: flex; flex: 0 1 auto; min-width: 0; margin: 0; padding: 0; border: 0; background: none; box-shadow: none; }
+.ribbon .format-toolbar, .ribbon .undo-group { border: 0; padding: 0; }
+.rb-panel #tableToolsBtn[hidden] { display: inline-flex; }
+/* prawa strona rzędu 1: Szukaj · tryb · Zapisz · ⋯ */
+.rb-act { display: flex; align-items: center; gap: 4px; flex: none; margin-left: auto; }
+.rb-act .doc-search { width: 190px; height: 30px; transition: width var(--t); }
+.rb-act .doc-search:focus-within { width: 280px; }
+.rb-act .doc-search-nav .tb-btn { height: 30px; min-width: 30px; }
+.rb-act .hero-save { height: 30px; }
+.rb-mode {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 9px; cursor: pointer;
+  border: 1px solid var(--accent-border); background: var(--accent-light); color: var(--accent); font: inherit; font-size: 13px; font-weight: 600;
+}
+.rb-mode-ico { display: inline-flex; }
+.rb-mode[data-mode="suggest"] { border-color: #e6c36a; background: #fff4d6; color: #7a5200; }
+[data-theme="dark"] .rb-mode[data-mode="suggest"] { border-color: #7a6020; background: #3a2e10; color: #f0c860; }
+.rb-mode:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Czytanie: „Edytuj” zamiast „Zapisz” (Zapisz zostaje, gdy są niezapisane zmiany) */
+.rb-edit { display: none; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 0; border-radius: 9px; cursor: pointer; background: var(--accent); color: var(--on-accent); font: inherit; font-size: 13px; font-weight: 600; }
+@media (hover: hover) { .rb-edit:hover { background: var(--accent-h); } }
+.rb-edit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+body.rb-reading.has-document .rb-edit { display: inline-flex; }
+body.rb-reading .rb-act .hero-save:not(.is-dirty) { display: none; }
+/* menu trybu: te same przyciski .mode-btn, ułożone w listę z opisem */
+.rb-modemenu {
+  position: absolute; z-index: 40; min-width: 260px; padding: 6px; border-radius: 12px;
+  background: var(--surface); border: 1px solid var(--border); box-shadow: 0 2px 4px rgba(16, 32, 64, .08), 0 16px 32px -12px rgba(16, 32, 64, .35);
+}
+.rb-modemenu[hidden] { display: none; }
+.rb-modemenu .mode-switch { display: grid; gap: 2px; padding: 0; border: 0; background: none; }
+.rb-modemenu .mode-pill { display: none; }
+.rb-modemenu .mode-btn {
+  display: grid; grid-template-columns: 20px minmax(0, 1fr); column-gap: 10px; align-items: center; justify-items: start;
+  min-height: 44px; padding: 6px 10px; text-align: left; background: none; color: var(--ink); border-radius: 8px;
+}
+.rb-modemenu .mode-btn > svg, .rb-modemenu .mode-btn .mode-ico { display: block; grid-row: 1 / span 2; color: var(--ink-2); }
+.rb-modemenu .mode-btn .mode-txt { display: block; font-weight: 600; }
+.rb-modemenu .mode-btn.is-active, .rb-modemenu .mode-switch.has-pill .mode-btn.is-active { background: var(--accent-light); color: var(--accent); }
+.rb-modemenu .mode-btn.is-active > svg, .rb-modemenu .mode-btn.is-active .mode-ico { color: var(--accent); }
+@media (hover: hover) { .rb-modemenu .mode-btn:hover { background: var(--accent-light); } }
+.rb-only, .rb-mdesc { display: none; }
+.rb-modemenu .rb-only { display: block; font-weight: 600; }
+.rb-modemenu .rb-mdesc { display: block; grid-column: 2; font-size: 11.5px; font-weight: 400; color: var(--muted); }
+/* węższe okno: napisy przy trybie i Zapisz znikają, szukanie zwija się do ikony (jak w makiecie) */
+@media (max-width: 1000px) {
+  .rb-mode-txt, .rb-act .hero-save-label { display: none; }
+  .rb-act .hero-save-icon { display: block; }
+  .rb-act .hero-save { padding: 0 10px; }
+  .rb-act .doc-search { width: 120px; }
+}
+/* tryb skupienia: tylko dokument — rząd poleceń znika, rząd 1 (karty, Zapisz, ⋯) zostaje */
+:root.focus-mode body.rb-on .rb-r2 { display: none; }
+:root.focus-mode body.rb-on .rb-r1 { border-bottom: 0; }
+:root.focus-mode body.rb-on .ribbon { margin-bottom: 4px; }
+@media print { .ribbon { display: none !important; } }

@@ -109,7 +109,7 @@ async function run() {
   check("stare pole wyboru ma w podglądzie kratkę ☐", glyph === "☐", glyph);
 
   // ── BŁĄD: edycja akapitu obok pola nie może rozbić kontrolki ───────────────
-  await page.click('.mode-btn[data-mode="edit"]');
+  await page.evaluate(() => document.querySelector('.mode-btn[data-mode="edit"]').click());
   await page.evaluate(() => {
     const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[12];
     placeCaret(p, p.textContent.length);
@@ -141,7 +141,7 @@ async function run() {
   check("dopisany wcześniej tekst przetrwał", s.paras[12] === "Uwagi można pisać tu zwyczajnie. Dopisane.", s.paras[12]);
   const undoLabel = await page.getAttribute("#undoBtn", "aria-label");
   check("Cofnij: „pole formularza”", /pole formularza/.test(undoLabel || ""), undoLabel);
-  await page.click("#undoBtn");
+  await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#undoBtn").then(async () => page.click("#undoBtn"));
   await idle(page);
   s = await fileState(page);
   check("Cofnij odznacza", s.sdt["15"].checked === "0" && s.sdt["15"].text === "☐", JSON.stringify(s.sdt["15"]));
