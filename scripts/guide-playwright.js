@@ -133,7 +133,7 @@ async function run() {
   await page.waitForTimeout(400);
   // szeroki ekran: komentarz w dymku na marginesie (review-margin.js), wąski — w karcie nad tekstem
   check("rozdz. 13: karta komentarza z ołówkiem (poprawianie treści)", await page.evaluate(() => !!document.querySelector('.comment-card .cc-edit, .mk-comment.is-active .mk-actions .mk-btn[aria-label="Edytuj komentarz"], .mk-comment.is-active .mk-actions .mk-btn[aria-label="Edit comment"]')));
-  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("layout")).then(() => page.click("#pageLayoutBtn"));
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("layout")).then(() => page.evaluate(() => document.getElementById("pageLayoutBtn").click()));
   await page.click('.compose-pop [data-preset="narrow"]');
   await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 10000 });
   await page.waitForTimeout(500);

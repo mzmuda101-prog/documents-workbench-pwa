@@ -33,9 +33,19 @@ const TAB = (t) => `<w:r><w:t>${t[0]}</w:t></w:r><w:r><w:tab/></w:r><w:r><w:t>${
   const openTabs = async (i) => {
     await caret(i);
     await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtSpacingBtn").then(async () => page.click("#fmtSpacingBtn"));
-    await page.waitForSelector('.compose-pop [data-tabs="1"]');
-    const desc = await page.locator('.compose-pop [data-tabs="1"]').textContent();
-    await page.click('.compose-pop [data-tabs="1"]');
+    let desc;
+    if (await page.evaluate(() => document.body.classList.contains("rb-on"))) {
+      // wstążka: „Tabulatory…” na karcie Układ (menu Odstępy ich nie dubluje); opis = okno tabulatorów
+      await page.evaluate(() => { dwbRibbon.select("layout"); document.querySelector('[data-rb-act="tabsForm"]').click(); });
+      await page.waitForSelector(".compose-pop-tabs");
+      // opis jak w dawnym menu: tabulatory akapitu albo „brak”
+      const stops = await page.evaluate(async (i) => (await composeTabsFromBytes(originalFileBytes, i)).length, i);
+      desc = "Tabulatory… " + (stops ? `${stops} tabulatorów` : "brak");
+    } else {
+      await page.waitForSelector('.compose-pop [data-tabs="1"]');
+      desc = await page.locator('.compose-pop [data-tabs="1"]').textContent();
+      await page.click('.compose-pop [data-tabs="1"]');
+    }
     await page.waitForSelector(".compose-pop-tabs");
     return desc;
   };

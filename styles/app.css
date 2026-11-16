@@ -4045,6 +4045,9 @@ html.dwb-debug body.rb-on .status-bar .log-panel { display: block; margin-left: 
 body.rb-on .status-bar .doc-tabs:not([hidden]) { display: flex; flex: 0 1 auto; min-width: 0; margin: 0; padding: 0; border: 0; background: none; box-shadow: none; }
 .ribbon .format-toolbar, .ribbon .undo-group { border: 0; padding: 0; }
 .rb-panel #tableToolsBtn[hidden] { display: inline-flex; }
+/* pełne menu „Wstaw” i całe okienko „Układ” dublowały przyciski karty — przy wstążce schowane
+   (zostają w DOM dla skrótów i telefonu); ich pozycje mają własne przyciski */
+.ribbon #insertMenuBtn, .ribbon #pageLayoutBtn { display: none; }
 /* pasek koloru pod ikoną (Wyróżnienie) — jak pod „A” koloru czcionki */
 .rb-btn .rb-bar { position: absolute; left: 9px; right: 9px; bottom: 5px; height: 3px; border-radius: 1px; }
 .rb-btn:has(.rb-bar) svg { margin-top: -3px; }
@@ -4156,6 +4159,10 @@ body:not(.has-document) .bs-needs-doc { display: none; }
 .bs-opts { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 16px 20px; align-items: center; max-width: 620px; }
 .bs-opts > :not(.bs-lbl) { justify-self: start; }
 .bs-lbl { color: var(--muted-strong); }
+/* Opcje: ustawienia widoku dokumentu (dawny panel Widok) — bez dubli: powiększenie i wybór widoku są
+   przy procentach na dolnym pasku, skróty sekcji na karcie Widok */
+.bs-sec #viewLayoutPanel, .bs-sec #zoomSliderField, .bs-sec #zoomReflowHint, .bs-sec label:has(#showSectionChips) { display: none; }
+.bs-sec .bs-opts + .rb-slot details.panel { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-subtle); }
 .bs-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 .bs-row .btn, .bs-opts .btn { display: inline-flex; align-items: center; gap: 8px; }
 /* menu ⋯ przy wstążce: tylko to, czego nie ma w Plik (odświeżenie, inne aplikacje, stan, wersja) */
@@ -4168,3 +4175,5 @@ body.rb-on #appMenu > .app-menu-sep:has(+ .app-menu-cap + [href]), body.rb-on #a
 .bs-opts .theme-seg button { padding: 6px 14px; }
 /* wstążka: powiadomienia nad dolnym paskiem (tam stoi powiększenie i karty dokumentów) */
 body.rb-on .toast-container { bottom: 64px; }
+/* „niezapisane: N zmian” dublowało licznik na „Zapisz” (przy wstążce zawsze widoczny) — na telefonie zostaje */
+body.rb-on .status-bar .status-dirty { display: none; }

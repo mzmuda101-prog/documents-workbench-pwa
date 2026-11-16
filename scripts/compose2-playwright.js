@@ -42,7 +42,7 @@ const savedZip = async (page) => {
   return JSZip.loadAsync(Buffer.from(b64, "base64"));
 };
 const insertMenu = async (page, label) => {
-  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.click("#insertMenuBtn"));
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.evaluate(() => document.getElementById("insertMenuBtn").click()));
   await page.click(`.compose-pop-insert .compose-item-label:text-is("${label}")`);
 };
 
@@ -70,7 +70,9 @@ async function run() {
   await page.keyboard.press("Enter");
   await page.keyboard.type("mleko");
   await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtListBtn").then(async () => page.click("#fmtListBtn"));
-  await page.click(".compose-pop-list .compose-item-label:text-is('Lista punktowana')");
+  // wstążka: „Punktory” to przycisk obok ▾ (menu go nie dubluje)
+  if (await page.evaluate(() => document.body.classList.contains("rb-on"))) await page.click('[data-rb-act="bullets"]');
+  else await page.click(".compose-pop-list .compose-item-label:text-is('Lista punktowana')");
   await idle(page);
   await caretEnd(page, 1);
   await page.keyboard.press("Enter"); await page.keyboard.type("chleb");
@@ -94,7 +96,8 @@ async function run() {
   check("Enter w pustym punkcie kończy listę (dalej zwykły akapit)", ps.length === 5 && !ps[4].list && ps[4].text === "Kroki:", JSON.stringify(ps.map((p) => [p.text, p.list])));
   await page.keyboard.press("Enter"); await page.keyboard.type("Krok pierwszy");
   await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtListBtn").then(async () => page.click("#fmtListBtn"));
-  await page.click(".compose-pop-list .compose-item-label:text-is('Lista numerowana')");
+  if (await page.evaluate(() => document.body.classList.contains("rb-on"))) await page.click('[data-rb-act="numbering"]'); // wstążka: przycisk obok ▾
+  else await page.click(".compose-pop-list .compose-item-label:text-is('Lista numerowana')");
   await idle(page);
   await caretEnd(page, 5);
   await page.keyboard.press("Enter"); await page.keyboard.type("Krok drugi");
@@ -109,7 +112,9 @@ async function run() {
   check("Backspace na początku punktu zdejmuje numerację, tekst zostaje", !ps[6].list && ps[6].text === "Krok drugi" && ps[5].list, JSON.stringify(ps.slice(5).map((p) => [p.text, p.list])));
   await caretEnd(page, 1);
   await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtListBtn").then(async () => page.click("#fmtListBtn"));
-  await page.click(".compose-pop-list .compose-item-label:text-is('Lista punktowana')"); // drugi raz = zdejmij
+  // wstążka: „Punktory” to przycisk obok ▾ (menu go nie dubluje)
+  if (await page.evaluate(() => document.body.classList.contains("rb-on"))) await page.click('[data-rb-act="bullets"]');
+  else await page.click(".compose-pop-list .compose-item-label:text-is('Lista punktowana')"); // drugi raz = zdejmij
   await idle(page);
   ps = await paras(page);
   check("ta sama lista drugi raz zdejmuje ją z akapitu", !ps[1].list && ps[2].list, JSON.stringify(ps.slice(0, 4).map((p) => [p.text, p.list])));
@@ -234,7 +239,7 @@ async function run() {
   await page.keyboard.type("Zakończenie");
   await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtParaStyle").then(async () => page.selectOption("#fmtParaStyle", "h2"));
   await idle(page);
-  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.click("#insertMenuBtn"));
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.evaluate(() => document.getElementById("insertMenuBtn").click()));
   const tocLabel = await page.evaluate(() => [...document.querySelectorAll(".compose-pop-insert .compose-item-label")].map((x) => x.textContent).find((x) => /spis/i.test(x)));
   check("gdy spis jest — w menu „Zaktualizuj spis treści”", tocLabel === "Zaktualizuj spis treści", tocLabel);
   await page.click(`.compose-pop-insert .compose-item-label:text-is("Zaktualizuj spis treści")`);

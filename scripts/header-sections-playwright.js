@@ -80,7 +80,7 @@ const idle = (page) => page.waitForFunction(() => document.getElementById("loadi
 
   // podział sekcji po „Pierwsza sekcja…” (Układ → Podziały → następna strona)
   await caret(/^Pierwsza/, 29);
-  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("layout")).then(() => page.click("#pageLayoutBtn"));
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("layout")).then(() => page.evaluate(() => document.getElementById("pageLayoutBtn").click()));
   await page.waitForSelector('.compose-pop [data-brk="nextPage"]');
   await page.click('.compose-pop [data-brk="nextPage"]');
   await idle(page);

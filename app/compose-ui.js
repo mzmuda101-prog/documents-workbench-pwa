@@ -616,12 +616,12 @@ const composeUi = (() => {
       label: t("listBullet"), desc: "• • •",
       icon: ICON('<line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4.5" cy="6" r="1" fill="currentColor"/><circle cx="4.5" cy="12" r="1" fill="currentColor"/><circle cx="4.5" cy="18" r="1" fill="currentColor"/>'),
       onPick: () => applyList("bullet"),
-    });
+    }).dataset.listBasic = "1";
     popItem(el, {
       label: t("listNumber"), desc: "1. 2. 3.",
       icon: ICON('<line x1="10" y1="6" x2="21" y2="6"/><line x1="10" y1="12" x2="21" y2="12"/><line x1="10" y1="18" x2="21" y2="18"/><path d="M4 6h1v4"/><path d="M4 10h2"/><path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/>'),
       onPick: () => applyList("number"),
-    });
+    }).dataset.listBasic = "1";
     const p = activeParagraph() || lastP;
     const inList = !!p && isListParagraph(p);
     // biblioteka formatów (jak strzałka przy numeracji / punktorach w Wordzie): przy kursorze w liście —
@@ -4540,7 +4540,7 @@ const composeUi = (() => {
   insertBtn?.addEventListener("click", () => openPop(insertBtn, buildInsertMenu));
   alignBtn?.addEventListener("mousedown", (e) => e.preventDefault());
   listBtn?.addEventListener("mousedown", (e) => e.preventDefault());
-  listBtn?.addEventListener("click", () => openPop(listBtn, buildListMenu));
+  listBtn?.addEventListener("click", () => openPop(listBtn, document.body.classList.contains("rb-on") ? (el) => { buildListMenu(el); trimForRibbon(el, ["[data-list-basic]"], []); } : buildListMenu));
   // Aa — zmiana wielkości liter (jak w Wordzie); pozycje pokazują efekt na sobie
   const caseBtn = document.getElementById("fmtCaseBtn");
   caseBtn?.addEventListener("mousedown", (e) => e.preventDefault());
@@ -4552,7 +4552,10 @@ const composeUi = (() => {
   }));
   alignBtn?.addEventListener("click", () => openPop(alignBtn, buildAlignMenu));
   spacingBtn?.addEventListener("mousedown", (e) => e.preventDefault());
-  spacingBtn?.addEventListener("click", () => { spacingAnchor = spacingBtn; openPop(spacingBtn, buildSpacingMenu); });
+  spacingBtn?.addEventListener("click", () => {
+    spacingAnchor = spacingBtn;
+    openPop(spacingBtn, document.body.classList.contains("rb-on") ? async (el) => { await buildSpacingMenu(el); trimForRibbon(el, ["[data-indent]", "[data-more]", "[data-tabs]"], ["indentCap"]); } : buildSpacingMenu);
+  });
   styleSel?.addEventListener("change", () => applyStyle(styleSel.value));
   colorBtn?.addEventListener("mousedown", (e) => e.preventDefault());
   colorBtn?.addEventListener("click", () => openPop(colorBtn, buildColorMenu));
@@ -4912,7 +4915,19 @@ const composeUi = (() => {
   const openSymbolPicker = (anchor) => openPop(anchor, buildSymbolPicker);
   const insertToday = () => insertText(todayText());
   const openPageSetupPart = (anchor, part) => openPageSetup(anchor, null, part);
-  const openSpacingMenu = (anchor) => { spacingAnchor = anchor; openPop(anchor, buildSpacingMenu); };
+  // wstążka: jedna funkcja w jednym miejscu — z menu znika to, co ma własny przycisk na karcie
+  function trimForRibbon(el, sels, capKeys) {
+    sels.forEach((sel) => el.querySelectorAll(sel).forEach((n) => n.remove()));
+    const caps = capKeys.map((k) => t(k));
+    el.querySelectorAll(".compose-cap").forEach((c) => { if (caps.includes(c.textContent)) c.remove(); });
+  }
+  async function openLayoutForm(anchor) {
+    const ctx = await layoutAtCaret();
+    if (!ctx) return;
+    spacingAnchor = anchor;
+    openPop(anchor, (form) => buildLayoutForm(form, ctx));
+  }
+  const openFormFieldMenu = (anchor) => openPop(anchor, (el) => { el.classList.add("compose-pop-insert"); buildInsertMoreGroups(el); });
   async function openTabsForm(anchor) {
     const ctx = await layoutAtCaret();
     if (!ctx) return;
@@ -4935,5 +4950,5 @@ const composeUi = (() => {
     });
   }
 
-  return { openTablePicker, openSymbolPicker, pickImage, insertToday, openPageSetupPart, openSpacingMenu, openTabsForm, stepIndentAtCaret, openMenu, openFontForm, commentAction, commentById, showCommentById, commentRanges, richRunEl: (r) => richRunEl(r), openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, stampPageNumbers, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, clearIndentAt, hasTextRule, clearRuleAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
+  return { openTablePicker, openSymbolPicker, pickImage, insertToday, openPageSetupPart, openTabsForm, openLayoutForm, openFormFieldMenu, stepIndentAtCaret, openMenu, openFontForm, commentAction, commentById, showCommentById, commentRanges, richRunEl: (r) => richRunEl(r), openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, stampPageNumbers, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, clearIndentAt, hasTextRule, clearRuleAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
 })();

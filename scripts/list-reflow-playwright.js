@@ -27,7 +27,9 @@ async function run() {
   await page.keyboard.press("Enter");
   await page.keyboard.type("Podpunkt");
   await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtListBtn").then(async () => page.click("#fmtListBtn"));
-  await page.click('.compose-pop-list .compose-item-label:text-is("Lista punktowana")');
+  // wstążka: „Punktory” to przycisk obok ▾ (menu go nie dubluje)
+  if (await page.evaluate(() => document.body.classList.contains("rb-on"))) await page.click('[data-rb-act="bullets"]');
+  else await page.click(".compose-pop-list .compose-item-label:text-is('Lista punktowana')");
   await page.waitForTimeout(500);
 
   const itemLeft = () => page.evaluate(() => {

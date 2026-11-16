@@ -106,7 +106,7 @@ async function run() {
   check("dalej nie w tekście dokumentu (także w trybie Edycja)", await page.evaluate(() => !collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).some((p) => p.querySelector(".dwb-page-break"))));
 
   // opcja w panelu Widok: wyłączenie chowa granice i jest pamiętane
-  await page.evaluate(() => { setSidebarOpen(true); document.getElementById("panel-view").open = true; });
+  await page.evaluate(() => dwbShortcuts.openToolPanel("panel-view")); // przy wstążce: Plik → Opcje
   await page.click("#showPageBreaks");
   await page.waitForTimeout(300);
   check("wyłączona opcja: brak granic", await page.evaluate(() => document.querySelectorAll(".dwb-page-break").length === 0));

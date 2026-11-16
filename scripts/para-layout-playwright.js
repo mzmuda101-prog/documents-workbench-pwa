@@ -70,7 +70,22 @@ async function run() {
     await page.evaluate((s) => { if (typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn()) { if (document.body.classList.contains("rb-reading")) document.querySelector('.mode-btn[data-mode="edit"]').click(); dwbRibbon.reveal(s); } }, "#fmtSpacingBtn").then(async () => page.click("#fmtSpacingBtn"));
     await page.waitForSelector(".compose-pop-spacing .compose-item", { timeout: 8000 });
   };
+  const RB = { '[data-indent="more"]': ["home", "indent"], '[data-indent="less"]': ["home", "outdent"], "[data-more]": ["layout", "layoutForm"] };
   const pick = async (sel) => {
+    // wstążka: wcięcia ± i „Odstępy i wcięcia…” mają własne przyciski (menu ich nie dubluje)
+    if (RB[sel] && await page.evaluate(() => document.body.classList.contains("rb-on"))) {
+      // ta sama funkcja co przycisk wstążki (composeUi) — z czekaniem na koniec edycji
+      await page.evaluate(async ([tab, act]) => {
+        document.getElementById("fmtSpacingBtn").click(); // drugi klik zamyka menu
+        dwbRibbon.select(tab);
+        const b = document.querySelector(`[data-rb-act="${act}"]`);
+        if (act === "indent") await composeUi.stepIndentAtCaret(1);
+        else if (act === "outdent") await composeUi.stepIndentAtCaret(-1);
+        else await composeUi.openLayoutForm(b);
+      }, RB[sel]);
+      await settle();
+      return;
+    }
     const box = await page.evaluate((sel) => { const b = document.querySelector(`.compose-pop-spacing ${sel}`); const r = b?.getBoundingClientRect(); return r ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null; }, sel);
     if (!box) throw new Error(`brak pozycji ${sel}`);
     await page.mouse.click(box.x, box.y);
@@ -82,7 +97,11 @@ async function run() {
   await caretIn(page, "Drugi akapit");
   await openMenu();
   const items = await page.evaluate(() => [...document.querySelectorAll(".compose-pop-spacing .compose-item")].map((b) => b.textContent.trim()));
-  check("menu: 6 interlinii, odstępy, wcięcia, „Odstępy i wcięcia…”, „Tabulatory…”", items.length === 12 && items[0].startsWith("1,0") && items[1].startsWith("1,15") && items[11].startsWith("Tabulatory…"), items.join(" | "));
+  // wstążka: wcięcia ±, „Odstępy i wcięcia…” i „Tabulatory…” mają własne przyciski — menu ich nie dubluje
+  const rbMenu = await page.evaluate(() => document.body.classList.contains("rb-on"));
+  check("menu: 6 interlinii, odstępy" + (rbMenu ? " (reszta na wstążce)" : ", wcięcia, „Odstępy i wcięcia…”, „Tabulatory…”"),
+    rbMenu ? items.length === 8 && items[0].startsWith("1,0") && items[1].startsWith("1,15") && !items.some((x) => /Tabulatory|wcięcie/.test(x))
+      : items.length === 12 && items[0].startsWith("1,0") && items[1].startsWith("1,15") && items[11].startsWith("Tabulatory…"), items.join(" | "));
   const lhBefore = await page.evaluate(() => getComputedStyle([...document.querySelectorAll(".docx-editable-p")].find((x) => x.textContent.includes("Drugi"))).lineHeight);
   await pick('[data-line="360"]');
   let pp = await savedPPr(page, "Drugi akapit");

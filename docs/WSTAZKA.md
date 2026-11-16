@@ -82,6 +82,15 @@ Odstępstwo: czwarty kafelek „Nowy” to „Przewodnik po aplikacji” (istnie
 - „Przepisz” z ikoną zamiast znaku ✦; pole Szukaj szersze (napis się nie ucina).
 - Dziennik techniczny („Log”) przy wstążce schowany (trafia do zgłoszenia: Plik → Zgłoś błąd),
   widać go z `?debug`; powiadomienia stoją nad dolnym paskiem.
+- Druga runda (bez dubli w menu): menu Odstępy na Narzędziach głównych = interlinia i odstęp
+  przed/po (wcięcia ± są przyciskami, „Odstępy i wcięcia…” i Tabulatory… na karcie Układ);
+  Punktory ▾ bez „Punktory/Numerowanie” (są obok); pełne menu „Wstaw” i całe okienko „Układ”
+  schowane (każda pozycja ma przycisk; pola formularza → Wstaw › Pole formularza ▾);
+  Recenzja: Akceptuj wszystkie / Odrzuć wszystkie / Przejrzyj po kolei (zamiast trzech dróg do
+  przeglądu), bez Sugerowania (tryb u góry); Plik bez Porównaj (jest w Recenzji) i bez Asystent AI
+  (karta Asystent); panel Widok → Plik › Opcje bez dubli (powiększenie, wybór widoku, skróty
+  sekcji); pigułka „niezapisane” schowana (licznik na Zapisz); obszar dokumentu dociąga do
+  dolnego paska po zmianie wysokości wstążki (Czytanie).
 - Zasada na dalej: jedna funkcja = jedno miejsce na wstążce (wyjątek jak w Wordzie: Komentarz
   na kartach Wstaw i Recenzja).
 

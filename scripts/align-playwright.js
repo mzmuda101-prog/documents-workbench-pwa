@@ -90,7 +90,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   // ── strona w pionie ──
   await caretIn("Strona tytułowa");
-  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("layout")).then(() => page.click("#pageLayoutBtn")); // „Układ” na pasku (wyrównanie w pionie — razem z marginesami)
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("layout")).then(() => page.evaluate(() => document.getElementById("pageLayoutBtn").click())); // „Układ” na pasku (wyrównanie w pionie — razem z marginesami)
   await page.waitForSelector(".compose-pop .compose-item[data-v='center']");
   await sleep(200);
   const curTop = await page.evaluate(() => document.querySelector(".compose-pop .compose-item[data-v='top']")?.getAttribute("aria-checked"));

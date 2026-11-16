@@ -189,8 +189,15 @@ async function run() {
   check("zapamiętane osobno: pion = desktopowy, poziom = mobilny", stored["touch-portrait"] === "desktop" && stored["touch-landscape"] === "mobile", JSON.stringify(stored));
 
   // panel Widok + klawiatura (strzałki w grupie)
-  await page.evaluate(() => { setSidebarOpen(true); document.getElementById("panel-view").open = true; });
-  await page.focus('#viewLayoutPanel .view-layout-opt[aria-checked="true"]');
+  // przy wstążce wybór widoku jest tylko w dymku przy procentach (dolny pasek) — panel Widok go nie dubluje
+  const viaPop = await page.evaluate(() => document.body.classList.contains("rb-on"));
+  if (viaPop) {
+    if (await page.evaluate(() => document.getElementById("viewPop")?.hidden !== false)) await page.click("#zoomNow");
+    await page.focus('#viewPop .view-layout-opt[aria-checked="true"]');
+  } else {
+    await page.evaluate(() => { setSidebarOpen(true); document.getElementById("panel-view").open = true; });
+    await page.focus('#viewLayoutPanel .view-layout-opt[aria-checked="true"]');
+  }
   await page.keyboard.press("ArrowUp"); // desktop → mobile
   await idle(page);
   const kb = await look(page);

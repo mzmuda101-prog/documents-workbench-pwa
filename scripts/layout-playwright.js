@@ -57,7 +57,7 @@ async function run() {
   const sectPrs = async () => ((await (await zipOf()).file("word/document.xml").async("string")).match(/<w:sectPr[\s\S]*?<\/w:sectPr>/g) || []);
   const openLayout = async () => {
     await page.evaluate(() => focusParagraphAtOffset(1, 2));
-    await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("layout")).then(() => page.click("#pageLayoutBtn"));
+    await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("layout")).then(() => page.evaluate(() => document.getElementById("pageLayoutBtn").click()));
     await page.waitForSelector('.compose-pop [data-preset="normal"]');
     await sleep(150);
   };
@@ -67,7 +67,7 @@ async function run() {
   const menu = await page.evaluate(() => [...document.querySelectorAll(".compose-pop .compose-item")].filter((b) => b.getAttribute("aria-checked") === "true").map((b) => b.dataset.preset || b.dataset.orient || b.dataset.size || (b.dataset.cols && `kol${b.dataset.cols}`) || b.dataset.v));
   check("„Układ” na pasku: zaznaczone obecne ustawienia (Normalne, pionowa, A4, jedna kolumna, do góry)", JSON.stringify(menu) === JSON.stringify(["normal", "portrait", "A4", "kol1", "top"]), JSON.stringify(menu));
   await page.keyboard.press("Escape");
-  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.click("#insertMenuBtn"));
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.evaluate(() => document.getElementById("insertMenuBtn").click()));
   const insertItems = await page.evaluate(() => [...document.querySelectorAll(".compose-pop-insert .compose-item-label")].map((x) => x.textContent));
   check("„＋ Wstaw” bez marginesów i układu strony (to nic nie wstawia)", insertItems.length > 5 && !insertItems.some((x) => /Układ strony|pionie|Marginesy/.test(x)), JSON.stringify(insertItems));
   await page.keyboard.press("Escape");
@@ -226,7 +226,7 @@ async function run() {
   check("Ctrl/⌘+Alt+F: przypis dolny, kursor w jego tekście", caretInNote);
   await page.keyboard.type("Drugi w tekście.");
   await page.evaluate(() => focusParagraphAtOffset(1, 4));
-  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.click("#insertMenuBtn"));
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.evaluate(() => document.getElementById("insertMenuBtn").click()));
   await page.click(".compose-pop .compose-item:has-text('Przypis dolny')");
   await idle();
   await page.keyboard.type("Pierwszy w tekście.");

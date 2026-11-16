@@ -150,7 +150,7 @@ async function run() {
   await page.evaluate(() => focusParagraphAtOffset(1, 0));
   await page.evaluate(() => composeUi.insertPageBreak());
   await idle(page);
-  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.click("#insertMenuBtn"));
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.evaluate(() => document.getElementById("insertMenuBtn").click()));
   await page.click(".compose-pop-insert .compose-item-label:text-is('Nagłówek, stopka, numer strony…')");
   await page.fill(".hf-h", "Firma XYZ");
   await page.click('[data-seg="h"] button[data-v="right"]');
@@ -178,7 +178,7 @@ async function run() {
   const footer = await zip.file(parts.find((f) => f.includes("footer") && !/<w:p\/>/.test(""))).async("string");
   check("plik: numer strony to pola PAGE i NUMPAGES", /instrText[^>]*> PAGE </.test(footer + (await Promise.all(parts.map((f) => zip.file(f).async("string")))).join("")) && /NUMPAGES/.test((await Promise.all(parts.map((f) => zip.file(f).async("string")))).join("")), "");
   // rodzaj cyfr i „Zacznij od” (w:pgNumType): I, II… od 3 — 2. strona = IV
-  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.click("#insertMenuBtn"));
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.evaluate(() => document.getElementById("insertMenuBtn").click()));
   await page.click(".compose-pop-insert .compose-item-label:text-is('Nagłówek, stopka, numer strony…')");
   await page.waitForSelector(".compose-pop-hf .hf-numfmt");
   check("okienko: „Cyfry” i „Zacznij od” przy numerze strony", await page.evaluate(() => !document.querySelector(".hf-numopts").hidden && document.querySelector(".hf-numfmt").value === "decimal" && document.querySelector(".hf-start").value === ""));
@@ -191,7 +191,7 @@ async function run() {
   zip = await savedZip(page);
   const sect2 = ((await zip.file("word/document.xml").async("string")).match(/<w:sectPr>.*?<\/w:sectPr>/) || [""])[0];
   check("plik: w:pgNumType fmt=upperRoman start=3 przed titlePg", /<w:pgNumType w:fmt="upperRoman" w:start="3"\/>.*<w:titlePg\/>/.test(sect2), sect2.slice(0, 400));
-  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.click("#insertMenuBtn"));
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.evaluate(() => document.getElementById("insertMenuBtn").click()));
   await page.click(".compose-pop-insert .compose-item-label:text-is('Nagłówek, stopka, numer strony…')");
   await page.waitForSelector(".compose-pop-hf .hf-numfmt");
   check("okienko pokazuje zapisane: I, II, III od 3", await page.evaluate(() => document.querySelector(".hf-numfmt").value === "upperRoman" && document.querySelector(".hf-start").value === "3"));
@@ -202,7 +202,7 @@ async function run() {
   zip = await savedZip(page);
   check("powrót do 1, 2, 3 i kontynuacji: w:pgNumType znika", !/pgNumType/.test(await zip.file("word/document.xml").async("string")));
   // usunięcie: puste pola, bez numeru, bez pierwszej
-  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.click("#insertMenuBtn"));
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.evaluate(() => document.getElementById("insertMenuBtn").click()));
   await page.click(".compose-pop-insert .compose-item-label:text-is('Nagłówek, stopka, numer strony…')");
   await page.fill(".hf-h", ""); await page.fill(".hf-f", ""); await page.selectOption(".hf-n", ""); await page.click(".hf-first");
   await page.click(".compose-pop-hf .lf-ok");

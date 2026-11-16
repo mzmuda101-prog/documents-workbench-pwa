@@ -59,7 +59,7 @@ async function run() {
   // ── tabela ─────────────────────────────────────────────────────────────────
   await page.keyboard.type("Tabela poniżej:");
   check("poza tabelą przycisku „Tabela” nie ma", await page.evaluate(() => document.getElementById("tableToolsBtn").hidden));
-  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.click("#insertMenuBtn"));
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.evaluate(() => document.getElementById("insertMenuBtn").click()));
   await page.click(".compose-pop-insert .compose-item-label:text-is('Tabela')");
   await page.hover(".table-pick button[data-r='2'][data-c='3']");
   const label = await page.textContent(".table-pick-size");

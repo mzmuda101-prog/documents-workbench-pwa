@@ -48,7 +48,12 @@ const dwbRibbon = (() => {
     let rq = 0; // w następnej klatce — zmiana układu w samym wywołaniu to „ResizeObserver loop” w Safari
     new ResizeObserver(() => {
       cancelAnimationFrame(rq);
-      rq = requestAnimationFrame(() => { if (on && typeof appFrame !== "undefined") appFrame.syncDock(); });
+      rq = requestAnimationFrame(() => {
+        if (!on) return;
+        if (typeof appFrame !== "undefined") appFrame.syncDock();
+        // obszar dokumentu sięga do dolnego paska — wstążka niższa (Czytanie) = dokument wyższy
+        if (typeof syncDocViewportHeight === "function") syncDocViewportHeight();
+      });
     }).observe(root);
   }
 
@@ -179,7 +184,6 @@ const dwbRibbon = (() => {
       modeBtn.setAttribute("aria-label", t("rbModeAria", { mode: t(MODE_KEYS[m]) }));
     }
     document.body.classList.toggle("rb-reading", m === "read");
-    root.querySelector('[data-rb-act="suggest"]')?.setAttribute("aria-pressed", String(m === "suggest"));
   }
   function closeModeMenu(refocus) {
     if (!modeMenu || modeMenu.hidden) return;
@@ -242,7 +246,6 @@ const dwbRibbon = (() => {
     symbol: (b) => cu()?.openSymbolPicker(b),
     toc: () => cu()?.insertToc(),
     pageSetup: () => cu()?.openPageSetup(),
-    suggest: () => clickMode(currentMode() === "suggest" ? "edit" : "suggest"),
     read: () => clickMode("read"),
     edit: () => clickMode("edit"),
     fullscreen: () => document.getElementById("fullscreenMenuItem")?.click(),
@@ -257,7 +260,8 @@ const dwbRibbon = (() => {
     numbering: () => cu()?.applyList("number"),
     outdent: () => cu()?.stepIndentAtCaret(-1),
     indent: () => cu()?.stepIndentAtCaret(1),
-    spacingMenu: (b) => cu()?.openSpacingMenu(b),
+    layoutForm: (b) => cu()?.openLayoutForm(b),
+    formFields: (b) => cu()?.openFormFieldMenu(b),
     tabsForm: (b) => cu()?.openTabsForm(b),
     markupMenu: (b) => {
       // te same przyciski co w panelu Recenzja (#rvMarkup: Wszystkie / Proste / Bez)
@@ -270,14 +274,8 @@ const dwbRibbon = (() => {
         onPick: () => opt(v)?.click(),
       })));
     },
-    acceptMenu: (b) => cu()?.openMenu(b, [
-      { label: t("reviewAcceptAllBtn"), onPick: () => proxy("rvAcceptAllBtn") },
-      { label: t("walkStart"), onPick: () => proxy("rvWalkBtn") },
-    ]),
-    rejectMenu: (b) => cu()?.openMenu(b, [
-      { label: t("reviewRejectAllBtn"), onPick: () => proxy("rvRejectAllBtn") },
-      { label: t("walkStart"), onPick: () => proxy("rvWalkBtn") },
-    ]),
+    acceptAll: () => proxy("rvAcceptAllBtn"),
+    rejectAll: () => proxy("rvRejectAllBtn"),
     walk: () => proxy("rvWalkBtn"),
     removeComments: () => proxy("rvRemoveCommentsBtn"),
     zoomIn: () => document.getElementById("zoomInBtn")?.click(),

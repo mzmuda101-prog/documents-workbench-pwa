@@ -143,14 +143,14 @@ async function run() {
 
   // ── Wstaw: data, znak, linia, podział strony ────────────────────────────────
   await caretTo(page, 1, true);
-  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.click("#insertMenuBtn"));
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.evaluate(() => document.getElementById("insertMenuBtn").click()));
   const menu = await page.evaluate(() => { const el = document.querySelector(".compose-pop-insert"); return el && { items: Array.from(el.querySelectorAll(".compose-item-label")).map((x) => x.textContent), chars: el.querySelectorAll(".compose-char").length }; });
   check("menu „Wstaw”: podział strony, linia, link, data, spis treści, 4 pola formularza + znaki", menu && ["Podział strony", "Linia pozioma", "Link…", "Dzisiejsza data", "Spis treści", "Tekst", "Lista wyboru", "Data", "Pole wyboru"].every((x) => menu.items.includes(x)) && menu.chars >= 16, JSON.stringify(menu));
   await page.click('.compose-char[aria-label="§"]');
   await page.waitForTimeout(200);
   ps = await paras(page);
   check("znak specjalny trafia w miejsce kursora", ps[1].text === "Wstęp do raportu.§", ps[1].text);
-  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.click("#insertMenuBtn"));
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.evaluate(() => document.getElementById("insertMenuBtn").click()));
   await page.click(".compose-item-label:text-is('Dzisiejsza data')");
   await page.waitForTimeout(200);
   ps = await paras(page);
@@ -165,7 +165,7 @@ async function run() {
 
   // linia pozioma za akapitem 1
   await caretTo(page, 1, true);
-  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.click("#insertMenuBtn"));
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.evaluate(() => document.getElementById("insertMenuBtn").click()));
   await page.click(".compose-item-label:text-is('Linia pozioma')");
   await idle(page);
   ps = await paras(page);
@@ -187,7 +187,7 @@ async function run() {
   check("obie części zachowują wyjustowanie", ps[5].align === "justify" && ps[6].align === "justify", `${ps[5].align}/${ps[6].align}`);
   // podział z menu na końcu ostatniego akapitu → nowa pusta strona, kursor tam
   await caretTo(page, 6, true);
-  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.click("#insertMenuBtn"));
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.evaluate(() => document.getElementById("insertMenuBtn").click()));
   await page.click(".compose-item-label:text-is('Podział strony')");
   await idle(page);
   const pages3 = await page.evaluate(() => document.querySelectorAll(".docx-preview-host section.docx").length);
@@ -271,7 +271,7 @@ async function run() {
   });
   check("telefon: pasek Edycji w jednym rzędzie, przewija się w bok z wygaszeniem, strona się nie rozjeżdża", bar.rows === 1 && bar.h < 48 && !bar.pageScroll && (!bar.scroll || bar.fade), JSON.stringify(bar));
   await caretTo(page, 0, true);
-  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.click("#insertMenuBtn"));
+  await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.evaluate(() => document.getElementById("insertMenuBtn").click()));
   const popBox = await page.evaluate(() => { const r = document.querySelector(".compose-pop").getBoundingClientRect(); return { l: r.left, r: r.right, b: r.bottom, w: innerWidth, h: innerHeight }; });
   check("telefon: okienko „Wstaw” mieści się na ekranie", popBox.l >= 0 && popBox.r <= popBox.w && popBox.b <= popBox.h, JSON.stringify(popBox));
   await page.mouse.click(200, 700);
