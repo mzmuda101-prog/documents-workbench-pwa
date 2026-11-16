@@ -220,6 +220,16 @@ const dwbRibbon = (() => {
 
   // ── polecenia kart ────────────────────────────────────────────────────────
   const cu = () => (typeof composeUi !== "undefined" ? composeUi : null);
+  const TABLE_PARTS = {
+    insert: [["tableInsertGroup"]],
+    delete: [["tableDeleteGroup"]],
+    merge: [["tableMergeGroup"]],
+    borders: [["tableLookGroup"], ["tableHeaderRow", "tableEvenCols"]],
+    shade: [["tableShadeGroup"]],
+    align: [["tableAlignGroup"]],
+    textdir: [["tableTextDir"]],
+    sort: [["tableSortGroup"]],
+  };
   const MARKUP_ICONS = {
     all: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
     simple: '<path d="M4 6h16M4 12h9M4 18h12"/><path d="M2 4v16"/>',
@@ -322,6 +332,9 @@ const dwbRibbon = (() => {
     const a = b.dataset.rbAct;
     if (a.startsWith("panel:")) { dwbShortcuts?.openToolPanel(a.slice(6)); return; }
     if (a.startsWith("ps:")) { cu()?.openPageSetupPart(b, a.slice(3)); return; }
+    // karta Tabela: polecenie wprost albo część menu tabeli (te same pozycje, bez dubli z przyciskami)
+    if (a.startsWith("tbl:")) { cu()?.tableAction(a.slice(4)); return; }
+    if (a.startsWith("tblp:")) { const [caps, drop] = TABLE_PARTS[a.slice(5)]; cu()?.openTablePart(b, caps, drop); return; }
     ACT[a]?.(b);
   });
   // przyciski kart nie zabierają kursora z dokumentu (jak pasek formatowania)

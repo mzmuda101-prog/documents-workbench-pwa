@@ -4044,10 +4044,9 @@ html.dwb-debug body.rb-on .status-bar .log-panel { display: block; margin-left: 
 /* otwarte dokumenty: na dolnym pasku, jak w makiecie (etap 4 doda resztę) */
 body.rb-on .status-bar .doc-tabs:not([hidden]) { display: flex; flex: 0 1 auto; min-width: 0; margin: 0; padding: 0; border: 0; background: none; box-shadow: none; }
 .ribbon .format-toolbar, .ribbon .undo-group { border: 0; padding: 0; }
-.rb-panel #tableToolsBtn[hidden] { display: inline-flex; }
 /* pełne menu „Wstaw” i całe okienko „Układ” dublowały przyciski karty — przy wstążce schowane
    (zostają w DOM dla skrótów i telefonu); ich pozycje mają własne przyciski */
-.ribbon #insertMenuBtn, .ribbon #pageLayoutBtn { display: none; }
+.ribbon #insertMenuBtn, .ribbon #pageLayoutBtn, .ribbon #tableToolsBtn { display: none !important; }
 /* pasek koloru pod ikoną (Wyróżnienie) — jak pod „A” koloru czcionki */
 .rb-btn .rb-bar { position: absolute; left: 9px; right: 9px; bottom: 5px; height: 3px; border-radius: 1px; }
 .rb-btn:has(.rb-bar) svg { margin-top: -3px; }

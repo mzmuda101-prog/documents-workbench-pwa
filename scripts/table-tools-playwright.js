@@ -76,7 +76,7 @@ async function run() {
   const menu = async (key) => {
     await settle();
     await page.waitForTimeout(150);
-    await page.waitForFunction(() => !document.getElementById("tableToolsBtn").hidden).then(() => page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("table"))).then(() => page.click("#tableToolsBtn"));
+    await page.waitForFunction(() => !document.getElementById("tableToolsBtn").hidden).then(() => page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("table"))).then(() => page.evaluate(() => document.getElementById("tableToolsBtn").click()));
     await page.waitForSelector(`.compose-pop-tabletools [data-tbl="${key}"]`, { timeout: 8000 });
     const box = await page.evaluate((key) => { const b = document.querySelector(`.compose-pop-tabletools [data-tbl="${key}"]`); b.scrollIntoView({ block: "nearest" }); const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }, key);
     await page.mouse.click(box.x, box.y);
@@ -143,7 +143,7 @@ async function run() {
   check("Powtarzaj jako nagłówek: w:tblHeader tylko w 1. wierszu", t.rows[0].header && !t.rows[1].header && !t.rows[2].header, JSON.stringify(t.rows.map((r) => r.header)));
   await settle();
   await inCell("A1");
-  await page.waitForFunction(() => !document.getElementById("tableToolsBtn").hidden).then(() => page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("table"))).then(() => page.click("#tableToolsBtn"));
+  await page.waitForFunction(() => !document.getElementById("tableToolsBtn").hidden).then(() => page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("table"))).then(() => page.evaluate(() => document.getElementById("tableToolsBtn").click()));
   await page.waitForSelector('.compose-pop-tabletools [data-tbl="headerRow"]');
   check("menu pokazuje włączony nagłówek (aria-checked)", await page.evaluate(() => document.querySelector('.compose-pop-tabletools [data-tbl="headerRow"]').getAttribute("aria-checked") === "true"));
   await page.keyboard.press("Escape");
@@ -154,7 +154,7 @@ async function run() {
   // ── kolor komórki (zakres: wiersz) ──────────────────────────────────────────
   await settle();
   await inCell("A1");
-  await page.waitForFunction(() => !document.getElementById("tableToolsBtn").hidden).then(() => page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("table"))).then(() => page.click("#tableToolsBtn"));
+  await page.waitForFunction(() => !document.getElementById("tableToolsBtn").hidden).then(() => page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("table"))).then(() => page.evaluate(() => document.getElementById("tableToolsBtn").click()));
   await page.waitForSelector(".compose-pop-tabletools .table-shades .color-swatch");
   await page.evaluate(() => {
     const pop = document.querySelector(".compose-pop-tabletools");

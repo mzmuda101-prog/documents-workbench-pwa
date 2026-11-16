@@ -4927,6 +4927,20 @@ const composeUi = (() => {
     spacingAnchor = anchor;
     openPop(anchor, (form) => buildLayoutForm(form, ctx));
   }
+  // karta Tabela na wstążce: jedna część menu tabeli (te same pozycje i obsługa); dropKeys = pozycje,
+  // które mają na karcie własny przycisk (bez dubli)
+  function openTablePart(anchor, capKeys, dropKeys = []) {
+    openPop(anchor, async (el) => {
+      await buildTableMenu(el);
+      const caps = capKeys.map((k) => t(k));
+      const drop = dropKeys.map((k) => t(k));
+      let keep = false;
+      Array.from(el.children).forEach((c) => {
+        if (c.classList.contains("compose-cap")) keep = caps.includes(c.textContent);
+        if (!keep || drop.includes(c.querySelector?.(".compose-item-label")?.textContent)) c.remove();
+      });
+    });
+  }
   const openFormFieldMenu = (anchor) => openPop(anchor, (el) => { el.classList.add("compose-pop-insert"); buildInsertMoreGroups(el); });
   async function openTabsForm(anchor) {
     const ctx = await layoutAtCaret();
@@ -4950,5 +4964,5 @@ const composeUi = (() => {
     });
   }
 
-  return { openTablePicker, openSymbolPicker, pickImage, insertToday, openPageSetupPart, openTabsForm, openLayoutForm, openFormFieldMenu, stepIndentAtCaret, openMenu, openFontForm, commentAction, commentById, showCommentById, commentRanges, richRunEl: (r) => richRunEl(r), openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, stampPageNumbers, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, clearIndentAt, hasTextRule, clearRuleAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
+  return { openTablePicker, openSymbolPicker, pickImage, insertToday, openPageSetupPart, openTabsForm, openLayoutForm, openFormFieldMenu, openTablePart, stepIndentAtCaret, openMenu, openFontForm, commentAction, commentById, showCommentById, commentRanges, richRunEl: (r) => richRunEl(r), openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, stampPageNumbers, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, clearIndentAt, hasTextRule, clearRuleAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
 })();

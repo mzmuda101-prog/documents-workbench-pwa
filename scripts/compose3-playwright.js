@@ -29,7 +29,7 @@ const savedZip = async (page) => {
   return JSZip.loadAsync(Buffer.from(b64, "base64"));
 };
 const tableTool = async (page, label) => {
-  await page.waitForFunction(() => !document.getElementById("tableToolsBtn").hidden).then(() => page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("table"))).then(() => page.click("#tableToolsBtn"));
+  await page.waitForFunction(() => !document.getElementById("tableToolsBtn").hidden).then(() => page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("table"))).then(() => page.evaluate(() => document.getElementById("tableToolsBtn").click()));
   await page.click(`.compose-pop-tabletools .compose-item-label:text-is("${label}")`);
   await idle(page);
 };

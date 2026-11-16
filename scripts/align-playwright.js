@@ -44,7 +44,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   // ── komórka: środek-środek ──
   await caretIn("B2");
-  await page.waitForFunction(() => !document.getElementById("tableToolsBtn").hidden).then(() => page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("table"))).then(() => page.click("#tableToolsBtn"));
+  await page.waitForFunction(() => !document.getElementById("tableToolsBtn").hidden).then(() => page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("table"))).then(() => page.evaluate(() => document.getElementById("tableToolsBtn").click()));
   await page.waitForSelector(".compose-cellalign .compose-align");
   const gridN = await page.evaluate(() => document.querySelectorAll(".compose-cellalign .compose-align").length);
   check("menu tabeli: siatka 3×3 wyrównania + zakres", gridN === 9 && await page.evaluate(() => document.querySelectorAll(".compose-cellalign-scope button").length === 4), gridN);
@@ -60,7 +60,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   // ── kolumna: dół-prawo ──
   await caretIn("C1");
-  await page.waitForFunction(() => !document.getElementById("tableToolsBtn").hidden).then(() => page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("table"))).then(() => page.click("#tableToolsBtn"));
+  await page.waitForFunction(() => !document.getElementById("tableToolsBtn").hidden).then(() => page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("table"))).then(() => page.evaluate(() => document.getElementById("tableToolsBtn").click()));
   await page.waitForSelector(".compose-cellalign-scope button");
   await page.click('.compose-cellalign-scope button[data-v="col"]');
   await page.click(".compose-cellalign .compose-align:nth-child(9)"); // dół / prawo
@@ -70,7 +70,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   check("zakres kolumna: C1–C3 dół + prawo, inne kolumny bez zmian", ["C1", "C2", "C3"].every((c) => /<w:vAlign w:val="bottom"\/>/.test(cellXml(xml, c)) && /<w:jc w:val="right"\/>/.test(cellXml(xml, c))) && !/bottom/.test(cellXml(xml, "A3")));
   // stan w menu: zaznaczony właściwy przycisk
   await caretIn("C2");
-  await page.waitForFunction(() => !document.getElementById("tableToolsBtn").hidden).then(() => page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("table"))).then(() => page.click("#tableToolsBtn"));
+  await page.waitForFunction(() => !document.getElementById("tableToolsBtn").hidden).then(() => page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("table"))).then(() => page.evaluate(() => document.getElementById("tableToolsBtn").click()));
   await page.waitForSelector(".compose-cellalign .compose-align");
   const onIdx = await page.evaluate(() => [...document.querySelectorAll(".compose-cellalign .compose-align")].findIndex((b) => b.classList.contains("is-on")));
   check("menu pokazuje obecne wyrównanie komórki (dół-prawo)", onIdx === 8, onIdx);
@@ -79,7 +79,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   // ── tabela: góra-lewo zdejmuje vAlign (domyślne) ──
   await caretIn("A1");
-  await page.waitForFunction(() => !document.getElementById("tableToolsBtn").hidden).then(() => page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("table"))).then(() => page.click("#tableToolsBtn"));
+  await page.waitForFunction(() => !document.getElementById("tableToolsBtn").hidden).then(() => page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("table"))).then(() => page.evaluate(() => document.getElementById("tableToolsBtn").click()));
   await page.waitForSelector(".compose-cellalign-scope button");
   await page.click('.compose-cellalign-scope button[data-v="table"]');
   await page.click(".compose-cellalign .compose-align:nth-child(1)");
