@@ -4001,9 +4001,9 @@ body.rb-reading .rb-r1 > .rb-strip, body:not(.has-document) .rb-r1 > .rb-strip {
 @keyframes rb-ctx-in { 50% { background: var(--rb-ctx-bg); } }
 /* przewijany rząd z podpowiedzią */
 .rb-strip { display: flex; align-items: stretch; min-width: 0; }
-.rb-sc { position: relative; display: flex; align-items: center; gap: 2px; flex: 1 1 auto; min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; scroll-snap-type: x proximity; }
+/* bez scroll-snap: przy przewijaniu kółkiem / touchpadem rząd dociągał do grup i „skakał” (nagranie 2026-11-16) */
+.rb-sc { position: relative; display: flex; align-items: center; gap: 2px; flex: 1 1 auto; min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 .rb-sc::-webkit-scrollbar { display: none; }
-.rb-sc > *, .rb-panel > .rb-g { scroll-snap-align: start; }
 .rb-strip.has-r .rb-sc { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent); }
 .rb-strip.has-l .rb-sc { -webkit-mask-image: linear-gradient(90deg, transparent, #000 40px); mask-image: linear-gradient(90deg, transparent, #000 40px); }
 .rb-strip.has-l.has-r .rb-sc { -webkit-mask-image: linear-gradient(90deg, transparent, #000 40px, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(90deg, transparent, #000 40px, #000 calc(100% - 40px), transparent); }
@@ -4313,3 +4313,31 @@ body.rb-on #panel-review :is(label:has(#rvTrack), #rvTrackInfo, #rvMarkupLabel, 
 @media (prefers-reduced-motion: reduce) { .mini-bar { transition: none; } }
 @media print { .mini-bar { display: none !important; } }
 .mini-bar .style-pick-ico { display: block; position: static; margin: 0; color: var(--ink-2); }
+
+/* ── Opcje wyświetlania wstążki (ribbon.js; etap 6, makieta v4) ───────────────────────────── */
+.rb-end { display: flex; align-items: center; flex: none; padding-left: 4px; margin-left: 2px; border-left: 1px solid var(--border-subtle); }
+/* Chowaj przy przewijaniu: rząd poleceń zwija się w dół strony, wraca w górę */
+body.rb-show-auto .rb-r2 { overflow: hidden; transition: height .2s ease-out, opacity .15s ease-out; }
+body.rb-show-auto.rb-tucked .rb-r2 { height: 0; opacity: 0; transition-timing-function: ease-in; }
+body.rb-show-auto.rb-tucked .rb-r1 { border-bottom-color: transparent; }
+/* Tylko karty: polecenia wysuwają się nad dokumentem po kliknięciu karty */
+body.rb-show-tabs .rb-r2 { display: none; }
+body.rb-show-tabs .rb-r1 { border-bottom-color: transparent; }
+body.rb-show-tabs.rb-peek:not(.rb-reading).has-document .rb-r2 {
+  display: flex; position: absolute; left: -1px; right: -1px; top: 100%; z-index: 2;
+  background: var(--surface); border: 1px solid var(--glass-border); border-top-color: var(--border-subtle);
+  border-radius: 0 0 var(--r-xl) var(--r-xl); box-shadow: 0 12px 24px -12px rgba(16, 32, 64, .35);
+  animation: rb-peek-in .16s ease-out;
+}
+@keyframes rb-peek-in { from { opacity: 0; transform: translateY(-4px); } }
+/* Dotyk: większe cele (jak w makiecie: rząd kart 48 px, polecenia 52 px, przyciski 40 px) */
+body.rb-touch .rb-r1, body.rb-touch .rb-r1 > .rb-strip { height: 48px; }
+body.rb-touch .rb-r2, body.rb-touch .rb-r2 > .rb-strip { height: 52px; }
+body.rb-touch.rb-show-auto.rb-tucked .rb-r2 { height: 0; }
+body.rb-touch .ribbon .rb-r2 .tb-btn { height: 40px; min-width: 40px; }
+body.rb-touch .ribbon .rb-r2 .rb-btn.rb-ic { width: 40px; }
+body.rb-touch .ribbon .rb-r2 .tb-select { height: 36px; }
+@media (prefers-reduced-motion: reduce) { body.rb-show-auto .rb-r2 { transition: none; } body.rb-show-tabs.rb-peek .rb-r2 { animation: none; } }
+/* Tylko karty, polecenia zwinięte: żadna karta nie wygląda na otwartą (jak w makiecie) */
+body.rb-show-tabs:not(.rb-peek) .rb-tab[aria-selected="true"] { color: var(--ink-2); font-weight: 500; }
+body.rb-show-tabs:not(.rb-peek) .rb-tab[aria-selected="true"]::after { display: none; }

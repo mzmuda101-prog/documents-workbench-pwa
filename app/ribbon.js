@@ -76,7 +76,7 @@ const dwbRibbon = (() => {
     tabStrip?.reveal(tab);
     if (focus) tab.focus();
   }
-  tabs.forEach((t) => t.addEventListener("click", () => select(t.dataset.rtab)));
+  tabs.forEach((t) => t.addEventListener("click", () => onTabClick(t.dataset.rtab)));
   root.querySelector('[role="tablist"]')?.addEventListener("keydown", (e) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(e.key)) return;
     const vis = tabs.filter((t) => !t.hidden);
@@ -137,11 +137,14 @@ const dwbRibbon = (() => {
         }
       }
     }
+    // z prostokątów, nie offsetLeft: kontrolka w gnieździe .rb-slot (display: contents) ma
+    // offsetLeft 0 — rząd skakał wtedy na początek przy każdym kliknięciu (np. ¶)
     function reveal(node) {
       if (!node) return;
-      const a = node.offsetLeft, b = a + node.offsetWidth;
-      if (a < sc.scrollLeft) sc.scrollLeft = a - 24;
-      else if (b > sc.scrollLeft + sc.clientWidth) sc.scrollLeft = b - sc.clientWidth + 40;
+      const r = node.getBoundingClientRect(), S = sc.getBoundingClientRect();
+      if (!r.width) return;
+      if (r.left < S.left) sc.scrollLeft += r.left - S.left - 24;
+      else if (r.right > S.right) sc.scrollLeft += r.right - S.right + 40;
     }
     sc.addEventListener("scroll", () => sync(), { passive: true });
     // pionowe kółko przewija rząd w bok (Shift+kółko działa natywnie)
@@ -153,7 +156,7 @@ const dwbRibbon = (() => {
     left?.addEventListener("click", () => sc.scrollBy({ left: -sc.clientWidth * 0.7, behavior: "smooth" }));
     right?.addEventListener("click", () => sc.scrollBy({ left: sc.clientWidth * 0.7, behavior: "smooth" }));
     // fokus z klawiatury na schowanym przycisku — rząd sam do niego dojeżdża
-    sc.addEventListener("focusin", (e) => { const n = e.target.closest(".rb-tab, .rb-g > *"); if (n) reveal(n); });
+    sc.addEventListener("focusin", (e) => { const n = e.target.closest(".rb-tab, .rb-g > *"); if (n) reveal(n.classList.contains("rb-slot") ? e.target : n); });
     let rq = 0;
     const later = () => { cancelAnimationFrame(rq); rq = requestAnimationFrame(() => sync()); };
     if (typeof ResizeObserver === "function") new ResizeObserver(later).observe(sc);
@@ -352,7 +355,81 @@ const dwbRibbon = (() => {
   if (fsItem) new MutationObserver(syncExtras).observe(fsItem, { attributes: true, attributeFilter: ["hidden"] });
   document.getElementById("showSectionChips")?.addEventListener("change", syncExtras);
 
+  // ── opcje wyświetlania (etap 6): Zawsze / Chowaj przy przewijaniu / Tylko karty, gęstość ──
+  // Przycisk na końcu rzędu poleceń (menu jak w makiecie) i Plik → Opcje; zapamiętane na urządzeniu.
+  const PREFS_KEY = "dwb-rb-prefs-v1";
+  const SHOWS = ["pin", "auto", "tabs"];
+  const SHOW_ICONS = {
+    pin: '<path d="M12 17v5M9 10.8V5h6v5.8l2.8 3.2a1 1 0 0 1-.8 1.7H7a1 1 0 0 1-.8-1.7z"/><path d="M8 5h8"/>',
+    auto: '<path d="m6 9 6 6 6-6"/>',
+    tabs: '<path d="m18 15-6-6-6 6"/>',
+  };
+  const prefs = (() => {
+    try { const p = JSON.parse(localStorage.getItem(PREFS_KEY) || "{}"); return { show: SHOWS.includes(p.show) ? p.show : "pin", dens: p.dens === "touch" ? "touch" : "mouse" }; }
+    catch (_) { return { show: "pin", dens: "mouse" }; }
+  })();
+  const optsBtn = document.getElementById("rbOptsBtn");
+  const r2 = root.querySelector(".rb-r2");
+  let peek = false;
+  function savePrefs() { try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch (_) {} }
+  function syncPrefs() {
+    const b = document.body;
+    SHOWS.forEach((v) => b.classList.toggle(`rb-show-${v}`, prefs.show === v));
+    b.classList.toggle("rb-touch", prefs.dens === "touch");
+    b.classList.toggle("rb-peek", prefs.show === "tabs" && peek);
+    if (prefs.show !== "auto") b.classList.remove("rb-tucked");
+    optsBtn?.querySelector("svg") && (optsBtn.querySelector("svg").innerHTML = SHOW_ICONS[prefs.show]);
+    document.querySelectorAll("#rbShowSeg [data-rb-show]").forEach((x) => { const on = x.dataset.rbShow === prefs.show; x.classList.toggle("is-on", on); x.setAttribute("aria-pressed", String(on)); });
+    document.querySelectorAll("#rbDensSeg [data-rb-dens]").forEach((x) => { const on = x.dataset.rbDens === prefs.dens; x.classList.toggle("is-on", on); x.setAttribute("aria-pressed", String(on)); });
+    requestAnimationFrame(() => strips.forEach((st) => st.sync()));
+  }
+  function setShow(v) { prefs.show = v; peek = false; savePrefs(); syncPrefs(); }
+  function setDens(v) { prefs.dens = v; savePrefs(); syncPrefs(); }
+  function setPeek(v) {
+    if (peek === v) return;
+    peek = v;
+    syncPrefs();
+    if (v) requestAnimationFrame(() => { const c = strips.find((x) => x.key === "cmds"); c?.sync(true); });
+  }
+  function onTabClick(id) {
+    if (prefs.show === "tabs") setPeek(!(peek && current === id)); // ta sama karta drugi raz = zwiń
+    document.body.classList.remove("rb-tucked");
+    select(id);
+  }
+  optsBtn?.addEventListener("click", () => {
+    const icon = (v) => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${SHOW_ICONS[v]}</svg>`;
+    const KEYS = { pin: ["rbShowPin", "rbShowPinDesc"], auto: ["rbShowAuto", "rbShowAutoDesc"], tabs: ["rbShowTabs", "rbShowTabsDesc"] };
+    cu()?.openMenu(optsBtn, SHOWS.map((v) => ({ label: t(KEYS[v][0]), desc: t(KEYS[v][1]), icon: icon(v), checked: prefs.show === v, onPick: () => setShow(v) })));
+  });
+  document.getElementById("rbShowSeg")?.addEventListener("click", (e) => { const b = e.target.closest("[data-rb-show]"); if (b) setShow(b.dataset.rbShow); });
+  document.getElementById("rbDensSeg")?.addEventListener("click", (e) => { const b = e.target.closest("[data-rb-dens]"); if (b) setDens(b.dataset.rbDens); });
+  // Ctrl/⌘+F1: tylko karty ↔ zawsze (jak w Wordzie)
+  document.addEventListener("keydown", (e) => {
+    if (!on) return;
+    if (e.key === "F1" && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey) {
+      e.preventDefault();
+      setShow(prefs.show === "tabs" ? "pin" : "tabs");
+    } else if (e.key === "Escape" && peek) setPeek(false);
+  });
+  // wysunięte polecenia (Tylko karty) chowa klik poza wstążką — nie w menu, które z niej wyszło
+  document.addEventListener("pointerdown", (e) => {
+    if (peek && !e.target.closest("#ribbon, .compose-pop, .cursor-hint")) setPeek(false);
+  }, true);
+  // Chowaj przy przewijaniu: rząd poleceń zwija się przy przewijaniu w dół, wraca w górę
+  const vpEl = document.getElementById("docViewport");
+  let lastTop = 0;
+  vpEl?.addEventListener("scroll", () => {
+    const top = vpEl.scrollTop, d = top - lastTop;
+    lastTop = top;
+    if (!on || prefs.show !== "auto") return;
+    const b = document.body;
+    if (d > 4 && top > 40 && !b.classList.contains("rb-tucked")) b.classList.add("rb-tucked");
+    else if ((d < -4 || top < 10) && b.classList.contains("rb-tucked")) b.classList.remove("rb-tucked");
+  }, { passive: true });
+  r2?.addEventListener("focusin", () => document.body.classList.remove("rb-tucked")); // Tab do poleceń
+
   // ── start ─────────────────────────────────────────────────────────────────
+  syncPrefs();
   place(deskMq.matches);
   deskMq.addEventListener("change", (e) => place(e.matches));
   syncMode();
@@ -377,5 +454,5 @@ const dwbRibbon = (() => {
     return !!p;
   }
 
-  return { select, reveal, isOn: () => on, current: () => current };
+  return { select, reveal, isOn: () => on, current: () => current, prefs: () => ({ ...prefs, peek }), setShow, setDens };
 })();

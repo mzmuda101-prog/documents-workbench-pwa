@@ -16,7 +16,7 @@ nie zmienia motywu.
 | 3 | Szyna i panele (v1.01.04) | Szyna 44 px (Nawigacja, Znajdź i zamień, Komentarze, Korekta, Asystent) z licznikami; panel wysuwany na margines albo przypięty. Zastępuje stały panel boczny. | — |
 | 4 | Dolny pasek (v1.01.06) | Karty otwartych dokumentów (przewijane) + strona, wyrazy, błędy, język, powiększenie, „Sugerowanie”. | — |
 | 5 | Mini pasek (v1.01.07) | Nad zaznaczeniem, pod nim gdy brak miejsca, gaśnie przy przewijaniu. | — |
-| 6 | Opcje wstążki | Klasyczna (duże przyciski, nazwy grup) / Uproszczona; Zawsze / Chowaj przy przewijaniu / Tylko karty (Ctrl+F1); gęstość Mysz/Dotyk. | — |
+| 6 | Opcje wstążki (6a v1.01.09; Klasyczna — decyzja) | Klasyczna (duże przyciski, nazwy grup) / Uproszczona; Zawsze / Chowaj przy przewijaniu / Tylko karty (Ctrl+F1); gęstość Mysz/Dotyk. | — |
 | 7 | Telefon | Pasek u góry (wstecz, cofnij, nazwa, tryb, ⋯); rząd poleceń nad klawiaturą; arkusz kart w miejscu klawiatury; Czytanie bez dodatkowych przycisków. | — |
 | 8 | Znaczniki recenzji | Licznik „N zmian · M komentarzy” nad kolumną dymków, poprzedni/następny, Akceptuj wszystkie; Recenzja → Znaczniki: Wszystkie / Proste / Bez. Reszta jak dziś (`review-margin.js`). | — |
 
@@ -146,6 +146,22 @@ schowane.
   nowe composeUi.openColorMenu, dwbRewrite.open). Ikony to klony ikon wstążki.
 - Odstępstwo: styl ma ikonę stylu ze wstążki (nie ¶ z makiety) — ta sama funkcja, ta sama ikona.
 - Test: `scripts/mini-bar-playwright.js` (oba silniki).
+
+## Etap 6a — opcje wyświetlania (v1.01.09)
+
+- Przycisk na końcu rzędu poleceń (ikona zależna od trybu: pinezka / ⌄ / ⌃) → menu: Zawsze /
+  Chowaj przy przewijaniu / Tylko karty. To samo w Plik → Opcje (Pokazywanie wstążki) + Gęstość
+  Mysz / Dotyk. Zapamiętane w localStorage (`dwb-rb-prefs-v1`); domyślnie Zawsze + Mysz.
+- Chowaj przy przewijaniu: rząd poleceń zwija się przy przewijaniu dokumentu w dół, wraca w górę
+  (i po Tab do poleceń / kliknięciu karty).
+- Tylko karty (też Ctrl/⌘+F1 ↔ Zawsze): klik w kartę wysuwa polecenia nad dokumentem, ta sama
+  karta drugi raz, klik poza wstążką albo Esc je chowa. Szybki dostęp (Cofnij) jest wtedy w
+  wysuniętym rzędzie (jak w makiecie).
+- Dotyk: rząd kart 48 px, polecenia 52 px, przyciski 40 px (makieta `.mk.touch`).
+- Poprawki przy okazji (nagranie Mateusza): rzędy wstążki bez `scroll-snap` (przewijanie
+  kółkiem/touchpadem dociągało do grup); fokus kontrolki z gniazda nie przewija rzędu na początek.
+- Test: `scripts/ribbon-playwright.js` (oba silniki).
+- Zostaje: układ Klasyczny (duże przyciski + nazwy grup) — do decyzji, jak go zbudować.
 
 ## Zasady techniczne
 
