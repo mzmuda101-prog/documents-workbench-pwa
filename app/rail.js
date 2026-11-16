@@ -106,7 +106,7 @@ const dwbRail = (() => {
   function place() {
     if (!on()) return;
     const r = rail.getBoundingClientRect();
-    document.documentElement.style.setProperty("--rail-x", `${Math.round(r.right + 12)}px`);
+    document.documentElement.style.setProperty("--rail-x", `${Math.round(r.right + 8)}px`);
     document.documentElement.style.setProperty("--rail-top", `${Math.round(r.top)}px`);
     const bar = document.querySelector(".status-bar");
     const bt = bar?.offsetParent ? bar.getBoundingClientRect().top : 0;

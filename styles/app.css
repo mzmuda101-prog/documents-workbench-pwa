@@ -4079,7 +4079,7 @@ body.rb-on .status-bar .zoom-group .zg-t, body.rb-on .status-bar .zoom-now .zn-i
 /* widok Auto / mobilny / desktopowy obok powiększenia (tylko przy wstążce i otwartym pliku) */
 .view-layout-bar { display: none; }
 body.rb-on.has-document .status-bar .view-layout-bar { display: inline-flex; align-items: center; gap: 1px; margin-left: 4px; }
-.view-layout-bar .view-layout-opt { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--muted); cursor: pointer; }
+.view-layout-bar .view-layout-opt { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 24px; min-height: 0; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--muted); cursor: pointer; }
 .view-layout-bar .view-layout-opt .vl-icon { width: 15px; height: 15px; }
 .view-layout-bar .view-layout-opt[aria-checked="true"] { background: var(--accent-light); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent-border); }
 .view-layout-bar .view-layout-opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -4243,8 +4243,8 @@ body.rb-on .rb-rail {
 }
 .rb-rail-n.is-warn { background: var(--danger); color: #fff; }
 .rb-rail-n[hidden] { display: none; }
-body.rb-on .main { margin-left: 56px; }
-:root.sidebar-docked.sidebar-open body.rb-on .main { margin-left: calc(56px + var(--sidebar-w, 320px) + 14px); }
+body.rb-on .main { margin-left: 52px; } /* szyna 44 px + 8 px odstępu, jak między wstążką a dokumentem */
+:root.sidebar-docked.sidebar-open body.rb-on .main { margin-left: calc(52px + var(--sidebar-w, 320px) + 8px); }
 :root.focus-mode body.rb-on .rb-rail { display: none; }
 :root.focus-mode body.rb-on .main { margin-left: 0; }
 /* panel: zawsze kartą za szyną (przypięty czy nie), jeden widoczny panel */
@@ -4398,3 +4398,11 @@ body.rb-classic .ribbon .rb-r2 .rb-cst > .tb-btn, body.rb-classic .rb-cst > .rb-
 /* Widok mobilny, „Tabele w pełnym rozmiarze”: tabela z szerokościami z pliku, przewija się w bok
    we własnym pasku (krawędź wygasa — attachOverflowFade), strona zostaje w ekranie */
 .doc-reflow-mode table.dwb-table-keep { display: block; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+
+/* Odstępy między kartami przy wstążce (wstążka, szyna, dokument, dolny pasek): 8 px, nie 12;
+   dolny pasek ciaśniej wokół swojej treści (prośba Mateusza 2026-11-16) */
+body.rb-on .ribbon { margin-bottom: 8px; }
+body.rb-on .workspace { padding-top: 0; }
+body.rb-on .rb-rail { top: 0; }
+body.rb-on .main { gap: 8px; }
+body.rb-on .status-bar { padding: 4px 8px; }
