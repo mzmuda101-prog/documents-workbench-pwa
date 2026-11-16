@@ -4332,12 +4332,65 @@ body.rb-show-tabs.rb-peek:not(.rb-reading).has-document .rb-r2 {
 @keyframes rb-peek-in { from { opacity: 0; transform: translateY(-4px); } }
 /* Dotyk: większe cele (jak w makiecie: rząd kart 48 px, polecenia 52 px, przyciski 40 px) */
 body.rb-touch .rb-r1, body.rb-touch .rb-r1 > .rb-strip { height: 48px; }
-body.rb-touch .rb-r2, body.rb-touch .rb-r2 > .rb-strip { height: 52px; }
+body.rb-touch:not(.rb-classic) .rb-r2, body.rb-touch:not(.rb-classic) .rb-r2 > .rb-strip { height: 52px; }
 body.rb-touch.rb-show-auto.rb-tucked .rb-r2 { height: 0; }
-body.rb-touch .ribbon .rb-r2 .tb-btn { height: 40px; min-width: 40px; }
-body.rb-touch .ribbon .rb-r2 .rb-btn.rb-ic { width: 40px; }
-body.rb-touch .ribbon .rb-r2 .tb-select { height: 36px; }
+body.rb-touch:not(.rb-classic) .ribbon .rb-r2 .tb-btn { height: 40px; min-width: 40px; }
+body.rb-touch:not(.rb-classic) .ribbon .rb-r2 .rb-btn.rb-ic { width: 40px; }
+body.rb-touch:not(.rb-classic) .ribbon .rb-r2 .tb-select { height: 36px; }
 @media (prefers-reduced-motion: reduce) { body.rb-show-auto .rb-r2 { transition: none; } body.rb-show-tabs.rb-peek .rb-r2 { animation: none; } }
 /* Tylko karty, polecenia zwinięte: żadna karta nie wygląda na otwartą (jak w makiecie) */
 body.rb-show-tabs:not(.rb-peek) .rb-tab[aria-selected="true"] { color: var(--ink-2); font-weight: 500; }
 body.rb-show-tabs:not(.rb-peek) .rb-tab[aria-selected="true"]::after { display: none; }
+
+/* ── Wstążka Klasyczna (app/ribbon-classic.js; etap 6b, makieta v4 .r2.classic) ───────────── */
+body.rb-classic .rb-r2 { height: 98px; align-items: stretch; padding-top: 6px; }
+body.rb-classic.rb-show-auto.rb-tucked .rb-r2 { height: 0; padding-top: 0; }
+body.rb-classic .rb-r2 > .rb-strip { height: auto; }
+body.rb-classic .rb-r2 .rb-sc { align-items: stretch; }
+body.rb-classic .rb-r2 .rb-nudge { align-self: center; }
+body.rb-classic .rb-qa { align-self: center; }
+body.rb-classic .rb-end { align-self: flex-end; border-left: 0; padding-bottom: 4px; }
+.rb-panel.rb-cl { align-items: stretch; }
+.rb-cg { display: grid; grid-template-rows: 1fr auto; flex: none; padding: 0 6px; border-right: 1px solid var(--border-subtle); }
+.rb-panel > .rb-cg:last-child { border-right: 0; }
+.rb-gi { display: flex; align-items: flex-start; gap: 2px; }
+.rb-gcap { position: relative; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 3px 14px 5px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.rb-launch { position: absolute; right: -4px; bottom: 3px; display: grid; place-items: center; padding: 2px; border: 0; border-radius: 3px; background: none; color: var(--muted); cursor: pointer; }
+@media (hover: hover) { .rb-launch:hover { background: var(--accent-light); color: var(--ink); } }
+.rb-launch:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.rb-cst { display: grid; gap: 2px; align-content: start; }
+.rb-crw { display: flex; align-items: center; gap: 2px; }
+body.rb-classic .ribbon .rb-r2 .tb-btn { height: 24px; min-width: 24px; }
+body.rb-classic .ribbon .rb-r2 .rb-btn.rb-ic { width: 26px; }
+body.rb-classic .ribbon .rb-r2 .tb-select { height: 24px; }
+/* duży przycisk: ikona 28 px nad podpisem (najwyżej dwa wiersze) */
+body.rb-classic .ribbon .rb-r2 .tb-btn.rb-big {
+  flex-direction: column; justify-content: flex-start; gap: 3px; height: 68px; min-width: 52px; max-width: 76px;
+  padding: 5px 4px 3px; font-size: 12px; font-weight: 500; line-height: 1.15; white-space: normal; text-align: center;
+}
+.rb-big svg:not(.rb-dd) { width: 28px; height: 28px; color: var(--accent); }
+.rb-big .rb-dd { margin: -2px 0 0; }
+body.rb-classic .ribbon .rb-r2 .tb-btn.rb-sm { justify-content: flex-start; gap: 6px; padding: 0 6px; font-size: 12px; }
+.rb-cb.rb-ai svg:not(.rb-dd) { color: var(--rb-ctx); }
+.rb-cl-item { display: inline-flex; align-items: center; border-radius: 6px; }
+.rb-cl-lbl { padding: 0 6px 0 2px; font-size: 12px; font-weight: 500; color: var(--ink); cursor: pointer; white-space: nowrap; }
+@media (hover: hover) { .rb-cl-item:hover { background: var(--accent-light); } .rb-cl-item:hover .tb-btn { background: none; } }
+.rb-cl-txt { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+/* galeria stylów */
+.rb-sty { display: flex; height: 58px; padding: 2px; gap: 4px; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--surface); }
+.rb-sty-list { display: flex; gap: 4px; width: calc(6 * 78px + 5 * 4px); overflow: hidden; }
+.rb-sty-i { flex: none; display: grid; grid-template-rows: 1fr auto; width: 78px; padding: 4px 6px; border: 1px solid transparent; border-radius: 4px; background: none; text-align: left; cursor: pointer; font: inherit; }
+@media (hover: hover) { .rb-sty-i:hover { border-color: var(--border); } }
+.rb-sty-i[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.rb-sty-i:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.rb-sty-i b { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--ink); font-size: 13px; }
+.rb-sty-i small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 10px; color: var(--muted); }
+.rb-sty-i.is-t b { font-size: 15px; }
+.rb-sty-i.is-h b { color: var(--accent); }
+.rb-sty-i.is-q b { font-style: italic; font-weight: 600; }
+.rb-sty-more { display: grid; align-content: space-between; padding: 0 1px; border-left: 1px solid var(--border-subtle); }
+.rb-sty-more button { display: grid; place-items: center; width: 16px; height: 17px; padding: 0; border: 0; border-radius: 3px; background: none; color: var(--muted); cursor: pointer; }
+@media (hover: hover) { .rb-sty-more button:hover { background: var(--accent-light); color: var(--ink); } }
+/* podpis dużego przycisku: najwyżej dwa wiersze; trzy małe przyciski w kolumnie mieszczą się nad nazwą grupy */
+.rb-big .rb-cl-t { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+body.rb-classic .ribbon .rb-r2 .rb-cst > .tb-btn, body.rb-classic .rb-cst > .rb-cl-item, body.rb-classic .rb-cst > .rb-cl-txt { height: 22px; }

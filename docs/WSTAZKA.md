@@ -16,7 +16,7 @@ nie zmienia motywu.
 | 3 | Szyna i panele (v1.01.04) | Szyna 44 px (Nawigacja, Znajdź i zamień, Komentarze, Korekta, Asystent) z licznikami; panel wysuwany na margines albo przypięty. Zastępuje stały panel boczny. | — |
 | 4 | Dolny pasek (v1.01.06) | Karty otwartych dokumentów (przewijane) + strona, wyrazy, błędy, język, powiększenie, „Sugerowanie”. | — |
 | 5 | Mini pasek (v1.01.07) | Nad zaznaczeniem, pod nim gdy brak miejsca, gaśnie przy przewijaniu. | — |
-| 6 | Opcje wstążki (6a v1.01.09; Klasyczna — decyzja) | Klasyczna (duże przyciski, nazwy grup) / Uproszczona; Zawsze / Chowaj przy przewijaniu / Tylko karty (Ctrl+F1); gęstość Mysz/Dotyk. | — |
+| 6 | Opcje wstążki (6a v1.01.09, 6b Klasyczna v1.01.10) | Klasyczna (duże przyciski, nazwy grup) / Uproszczona; Zawsze / Chowaj przy przewijaniu / Tylko karty (Ctrl+F1); gęstość Mysz/Dotyk. | — |
 | 7 | Telefon | Pasek u góry (wstecz, cofnij, nazwa, tryb, ⋯); rząd poleceń nad klawiaturą; arkusz kart w miejscu klawiatury; Czytanie bez dodatkowych przycisków. | — |
 | 8 | Znaczniki recenzji | Licznik „N zmian · M komentarzy” nad kolumną dymków, poprzedni/następny, Akceptuj wszystkie; Recenzja → Znaczniki: Wszystkie / Proste / Bez. Reszta jak dziś (`review-margin.js`). | — |
 
@@ -161,7 +161,22 @@ schowane.
 - Poprawki przy okazji (nagranie Mateusza): rzędy wstążki bez `scroll-snap` (przewijanie
   kółkiem/touchpadem dociągało do grup); fokus kontrolki z gniazda nie przewija rzędu na początek.
 - Test: `scripts/ribbon-playwright.js` (oba silniki).
-- Zostaje: układ Klasyczny (duże przyciski + nazwy grup) — do decyzji, jak go zbudować.
+
+## Etap 6b — wstążka Klasyczna (v1.01.10, decyzja Mateusza: 1:1 z makietą)
+
+- `app/ribbon-classic.js` buduje panele `.rb-panel.rb-cl` z opisu kart (SPEC) — układ jak w
+  makiecie: duże przyciski (ikona 28 px nad podpisem), kolumny małych z podpisami, nazwy grup,
+  ↘ „Więcej ustawień” (Czcionka → okno Czcionka, Akapit → Odstępy i wcięcia, Ustawienia strony),
+  galeria stylów (te same style co lista, ↑ ↓ i „Wszystkie style”), 4 przyciski wyrównania.
+- Te same akcje (`data-rb-act`, obsługa w ribbon.js) i te same kontrolki z id — w Klasycznej
+  przenoszą się do gniazd `[data-rbc]` (`applyLayout`), na telefonie wracają na miejsce.
+- Wybór: menu opcji przy rzędzie (Układ wstążki + Pokazywanie) i Plik → Opcje.
+- Różnice od makiety (brak funkcji w aplikacji albo wcześniejsza decyzja): Układ → Akapit to
+  przycisk „Odstępy i wcięcia…” zamiast pól Wcięcie/Odstęp; bez Linijki, „Zaznacz”, Poprzedni/
+  Następny komentarz i zmiana, Okienka „Snippety” w Korespondencji, w Widoku bez Czytania,
+  Powiększenia i Wyglądu (decyzje z przeglądu). Funkcje aplikacji spoza makiety dołożone do
+  najbliższych grup (Nagłówek i stopka, Spis treści, Zakładka, Komentarz, Pole formularza,
+  Narzędzia edycji, wyrównanie/kierunek/rozłożenie w Tabeli). Gęstość Dotyk dotyczy Uproszczonej.
 
 ## Zasady techniczne
 

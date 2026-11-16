@@ -4437,6 +4437,9 @@ const composeUi = (() => {
       }
     }
     if (alignBtn) alignBtn.innerHTML = alignSvg(currentAlign());
+    // wstążka Klasyczna: cztery przyciski wyrównania zamiast menu (ribbon.js, data-rb-act="align:…")
+    const curAlign = currentAlign();
+    document.querySelectorAll('[data-rb-act^="align:"]').forEach((b) => { const on = b.dataset.rbAct === `align:${curAlign}`; b.classList.toggle("is-on", on); b.setAttribute("aria-pressed", String(on)); });
     listBtn?.classList.toggle("is-on", !!target && isListParagraph(target) && !pop);
     // tylko gdy kursor stoi (albo ostatnio stał — fokus mógł przejść na pasek) w tabeli
     if (tableBtn) tableBtn.hidden = !(target?.isConnected && target.closest("td, th") && !readOnlyMode);
@@ -4958,11 +4961,12 @@ const composeUi = (() => {
     openPop(anchor, (el) => {
       el.classList.add("compose-pop-insert");
       items.forEach((it) => {
+        if (it.cap) { popCap(el, it.cap); return; } // nagłówek sekcji menu
         const b = popItem(el, it);
         if (typeof it.checked === "boolean") { b.setAttribute("role", "menuitemradio"); b.setAttribute("aria-checked", String(it.checked)); b.classList.toggle("is-current", it.checked); }
       });
     });
   }
 
-  return { openColorMenu: (anchor) => openPop(anchor, buildColorMenu), openTablePicker, openSymbolPicker, pickImage, insertToday, openPageSetupPart, openTabsForm, openLayoutForm, openFormFieldMenu, openTablePart, stepIndentAtCaret, openMenu, openFontForm, commentAction, commentById, showCommentById, commentRanges, richRunEl: (r) => richRunEl(r), openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, stampPageNumbers, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, clearIndentAt, hasTextRule, clearRuleAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
+  return { alignSvg: (k) => alignSvg(k), openColorMenu: (anchor) => openPop(anchor, buildColorMenu), openTablePicker, openSymbolPicker, pickImage, insertToday, openPageSetupPart, openTabsForm, openLayoutForm, openFormFieldMenu, openTablePart, stepIndentAtCaret, openMenu, openFontForm, commentAction, commentById, showCommentById, commentRanges, richRunEl: (r) => richRunEl(r), openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, stampPageNumbers, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, clearIndentAt, hasTextRule, clearRuleAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
 })();

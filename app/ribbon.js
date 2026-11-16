@@ -35,6 +35,7 @@ const dwbRibbon = (() => {
     }
     root.hidden = !desk;
     document.body.classList.toggle("rb-on", desk);
+    applyLayout();
     closeModeMenu();
     if (desk) requestAnimationFrame(() => strips.forEach((s) => s.sync(true)));
     requestAnimationFrame(() => {
@@ -57,6 +58,27 @@ const dwbRibbon = (() => {
     }).observe(root);
   }
 
+  // ── układ Klasyczna / Uproszczona (ribbon-classic.js buduje panele Klasycznej) ──
+  // Kontrolki z id stoją w Klasycznej w gniazdach [data-rbc] — przy przełączeniu przenoszą się
+  // między gniazdami obu układów (jak na telefon i z powrotem); na telefonie wracają na miejsce.
+  const clSlots = (typeof dwbRibbonClassic !== "undefined" && dwbRibbonClassic?.slots) || [];
+  let classicNow = false;
+  function applyLayout() {
+    const want = on && prefsLayout() === "classic" && clSlots.length > 0;
+    document.body.classList.toggle("rb-classic", want);
+    if (want !== classicNow) {
+      classicNow = want;
+      for (const s of clSlots) {
+        const el = document.querySelector(s.dataset.rbc);
+        if (!el) continue;
+        if (want) s.append(el);
+        else if (el.parentNode === s) root.querySelector(`.rb-panel:not(.rb-cl) [data-rb="${CSS.escape(s.dataset.rbc)}"]`)?.append(el);
+      }
+    }
+    if (typeof select === "function" && typeof current !== "undefined") select(current);
+  }
+  function prefsLayout() { return typeof prefs !== "undefined" ? prefs.layout : "simple"; }
+
   // ── karty ─────────────────────────────────────────────────────────────────
   const tabs = Array.from(root.querySelectorAll(".rb-tab"));
   const panels = Array.from(root.querySelectorAll(".rb-panel"));
@@ -70,7 +92,8 @@ const dwbRibbon = (() => {
       t.setAttribute("aria-selected", String(sel));
       t.tabIndex = sel ? 0 : -1;
     });
-    panels.forEach((p) => { p.hidden = p.dataset.rtab !== id; });
+    const cl = document.body.classList.contains("rb-classic");
+    panels.forEach((p) => { p.hidden = p.dataset.rtab !== id || p.classList.contains("rb-cl") !== cl; });
     const cmds = strips.find((s) => s.key === "cmds");
     if (cmds) { cmds.sc.scrollLeft = 0; cmds.sync(true); }
     tabStrip?.reveal(tab);
@@ -115,7 +138,7 @@ const dwbRibbon = (() => {
     const right = el.querySelector(".rb-nudge-r");
     const cnt = right?.querySelector(".rb-cnt");
     const key = el.dataset.strip;
-    const items = () => Array.from(sc.querySelectorAll(key === "tabs" ? ".rb-tab:not([hidden])" : key === "docs" ? ".doc-tab" : ".rb-panel:not([hidden]) > .rb-g > *"));
+    const items = () => Array.from(sc.querySelectorAll(key === "tabs" ? ".rb-tab:not([hidden])" : key === "docs" ? ".doc-tab" : ".rb-panel:not([hidden]) > .rb-g > *, .rb-panel:not([hidden]) > .rb-cg"));
     function sync(first) {
       if (!on) return;
       const max = sc.scrollWidth - sc.clientWidth;
@@ -156,7 +179,7 @@ const dwbRibbon = (() => {
     left?.addEventListener("click", () => sc.scrollBy({ left: -sc.clientWidth * 0.7, behavior: "smooth" }));
     right?.addEventListener("click", () => sc.scrollBy({ left: sc.clientWidth * 0.7, behavior: "smooth" }));
     // fokus z klawiatury na schowanym przycisku — rząd sam do niego dojeżdża
-    sc.addEventListener("focusin", (e) => { const n = e.target.closest(".rb-tab, .rb-g > *"); if (n) reveal(n.classList.contains("rb-slot") ? e.target : n); });
+    sc.addEventListener("focusin", (e) => { reveal(e.target.closest(".rb-tab") || e.target); });
     let rq = 0;
     const later = () => { cancelAnimationFrame(rq); rq = requestAnimationFrame(() => sync()); };
     if (typeof ResizeObserver === "function") new ResizeObserver(later).observe(sc);
@@ -189,6 +212,7 @@ const dwbRibbon = (() => {
       modeBtn.setAttribute("aria-label", t("rbModeAria", { mode: t(MODE_KEYS[m]) }));
     }
     document.body.classList.toggle("rb-reading", m === "read");
+    root.querySelectorAll('[data-rb-act="suggest"]').forEach((b) => { b.classList.toggle("is-on", m === "suggest"); b.setAttribute("aria-pressed", String(m === "suggest")); });
   }
   function closeModeMenu(refocus) {
     if (!modeMenu || modeMenu.hidden) return;
@@ -293,6 +317,13 @@ const dwbRibbon = (() => {
     walk: () => proxy("rvWalkBtn"),
     removeComments: () => proxy("rvRemoveCommentsBtn"),
     zoomIn: () => document.getElementById("zoomInBtn")?.click(),
+    // wstążka Klasyczna (ribbon-classic.js): przyciski, których Uproszczona nie ma
+    fontForm: () => cu()?.openFontForm(),
+    find: () => dwbShortcuts?.openToolPanel("panel-search", document.getElementById("searchQuery")),
+    replace: () => dwbShortcuts?.openReplace(),
+    a11y: () => { dwbShortcuts?.openToolPanel("panel-grammar"); setTimeout(() => document.getElementById("a11yScanBtn")?.click(), 320); },
+    lang: () => { const sel = document.getElementById("grammarLang"); dwbShortcuts?.openToolPanel("panel-grammar"); setTimeout(() => sel?.focus(), 320); },
+    suggest: () => clickMode(currentMode() === "suggest" ? "edit" : "suggest"),
     zoomFit: () => document.getElementById("zoomFitBtn")?.click(),
   };
   // przycisk z panelu Recenzja (ta sama akcja); nieaktywny = nie ma czego przeglądać
@@ -335,6 +366,8 @@ const dwbRibbon = (() => {
     if (!b || b.disabled) return;
     const a = b.dataset.rbAct;
     if (a.startsWith("panel:")) { dwbShortcuts?.openToolPanel(a.slice(6)); return; }
+    if (a.startsWith("align:")) { cu()?.applyAlign(a.slice(6)); return; }
+    if (a.startsWith("click:")) { document.querySelector(a.slice(6))?.click(); return; }
     if (a.startsWith("ps:")) { cu()?.openPageSetupPart(b, a.slice(3)); return; }
     // karta Tabela: polecenie wprost albo część menu tabeli (te same pozycje, bez dubli z przyciskami)
     if (a.startsWith("tbl:")) { cu()?.tableAction(a.slice(4)); return; }
@@ -350,7 +383,7 @@ const dwbRibbon = (() => {
   function syncExtras() {
     if (fsBtn && fsItem) fsBtn.hidden = fsItem.hidden;
     const strip = document.getElementById("showSectionChips");
-    root.querySelector('[data-rb-act="sectionStrip"]')?.setAttribute("aria-pressed", String(!!strip?.checked));
+    root.querySelectorAll('[data-rb-act="sectionStrip"]').forEach((b) => b.setAttribute("aria-pressed", String(!!strip?.checked)));
   }
   if (fsItem) new MutationObserver(syncExtras).observe(fsItem, { attributes: true, attributeFilter: ["hidden"] });
   document.getElementById("showSectionChips")?.addEventListener("change", syncExtras);
@@ -365,8 +398,8 @@ const dwbRibbon = (() => {
     tabs: '<path d="m18 15-6-6-6 6"/>',
   };
   const prefs = (() => {
-    try { const p = JSON.parse(localStorage.getItem(PREFS_KEY) || "{}"); return { show: SHOWS.includes(p.show) ? p.show : "pin", dens: p.dens === "touch" ? "touch" : "mouse" }; }
-    catch (_) { return { show: "pin", dens: "mouse" }; }
+    try { const p = JSON.parse(localStorage.getItem(PREFS_KEY) || "{}"); return { show: SHOWS.includes(p.show) ? p.show : "pin", dens: p.dens === "touch" ? "touch" : "mouse", layout: p.layout === "classic" ? "classic" : "simple" }; }
+    catch (_) { return { show: "pin", dens: "mouse", layout: "simple" }; }
   })();
   const optsBtn = document.getElementById("rbOptsBtn");
   const r2 = root.querySelector(".rb-r2");
@@ -380,11 +413,13 @@ const dwbRibbon = (() => {
     if (prefs.show !== "auto") b.classList.remove("rb-tucked");
     optsBtn?.querySelector("svg") && (optsBtn.querySelector("svg").innerHTML = SHOW_ICONS[prefs.show]);
     document.querySelectorAll("#rbShowSeg [data-rb-show]").forEach((x) => { const on = x.dataset.rbShow === prefs.show; x.classList.toggle("is-on", on); x.setAttribute("aria-pressed", String(on)); });
+    document.querySelectorAll("#rbLayoutSeg [data-rb-layout]").forEach((x) => { const on = x.dataset.rbLayout === prefs.layout; x.classList.toggle("is-on", on); x.setAttribute("aria-pressed", String(on)); });
     document.querySelectorAll("#rbDensSeg [data-rb-dens]").forEach((x) => { const on = x.dataset.rbDens === prefs.dens; x.classList.toggle("is-on", on); x.setAttribute("aria-pressed", String(on)); });
     requestAnimationFrame(() => strips.forEach((st) => st.sync()));
   }
   function setShow(v) { prefs.show = v; peek = false; savePrefs(); syncPrefs(); }
   function setDens(v) { prefs.dens = v; savePrefs(); syncPrefs(); }
+  function setLayout(v) { prefs.layout = v; savePrefs(); applyLayout(); syncPrefs(); }
   function setPeek(v) {
     if (peek === v) return;
     peek = v;
@@ -399,9 +434,16 @@ const dwbRibbon = (() => {
   optsBtn?.addEventListener("click", () => {
     const icon = (v) => `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${SHOW_ICONS[v]}</svg>`;
     const KEYS = { pin: ["rbShowPin", "rbShowPinDesc"], auto: ["rbShowAuto", "rbShowAutoDesc"], tabs: ["rbShowTabs", "rbShowTabsDesc"] };
-    cu()?.openMenu(optsBtn, SHOWS.map((v) => ({ label: t(KEYS[v][0]), desc: t(KEYS[v][1]), icon: icon(v), checked: prefs.show === v, onPick: () => setShow(v) })));
+    const LAY = { simple: ["rbLayoutSimple", "rbLayoutSimpleDesc", '<path d="M3 12h18"/><rect x="3" y="8" width="18" height="8" rx="2"/>'], classic: ["rbLayoutClassic", "rbLayoutClassicDesc", '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 15h18M9 4v11M15 4v11"/>'] };
+    cu()?.openMenu(optsBtn, [
+      { cap: t("rbLayoutLabel") },
+      ...["simple", "classic"].map((v) => ({ label: t(LAY[v][0]), desc: t(LAY[v][1]), icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${LAY[v][2]}</svg>`, checked: prefs.layout === v, onPick: () => setLayout(v) })),
+      { cap: t("rbShowLabel") },
+      ...SHOWS.map((v) => ({ label: t(KEYS[v][0]), desc: t(KEYS[v][1]), icon: icon(v), checked: prefs.show === v, onPick: () => setShow(v) })),
+    ]);
   });
   document.getElementById("rbShowSeg")?.addEventListener("click", (e) => { const b = e.target.closest("[data-rb-show]"); if (b) setShow(b.dataset.rbShow); });
+  document.getElementById("rbLayoutSeg")?.addEventListener("click", (e) => { const b = e.target.closest("[data-rb-layout]"); if (b) setLayout(b.dataset.rbLayout); });
   document.getElementById("rbDensSeg")?.addEventListener("click", (e) => { const b = e.target.closest("[data-rb-dens]"); if (b) setDens(b.dataset.rbDens); });
   // Ctrl/⌘+F1: tylko karty ↔ zawsze (jak w Wordzie)
   document.addEventListener("keydown", (e) => {
@@ -454,5 +496,5 @@ const dwbRibbon = (() => {
     return !!p;
   }
 
-  return { select, reveal, isOn: () => on, current: () => current, prefs: () => ({ ...prefs, peek }), setShow, setDens };
+  return { select, reveal, isOn: () => on, current: () => current, prefs: () => ({ ...prefs, peek }), setShow, setDens, setLayout };
 })();
