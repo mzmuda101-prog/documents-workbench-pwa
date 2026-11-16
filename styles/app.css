@@ -4176,3 +4176,59 @@ body.rb-on #appMenu > .app-menu-sep:has(+ .app-menu-cap + [href]), body.rb-on #a
 body.rb-on .toast-container { bottom: 64px; }
 /* „niezapisane: N zmian” dublowało licznik na „Zapisz” (przy wstążce zawsze widoczny) — na telefonie zostaje */
 body.rb-on .status-bar .status-dirty { display: none; }
+
+/* ── Szyna paneli i wysuwany panel (app/rail.js; etap 3 wstążki) ──────────────────────────
+   Dawny panel boczny: ten sam ruch (280 ms, --ease-drawer) i to samo przypinanie (sidebar-docked),
+   ale jeden panel naraz, za szyną; bez pinezki leży na marginesie (dokument się nie przesuwa). */
+.rb-rail { display: none; }
+body.rb-on .rb-rail {
+  position: absolute; left: 0; top: 2px; bottom: 0; z-index: 2; width: 44px; padding: 8px 0; box-sizing: border-box;
+  display: flex; flex-direction: column; align-items: center; gap: 4px; border-radius: var(--r-xl);
+  background: var(--glass-sheen), var(--glass-bg); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow);
+}
+.rb-rail-btn {
+  position: relative; width: 34px; height: 34px; border: 0; border-radius: 9px; background: none; color: var(--ink-2);
+  display: grid; place-items: center; cursor: pointer;
+}
+@media (hover: hover) { .rb-rail-btn:hover { background: var(--accent-light); color: var(--accent); } }
+.rb-rail-btn[aria-pressed="true"] { background: var(--accent-light); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent-border); }
+.rb-rail-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.rb-rail-n {
+  position: absolute; top: 1px; right: 0; min-width: 15px; height: 15px; padding: 0 4px; box-sizing: border-box; border-radius: 8px;
+  background: var(--accent); color: var(--on-accent); font-size: 9.5px; font-weight: 700; line-height: 15px; text-align: center;
+}
+.rb-rail-n.is-warn { background: var(--danger); color: #fff; }
+.rb-rail-n[hidden] { display: none; }
+body.rb-on .main { margin-left: 56px; }
+:root.sidebar-docked.sidebar-open body.rb-on .main { margin-left: calc(56px + var(--sidebar-w, 320px) + 14px); }
+:root.focus-mode body.rb-on .rb-rail { display: none; }
+:root.focus-mode body.rb-on .main { margin-left: 0; }
+/* panel: zawsze kartą za szyną (przypięty czy nie), jeden widoczny panel */
+body.rb-on #toolsPanel {
+  top: var(--rail-top, 120px); left: var(--rail-x, 70px);
+  height: calc(100dvh - var(--rail-top, 120px) - 16px); max-height: calc(100dvh - var(--rail-top, 120px) - 16px);
+  width: clamp(288px, 22vw, 340px); padding: 10px; border-radius: var(--r-xl);
+  background: var(--glass-sheen), var(--glass-bg); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow);
+}
+:root:not(.sidebar-docked) body.rb-on #toolsPanel { background: var(--surface); box-shadow: 0 2px 6px rgba(16, 32, 64, .1), 0 22px 48px -16px rgba(16, 32, 64, .4); }
+body.rb-on .sidebar-scrim, body.rb-on .sidebar-handle, body.rb-on .sidebar-finder, body.rb-on #sidebarFinderEmpty,
+body.rb-on .sidebar-group-head, body.rb-on .sidebar #panelToggle { display: none !important; }
+body.rb-on #panelToggle { display: none; }
+body.rb-on .sidebar-close { display: grid; }
+body.rb-on .sidebar details.panel:not(.rb-active) { display: none; }
+body.rb-on .sidebar-group:not(:has(details.rb-active)) { display: none; }
+body.rb-on .sidebar-group + .sidebar-group { margin: 0; padding: 0; border: 0; }
+body.rb-on .sidebar details.rb-active > summary { display: none; }
+body.rb-on .sidebar details.rb-active + details.rb-active { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+.rb-fly-title, .rb-fly-pin { display: none; }
+body.rb-on .rb-fly-title { display: block; flex: 1 1 auto; min-width: 0; padding-left: 6px; font-size: 15px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.rb-on .rb-fly-pin {
+  display: grid; place-items: center; flex: none; width: 34px; height: 34px; border: 0; border-radius: 9px; background: none; color: var(--muted-strong); cursor: pointer;
+}
+@media (hover: hover) { body.rb-on .rb-fly-pin:hover { background: var(--accent-light); color: var(--ink); } }
+body.rb-on .rb-fly-pin[aria-pressed="true"] { background: var(--accent-light); color: var(--accent); }
+body.rb-on .rb-fly-pin:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* panel „Zmiany i komentarze” przy wstążce: bez dubli z kartą Recenzja i przyciskiem trybu
+   (Śledź zmiany = Sugerowanie, Znaczniki ▾, Akceptuj / Odrzuć wszystkie, Przejrzyj po kolei, Usuń komentarze);
+   przyciski zostają w DOM — karta Recenzja je wywołuje */
+body.rb-on #panel-review :is(label:has(#rvTrack), #rvTrackInfo, #rvMarkupLabel, #rvMarkup, #rvMarkupHint, .btn-row:has(#rvAcceptAllBtn), #rvWalkBtn, #rvRemoveCommentsBtn) { display: none !important; }

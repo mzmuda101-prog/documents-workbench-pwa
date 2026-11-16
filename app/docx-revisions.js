@@ -491,7 +491,8 @@ async function refreshReviewCounts() {
   if (reviewNoticePending) {
     reviewNoticePending = false;
     const { changes, comments } = docReviewCounts;
-    if (changes || comments) toast(t("reviewOnOpen", { changes, comments }), "info");
+    // wstążka: panel to „Zmiany i komentarze” na szynie (rail.js); bez wstążki — panel Recenzja
+    if (changes || comments) toast(t(typeof dwbRail !== "undefined" && dwbRail?.isOn() ? "reviewOnOpenRail" : "reviewOnOpen", { changes, comments }), "info");
   }
 }
 

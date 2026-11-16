@@ -81,7 +81,12 @@ async function desktop(browser) {
       sideRight: Math.round(side.right), mainLeft: Math.round(main.left),
     };
   });
-  check("≥1024: panel otwarty OBOK dokumentu, bez scrimu", dock.docked && dock.open && !dock.scrim && dock.sideRight <= dock.mainLeft, JSON.stringify(dock));
+  if (await page.evaluate(() => document.body.classList.contains("rb-on"))) {
+    // wstążka: na starcie bez panelu — dokument ma całe miejsce; panel otwiera szyna
+    check("wstążka: start bez panelu (szyna), bez scrimu", !dock.open && !dock.scrim, JSON.stringify(dock));
+  } else {
+      check("≥1024: panel otwarty OBOK dokumentu, bez scrimu", dock.docked && dock.open && !dock.scrim && dock.sideRight <= dock.mainLeft, JSON.stringify(dock));
+  }
 
   await loadHeadingsDoc(page);
   const hero = await page.evaluate(() => ({
@@ -175,6 +180,10 @@ async function desktop(browser) {
   check("menu ⋯: język, motyw, zamknij dokument; Esc zamyka", menu.open && menu.lang && menu.theme && menu.close && menu.inBody && menuClosed, JSON.stringify(menu));
 
   // Znajdź ustawienie…
+  if (await page.evaluate(() => document.body.classList.contains("rb-on"))) {
+    // wstążka: panel pokazuje jeden panel naraz (szyna) — „Znajdź ustawienie…” schowane
+    check("wstążka: „Znajdź ustawienie…” schowane (jeden panel naraz, szyna)", await page.evaluate(() => !document.getElementById("sidebarFinder").offsetParent));
+  } else {
   // wstążka: Metadane są na ekranie Plik — sprawdzamy panel, który został w panelu bocznym (CSV → Placeholdery)
   const rbOn = await page.evaluate(() => document.body.classList.contains("rb-on"));
   const finderWant = rbOn ? "panel-placeholders" : "panel-metadata";
@@ -183,6 +192,7 @@ async function desktop(browser) {
   await page.fill("#sidebarFinder", "");
   const finderReset = await page.evaluate(() => [...document.querySelectorAll(".sidebar details.panel")].every((d) => !d.hidden));
   check("„Znajdź ustawienie…”: „kluczowe” → tylko Metadane, po wyczyszczeniu wszystko", finder.length === 1 && finder[0] === finderWant && finderReset, finder.join(","));
+  }
 
   // × chowa skróty sekcji — na stałe (opcja w Widok)
   await page.click("#sectionStripHide");
@@ -191,12 +201,31 @@ async function desktop(browser) {
   await page.evaluate(() => { const o = document.getElementById("showSectionChips"); o.checked = true; o.dispatchEvent(new Event("change")); });
   check("opcja w Widok przywraca skróty", await page.evaluate(() => !document.getElementById("sectionStrip").hidden));
 
+  if (await page.evaluate(() => document.body.classList.contains("rb-on"))) {
+    // wstążka (rail.js): szyna otwiera panel, pinezka przypina go obok dokumentu, « chowa
+    const mainLeft = () => page.evaluate(() => Math.round(document.querySelector(".main").getBoundingClientRect().left));
+    await page.click('[data-rail="nav"]');
+    await until(page, () => document.documentElement.classList.contains("sidebar-open"));
+    const overlayLeft = await mainLeft();
+    await page.click("#railPinBtn");
+    await page.waitForTimeout(450);
+    const pin = await page.evaluate(() => ({ docked: document.documentElement.classList.contains("sidebar-docked"), saved: localStorage.getItem("dwb-rail-pin-v1") }));
+    const pinnedLeft = await mainLeft();
+    await page.click("#sidebarCloseBtn");
+    await page.waitForTimeout(450);
+    const closedLeft = await mainLeft();
+    check("szyna: panel na marginesie (dokument stoi), pinezka przypina obok (dokument się przesuwa), « chowa",
+      pin.docked && pin.saved === "1" && pinnedLeft > overlayLeft + 200 && closedLeft < pinnedLeft - 200 && !(await page.evaluate(() => isSidebarOpen())),
+      JSON.stringify({ overlayLeft, pinnedLeft, closedLeft, pin }));
+    await page.evaluate(() => localStorage.removeItem("dwb-rail-pin-v1"));
+  } else {
   // « chowa panel; zapamiętane
   await page.click("#sidebarCloseBtn");
   // przejście marginesu (--t-slow 250 ms; sztywne 450 ms ×0,5 kończyło się przed nim)
   await until(page, () => document.querySelector(".main").getBoundingClientRect().left < 60);
   const closed = await page.evaluate(() => ({ open: document.documentElement.classList.contains("sidebar-open"), saved: localStorage.getItem("dwb-panel-docked-open-v1"), mainLeft: Math.round(document.querySelector(".main").getBoundingClientRect().left) }));
   check("« chowa panel (dokument zajmuje miejsce), wybór zapamiętany", !closed.open && closed.saved === "0" && closed.mainLeft < 60, JSON.stringify(closed));
+  }
 
   if (errors.length) check("desktop: brak błędów w konsoli", false, errors.slice(0, 3).join(" | "));
   await context.close();
@@ -206,7 +235,9 @@ async function tablet(browser) {
   const { context, page, errors } = await newPage(browser, { width: 900, height: 1100 });
   const s = await page.evaluate(() => ({ docked: document.documentElement.classList.contains("sidebar-docked"), open: document.documentElement.classList.contains("sidebar-open") }));
   await loadHeadingsDoc(page);
-  await page.click("#panelToggle");
+  // wstążka: panel otwiera szyna (🔧 zniknął)
+  if (await page.evaluate(() => document.body.classList.contains("rb-on"))) await page.click('[data-rail="nav"]');
+  else await page.click("#panelToggle");
   const opened = await page.evaluate(() => document.documentElement.classList.contains("sidebar-open"));
   check("< 1024: panel wysuwany, startuje schowany, ⚙ otwiera", !s.docked && !s.open && opened, JSON.stringify(s));
   if (errors.length) check("tablet: brak błędów w konsoli", false, errors.slice(0, 3).join(" | "));

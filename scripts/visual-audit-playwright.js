@@ -38,6 +38,7 @@ async function run() {
   // flex item rozszerzał kartę i tekst nakładał się na kolejne wyniki (zgłoszenie UI).
   const semanticLayout = await page.evaluate(() => {
     const panel = document.getElementById("panel-semantic-search");
+    dwbShortcuts.openToolPanel("panel-semantic-search"); // przy wstążce: szyna → Asystent (widoczny od razu)
     panel.open = true;
     const anchor = document.querySelector(".docx-preview-host p");
     const long = "To bardzo długi wynik wyszukiwania semantycznego, który ma pozostać w obrębie jednej karty i zostać ograniczony do trzech czytelnych linii zamiast nachodzić na następne wyniki listy. ".repeat(4);

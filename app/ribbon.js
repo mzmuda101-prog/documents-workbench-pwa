@@ -240,7 +240,6 @@ const dwbRibbon = (() => {
       if (typeof dwbBackstage === "undefined" || !dwbBackstage) { dwbShortcuts?.openToolPanel("panel-file"); return; }
       if (dwbBackstage.isOpen()) dwbBackstage.close(); else dwbBackstage.open();
     },
-    replace: () => dwbShortcuts?.openReplace(),
     pageBreak: () => cu()?.insertPageBreak(),
     hf: () => cu()?.openHeaderFooterForm(),
     hrule: () => cu()?.insertHrule(),

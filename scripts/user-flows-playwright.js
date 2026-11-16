@@ -82,7 +82,7 @@ async function run() {
       d.scrollIntoView({ block: "start" });
     }, id);
     await page.waitForTimeout(250);
-    if (!(await page.evaluate((id) => document.getElementById(id).open, id))) await page.click(`#${id} > summary`);
+    if (!(await page.evaluate((id) => document.getElementById(id).open, id))) await page.evaluate((id) => dwbShortcuts.openToolPanel(id), id);
     await page.waitForTimeout(400);
   };
   const editMode = async () => { await page.evaluate(() => document.querySelector('.mode-btn[data-mode="edit"]').click()); await page.waitForTimeout(400); };

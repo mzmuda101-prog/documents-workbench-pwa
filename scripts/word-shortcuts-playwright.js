@@ -88,7 +88,7 @@ async function run() {
   await page.evaluate(() => { getSelection().removeAllRanges(); document.getElementById("fmtParaStyle")?.focus(); });
   await page.keyboard.press(`${M}+Alt+Digit1`);
   await page.waitForTimeout(400);
-  check("Ctrl/⌘+Alt+1 poza tekstem: panel (jak dotąd)", await page.evaluate(() => !!document.activeElement?.closest("#toolsPanel, .tools-panel, aside")), await page.evaluate(() => document.activeElement?.id || document.activeElement?.className));
+  check("Ctrl/⌘+Alt+1 poza tekstem: panel (jak dotąd)", await page.evaluate(() => !!document.activeElement?.closest("#toolsPanel, .tools-panel, aside, #rbRail")), await page.evaluate(() => document.activeElement?.id || document.activeElement?.className));
 
   // ── Wstaw → Symbol: znak w miejscu kursora, potem w „Ostatnio używanych” ───
   await caret("Szukaj", 6);

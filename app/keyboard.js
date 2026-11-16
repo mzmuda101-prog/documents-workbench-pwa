@@ -31,6 +31,12 @@
 
   // ── obszary ekranu ─────────────────────────────────────────────────────────
   function focusPanel() {
+    // wstążka: obszar paneli to szyna (rail.js) — fokus na wybranym albo pierwszym panelu, Enter otwiera
+    const rail = document.getElementById("rbRail");
+    if (document.body.classList.contains("rb-on") && rail) {
+      (rail.querySelector('[aria-pressed="true"]') || rail.querySelector("button"))?.focus();
+      return;
+    }
     if (!isSidebarOpen()) toggleSidebar();
     setTimeout(() => document.getElementById("sidebarFinder")?.focus(), 60);
   }

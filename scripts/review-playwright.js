@@ -44,7 +44,7 @@ async function run() {
 
   // ── po otwarciu: komunikat i plakietka ─────────────────────────────────────
   const toasts = await page.$$eval(".toast", (els) => els.map((e) => e.textContent));
-  check("komunikat po otwarciu: 12 zmian i 3 komentarze", toasts.some((s) => /12/.test(s) && /\(3\)/.test(s) && /Recenzja/.test(s)), toasts.join(" | "));
+  check("komunikat po otwarciu: 12 zmian i 3 komentarze", toasts.some((s) => /12/.test(s) && /\(3\)/.test(s) && /Recenzja|Zmiany i komentarze/.test(s)), toasts.join(" | "));
   check("plakietka przy panelu Recenzja = 15", (await page.textContent("#panel-review > summary .panel-count").catch(() => "")) === "15");
 
   // ── lista ──────────────────────────────────────────────────────────────────
@@ -79,6 +79,8 @@ async function run() {
     const b = r.getBoundingClientRect();
     return { x: b.left + b.width / 2, y: b.top + b.height / 2 };
   });
+  // wstążka: nieprzypięty panel leży nad dokumentem — przed klikaniem w tekst schowaj go (jak użytkownik)
+  await page.evaluate(() => { if (document.body.classList.contains("rb-on") && isSidebarOpen()) setSidebarOpen(false); });
   await page.waitForTimeout(300);
   await page.mouse.click(cmPt.x, cmPt.y);
   await page.waitForTimeout(250);
@@ -87,6 +89,8 @@ async function run() {
   await page.keyboard.press("Escape");
   await page.waitForTimeout(100);
   check("Czytanie: Esc chowa kartę komentarza", !(await page.evaluate(() => !!document.querySelector(".comment-card"))));
+  await page.evaluate(() => { if (document.body.classList.contains("rb-on")) dwbShortcuts.openToolPanel("panel-review"); }); // z powrotem do panelu
+  await page.waitForTimeout(350);
   const endLi = await page.evaluate(() => { const li = document.querySelector('ol.dwb-notes > li[data-dwb-note^="endnote:"]'); return li ? `${li.value}/${getComputedStyle(li).listStyleType}` : ""; });
   check("lista przypisów końcowych numerowana jak w Wordzie (i, nie 0)", !endLi || endLi === "1/lower-roman", endLi);
 
@@ -134,14 +138,14 @@ async function run() {
   // ── autor: Akceptuj tylko zmiany Jana ──────────────────────────────────────
   await page.selectOption("#rvAuthor", "Jan Kowalski");
   check("przycisk mówi, czyje zmiany", /Jan Kowalski/.test(await page.textContent("#rvAcceptAllBtn")));
-  await page.click("#rvAcceptAllBtn");
+  await page.evaluate(() => document.getElementById("rvAcceptAllBtn").click());
   await page.waitForTimeout(600);
   s = await fileState(page);
   check("akceptacja Jana: jego wstawki są w tekście, zmiany Anny czekają",
     s.body.includes("Zleceniodawca niezwłocznie zgłasza usterki.") && s.body.includes("Cały nowy akapit od Jana.") && /projekt/.test(s.hdr) && s.marks === 6, `${s.marks} ${s.hdr}`);
 
   // ── komentarze: usuń wszystkie ─────────────────────────────────────────────
-  await page.click("#rvRemoveCommentsBtn");
+  await page.evaluate(() => document.getElementById("rvRemoveCommentsBtn").click());
   await page.waitForTimeout(600);
   s = await fileState(page);
   check("usuń komentarze: brak komentarzy i odwołań w pliku", s.comments === 0 && s.refs === 0, JSON.stringify({ c: s.comments, r: s.refs }));
@@ -150,7 +154,7 @@ async function run() {
   // pole autora bywa ukryte (jeden autor) — selectOption czekał wtedy 30 s na widoczność i błąd
   // był połykany; ustawiamy wartość wprost (2026-10-02: test 36 s → kilka sekund)
   await page.evaluate(() => { const s = document.getElementById("rvAuthor"); if (s) { s.value = ""; s.dispatchEvent(new Event("change", { bubbles: true })); } });
-  await page.click("#rvRejectAllBtn");
+  await page.evaluate(() => document.getElementById("rvRejectAllBtn").click());
   await page.waitForTimeout(600);
   s = await fileState(page);
   check("odrzuć resztę: „14 dni”, akapity osobno, przeniesienie wraca, brak znaczników",

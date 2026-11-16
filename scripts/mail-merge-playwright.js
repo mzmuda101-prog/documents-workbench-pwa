@@ -69,6 +69,7 @@ async function run() {
   // panel pól (leniwe skrypty)
   await page.evaluate(async () => {
     const d = document.getElementById("panel-placeholders");
+    dwbShortcuts.openToolPanel("panel-placeholders"); // przy wstążce panel jest domyślnie schowany (szyna)
     d.open = true;
     d.dispatchEvent(new Event("toggle"));
     if (typeof ensureLazyFeature === "function") await ensureLazyFeature("placeholders");

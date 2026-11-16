@@ -423,7 +423,9 @@ const appFrame = (() => {
   // Od 1024 px staje obok: .main dostaje lewy margines = szerokość panelu, a panel
   // (dalej position:fixed — własne przewijanie) stoi na wysokości obszaru dokumentu.
   // Otwarty/zamknięty — zapamiętane (tylko świadome kliknięcia, nie start aplikacji).
-  function isDocked() { return dockMq.matches; }
+  // wstążka (rail.js): panel obok dokumentu tylko przypięty pinezką — inaczej kładzie się na marginesie
+  const railPinned = () => { try { return localStorage.getItem("dwb-rail-pin-v1") === "1"; } catch (_) { return false; } };
+  function isDocked() { return dockMq.matches && (!document.body.classList.contains("rb-on") || railPinned()); }
   function syncDock() {
     const docked = isDocked();
     rootEl.classList.toggle("sidebar-docked", docked);

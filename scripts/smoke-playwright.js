@@ -18,7 +18,7 @@ async function run() {
   const title = await page.title();
   if (!title.includes("Documents Workbench")) throw new Error(`Unexpected title: ${title}`);
 
-  await page.click("#loadSampleBtn");
+  await page.evaluate(() => document.getElementById("loadSampleBtn").click());
   await page.waitForTimeout(2500);
 
   const hasDocText = await page.locator(".docx-preview-host").evaluate((el) => (el?.textContent || "").includes("Przewodnik po Documents Workbench"));

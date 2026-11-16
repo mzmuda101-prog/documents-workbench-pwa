@@ -99,7 +99,15 @@ async function run() {
   // panel
   await page.keyboard.press("Control+Alt+Digit1");
   await page.waitForTimeout(400);
-  check("Ctrl+Alt+1 → panel otwarty, fokus w „Znajdź ustawienie…”", (await page.evaluate(() => isSidebarOpen() && !document.querySelector(".sidebar").inert)) && (await active(page)) === "sidebarFinder", await active(page));
+  if (await page.evaluate(() => document.body.classList.contains("rb-on"))) {
+    // wstążka: obszar paneli = szyna; Enter na jej przycisku otwiera panel
+    check("Ctrl+Alt+1 → fokus na szynie paneli", await page.evaluate(() => !!document.activeElement?.closest("#rbRail")), await active(page));
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(400);
+    check("Enter na szynie → panel otwarty", await page.evaluate(() => isSidebarOpen() && !document.querySelector(".sidebar").inert));
+  } else {
+      check("Ctrl+Alt+1 → panel otwarty, fokus w „Znajdź ustawienie…”", (await page.evaluate(() => isSidebarOpen() && !document.querySelector(".sidebar").inert)) && (await active(page)) === "sidebarFinder", await active(page));
+  }
 
   // skróty sekcji
   const chipTabStops = await page.evaluate(() => [...document.querySelectorAll(".section-chip")].filter((c) => c.tabIndex === 0).length);

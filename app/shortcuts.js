@@ -175,6 +175,12 @@ const dwbShortcuts = (() => {
     }
     // panel w panelu bocznym — ekran Plik nie może go zasłaniać (np. Ctrl+H przy otwartym Plik)
     if (typeof dwbBackstage !== "undefined" && dwbBackstage?.isOpen()) dwbBackstage.close({ refocus: false });
+    // wstążka: panel w wysuwanym panelu szyny (rail.js) — jeden naraz, z tytułem
+    if (typeof dwbRail !== "undefined" && dwbRail?.isOn()) {
+      dwbRail.open(panelId);
+      if (focusEl && lastInputModality === "keyboard") setTimeout(() => { focusEl.focus(); focusEl.select?.(); }, 300);
+      return;
+    }
     if (typeof setSidebarOpen === "function") setSidebarOpen(true);
     const panel = document.getElementById(panelId);
     if (!panel) return;

@@ -60,7 +60,7 @@ async function run() {
 
   // ── włączenie ──────────────────────────────────────────────────────────────
   check("domyślnie wyłączone, bez znacznika na pasku stanu", await page.evaluate(() => !document.getElementById("rvTrack").checked && document.getElementById("statusTrack").hidden));
-  await page.click("#rvTrack");
+  await page.evaluate(() => document.getElementById("rvTrack").click());
   await page.waitForFunction(() => dwbTrack.isOn(), null, { timeout: 8000 });
   check("Śledź zmiany: włączone, imię z pytania, znacznik „Śledzenie zmian” na pasku stanu", await page.evaluate(() => dwbTrack._state.author === "Jan Test" && !document.getElementById("statusTrack").hidden && document.getElementById("rvTrack").checked));
 

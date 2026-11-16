@@ -15,7 +15,7 @@ async function run() {
   await page.evaluate(() => {
     if (typeof setSidebarOpen === "function") setSidebarOpen(true);
   });
-  await page.locator("#panel-structure summary").click();
+  await page.evaluate(() => dwbShortcuts.openToolPanel("panel-structure")); // przy wstążce: szyna → Nawigacja
   await page.waitForSelector(".structure-outline-item", { timeout: 10000 });
 
   const listMetrics = await page.evaluate(() => {

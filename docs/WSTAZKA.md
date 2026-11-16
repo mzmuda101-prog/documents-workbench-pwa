@@ -13,7 +13,7 @@ nie zmienia motywu.
 |---|------|------------|------|
 | 1 | Rama: dwa rzędy u góry (1a: v1.01.00) | Wiersz 1: logo, Plik, karty, Szukaj, tryb (menu), Zapisz, ⋯. Wiersz 2: Cofnij/Ponów + polecenia karty w jednej linii (wstążka uproszczona). Karty: Narzędzia główne, Wstaw, Układ, Recenzja, Korespondencja, Widok, Asystent, kontekstowa Tabela. Przewijany rząd z podpowiedzią (wygaszenie, strzałka „+N”, jednorazowe drgnięcie). Komputer (≥ 769 px). | w toku |
 | 2 | Plik za kulisami (v1.01.02) | Ekran Plik: Nowy, Otwórz, Zdjęcie, Informacje, Zapisz jako, Eksportuj, Drukuj, Porównaj, Zamknij, Opcje, Pomoc, Zgłoś błąd. Menu ⋯ odchudzone (aktualizacja, wersja, inne aplikacje). | — |
-| 3 | Szyna i panele | Szyna 44 px (Nawigacja, Znajdź i zamień, Komentarze, Korekta, Asystent) z licznikami; panel wysuwany na margines albo przypięty. Zastępuje stały panel boczny. | — |
+| 3 | Szyna i panele (v1.01.04) | Szyna 44 px (Nawigacja, Znajdź i zamień, Komentarze, Korekta, Asystent) z licznikami; panel wysuwany na margines albo przypięty. Zastępuje stały panel boczny. | — |
 | 4 | Dolny pasek | Karty otwartych dokumentów (przewijane) + strona, wyrazy, błędy, język, powiększenie, „Sugerowanie”. | — |
 | 5 | Mini pasek | Nad zaznaczeniem, pod nim gdy brak miejsca, gaśnie przy przewijaniu. | — |
 | 6 | Opcje wstążki | Klasyczna (duże przyciski, nazwy grup) / Uproszczona; Zawsze / Chowaj przy przewijaniu / Tylko karty (Ctrl+F1); gęstość Mysz/Dotyk. | — |
@@ -93,6 +93,26 @@ Odstępstwo: czwarty kafelek „Nowy” to „Przewodnik po aplikacji” (istnie
   dolnego paska po zmianie wysokości wstążki (Czytanie).
 - Zasada na dalej: jedna funkcja = jedno miejsce na wstążce (wyjątek jak w Wordzie: Komentarz
   na kartach Wstaw i Recenzja).
+
+## Etap 3 — szyna i wysuwany panel (+ karta Tabela)
+
+`app/rail.js` + `#rbRail`. Szyna po lewej: Nawigacja (Struktura), Znajdź i zamień, Zmiany i
+komentarze (Recenzja), Korekta, Asystent (Zapytaj dokument + Znajdź sens) — z licznikami z
+nagłówków sekcji. Dawny panel boczny = wysuwany panel: jeden panel naraz, tytuł, pinezka, «; ten
+sam ruch; bez pinezki leży nad dokumentem, z pinezką stoi obok (dawne `sidebar-docked`, wybór
+zapamiętany). Na starcie bez panelu. Każda droga do panelu (`openToolPanel`, skróty, przyciski kart,
+`details.open`) pokazuje go w tym panelu. Ctrl/⌘+Alt+1 = fokus na szynie. Znikają: 🔧, „WYSUŃ”,
+„Znajdź ustawienie…”, sekcja Plik w panelu.
+
+Bez dubli: z kart znikły przyciski otwierające panele z szyny (Recenzja: Korekta, Recenzja;
+Widok: Struktura; Asystent: Zapytaj dokument, Znajdź sens; Narzędzia główne: Zamień → zostaje
+Ctrl/⌘+H i szyna, na karcie „Narzędzia edycji”). W panelu Zmiany i komentarze schowane: Śledź
+zmiany, Znaczniki, Akceptuj/Odrzuć wszystkie, Przejrzyj po kolei, Usuń komentarze (są na karcie).
+
+Karta Tabela jak w makiecie: Wstaw ▾ (wiersz nad/pod, kolumna z lewej/z prawej — razem, uwaga
+Mateusza), Usuń ▾, Scal i podziel ▾, Wiersz nagłówka, Obramowanie ▾, Kolor komórki ▾, Wyrównanie w
+komórce ▾, Kierunek tekstu ▾, Rozłóż kolumny, Sortuj ▾ — części menu tabeli; pełne „Tabela ▾”
+schowane.
 
 ## Zasady techniczne
 

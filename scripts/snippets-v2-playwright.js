@@ -53,7 +53,7 @@ async function run() {
   await page.evaluate(() => { if (!document.documentElement.classList.contains("sidebar-open")) document.getElementById("panelToggle").click(); });
   await page.waitForTimeout(250);
   await page.evaluate(() => { const d = document.getElementById("panel-snippets"); d.scrollIntoView(); });
-  await page.click("#panel-snippets > summary");
+  await page.evaluate(() => dwbShortcuts.openToolPanel("panel-snippets"));
   await page.waitForTimeout(400);
   await page.click("#snStarterBtn");
   await page.waitForTimeout(150);

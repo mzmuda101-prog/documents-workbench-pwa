@@ -166,7 +166,8 @@ async function run() {
   await page.waitForTimeout(400);
   // niski ekran laptopa: pod przyciskiem za mało miejsca — okienko szuka go nad nim, bez przewijania w ścisku
   const vpSize = page.viewportSize();
-  await page.setViewportSize({ width: 1300, height: 720 }); // najwęższy pas z dymkami w obu silnikach
+  // najwęższy pas z dymkami w obu silnikach (wstążka: szyna paneli zabiera 56 px — stąd szerzej niż dawne 1300)
+  await page.setViewportSize({ width: await page.evaluate(() => (document.body.classList.contains("rb-on") ? 1360 : 1300)), height: 720 });
   await page.waitForTimeout(300);
   await page.click('[data-key="c:10"] .mk-reply-btn');
   await page.waitForSelector(".compose-pop-comment .cf-rich");
