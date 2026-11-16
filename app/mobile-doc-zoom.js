@@ -135,6 +135,9 @@ function maybeShowAutoViewTip(layout) {
 // Przełączniki zostawiają do porównania dawny wygląd aplikacji (klasy na <html>, app.css).
 const REFLOW_HF_KEY = "dwb-reflow-hf-v1";
 const REFLOW_FILL_KEY = "dwb-reflow-fill-v1";
+// Tabele w Widoku mobilnym: domyślnie dopasowane do ekranu (jak dotąd); włączone = pełny rozmiar
+// z pliku, tabela przewija się w bok we własnym pasku (prośba Mateusza 2026-11-16)
+const REFLOW_TABLES_KEY = "dwb-reflow-tables-keep-v1";
 function reflowPref(key) {
   try { return localStorage.getItem(key) === "1"; } catch (_) { return false; }
 }
@@ -152,6 +155,18 @@ function syncReflowOptions() {
   });
 });
 syncReflowOptions();
+(() => {
+  const box = document.getElementById("reflowKeepTables");
+  if (!box) return;
+  box.checked = reflowPref(REFLOW_TABLES_KEY);
+  box.addEventListener("change", () => {
+    try { localStorage.setItem(REFLOW_TABLES_KEY, box.checked ? "1" : "0"); } catch (_) { /* tryb prywatny: tylko do odświeżenia */ }
+    // szerokości tabel ustawia przebudowa podglądu (applyMobileReflowLayout) — przebuduj w miejscu
+    if (shouldUseMobileReflow() && originalFileBytes && typeof rerenderKeepingEdits === "function") {
+      rerenderKeepingEdits({ anchor: captureScrollAnchorNow(), quiet: true });
+    }
+  });
+})();
 
 // Konwersja PDF: pola formularza z PDF jako kontrolki Worda (domyślnie tak; pdf-import.js czyta przy
 // konwersji). Wyłączone = dawny wynik: wartość pola jako zwykły tekst między kropkami.
@@ -256,6 +271,22 @@ function syncMobileZoomUi() {
   syncViewLayoutUi();
 }
 
+// krawędź tabeli wygasa, gdy jest co przewinąć w bok (bez attachOverflowFade: ten zamienia pionowe
+// kółko na przewijanie w bok, a nad tabelą w dokumencie kółko ma przewijać stronę)
+function fadeKeptTable(table) {
+  if (table._dwbFade) return;
+  table._dwbFade = true;
+  table.classList.add("overflow-fade");
+  const sync = () => {
+    const max = table.scrollWidth - table.clientWidth;
+    table.classList.toggle("more-l", max > 1 && table.scrollLeft > 2);
+    table.classList.toggle("more-r", max > 1 && table.scrollLeft < max - 2);
+  };
+  table.addEventListener("scroll", sync, { passive: true });
+  if (typeof ResizeObserver === "function") new ResizeObserver(sync).observe(table);
+  requestAnimationFrame(sync);
+}
+
 function applyMobileReflowLayout(host) {
   if (!host || !shouldUseMobileReflow()) return;
   const section = host.querySelector("section.docx") || host.querySelector(".docx");
@@ -274,7 +305,10 @@ function applyMobileReflowLayout(host) {
     el.style.boxSizing = "border-box";
   });
 
+  const keepTables = reflowPref(REFLOW_TABLES_KEY);
+  const inKept = (el) => keepTables && !!el.closest("table");
   host.querySelectorAll("[style]").forEach((el) => {
+    if (inKept(el)) return;
     const w = el.style.width;
     const mw = el.style.maxWidth;
     const ml = el.style.marginLeft;
@@ -297,6 +331,27 @@ function applyMobileReflowLayout(host) {
   });
 
   host.querySelectorAll("table").forEach((table) => {
+    table.classList.toggle("dwb-table-keep", keepTables);
+    if (keepTables) {
+      // tylko zewnętrzna tabela przewija się w bok (zagnieżdżona jedzie razem z nią)
+      if (!table.parentElement?.closest("table")) fadeKeptTable(table);
+      // szerokości kolumn z pliku jako najmniejsze szerokości komórek — inaczej tabela w środku
+      // przewijanego bloku i tak ściska się do ekranu
+      const colW = [...table.querySelectorAll(":scope > colgroup > col")].map((c) => c.style.width);
+      table.querySelectorAll(":scope > tbody > tr, :scope > tr").forEach((tr) => {
+        let ci = 0;
+        for (const c of tr.children) {
+          if (!/^T[DH]$/.test(c.tagName)) continue;
+          const span = c.colSpan || 1;
+          const ws = colW.slice(ci, ci + span).filter((w) => /(pt|px)$/.test(w));
+          const own = /(pt|px)$/.test(c.style.width) ? c.style.width : "";
+          if (ws.length === span) c.style.minWidth = span > 1 ? `calc(${ws.join(" + ")})` : ws[0];
+          else if (own) c.style.minWidth = own;
+          ci += span;
+        }
+      });
+      return;
+    }
     table.style.width = "100%";
     table.style.maxWidth = "100%";
     table.style.tableLayout = "fixed";
@@ -327,6 +382,7 @@ function applyMobileReflowLayout(host) {
   });
 
   host.querySelectorAll("p, div, span, td").forEach((el) => {
+    if (inKept(el)) return;
     const w = el.style.width;
     if (!w || w.endsWith("%")) return;
     if (parseFloat(w) > 120) {

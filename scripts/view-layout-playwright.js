@@ -89,6 +89,18 @@ async function run() {
     m0.pref === "auto" && m0.layout === "mobile" && m0.reflow && m0.overflowX <= 1 && m0.hostW >= m0.vpW - 2, JSON.stringify(m0));
   check("pasek: ikonka telefonu + 100%", m0.icon === "mobile" && m0.label === "100%", JSON.stringify(m0));
 
+  // tabele: domyślnie dopasowane do ekranu; opcja „pełny rozmiar” — szerokość z pliku, przewijana w bok
+  const tbl = () => page.evaluate(() => { const t = document.querySelector(".docx-preview-host table"); return { w: Math.round(t.getBoundingClientRect().width), sw: t.scrollWidth, fade: t.classList.contains("more-r"), page: document.documentElement.scrollWidth <= innerWidth + 1 }; });
+  const tFit = await tbl();
+  await page.evaluate(() => { const b = document.getElementById("reflowKeepTables"); b.checked = true; b.dispatchEvent(new Event("change")); });
+  await page.waitForTimeout(1500);
+  const tKeep = await tbl();
+  await page.evaluate(() => { const b = document.getElementById("reflowKeepTables"); b.checked = false; b.dispatchEvent(new Event("change")); });
+  await page.waitForTimeout(1500);
+  const tBack = await tbl();
+  check("tabele w Widoku mobilnym: domyślnie w ekranie; „pełny rozmiar” szerzej, przewijane w bok z wygaszeniem; strona bez przewijania w bok",
+    tFit.sw <= tFit.w + 1 && tKeep.sw > tKeep.w + 100 && tKeep.fade && tKeep.page && tBack.sw <= tBack.w + 1, JSON.stringify({ tFit, tKeep, tBack }));
+
   // dymek z paska
   await page.click("#zoomNow");
   const pop = await page.evaluate(() => {

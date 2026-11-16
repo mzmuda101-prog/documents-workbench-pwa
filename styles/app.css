@@ -4394,3 +4394,7 @@ body.rb-classic .ribbon .rb-r2 .tb-btn.rb-sm { justify-content: flex-start; gap:
 /* podpis dużego przycisku: najwyżej dwa wiersze; trzy małe przyciski w kolumnie mieszczą się nad nazwą grupy */
 .rb-big .rb-cl-t { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 body.rb-classic .ribbon .rb-r2 .rb-cst > .tb-btn, body.rb-classic .rb-cst > .rb-cl-item, body.rb-classic .rb-cst > .rb-cl-txt { height: 22px; }
+
+/* Widok mobilny, „Tabele w pełnym rozmiarze”: tabela z szerokościami z pliku, przewija się w bok
+   we własnym pasku (krawędź wygasa — attachOverflowFade), strona zostaje w ekranie */
+.doc-reflow-mode table.dwb-table-keep { display: block; max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
