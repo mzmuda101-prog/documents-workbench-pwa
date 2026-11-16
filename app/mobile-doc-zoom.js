@@ -696,6 +696,36 @@ function renderViewLayoutChoices(host) {
   if (hadFocus) group.querySelector('[aria-checked="true"]')?.focus();
 }
 
+// dolny pasek przy wstążce: te same trzy widoki co w dymku, same ikony (nazwa i opis w podpowiedzi)
+const viewLayoutBarEl = document.getElementById("viewLayoutBar");
+function renderViewLayoutBar() {
+  const host = viewLayoutBarEl;
+  if (!host) return;
+  const pref = getViewLayoutPref();
+  const autoNow = t(autoViewLayout() === "mobile" ? "viewLayoutMobile" : "viewLayoutDesktop");
+  const hadFocus = host.contains(document.activeElement);
+  host.setAttribute("role", "radiogroup");
+  host.setAttribute("aria-label", t("viewLayoutLabel"));
+  host.replaceChildren(...VIEW_LAYOUTS.map((key) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "view-layout-opt";
+    b.dataset.layout = key;
+    b.setAttribute("role", "radio");
+    b.setAttribute("aria-checked", String(key === pref));
+    b.tabIndex = key === pref ? 0 : -1;
+    const name = t({ auto: "viewLayoutAuto", mobile: "viewLayoutMobile", desktop: "viewLayoutDesktop" }[key]);
+    const tip = key === "auto" ? `${name} — ${autoNow}` : name;
+    b.setAttribute("aria-label", tip);
+    b.dataset.hint = "";
+    b.dataset.hintPl = b.dataset.hintEn = tip;
+    b.dataset.hintDelay = "0.6";
+    b.innerHTML = viewLayoutIcon(key);
+    return b;
+  }));
+  if (hadFocus) host.querySelector('[aria-checked="true"]')?.focus();
+}
+
 function bindViewLayoutChoices(host) {
   if (!host || host.dataset.bound) return;
   host.dataset.bound = "1";
@@ -759,6 +789,7 @@ function setViewPopOpen(open, opts = {}) {
 
 function syncViewLayoutUi() {
   if (viewLayoutPanelEl) renderViewLayoutChoices(viewLayoutPanelEl);
+  renderViewLayoutBar();
   if (viewPopEl) {
     viewPopEl.setAttribute("aria-label", t("viewLayoutLabel"));
     viewPopEl.querySelector(".view-pop-title").textContent = t("viewLayoutLabel");
@@ -770,6 +801,8 @@ function syncViewLayoutUi() {
 
 function initViewLayoutSwitch() {
   bindViewLayoutChoices(viewLayoutPanelEl);
+  bindViewLayoutChoices(viewLayoutBarEl);
+  renderViewLayoutBar();
   const btn = document.getElementById("zoomNow");
   if (!btn) return;
   btn.addEventListener("click", (e) => {

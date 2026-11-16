@@ -4076,6 +4076,14 @@ body.rb-on .status-bar .status-chip:focus-visible { outline: 2px solid var(--acc
 @media (hover: hover) { body.rb-on .status-bar .status-chip:hover { background: color-mix(in srgb, var(--muted) 14%, transparent); color: var(--ink); } }
 body.rb-on .status-bar .status-proof.has-n { color: var(--ink); }
 body.rb-on .status-bar .zoom-group .zg-t, body.rb-on .status-bar .zoom-now .zn-icon { display: none; }
+/* widok Auto / mobilny / desktopowy obok powiększenia (tylko przy wstążce i otwartym pliku) */
+.view-layout-bar { display: none; }
+body.rb-on.has-document .status-bar .view-layout-bar { display: inline-flex; align-items: center; gap: 1px; margin-left: 4px; }
+.view-layout-bar .view-layout-opt { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 24px; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--muted); cursor: pointer; }
+.view-layout-bar .view-layout-opt .vl-icon { width: 15px; height: 15px; }
+.view-layout-bar .view-layout-opt[aria-checked="true"] { background: var(--accent-light); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent-border); }
+.view-layout-bar .view-layout-opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (hover: hover) { .view-layout-bar .view-layout-opt:not([aria-checked="true"]):hover { background: color-mix(in srgb, var(--muted) 14%, transparent); color: var(--ink); } }
 body.rb-on .status-bar .zoom-group .zg-i { display: block; }
 /* wąsko (jak w makiecie poniżej 1000 px): wyrazy i język ustępują kartom */
 @media (max-width: 999px) { body.rb-on .status-bar .status-words, body.rb-on.has-document .status-bar .status-lang { display: none; } }

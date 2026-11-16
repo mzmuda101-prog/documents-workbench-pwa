@@ -129,7 +129,9 @@ schowane.
 - Poniżej 1000 px chowają się wyrazy i język.
 - Odstępstwa: × zamknięcia karty pokazuje się pod kursorem (w makiecie go nie ma, a karty trzeba
   zamykać; na dotyku stoi zawsze); przycisk „Dopasuj” zostaje przy powiększeniu (Widok nie ma
-  grupy Powiększenie — decyzja z przeglądu); bez ikonki widoku mobilnego/desktopowego przy „100%”.
+  grupy Powiększenie — decyzja z przeglądu); zamiast ikonki przy „100%” obok powiększenia trzy
+  ikonki widoku Auto / mobilny / desktopowy (v1.01.08, prośba Mateusza — jest miejsce).
+  Odstępstwa zatwierdzone przez Mateusza.
 - Wysuwany panel kończy się nad dolnym paskiem (wcześniej zasłaniał karty dokumentów).
 
 ## Etap 5 — mini pasek (v1.01.07)
