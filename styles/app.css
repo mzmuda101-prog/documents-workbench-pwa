@@ -4278,3 +4278,30 @@ body.rb-on #panel-review :is(label:has(#rvTrack), #rvTrackInfo, #rvMarkupLabel, 
 .app-menu-offline[data-state="preparing"] svg { color: var(--muted); }
 .app-menu-offline[data-state="volatile"] svg, .app-menu-offline[data-state="blocked"] svg { color: var(--warning); }
 .app-menu-offline b { font-weight: 600; color: var(--ink); }
+
+/* ── Mini pasek przy zaznaczeniu (app/mini-bar.js; etap 5 wstążki, makieta v4 .mini) ───────── */
+.mini-bar {
+  position: fixed; z-index: 60; display: flex; align-items: center; gap: 1px; padding: 3px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 9px;
+  box-shadow: 0 2px 4px rgba(16, 32, 64, .08), 0 10px 24px -10px rgba(16, 32, 64, .35);
+  transition: opacity .12s ease-out;
+}
+.mini-bar[hidden] { display: none; }
+.mini-bar.is-off { opacity: 0; pointer-events: none; }
+.mini-bar .tb-btn { position: relative; height: 28px; min-width: 28px; padding: 0 6px; border-color: transparent; background: none; }
+.mini-bar .mini-btn:not(.color-btn) { display: inline-flex; align-items: center; justify-content: center; gap: 2px; }
+@media (hover: hover) { .mini-bar .tb-btn:hover { border-color: transparent; background: var(--accent-light); } }
+.mini-bar .tb-btn.is-on { border-color: var(--accent-border); background: var(--accent-light); color: var(--accent); }
+.mini-bar .tb-btn svg { flex: none; color: var(--ink-2); }
+.mini-bar .tb-btn.is-on svg { color: var(--accent); }
+.mini-bar .rb-btn .rb-bar { left: 7px; right: 7px; bottom: 4px; }
+.mini-bar .tb-select { height: 26px; border-radius: 6px; }
+.mini-bar .mini-font { width: 92px; }
+.mini-bar .mini-size { width: 52px; }
+.mini-bar .mini-font + .mini-size { margin-left: 3px; }
+.mini-sep { width: 1px; height: 18px; margin: 0 2px; background: var(--border); }
+.mini-ai .tb-btn svg { color: #7a3fb5; }
+[data-theme="dark"] .mini-ai .tb-btn svg { color: #c49af5; }
+@media (prefers-reduced-motion: reduce) { .mini-bar { transition: none; } }
+@media print { .mini-bar { display: none !important; } }
+.mini-bar .style-pick-ico { display: block; position: static; margin: 0; color: var(--ink-2); }

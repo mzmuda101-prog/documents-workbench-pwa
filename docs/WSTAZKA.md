@@ -15,7 +15,7 @@ nie zmienia motywu.
 | 2 | Plik za kulisami (v1.01.02) | Ekran Plik: Nowy, Otwórz, Zdjęcie, Informacje, Zapisz jako, Eksportuj, Drukuj, Porównaj, Zamknij, Opcje, Pomoc, Zgłoś błąd. Menu ⋯ odchudzone (aktualizacja, wersja, inne aplikacje). | — |
 | 3 | Szyna i panele (v1.01.04) | Szyna 44 px (Nawigacja, Znajdź i zamień, Komentarze, Korekta, Asystent) z licznikami; panel wysuwany na margines albo przypięty. Zastępuje stały panel boczny. | — |
 | 4 | Dolny pasek (v1.01.06) | Karty otwartych dokumentów (przewijane) + strona, wyrazy, błędy, język, powiększenie, „Sugerowanie”. | — |
-| 5 | Mini pasek | Nad zaznaczeniem, pod nim gdy brak miejsca, gaśnie przy przewijaniu. | — |
+| 5 | Mini pasek (v1.01.07) | Nad zaznaczeniem, pod nim gdy brak miejsca, gaśnie przy przewijaniu. | — |
 | 6 | Opcje wstążki | Klasyczna (duże przyciski, nazwy grup) / Uproszczona; Zawsze / Chowaj przy przewijaniu / Tylko karty (Ctrl+F1); gęstość Mysz/Dotyk. | — |
 | 7 | Telefon | Pasek u góry (wstecz, cofnij, nazwa, tryb, ⋯); rząd poleceń nad klawiaturą; arkusz kart w miejscu klawiatury; Czytanie bez dodatkowych przycisków. | — |
 | 8 | Znaczniki recenzji | Licznik „N zmian · M komentarzy” nad kolumną dymków, poprzedni/następny, Akceptuj wszystkie; Recenzja → Znaczniki: Wszystkie / Proste / Bez. Reszta jak dziś (`review-margin.js`). | — |
@@ -132,6 +132,19 @@ schowane.
   grupy Powiększenie — decyzja z przeglądu); bez ikonki widoku mobilnego/desktopowego przy „100%”.
 - Wysuwany panel kończy się nad dolnym paskiem (wcześniej zasłaniał karty dokumentów).
 
+## Etap 5 — mini pasek (v1.01.07)
+
+- `app/mini-bar.js`: po zaznaczeniu MYSZĄ w Edycji (przy wstążce) nad zaznaczeniem: krój, rozmiar ·
+  B I U · wyróżnienie, kolor · punktory, styl · komentarz, Przepisz. Pod zaznaczeniem, gdy u góry
+  brak miejsca; przy przewijaniu gaśnie i wraca po zatrzymaniu; poza ekranem — brak; nie wchodzi
+  na wysuwany panel. Znika po klawiszu, kliknięciu w dokument, w Czytaniu. Zaznaczenie klawiaturą
+  i dotyk — bez paska (jak w Wordzie; na dotyku menu systemowe).
+- Bez kopii logiki: przyciski klikają kontrolki wstążki (#fmtBold…, listy kroju/rozmiaru) albo
+  wołają te same funkcje (composeUi.applyColor/applyList/applyStyle/openCommentForm,
+  nowe composeUi.openColorMenu, dwbRewrite.open). Ikony to klony ikon wstążki.
+- Odstępstwo: styl ma ikonę stylu ze wstążki (nie ¶ z makiety) — ta sama funkcja, ta sama ikona.
+- Test: `scripts/mini-bar-playwright.js` (oba silniki).
+
 ## Zasady techniczne
 
 - Identyfikatory istniejących przycisków zostają (moduły i testy z nich korzystają); element
@@ -152,7 +165,7 @@ Zrobione i wydane: 1a, 1b, 2, 3 (+ karta Tabela, sprzątanie dubli). Zostało:
 - Bez dubli: „Dokument wczytany” (`#status`) — sprawdzić, czy potrzebne; licznik zmian jest na Zapisz.
 - Wąsko (< 1000 px): chowają się wyrazy i język (jak w makiecie, `.wide`).
 
-**5. Mini pasek przy zaznaczeniu** (nowy moduł, wzór: makieta v3/v4 `.mini`)
+**5. Mini pasek przy zaznaczeniu** — zrobione (v1.01.07, wyżej). (nowy moduł, wzór: makieta v3/v4 `.mini`)
 - Nad zaznaczeniem w Edycji: krój, rozmiar, B/I/U, wyróżnienie, kolor, punktory, styl,
   komentarz, Przepisz — wołają te same funkcje co wstążka (`composeUi`, `#fmt*` kliknięte).
 - Gdy nad zaznaczeniem brak miejsca → pod nim; przy przewijaniu gaśnie; zaznaczenie poza

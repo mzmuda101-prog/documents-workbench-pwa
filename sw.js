@@ -85,6 +85,7 @@ const SHELL_ASSETS = [
   `./app/ribbon.js?v=${ASSET_V}`,
   `./app/backstage.js?v=${ASSET_V}`,
   `./app/rail.js?v=${ASSET_V}`,
+  `./app/mini-bar.js?v=${ASSET_V}`,
   `./app/doc-context-menu.js?v=${ASSET_V}`,
   `./app/doc-comfort.js?v=${ASSET_V}`,
   `./app/cursor-hint.js?v=${ASSET_V}`,
