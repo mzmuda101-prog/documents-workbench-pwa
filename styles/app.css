@@ -4043,6 +4043,18 @@ body.rb-on .status-bar .log-panel { margin-left: 8px; }
 body.rb-on .status-bar .doc-tabs:not([hidden]) { display: flex; flex: 0 1 auto; min-width: 0; margin: 0; padding: 0; border: 0; background: none; box-shadow: none; }
 .ribbon .format-toolbar, .ribbon .undo-group { border: 0; padding: 0; }
 .rb-panel #tableToolsBtn[hidden] { display: inline-flex; }
+/* pasek koloru pod ikoną (Wyróżnienie) — jak pod „A” koloru czcionki */
+.rb-btn .rb-bar { position: absolute; left: 9px; right: 9px; bottom: 5px; height: 3px; border-radius: 1px; }
+.rb-btn:has(.rb-bar) svg { margin-top: -3px; }
+/* Punktory + ▾ (dawny przycisk listy #fmtListBtn otwiera format i poziom) — jeden przycisk dzielony */
+.rb-split { display: inline-flex; align-items: center; }
+.ribbon .rb-split #fmtListBtn { min-width: 16px; width: 16px; padding: 0; }
+.ribbon .rb-split #fmtListBtn svg { display: none; }
+.ribbon .rb-split #fmtListBtn::after {
+  content: ""; width: 10px; height: 10px; background: currentColor; opacity: .7;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
+}
 /* prawa strona rzędu 1: Szukaj · tryb · Zapisz · ⋯ */
 .rb-act { display: flex; align-items: center; gap: 4px; flex: none; margin-left: auto; }
 .rb-act .doc-search { width: 190px; height: 30px; transition: width var(--t); }

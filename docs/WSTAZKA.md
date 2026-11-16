@@ -11,7 +11,7 @@ nie zmienia motywu.
 
 | # | Etap | Co wchodzi | Stan |
 |---|------|------------|------|
-| 1 | Rama: dwa rzędy u góry | Wiersz 1: logo, Plik, karty, Szukaj, tryb (menu), Zapisz, ⋯. Wiersz 2: Cofnij/Ponów + polecenia karty w jednej linii (wstążka uproszczona). Karty: Narzędzia główne, Wstaw, Układ, Recenzja, Korespondencja, Widok, Asystent, kontekstowa Tabela. Przewijany rząd z podpowiedzią (wygaszenie, strzałka „+N”, jednorazowe drgnięcie). Komputer (≥ 769 px). | w toku |
+| 1 | Rama: dwa rzędy u góry (1a: v1.01.00) | Wiersz 1: logo, Plik, karty, Szukaj, tryb (menu), Zapisz, ⋯. Wiersz 2: Cofnij/Ponów + polecenia karty w jednej linii (wstążka uproszczona). Karty: Narzędzia główne, Wstaw, Układ, Recenzja, Korespondencja, Widok, Asystent, kontekstowa Tabela. Przewijany rząd z podpowiedzią (wygaszenie, strzałka „+N”, jednorazowe drgnięcie). Komputer (≥ 769 px). | w toku |
 | 2 | Plik za kulisami | Ekran Plik: Nowy, Otwórz, Zdjęcie, Informacje, Zapisz jako, Eksportuj, Drukuj, Porównaj, Zamknij, Opcje, Pomoc, Zgłoś błąd. Menu ⋯ odchudzone (aktualizacja, wersja, inne aplikacje). | — |
 | 3 | Szyna i panele | Szyna 44 px (Nawigacja, Znajdź i zamień, Komentarze, Korekta, Asystent) z licznikami; panel wysuwany na margines albo przypięty. Zastępuje stały panel boczny. | — |
 | 4 | Dolny pasek | Karty otwartych dokumentów (przewijane) + strona, wyrazy, błędy, język, powiększenie, „Sugerowanie”. | — |
@@ -41,6 +41,22 @@ Rozstrzygnięcia, których makieta nie pokazywała:
 - tryb skupienia chowa rząd poleceń (rząd 1 zostaje, żeby był Zapisz i wyjście);
 - karta Wstaw ma też istniejące polecenia spoza listy makiety (Nagłówek i stopka, Zakładka,
   Komentarz, Spis treści, pełne menu „Wstaw”) — żeby nic, co już działało, nie zniknęło.
+
+## Etap 1b — co weszło
+
+- Narzędzia główne: Schowek (Wklej, Wytnij, Kopiuj, Malarz formatów), osobno Wyróżnienie (żółte,
+  jak domyślne w Wordzie) obok koloru czcionki, Punktory ▾ (▾ = dawne menu listy: format i poziom)
+  i Numerowanie, Zmniejsz / Zwiększ wcięcie (w liście = poziom punktu, jak w Wordzie).
+- Wklej: `navigator.clipboard.read()` → to samo zdarzenie „paste” co Ctrl/⌘+V (ta sama obsługa
+  formatowania i obrazów). Chrome pyta raz o zgodę, Safari pokazuje dymek; odmowa = komunikat
+  „użyj Ctrl/⌘+V”.
+- Układ: osobne listy Marginesy, Orientacja, Rozmiar, Kolumny, Podziały, Wyrównanie w pionie
+  (części tego samego okienka), „Układ” = całe okienko, Odstępy i wcięcia, Tabulatory….
+- Recenzja: Sugerowanie, Znaczniki ▾ (Wszystkie / Proste / Bez), Akceptuj ▾ / Odrzuć ▾
+  (wszystkie lub po kolei), Poprzednia / Następna (przegląd po kolei), Komentarz, Usuń wszystkie.
+- Skróty w dymkach nowych przycisków (Ctrl/⌘+V/X/C, Enter, K, H, Alt+M, Alt+F, Alt+D).
+
+Wciąż brakuje: Język i Dostępność w Recenzji (osobny etap — wymagają nowych okienek).
 
 ## Zasady techniczne
 

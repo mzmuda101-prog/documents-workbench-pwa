@@ -1994,7 +1994,7 @@ const composeUi = (() => {
   // (openPageSetup — w trybie Czytanie przełącza na Edycję; after = np. przerysuj podgląd).
   let pageSetupAnchor = null;
   let pageSetupAfter = null;
-  async function openPageSetup(anchor, after = null) {
+  async function openPageSetup(anchor, after = null, only = null) {
     if (!originalFileBytes) return;
     if (readOnlyMode && typeof appFrame !== "undefined") {
       appFrame.setReadOnly(false);
@@ -2005,7 +2005,17 @@ const composeUi = (() => {
     }
     pageSetupAnchor = anchor || (layoutBtn && !layoutBtn.closest(".hidden") ? layoutBtn : insertBtn);
     pageSetupAfter = after;
-    openPop(pageSetupAnchor, buildPageSetupMenu);
+    openPop(pageSetupAnchor, only ? async (el) => { await buildPageSetupMenu(el); keepPageSetupPart(el, only); } : buildPageSetupMenu);
+  }
+  // Jedna część okienka Układ (karta Układ na wstążce, ribbon.js) — sekcje wyznaczają nagłówki .compose-cap
+  const PAGE_SETUP_PARTS = { margins: ["pageMargins"], orient: ["pageOrient"], size: ["pageSize"], cols: ["colsCap", "colsCapSel"], valign: ["pageVAlign"], breaks: ["breaksCap"] };
+  function keepPageSetupPart(el, only) {
+    const caps = (PAGE_SETUP_PARTS[only] || []).map((k) => t(k));
+    let keep = false;
+    Array.from(el.children).forEach((c) => {
+      if (c.classList.contains("compose-cap")) keep = caps.includes(c.textContent);
+      if (!keep) c.remove();
+    });
   }
   async function runPageSetup(edit, ctx) {
     pageSetupReflowHint();
@@ -2190,6 +2200,7 @@ const composeUi = (() => {
   // Szybkie pozycje działają od razu; „Odstępy i wcięcia…” — formularz z polami jak okno Akapit.
   // Wartości w okienku to wartości EFEKTYWNE (styl, lista, akapit) — composeParaLayout.
   const spacingBtn = document.getElementById("fmtSpacingBtn");
+  let spacingAnchor = spacingBtn;
   const LINE_PRESETS = [240, 276, 360, 480, 600, 720]; // 1,0 · 1,15 · 1,5 · 2,0 · 2,5 · 3,0
   const INDENT_STEP_TW = 709; // 1,25 cm (domyślny tabulator Worda)
   const numLocale = () => (currentLang === "en" ? "en-GB" : "pl-PL");
@@ -2254,7 +2265,7 @@ const composeUi = (() => {
       label: t("spacingMore"),
       desc: t("spacingSummary", { b: ptText(cur.before), a: ptText(cur.after), i: cmText(cur.left) }),
       icon: ICON('<rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M10 12h6M8 16h8"/>'),
-      onPick: () => openPop(spacingBtn, (form) => buildLayoutForm(form, ctx)),
+      onPick: () => openPop(spacingAnchor, (form) => buildLayoutForm(form, ctx)),
     }).dataset.more = "1";
     // Tabulatory… (jak przycisk „Tabulatory” w oknie Akapit w Wordzie)
     const stops = await composeTabsFromBytes(originalFileBytes, ctx.indices[0]).catch(() => []);
@@ -2262,7 +2273,7 @@ const composeUi = (() => {
       label: t("tabsMore"),
       desc: stops.length ? stops.map((x) => `${cmText(x.pos)} cm`).slice(0, 4).join(" · ") + (stops.length > 4 ? " …" : "") : t("tabsNone"),
       icon: ICON('<line x1="3" y1="20" x2="21" y2="20"/><path d="M7 20v-6h4"/><path d="M15 20v-6"/><path d="M13 14h4"/><line x1="4" y1="9" x2="20" y2="9" stroke-dasharray="1.5 2.5"/>'),
-      onPick: () => openPop(spacingBtn, (form) => buildTabsForm(form, ctx, stops)),
+      onPick: () => openPop(spacingAnchor, (form) => buildTabsForm(form, ctx, stops)),
     }).dataset.tabs = "1";
   }
 
@@ -4541,7 +4552,7 @@ const composeUi = (() => {
   }));
   alignBtn?.addEventListener("click", () => openPop(alignBtn, buildAlignMenu));
   spacingBtn?.addEventListener("mousedown", (e) => e.preventDefault());
-  spacingBtn?.addEventListener("click", () => openPop(spacingBtn, buildSpacingMenu));
+  spacingBtn?.addEventListener("click", () => { spacingAnchor = spacingBtn; openPop(spacingBtn, buildSpacingMenu); });
   styleSel?.addEventListener("change", () => applyStyle(styleSel.value));
   colorBtn?.addEventListener("mousedown", (e) => e.preventDefault());
   colorBtn?.addEventListener("click", () => openPop(colorBtn, buildColorMenu));
@@ -4900,6 +4911,29 @@ const composeUi = (() => {
   const openTablePicker = (anchor) => openPop(anchor, buildTablePicker);
   const openSymbolPicker = (anchor) => openPop(anchor, buildSymbolPicker);
   const insertToday = () => insertText(todayText());
+  const openPageSetupPart = (anchor, part) => openPageSetup(anchor, null, part);
+  const openSpacingMenu = (anchor) => { spacingAnchor = anchor; openPop(anchor, buildSpacingMenu); };
+  async function openTabsForm(anchor) {
+    const ctx = await layoutAtCaret();
+    if (!ctx) return;
+    const stops = await composeTabsFromBytes(originalFileBytes, ctx.indices[0]).catch(() => []);
+    spacingAnchor = anchor;
+    openPop(anchor, (form) => buildTabsForm(form, ctx, stops));
+  }
+  async function stepIndentAtCaret(dir) {
+    const ctx = await layoutAtCaret();
+    if (ctx) await stepIndent(ctx, dir);
+  }
+  // proste menu przy przycisku wstążki: [{ label, desc, kbd, icon, checked, onPick }]
+  function openMenu(anchor, items) {
+    openPop(anchor, (el) => {
+      el.classList.add("compose-pop-insert");
+      items.forEach((it) => {
+        const b = popItem(el, it);
+        if (typeof it.checked === "boolean") { b.setAttribute("role", "menuitemradio"); b.setAttribute("aria-checked", String(it.checked)); b.classList.toggle("is-current", it.checked); }
+      });
+    });
+  }
 
-  return { openTablePicker, openSymbolPicker, pickImage, insertToday, openFontForm, commentAction, commentById, showCommentById, commentRanges, richRunEl: (r) => richRunEl(r), openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, stampPageNumbers, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, clearIndentAt, hasTextRule, clearRuleAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
+  return { openTablePicker, openSymbolPicker, pickImage, insertToday, openPageSetupPart, openSpacingMenu, openTabsForm, stepIndentAtCaret, openMenu, openFontForm, commentAction, commentById, showCommentById, commentRanges, richRunEl: (r) => richRunEl(r), openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, stampPageNumbers, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, clearIndentAt, hasTextRule, clearRuleAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
 })();

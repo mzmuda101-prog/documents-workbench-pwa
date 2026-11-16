@@ -214,6 +214,11 @@ const dwbRibbon = (() => {
 
   // ── polecenia kart ────────────────────────────────────────────────────────
   const cu = () => (typeof composeUi !== "undefined" ? composeUi : null);
+  const MARKUP_ICONS = {
+    all: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    simple: '<path d="M4 6h16M4 12h9M4 18h12"/><path d="M2 4v16"/>',
+    none: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+  };
   const ACT = {
     file: () => dwbShortcuts?.openToolPanel("panel-file"),
     replace: () => dwbShortcuts?.openReplace(),
@@ -239,14 +244,81 @@ const dwbRibbon = (() => {
     aiSettings: () => document.getElementById("aiMenuItem")?.click(),
     sectionStrip: () => document.getElementById("showSectionChips")?.click(),
     zoomOut: () => document.getElementById("zoomOutBtn")?.click(),
+    paste: () => pasteFromClipboard(),
+    cut: () => document.execCommand("cut"),
+    copy: () => document.execCommand("copy"),
+    highlight: () => cu()?.applyColor("highlight", "yellow"),
+    bullets: () => cu()?.applyList("bullet"),
+    numbering: () => cu()?.applyList("number"),
+    outdent: () => cu()?.stepIndentAtCaret(-1),
+    indent: () => cu()?.stepIndentAtCaret(1),
+    spacingMenu: (b) => cu()?.openSpacingMenu(b),
+    tabsForm: (b) => cu()?.openTabsForm(b),
+    markupMenu: (b) => {
+      // te same przyciski co w panelu Recenzja (#rvMarkup: Wszystkie / Proste / Bez)
+      const opt = (v) => document.querySelector(`#rvMarkup [data-markup="${v}"]`);
+      cu()?.openMenu(b, ["all", "simple", "none"].map((v) => ({
+        label: t({ all: "markupAll", simple: "markupSimple", none: "markupNone" }[v]),
+        desc: t({ all: "rbMarkupAllDesc", simple: "rbMarkupSimpleDesc", none: "rbMarkupNoneDesc" }[v]),
+        icon: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${MARKUP_ICONS[v]}</svg>`,
+        checked: opt(v)?.getAttribute("aria-checked") === "true",
+        onPick: () => opt(v)?.click(),
+      })));
+    },
+    acceptMenu: (b) => cu()?.openMenu(b, [
+      { label: t("reviewAcceptAllBtn"), onPick: () => proxy("rvAcceptAllBtn") },
+      { label: t("walkStart"), onPick: () => proxy("rvWalkBtn") },
+    ]),
+    rejectMenu: (b) => cu()?.openMenu(b, [
+      { label: t("reviewRejectAllBtn"), onPick: () => proxy("rvRejectAllBtn") },
+      { label: t("walkStart"), onPick: () => proxy("rvWalkBtn") },
+    ]),
+    walk: () => proxy("rvWalkBtn"),
+    removeComments: () => proxy("rvRemoveCommentsBtn"),
     zoomIn: () => document.getElementById("zoomInBtn")?.click(),
     zoomFit: () => document.getElementById("zoomFitBtn")?.click(),
   };
+  // przycisk z panelu Recenzja (ta sama akcja); nieaktywny = nie ma czego przeglądać
+  function proxy(id) {
+    const el = document.getElementById(id);
+    if (!el || el.disabled || el.hidden) { toast(t("rbNoChanges"), "info"); return; }
+    el.click();
+  }
+  // Wklej: schowek z formatowaniem trafia do TEJ SAMEJ obsługi co Ctrl/⌘+V (zdarzenie „paste” na
+  // dokumencie — compose-ui / paste-rich), więc przycisk wkleja dokładnie jak skrót. Chrome pyta
+  // raz o zgodę, Safari pokazuje dymek „Wklej”; odmowa lub brak API = podpowiedź o skrócie.
+  async function pasteFromClipboard() {
+    const target = document.activeElement?.closest?.("[contenteditable='true'], .docx-edit-root") || docCanvasEl;
+    let dt = null;
+    try {
+      dt = new DataTransfer();
+      if (navigator.clipboard?.read) {
+        for (const item of await navigator.clipboard.read()) {
+          for (const type of item.types) {
+            const blob = await item.getType(type);
+            if (type === "text/html" || type === "text/plain") dt.setData(type, await blob.text());
+            else if (type.startsWith("image/")) dt.items.add(new File([blob], `obraz.${type.split("/")[1] || "png"}`, { type }));
+          }
+        }
+      } else if (navigator.clipboard?.readText) {
+        dt.setData("text/plain", await navigator.clipboard.readText());
+      } else throw new Error("no clipboard API");
+    } catch (_) {
+      toast(t("rbPasteDenied"), "info");
+      return;
+    }
+    if (!dt.types.length) return;
+    const ev = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
+    target?.dispatchEvent(ev);
+    // nikt nie obsłużył (zwykły tekst w polu) — wstaw jak przeglądarka
+    if (!ev.defaultPrevented) document.execCommand("insertText", false, dt.getData("text/plain"));
+  }
   root.addEventListener("click", (e) => {
     const b = e.target.closest("[data-rb-act]");
     if (!b || b.disabled) return;
     const a = b.dataset.rbAct;
     if (a.startsWith("panel:")) { dwbShortcuts?.openToolPanel(a.slice(6)); return; }
+    if (a.startsWith("ps:")) { cu()?.openPageSetupPart(b, a.slice(3)); return; }
     ACT[a]?.(b);
   });
   // przyciski kart nie zabierają kursora z dokumentu (jak pasek formatowania)
