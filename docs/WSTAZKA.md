@@ -11,7 +11,7 @@ nie zmienia motywu.
 
 | # | Etap | Co wchodzi | Stan |
 |---|------|------------|------|
-| 1 | Rama: dwa rzędy u góry (1a: v1.01.00) | Wiersz 1: logo, Plik, karty, Szukaj, tryb (menu), Zapisz, ⋯. Wiersz 2: Cofnij/Ponów + polecenia karty w jednej linii (wstążka uproszczona). Karty: Narzędzia główne, Wstaw, Układ, Recenzja, Korespondencja, Widok, Asystent, kontekstowa Tabela. Przewijany rząd z podpowiedzią (wygaszenie, strzałka „+N”, jednorazowe drgnięcie). Komputer (≥ 769 px). | w toku |
+| 1 | Rama: dwa rzędy u góry (1a v1.01.00, 1b v1.01.01) | Wiersz 1: logo, Plik, karty, Szukaj, tryb (menu), Zapisz, ⋯. Wiersz 2: Cofnij/Ponów + polecenia karty w jednej linii (wstążka uproszczona). Karty: Narzędzia główne, Wstaw, Układ, Recenzja, Korespondencja, Widok, Asystent, kontekstowa Tabela. Przewijany rząd z podpowiedzią (wygaszenie, strzałka „+N”, jednorazowe drgnięcie). Komputer (≥ 769 px). | w toku |
 | 2 | Plik za kulisami (v1.01.02) | Ekran Plik: Nowy, Otwórz, Zdjęcie, Informacje, Zapisz jako, Eksportuj, Drukuj, Porównaj, Zamknij, Opcje, Pomoc, Zgłoś błąd. Menu ⋯ odchudzone (aktualizacja, wersja, inne aplikacje). | — |
 | 3 | Szyna i panele (v1.01.04) | Szyna 44 px (Nawigacja, Znajdź i zamień, Komentarze, Korekta, Asystent) z licznikami; panel wysuwany na margines albo przypięty. Zastępuje stały panel boczny. | — |
 | 4 | Dolny pasek | Karty otwartych dokumentów (przewijane) + strona, wyrazy, błędy, język, powiększenie, „Sugerowanie”. | — |
@@ -121,3 +121,52 @@ schowane.
 - Polecenia na kartach wołają te same funkcje co dziś (`composeUi.*`, `dwbShortcuts.openToolPanel`),
   bez kopii logiki.
 - Rząd, który się nie mieści, przewija się w bok — nic nie chowa się do list ani pod „⋯”.
+
+## Dalej — etapy 4–8 (stan po v1.01.04; do wzięcia w nowym czacie)
+
+Zrobione i wydane: 1a, 1b, 2, 3 (+ karta Tabela, sprzątanie dubli). Zostało:
+
+**4. Dolny pasek** (`.status-bar`, `app/open-docs.js`, `app/ribbon.js`)
+- Karty otwartych dokumentów widoczne ZAWSZE przy wstążce (też jeden plik) — dziś `#docTabs`
+  pokazuje się od drugiego pliku; przewijane z podpowiedzią jak rzędy wstążki (`.rb-strip`).
+- Kolejność jak w makiecie: [karty dokumentów] … „Sugerowanie” (gdy tryb) · Str. 1/4 · wyrazy ·
+  błędy (klik → szyna Korekta) · język · zoom.
+- Bez dubli: „Dokument wczytany” (`#status`) — sprawdzić, czy potrzebne; licznik zmian jest na Zapisz.
+- Wąsko (< 1000 px): chowają się wyrazy i język (jak w makiecie, `.wide`).
+
+**5. Mini pasek przy zaznaczeniu** (nowy moduł, wzór: makieta v3/v4 `.mini`)
+- Nad zaznaczeniem w Edycji: krój, rozmiar, B/I/U, wyróżnienie, kolor, punktory, styl,
+  komentarz, Przepisz — wołają te same funkcje co wstążka (`composeUi`, `#fmt*` kliknięte).
+- Gdy nad zaznaczeniem brak miejsca → pod nim; przy przewijaniu gaśnie; zaznaczenie poza
+  ekranem → znika; nie wchodzi na wysuwany panel. Tylko mysz (na dotyku systemowe menu).
+- Uwaga na dubel: to celowy skrót przy tekście (powód jak w Wordzie) — reszta jednego miejsca.
+
+**6. Opcje wstążki** (ostatni przycisk rzędu poleceń, też Plik → Opcje)
+- Układ: Uproszczona (dziś) / Klasyczna (duże przyciski + nazwy grup, wys. ~98 px — makieta v1/v4).
+- Pokazywanie: Zawsze / Chowaj przy przewijaniu (rząd 2 zwija się przy przewijaniu w dół,
+  wraca w górę) / Tylko karty (Ctrl/⌘+F1; rząd poleceń wysuwa się po kliknięciu karty).
+- Gęstość Mysz / Dotyk (większe cele); zapamiętane w localStorage.
+
+**7. Telefon** (≤ 768 px; dziś stary układ — `ribbon.js` oddaje kontrolki na miejsca)
+- Góra 44 px: ← Pliki, Cofnij, nazwa + „N niezapisane · tryb”, przycisk trybu, ⋯ (Plik).
+- Edycja: jeden przewijany rząd poleceń bieżącej karty nad klawiaturą; przycisk z nazwą karty
+  otwiera arkusz w miejscu klawiatury (karty jako „chipy”, polecenia z podpisami, cele 44–48 px).
+- Czytanie: cały ekran dokument, BEZ pływającego „Edytuj” (tryb zmienia się u góry).
+- Zachować zachowania telefonu, które są dziś (zwijanie nagłówka, wyspa szukania, pinch).
+
+**8. Znaczniki recenzji** (`app/review-margin.js`)
+- Nad kolumną dymków (szeroko): licznik „N zmian · M komentarzy”, ↑ ↓ (poprzedni/następny),
+  ✓ Akceptuj wszystkie. Reszta jak dziś (dymki obok kartki, wąsko ikonki + karta pod wierszem).
+- Recenzja → Znaczniki ▾ już jest (Wszystkie / Proste / Bez).
+
+### Jak pracować (sprawdzone w tym projekcie)
+- Wzór wyglądu: `docs/makiety/wstazka-v4.html` (otwórz w przeglądarce, suwak szerokości).
+- Zasady: 1:1 z makietą (animacje mogą się różnić); jedna funkcja w jednym miejscu — przenosząc,
+  usuń ze starego (też z menu, okienek, Pliku, paska stanu); różne funkcje = różne ikony; samotna
+  ikona → podpis; po zmianie układu sprawdź Czytanie i Edycję (wysokości, puste pasy).
+- Kontrolki przenosi się gniazdami `[data-rb="#id"]` (te same id; telefon dostaje je z powrotem).
+- Testy: `JOBS=6 node scripts/run-tests.mjs` (sam pomija nietknięte; pełny ~45 min). Testy klikające
+  kontrolki z kart: `dwbRibbon.reveal("#id")`; panele: `dwbShortcuts.openToolPanel(id)`.
+  Znany czerwony: `ENGINE=webkit schema` (crash WebKit, pada też na starym kodzie).
+- Wydanie: commit `feat/fix(docs): …`, potem `npm run release`, commit `chore(docs): wydanie vX — …`,
+  `git push`. Bez stopki Co-Authored-By.
