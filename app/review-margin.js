@@ -23,6 +23,7 @@ const dwbMargin = (() => {
 
   let cache = { bytes: null, job: null };
   let layer = null, inner = null, wire = null;
+  let sum = null, sumX = 0, sumH = 0; // licznik nad kolumną dymków (etap 8 wstążki, makieta v4 .mk-sum)
   let items = []; // { key, kind, el, anchor: {x, y, h}, top }
   let active = null, hover = null;
   let showing = false;
@@ -39,6 +40,8 @@ const dwbMargin = (() => {
   const initials = (c) => (c.initials || String(c.author || "?").trim().split(/\s+/).map((w) => w[0] || "").join("").slice(0, 2)).toUpperCase();
   const ICONS = {
     ok: '<polyline points="20 6 9 17 4 12"/>',
+    up: '<path d="m18 15-6-6-6 6"/>',
+    down: '<path d="m6 9 6 6 6-6"/>',
     no: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
     reply: '<polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/>',
     resolve: '<circle cx="12" cy="12" r="9"/><polyline points="8 12.5 11 15.5 16.5 9.5"/>',
@@ -136,7 +139,52 @@ const dwbMargin = (() => {
     wire.setAttribute("aria-hidden", "true");
     inner.appendChild(wire);
     layer.appendChild(inner);
+    // licznik: w warstwie, nie w przewijanej treści — stoi u góry kolumny przy przewijaniu
+    sum = document.createElement("div");
+    sum.className = "mk-sum";
+    sum.hidden = true;
+    sum.innerHTML = '<span class="mk-sum-t"></span>';
+    sum.append(
+      btn("up", "mkPrev", () => step(-1), "mk-sum-prev"),
+      btn("down", "mkNext", () => step(1), "mk-sum-next"),
+      // ta sama droga co Recenzja → Akceptuj wszystkie na wstążce (doczytuje moduł Recenzji, skanuje)
+      btn("ok", "mkAcceptAll", () => { if (typeof dwbRibbon !== "undefined" && dwbRibbon) dwbRibbon.run("acceptAll"); }, "mk-ok mk-sum-ok"),
+    );
+    layer.appendChild(sum);
     document.body.appendChild(layer);
+  }
+  // „3 zmiany · 2 komentarze” (polskie liczebniki: 1 / 2–4 / 5+)
+  function plural(n, keys) {
+    const d = n % 10, h = n % 100;
+    return t(n === 1 ? keys[0] : d >= 2 && d <= 4 && (h < 12 || h > 14) ? keys[1] : keys[2]);
+  }
+  let sumArgs = null;
+  function syncSum(on, nLive, x, w) {
+    if (!sum) return;
+    sum.hidden = !on;
+    sumArgs = on ? [on, nLive, x, w] : null;
+    if (!on) { sumH = 0; return; }
+    // te same liczby co komunikat po otwarciu i plakietka na szynie (cały plik, docx-revisions.js)
+    const fc = typeof docReviewCounts !== "undefined" ? docReviewCounts : { changes: 0, comments: 0 };
+    const nChanges = fc.changes + nLive, nComments = fc.comments;
+    sumX = x;
+    sum.style.width = `${w}px`;
+    const txt = sum.querySelector(".mk-sum-t");
+    txt.replaceChildren();
+    // liczba z wyrazem w jednym kawałku — wąska kolumna łamie tylko przy „ · ”
+    const part = (n, keys) => { const w = document.createElement("span"); w.className = "mk-sum-p"; const b = document.createElement("b"); b.textContent = fmtNum(n); w.append(b, ` ${plural(n, keys)}`); return w; };
+    txt.append(part(nChanges, ["mkChange1", "mkChange2", "mkChange5"]), " · ", part(nComments, ["mkComment1", "mkComment2", "mkComment5"]));
+    sum.querySelector(".mk-sum-ok").hidden = !nChanges;
+    frame();
+    sumH = sum.offsetHeight;
+  }
+  // ↑ ↓ — poprzedni / następny znacznik w kolejności tekstu (ten sam ruch co klik w dymek)
+  function step(dir) {
+    const list = items.slice().sort((a, b) => a.anchor.y - b.anchor.y || a.anchor.x - b.anchor.x);
+    if (!list.length) return;
+    const i = list.findIndex((it) => it.key === active);
+    const n = i < 0 ? (dir > 0 ? 0 : list.length - 1) : (i + dir + list.length) % list.length;
+    focusItem(list[n].key, { reveal: true });
   }
   function frame() {
     const v = vp();
@@ -147,6 +195,7 @@ const dwbMargin = (() => {
     layer.style.width = `${v.clientWidth}px`;
     layer.style.height = `${v.clientHeight}px`;
     inner.style.transform = `translate(${-v.scrollLeft}px, ${-v.scrollTop}px)`;
+    if (sum && !sum.hidden) sum.style.left = `${sumX - v.scrollLeft}px`;
   }
   // prostokąt ekranu → współrzędne treści obszaru dokumentu (te, które przewija warstwa)
   function toContent(r) {
@@ -168,6 +217,7 @@ const dwbMargin = (() => {
     showing = false;
     if (wire) wire.replaceChildren();
     layer?.classList.remove("has-cards");
+    syncSum(false);
   }
 
   function schedule() {
@@ -299,6 +349,9 @@ const dwbMargin = (() => {
     paintMarks(marks, pageR, bars);
     showing = items.length > 0;
     layer.classList.toggle("has-cards", showing);
+    // licznik nad kolumną: tylko gdy dymki stoją obok kartki (Wszystkie znaczniki)
+    const nLive = live.reduce((n, g) => n + g.ins.length + g.dels.length, 0);
+    syncSum(cards && mode === "all" && showing, nLive, colX, colW);
     if (active && !items.some((it) => it.key === active)) active = null;
     if (!active) { const k = itemAtCaret(); if (k) active = k; }
     place();
@@ -610,8 +663,10 @@ const dwbMargin = (() => {
     list.forEach((it) => { it.h = it.el.offsetHeight; it.top = it.anchor.y - 4; });
     const ai = active ? list.findIndex((it) => it.key === active) : -1;
     if (!list.length) { paintFocus(); drawWire(); return; }
+    // u góry dokumentu dymki zaczynają się pod licznikiem (licznik stoi u góry kolumny)
+    const top0 = sum && !sum.hidden ? sumH + 8 : -Infinity;
     if (ai < 0) {
-      let floor = -Infinity;
+      let floor = top0;
       list.forEach((it) => { it.top = Math.max(it.top, floor); floor = it.top + it.h + GAP; });
     } else {
       let floor = list[ai].top + list[ai].h + GAP;
@@ -620,6 +675,8 @@ const dwbMargin = (() => {
       for (let i = ai - 1; i >= 0; i--) { list[i].top = Math.min(list[i].top, ceil - list[i].h); ceil = list[i].top - GAP; }
       // nad aktywnym brakuje miejsca — dymki nad nim wyjeżdżają w górę poza widok (jak w Wordzie);
       // wrócą na swoje miejsca, gdy aktywny przestanie nim być
+      const over = top0 - list[ai].top;
+      if (over > 0) list.forEach((it) => { it.top += over; });
     }
     // rozsuwanie dymków: transform liczy karta graficzna, top przeliczałby układ w każdej klatce
     list.forEach((it) => setCardY(it.el, it.top));
@@ -769,6 +826,7 @@ const dwbMargin = (() => {
   return {
     init, schedule, setMode, focusItem, rangeIn, colorOf, // rangeIn, colorOf — przegląd po kolei (review-walk.js)
     mode: () => mode,
+    syncCounts: () => { if (sumArgs) syncSum(...sumArgs); }, // liczby z pliku przeliczone (docx-revisions.js)
     visible: () => showing,
     hasItem: (key) => showing && items.some((it) => it.key === key),
     _items: () => items.map((it) => ({ key: it.key, kind: it.kind, top: it.top, h: it.h, anchorY: it.anchor.y, left: parseFloat(it.el.style.left), width: it.el.offsetWidth })),

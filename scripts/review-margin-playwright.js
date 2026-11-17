@@ -313,6 +313,55 @@ async function run() {
   check("w pliku: obraz = połowa szerokości tekstu", Math.abs(ratio - 0.5) < 0.002, String(ratio));
   check("uchwyty idą za obrazem po zapisie", await page.evaluate(() => { const i = document.querySelector(".docx-preview-host img").getBoundingClientRect(); const h = document.querySelector(".img-handles").getBoundingClientRect(); return Math.abs(i.width - h.width) < 1.5 && Math.abs(i.left - h.left) < 1.5; }));
 
+  // ── licznik nad kolumną dymków (etap 8 wstążki) ──────────────────────────
+  const ps = await context.newPage();
+  ps.on("pageerror", (e) => errors.push(e.message));
+  await ps.goto(APP_URL, { waitUntil: "load" });
+  await ps.evaluate(() => { document.getElementById("heroSplash")?.remove(); setSidebarOpen(false); dwbMargin.setMode("all"); });
+  await ps.locator("#fileInput").setInputFiles("docs/samples/review-sample.docx");
+  await idle(ps);
+  const sumSt = () => ps.evaluate(() => {
+    const s = document.querySelector(".mk-sum"); const r = s.getBoundingClientRect();
+    const col = [...document.querySelectorAll(".mk-card:not([hidden])")].map((c) => c.getBoundingClientRect());
+    return { t: s.querySelector(".mk-sum-t").textContent, hidden: s.hidden, ok: !s.querySelector(".mk-sum-ok").hidden, left: Math.round(r.left), colLeft: Math.round(Math.min(...col.map((c) => c.left))), bottom: r.bottom, firstTop: Math.min(...col.map((c) => c.top)), active: document.querySelector(".mk-card.is-active")?.textContent.slice(0, 24) || null };
+  });
+  const sm0 = await sumSt();
+  const rvCounts = await ps.evaluate(() => docReviewCounts);
+  check("licznik: „12 zmian · 3 komentarze” (te same liczby co szyna), nad kolumną, dymki pod nim", !sm0.hidden && sm0.t === `${rvCounts.changes} zmian · ${rvCounts.comments} komentarze` && sm0.ok && Math.abs(sm0.left - sm0.colLeft) <= 2 && sm0.firstTop >= sm0.bottom, JSON.stringify({ sm0, rvCounts }));
+  await ps.click(".mk-sum-next");
+  await ps.waitForTimeout(400);
+  const ma1 = (await sumSt()).active;
+  await ps.click(".mk-sum-next");
+  await ps.waitForTimeout(400);
+  const ma2 = (await sumSt()).active;
+  await ps.click(".mk-sum-prev");
+  await ps.waitForTimeout(400);
+  check("licznik: ↓ ↓ ↑ przechodzi po dymkach w kolejności tekstu", ma1 && ma2 && ma1 !== ma2 && (await sumSt()).active === ma1, JSON.stringify({ ma1, ma2 }));
+  await ps.evaluate(() => dwbMargin.setMode("simple"));
+  await ps.waitForTimeout(500);
+  check("Proste znaczniki: bez licznika (dymków obok kartki nie ma)", (await sumSt()).hidden);
+  await ps.evaluate(() => dwbMargin.setMode("all"));
+  await ps.waitForTimeout(500);
+  // ✓ Akceptuj wszystkie — bez otwierania panelu Recenzja (moduł doczytuje się sam)
+  await ps.evaluate(() => document.querySelector('.mode-btn[data-mode="edit"]').click());
+  await ps.waitForTimeout(400);
+  await ps.click(".mk-sum-ok");
+  await ps.waitForFunction(() => docReviewCounts.changes === 0, null, { timeout: 8000 }).catch(() => {});
+  await ps.waitForTimeout(400);
+  const sm3 = await sumSt();
+  check("✓ Akceptuj wszystkie: zmiany przyjęte, „0 zmian”, ✓ znika", sm3.t.startsWith("0 zmian") && !sm3.ok, JSON.stringify(sm3));
+  // to samo ze wstążki (Recenzja → Akceptuj wszystkie / Odrzuć) przy zamkniętym panelu — Cofnij i Odrzuć
+  await ps.evaluate(() => document.getElementById("undoBtn").click());
+  await ps.waitForFunction(() => docReviewCounts.changes > 0, null, { timeout: 8000 }).catch(() => {});
+  await ps.evaluate(() => dwbRibbon.run("rejectAll"));
+  await ps.waitForFunction(() => docReviewCounts.changes === 0, null, { timeout: 8000 }).catch(() => {});
+  check("wstążka: Odrzuć wszystkie działa bez otwierania panelu Recenzja", await ps.evaluate(() => docReviewCounts.changes === 0 && !document.getElementById("panel-review").open));
+  await ps.setViewportSize({ width: 900, height: 900 });
+  await ps.evaluate(() => document.getElementById("undoBtn").click());
+  await ps.waitForTimeout(1200);
+  check("wąsko (bez kolumny dymków): bez licznika", (await sumSt()).hidden);
+  await ps.close();
+
   check("brak błędów strony", !errors.length, errors.join(" | "));
   await browser.close();
   let failed = 0;

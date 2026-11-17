@@ -486,6 +486,7 @@ async function refreshReviewCounts() {
   }
   if (job !== reviewCountJob) return;
   if (typeof appFrame !== "undefined") appFrame.syncPanelCounts();
+  if (typeof dwbMargin !== "undefined") dwbMargin.syncCounts?.(); // licznik nad dymkami
   // otwarty panel Recenzja nadąża za edycjami (Cofnij, zmiany z innych paneli)
   if (document.getElementById("panel-review")?.open && typeof runReviewScan === "function") runReviewScan().catch(() => {});
   if (reviewNoticePending) {

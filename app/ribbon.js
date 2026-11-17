@@ -327,8 +327,12 @@ const dwbRibbon = (() => {
     zoomFit: () => document.getElementById("zoomFitBtn")?.click(),
   };
   // przycisk z panelu Recenzja (ta sama akcja); nieaktywny = nie ma czego przeglądać
-  function proxy(id) {
+  async function proxy(id) {
     const el = document.getElementById(id);
+    // panel Recenzja jeszcze nieotwarty: jego moduł ładuje się leniwie (lazy-features.js), a przyciski
+    // czekają na skan — przycisk bez obsługi nic nie robił (błąd od etapu 1b). Najpierw moduł i skan.
+    if (typeof ensureLazyFeature === "function") await ensureLazyFeature("review");
+    if (typeof runReviewScan === "function" && (el?.disabled || typeof reviewScan === "undefined" || !reviewScan)) await runReviewScan();
     if (!el || el.disabled || el.hidden) { toast(t("rbNoChanges"), "info"); return; }
     el.click();
   }

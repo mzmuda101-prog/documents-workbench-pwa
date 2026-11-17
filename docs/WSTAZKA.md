@@ -18,7 +18,7 @@ nie zmienia motywu.
 | 5 | Mini pasek (v1.01.07) | Nad zaznaczeniem, pod nim gdy brak miejsca, gaśnie przy przewijaniu. | — |
 | 6 | Opcje wstążki (6a v1.01.09, 6b Klasyczna v1.01.10) | Klasyczna (duże przyciski, nazwy grup) / Uproszczona; Zawsze / Chowaj przy przewijaniu / Tylko karty (Ctrl+F1); gęstość Mysz/Dotyk. | — |
 | 7 | Telefon (7a v1.01.13, 7b v1.01.14) | Pasek u góry (wstecz, cofnij, nazwa, tryb, ⋯); rząd poleceń nad klawiaturą; arkusz kart w miejscu klawiatury; Czytanie bez dodatkowych przycisków. | — |
-| 8 | Znaczniki recenzji | Licznik „N zmian · M komentarzy” nad kolumną dymków, poprzedni/następny, Akceptuj wszystkie; Recenzja → Znaczniki: Wszystkie / Proste / Bez. Reszta jak dziś (`review-margin.js`). | — |
+| 8 | Znaczniki recenzji (v1.01.16) | Licznik „N zmian · M komentarzy” nad kolumną dymków, poprzedni/następny, Akceptuj wszystkie; Recenzja → Znaczniki: Wszystkie / Proste / Bez. Reszta jak dziś (`review-margin.js`). | — |
 
 ## Etap 1a — co weszło (2026-11-16)
 
@@ -210,6 +210,18 @@ schowane.
   zszedł z wyspy (karta Widok; na wyspie tylko jako wyjście, gdy włączony), pigułki „niezapisane”
   i „Sugerowanie” nad wyspą schowane (dublowały Zapisz i tryb). Mateusz: panel narzędzi (klucz)
   docelowo może nie być potrzebny w tej formie — do przemyślenia później.
+
+## Etap 8 — licznik nad dymkami (v1.01.16)
+
+- `review-margin.js`: nad kolumną dymków (gdy stoją obok kartki, Wszystkie znaczniki) licznik
+  „N zmian · M komentarzy” — te same liczby co komunikat po otwarciu i plakietka na szynie
+  (`docReviewCounts`, cały plik) + zmiany na żywo w Sugerowaniu; ↑ ↓ poprzedni / następny dymek
+  w kolejności tekstu (`focusItem`), ✓ Akceptuj wszystkie (gdy są zmiany). Stoi u góry kolumny
+  przy przewijaniu (w warstwie, nie w treści); dymki u góry dokumentu zaczynają się pod nim.
+  Wąska kolumna: dwa wiersze zamiast ucinania. Proste / Bez znaczników / wąsko — bez licznika.
+- Naprawiony błąd od etapu 1b: Recenzja → Akceptuj / Odrzuć wszystkie, Przejrzyj po kolei,
+  Usuń komentarze na wstążce nic nie robiły, dopóki panel Recenzja nie był otwarty (moduł ładuje
+  się leniwie) — teraz doczytują moduł i skanują plik same (`ribbon.js proxy`).
 
 ## Zasady techniczne
 
