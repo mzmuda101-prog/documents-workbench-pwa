@@ -4781,11 +4781,23 @@ const composeUi = (() => {
     runFileEdit(edit, { paraIndex: ctx.index, offset: ctx.start + text.length });
   }, true);
 
+  function clipboardHasText(cd) {
+    if ((cd?.getData("text/plain") || "").trim()) return true;
+    const html = cd?.getData("text/html") || "";
+    if (!html) return false;
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    doc.querySelectorAll("style, script, title, head").forEach((n) => n.remove());
+    return !!(doc.body?.textContent || "").replace(/\u00a0/g, " ").trim();
+  }
   // Wklejony obraz (zrzut ekranu, skopiowane zdjęcie) — w miejscu kursora, jak „Wstaw → Obraz”.
   docCanvasEl?.addEventListener("paste", (e) => {
     if (readOnlyMode) return;
     const file = Array.from(e.clipboardData?.files || []).find((f) => /^image\//.test(f.type));
     if (!file) return;
+    // Word, Excel, strony WWW kładą do schowka obok tekstu też ZDJĘCIE zaznaczenia — wtedy wklejamy
+    // tekst (z formatowaniem, paste-rich.js), jak Word. Obraz tylko, gdy w schowku nie ma tekstu
+    // (zrzut ekranu, skopiowane zdjęcie, sam obraz z Worda/strony). Zgłoszenie 2026-11-17 (nagranie).
+    if (clipboardHasText(e.clipboardData)) return;
     if (typeof dwbSel !== "undefined") dwbSel.collapseForInsert(); // obraz w miejsce zaznaczenia kilku akapitów
     // zaznaczony obraz (karta obrazu) — wklejony obraz go zastępuje, jak w Wordzie. Tylko gdy od
     // kliknięcia w obraz kursor się nie ruszył: karta bywa jeszcze otwarta, gdy piszesz dalej

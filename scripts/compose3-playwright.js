@@ -163,6 +163,19 @@ async function run() {
   await page.waitForTimeout(400);
   await idle(page);
   check("wklejony obraz (zrzut ekranu) trafia do dokumentu", await page.evaluate(() => document.querySelectorAll(".docx-preview-host img").length) === 2);
+  // kopia z Worda: w schowku tekst z formatowaniem + ZDJĘCIE zaznaczenia — wkleja się tekst, nie obraz
+  await page.keyboard.press("Enter");
+  const wordShot = await makeImage(page, 300, 120);
+  await page.evaluate((f) => {
+    const dt = new DataTransfer(); dt.items.add(f);
+    dt.setData("text/html", '<html xmlns:o="urn:schemas-microsoft-com:office:office"><body><p class=MsoNormal><b>Z Worda</b> akapit pierwszy</p><p class=MsoNormal>drugi akapit</p></body></html>');
+    dt.setData("text/plain", "Z Worda akapit pierwszy\ndrugi akapit");
+    docCaretParagraph(document.activeElement).dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+  }, wordShot);
+  await page.waitForTimeout(400);
+  await idle(page);
+  const fromWord = await page.evaluate(() => ({ imgs: document.querySelectorAll(".docx-preview-host img").length, text: document.querySelector(".docx-preview-host").textContent.includes("Z Worda akapit pierwszy"), bold: [...document.querySelectorAll(".docx-preview-host b, .docx-preview-host strong, .docx-preview-host span")].some((x) => x.textContent === "Z Worda" && Number(getComputedStyle(x).fontWeight) >= 600) }));
+  check("kopia z Worda (tekst + zdjęcie w schowku): wkleja się tekst z formatowaniem, bez obrazu", fromWord.imgs === 2 && fromWord.text && fromWord.bold, JSON.stringify(fromWord));
   await page.click(".docx-preview-host img >> nth=1");
   await page.keyboard.press("Delete");
   await idle(page);
