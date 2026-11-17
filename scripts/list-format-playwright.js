@@ -103,6 +103,16 @@ const idle = (page) => page.waitForFunction(() => document.getElementById("loadi
     return { roman: /<w:numFmt w:val="upperRoman"\/><w:lvlText w:val="%1\."\/>/.test(num), legal: /<w:lvlText w:val="%1\.%2\."\/>/.test(num), restart: /<w:startOverride w:val="1"\/>/.test(num) };
   });
   check("plik: I. (upperRoman „%1.”), 1.1. („%1.%2.”), numerowanie od nowa (startOverride)", file.roman && file.legal && file.restart, JSON.stringify(file));
+  // ręcznie wpisany punktor („• tekst”) — Word przy włączeniu listy go usuwa (nagranie 2026-11-17)
+  await page.locator("#fileInput").setInputFiles({ name: "punktory.docx", mimeType: DOCX_MIME, buffer: await buildDocx({ body: ["• Alfa", "•\tBeta", "▪ Gamma", "•Delta", "- Epsilon", "Zwykły"] }) });
+  await idle(page);
+  await page.evaluate(() => appFrame.setReadOnly(false));
+  await idle(page);
+  await page.evaluate(() => applyDocumentEdit({ op: "list", indices: [0, 1, 2, 3, 4, 5], kind: "number", toggle: false }));
+  await idle(page);
+  const manual = await page.evaluate(() => collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).map((q) => `${(q.getAttribute("data-dwb-num") || "").trim()}|${q.textContent}`));
+  check("numerowanie zdejmuje wpisany „• ” / „•⇥” / „▪ ”; „•Delta”, „- Epsilon” i zwykły tekst bez zmian",
+    JSON.stringify(manual) === JSON.stringify(["1.|Alfa", "2.|Beta", "3.|Gamma", "4.|•Delta", "5.|- Epsilon", "6.|Zwykły"]), JSON.stringify(manual));
   check("bez błędów strony", !errors.length, errors.join(" | "));
   await browser.close();
   let failed = 0;

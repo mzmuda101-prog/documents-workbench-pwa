@@ -1207,6 +1207,30 @@ function composeParagraphListKind(p, idx) {
 
 const composeNumIdOf = (p) => composeDirectChild(composeDirectChild(composeDirectChild(p, "pPr") || p, "numPr") || p, "numId")?.getAttributeNS(W_NS, "val") || null;
 
+// Ręcznie wpisany punktor na początku akapitu („• tekst”, „▪<tab>tekst”) — przy włączeniu listy Word
+// go usuwa (zostaje numer / punktor listy, nie „1. • tekst”). Nagranie Mateusza 2026-11-17.
+// Tylko znaki punktorów — „- ” i „1. ” zostają (to bywa treść, np. myślnik albo numer w tekście).
+const COMPOSE_MANUAL_BULLET = /^[\u2022\u25E6\u25AA\u25AB\u25CF\u25CB\u25A0\u25A1\u25C6\u25C7\u25BA\u27A2\u2023\u2043\u00B7]/;
+function composeStripManualBullet(p) {
+  // tekst akapitu w kolejności: w:t (zwykły tekst) i w:tab; bez usuniętego tekstu (w:delText)
+  const inDel = (n) => { for (let a = n.parentNode; a && a !== p; a = a.parentNode) if (a.localName === "del" || a.localName === "moveFrom") return true; return false; };
+  const nodes = Array.from(p.getElementsByTagNameNS(W_NS, "*")).filter((n) => (n.localName === "t" || n.localName === "tab") && n.parentNode?.localName === "r" && !inDel(n));
+  const first = nodes.findIndex((n) => n.localName === "tab" || n.textContent.length);
+  if (first < 0 || nodes[first].localName !== "t" || !COMPOSE_MANUAL_BULLET.test(nodes[first].textContent)) return false;
+  // po znaku musi być odstęp (spacja albo tabulator) — „•tekst” bez odstępu to treść
+  const t0 = nodes[first];
+  const rest = t0.textContent.slice(1);
+  const nextTab = nodes[first + 1]?.localName === "tab" ? nodes[first + 1] : null;
+  if (rest.length ? !/^[ \u00A0\t]/.test(rest) : !nextTab && !/^[ \u00A0]/.test(nodes[first + 1]?.textContent || "")) return false;
+  t0.textContent = rest.replace(/^[ \u00A0\t]+/, "");
+  if (!rest.length) {
+    if (nextTab) nextTab.parentNode.removeChild(nextTab);
+    else if (nodes[first + 1]) nodes[first + 1].textContent = nodes[first + 1].textContent.replace(/^[ \u00A0]+/, "");
+  }
+  if (!t0.textContent) t0.removeAttribute("xml:space");
+  return true;
+}
+
 async function applyListInZip(zip, xml, edit) {
   const doc = composeParse(xml);
   const paragraphs = collectParagraphElements(doc.documentElement, "all");
@@ -1278,6 +1302,7 @@ async function applyListInZip(zip, xml, edit) {
   if (!numId && kind === "bullet") numId = Array.from(idx.nums.entries()).find(([, a]) => a === absId)?.[0] || null;
   if (!numId) numId = newNum(kind === "number" && !wholeId);
   targets.forEach((p) => {
+    composeStripManualBullet(p);
     const pPr = composeEnsurePPr(p);
     const old = composeDirectChild(pPr, "numPr");
     const ilvl = old && composeDirectChild(old, "ilvl")?.getAttributeNS(W_NS, "val");
