@@ -133,7 +133,7 @@ async function run() {
   check("góra zakresu 3×", s4.zoom <= 3.001 && s4.zoom >= 2.9, String(s4.zoom));
 
   // miejsce pod palcami zostaje pod palcami (tekst w „Dopasuj” zawija się na nowo)
-  await page.click("#zoomFitBtn");
+  await page.evaluate(() => document.getElementById("zoomFitBtn").click()); // „Dopasuj” na telefonie: Widok w rzędzie poleceń (phone-bar.js)
   await page.waitForTimeout(300);
   await page.evaluate(() => { document.getElementById("docViewport").scrollTop = 400; });
   await page.waitForTimeout(100);
@@ -159,7 +159,7 @@ async function run() {
   });
   check("tekst pod palcami zostaje pod palcami (bez skoku na początek)", markBefore && Math.abs(drift.dy) < 60 && drift.top > 400, `${wordBefore} ${JSON.stringify(drift)}`);
 
-  await page.click("#zoomFitBtn");
+  await page.evaluate(() => document.getElementById("zoomFitBtn").click()); // „Dopasuj” na telefonie: Widok w rzędzie poleceń (phone-bar.js)
   await page.waitForTimeout(300);
   const s5 = await state(page);
   check("„Dopasuj” wraca do 100% (etykieta „100%” z ikonką Widoku mobilnego)", s5.zoom === 1 && s5.mode === "fit" && s5.now === "100%"
@@ -177,7 +177,7 @@ async function run() {
   check("jeden palec nie startuje gestu", one === "");
 
   // zsunięcie palców wyraźnie poniżej 50% = „cała strona”: Widok desktopowy (jak w zdjęciach)
-  await page.click("#zoomFitBtn");
+  await page.evaluate(() => document.getElementById("zoomFitBtn").click()); // „Dopasuj” na telefonie: Widok w rzędzie poleceń (phone-bar.js)
   await page.waitForTimeout(300);
   await page.evaluate(() => { document.getElementById("docViewport").scrollTop = 1200; });
   await page.waitForTimeout(250);
@@ -211,7 +211,7 @@ async function run() {
   // tablet w pionie (Auto): Widok mobilny — pinch skaluje tekst, który dalej się zawija
   await page.setViewportSize({ width: 820, height: 1000 });
   await page.waitForTimeout(600);
-  await page.click("#zoomFitBtn");
+  await page.evaluate(() => document.getElementById("zoomFitBtn").click()); // „Dopasuj” na telefonie: Widok w rzędzie poleceń (phone-bar.js)
   await page.waitForTimeout(300);
   const p0 = await state(page);
   check("tablet w pionie: Widok mobilny (tekst zawija się)", p0.mode === "fit" && p0.reflow, JSON.stringify(p0));
@@ -236,7 +236,7 @@ async function run() {
   await pinch(page, 100, 140, 410, 500);
   const p1 = await state(page);
   check("tablet w pionie: pinch powiększa tekst, bez poziomego przewijania", p1.reflow && p1.lineH > p0.lineH * 1.25 && p1.sw <= 1, JSON.stringify({ p0: p0.lineH, p1: p1.lineH, sw: p1.sw }));
-  await page.click("#zoomFitBtn");
+  await page.evaluate(() => document.getElementById("zoomFitBtn").click()); // „Dopasuj” na telefonie: Widok w rzędzie poleceń (phone-bar.js)
 
   // tablet w poziomie (Auto): Widok desktopowy — strony, pinch przybliża jak zdjęcie
   await page.setViewportSize({ width: 1180, height: 820 });

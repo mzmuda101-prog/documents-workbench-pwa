@@ -46,6 +46,15 @@ const insertMenu = async (page, label) => {
   await page.click(`.compose-pop-insert .compose-item-label:text-is("${label}")`);
 };
 
+// telefon (app/phone-bar.js): polecenie z arkusza kart — przycisk karty, chip karty, polecenie
+async function phCmd(p, tab, act) {
+  if (await p.evaluate(() => document.querySelector(".ph-sheet").hidden)) { await p.tap(".ph-tsw"); await p.waitForTimeout(250); }
+  await p.tap(`.ph-chip[data-tab="${tab}"]`);
+  await p.waitForTimeout(150);
+  await p.tap(`.ph-sheet-b [data-act="${act}"]`);
+  await p.waitForTimeout(250);
+}
+
 async function run() {
   const browser = await pw[ENGINE].launch({ headless: true });
   const context = await browser.newContext({ serviceWorkers: "block", viewport: { width: 1280, height: 860 } });
@@ -279,17 +288,20 @@ async function run() {
   await tp.waitForSelector(".docx-preview-host p.docx-editable-p", { timeout: 20000 });
   await idle(tp);
   await tp.evaluate(() => focusParagraphAtOffset(3, 0));
-  await tp.tap("#insertMenuBtn");
-  check("dotyk: tap „＋ Wstaw” otwiera menu", await tp.evaluate(() => !!document.querySelector(".compose-pop-insert")));
-  await tp.tap(".compose-pop-insert .compose-char[aria-label='§']");
+  // telefon (phone-bar.js): polecenia z arkusza kart (karta → polecenie), jak palcem
+  await phCmd(tp, "insert", "symbol");
+  check("dotyk: Wstaw → Symbol otwiera okno symboli", await tp.evaluate(() => !!document.querySelector(".compose-pop-symbols")));
+  const ch = await tp.evaluate(() => document.querySelector(".compose-pop-symbols .symbol-pick button").textContent);
+  await tp.tap(".compose-pop-symbols .symbol-pick button >> nth=0");
   await tp.waitForTimeout(250);
-  check("dotyk: tap w znak wstawia go w tekst", (await tp.evaluate(() => collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[3].textContent)).startsWith("§"));
-  await tp.tap("#fmtListBtn");
+  check("dotyk: tap w znak wstawia go w tekst", (await tp.evaluate(() => collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[3].textContent)).startsWith(ch), ch);
+  await tp.evaluate(() => focusParagraphAtOffset(3, 0));
+  await phCmd(tp, "home", "menu:fmtListBtn");
   await tp.tap(".compose-pop-list .compose-item-label:text-is('Lista numerowana')");
   await idle(tp);
   check("dotyk: tap „Lista” → „Lista numerowana” robi listę", await tp.evaluate(() => isListParagraph(collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[3])));
   await tp.evaluate(() => focusParagraphAtOffset(3, 1));
-  await tp.tap("#fmtAlignBtn");
+  await phCmd(tp, "home", "menu:fmtAlignBtn");
   await tp.tap(".compose-pop-align button[aria-label='Do prawej']");
   await idle(tp);
   check("dotyk: tap wyrównania działa", await tp.evaluate(() => getComputedStyle(collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[3]).textAlign) === "right");

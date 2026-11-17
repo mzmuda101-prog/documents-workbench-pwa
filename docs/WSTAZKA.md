@@ -17,7 +17,7 @@ nie zmienia motywu.
 | 4 | Dolny pasek (v1.01.06) | Karty otwartych dokumentów (przewijane) + strona, wyrazy, błędy, język, powiększenie, „Sugerowanie”. | — |
 | 5 | Mini pasek (v1.01.07) | Nad zaznaczeniem, pod nim gdy brak miejsca, gaśnie przy przewijaniu. | — |
 | 6 | Opcje wstążki (6a v1.01.09, 6b Klasyczna v1.01.10) | Klasyczna (duże przyciski, nazwy grup) / Uproszczona; Zawsze / Chowaj przy przewijaniu / Tylko karty (Ctrl+F1); gęstość Mysz/Dotyk. | — |
-| 7 | Telefon (7a v1.01.13) | Pasek u góry (wstecz, cofnij, nazwa, tryb, ⋯); rząd poleceń nad klawiaturą; arkusz kart w miejscu klawiatury; Czytanie bez dodatkowych przycisków. | — |
+| 7 | Telefon (7a v1.01.13, 7b v1.01.14) | Pasek u góry (wstecz, cofnij, nazwa, tryb, ⋯); rząd poleceń nad klawiaturą; arkusz kart w miejscu klawiatury; Czytanie bez dodatkowych przycisków. | — |
 | 8 | Znaczniki recenzji | Licznik „N zmian · M komentarzy” nad kolumną dymków, poprzedni/następny, Akceptuj wszystkie; Recenzja → Znaczniki: Wszystkie / Proste / Bez. Reszta jak dziś (`review-margin.js`). | — |
 
 ## Etap 1a — co weszło (2026-11-16)
@@ -188,8 +188,23 @@ schowane.
 - Decyzje Mateusza (2026-11-17): ← = zamknij do ekranu startowego; wyspa szukania — ustawienie,
   domyślnie jak dziś, do wyboru „jak w makiecie” (bez wyspy) — wchodzi w 7b.
 - Przy wstążce dolny pasek prawie przy krawędzi okna (4 px).
-- Dalej 7b: rząd poleceń karty nad klawiaturą + arkusz kart (chipy, polecenia z podpisami),
-  ustawienie wyspy, zastąpienie paska nad dokumentem.
+
+## Etap 7b — rząd poleceń i arkusz kart na telefonie (v1.01.14)
+
+- `app/phone-bar.js` (część 7b): w Edycji u dołu obszaru dokumentu rząd poleceń bieżącej karty
+  (przycisk karty „Główne ▾”, przewijane ikony 44 px, ⌄ schowaj klawiaturę gdy otwarta). Obszar
+  dokumentu przy pisaniu kończy się nad klawiaturą, więc rząd stoi nad nią; bez klawiatury — nad
+  wyspą. Przycisk karty otwiera arkusz (klawiatura chowa się, zaznaczenie zostaje): karty jako
+  chipy (Tabela, gdy kursor w tabeli), polecenia z podpisami w 2 kolumnach, „Gotowe”.
+- Polecenia = te same akcje co wstążka (`dwbRibbon.run`) albo klik istniejącej kontrolki;
+  menu formatowania przy przycisku telefonu (`composeUi.openMenuFor`). Listy kart jak w makiecie
+  + funkcje aplikacji spoza makiety na końcu (np. Ponów na początku Głównych, Nagłówek i stopka).
+- Dawny pasek nad dokumentem na telefonie zniknął (tryb i Cofnij u góry, reszta w rzędzie/arkuszu;
+  ¶, Dopasuj, Widok i powiększenie — karta Widok). „Gotowe” przy pisaniu = ⌄ w rzędzie.
+- Wyspa szukania: ustawienie w panelu Widok „Wyspa szukania u dołu (telefon)”, domyślnie
+  włączona (jak dotąd); wyłączona = jak w makiecie (szukanie: Widok → Znajdź i zamień).
+- W Czytaniu na telefonie nie ma paska poleceń (jak w makiecie); widok i powiększenie — szczypanie
+  i panel Widok (klucz na wyspie).
 
 ## Zasady techniczne
 

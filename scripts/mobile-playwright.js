@@ -115,24 +115,21 @@ async function run() {
   }
   console.log("  ✓ Brakujące kroje: rodzaj zapasowy (sans-serif/serif) i widoczne pogrubienie");
 
-  // Pasek Edycji na telefonie: Wstaw / Układ / Przepisz i lista stylów jako ikony 40 px (jak ikony
-  // trybów), nazwa dalej w aria-label; lista stylów działa
+  // Edycja na telefonie: rząd poleceń karty (app/phone-bar.js) — ikony 44 px z nazwą w aria-label,
+  // dawny pasek formatowania schowany
   await page.evaluate(() => appFrame.setReadOnly(false));
   await page.waitForTimeout(500);
   const tb = await page.evaluate(() => {
-    const w = (id) => Math.round(document.getElementById(id).getBoundingClientRect().width);
-    const sel = document.getElementById("fmtParaStyle");
-    const ico = document.querySelector(".style-pick-ico").getBoundingClientRect();
+    const btns = [...document.querySelectorAll(".ph-strip .ph-ic")];
     return {
-      widths: ["insertMenuBtn", "pageLayoutBtn", "rewriteBtn"].map(w).concat(w("fmtParaStyle")),
-      labels: ["insertMenuBtn", "pageLayoutBtn", "rewriteBtn", "fmtParaStyle"].map((id) => document.getElementById(id).getAttribute("aria-label")),
-      icoShown: ico.width > 0,
-      textHidden: getComputedStyle(sel).color === "rgba(0, 0, 0, 0)",
+      n: btns.length,
+      sizes: [...new Set(btns.slice(0, 6).map((b) => `${Math.round(b.getBoundingClientRect().width)}x${Math.round(b.getBoundingClientRect().height)}`))],
+      unnamed: btns.filter((b) => !b.getAttribute("aria-label")).length,
+      oldBar: !!document.getElementById("formatToolbar").offsetParent,
     };
   });
-  if (tb.widths.some((x) => x > 44) || !tb.icoShown || !tb.textHidden) throw new Error(`Pasek Edycji na telefonie bez ikon: ${JSON.stringify(tb)}`);
-  if (tb.labels.join("|") !== "Wstaw|Układ|Przepisz|Styl akapitu") throw new Error(`Ikony bez nazwy dla czytnika: ${JSON.stringify(tb.labels)}`);
-  console.log("  ✓ Pasek Edycji: Wstaw / Układ / Przepisz / styl jako ikony, nazwy w aria-label");
+  if (tb.n < 10 || tb.sizes.join() !== "44x44" || tb.unnamed || tb.oldBar) throw new Error(`Rząd poleceń na telefonie: ${JSON.stringify(tb)}`);
+  console.log("  ✓ Edycja: rząd poleceń z ikonami 44 px i nazwami, bez dawnego paska");
 
   assertNoErrors(errors, "mobile-playwright");
   await browser.close();

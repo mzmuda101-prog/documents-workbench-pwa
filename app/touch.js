@@ -109,7 +109,10 @@
     const was = document.body.classList.contains("kb-open");
     if (open === was) { if (open) checkSoon(); return; }
     document.body.classList.toggle("kb-open", open);
-    if (open) {
+    // górny pasek telefonu (phone-bar.js: ↶, tryb) zostaje przy klawiaturze — jak w makiecie v4
+    if (open && document.body.classList.contains("ph-bar-on")) {
+      heroWasCollapsed = null;
+    } else if (open) {
       heroWasCollapsed = appFrame.isHeroCollapsed();
       appFrame.setHeroCollapsed(true);
     } else if (heroWasCollapsed === false) {

@@ -115,7 +115,8 @@ async function run() {
       focus: !!a?.closest?.(".docx-edit-root, .docx-editable-p"),
       sel: !!sel.rangeCount && document.getElementById("docCanvas").contains(sel.anchorNode),
       hl: document.querySelectorAll("#docCanvas .search-hit, #docCanvas .semantic-hit").length,
-      btn: btn.hidden ? null : btn.textContent.trim(),
+      // telefon (phone-bar.js): „Gotowe” przy pisaniu to ⌄ w rzędzie poleceń; „Odznacz” dalej pływa
+      btn: (() => { const kb = document.querySelector(".ph-hidekb"); if (kb && kb.offsetParent && !kb.hidden) return "Gotowe"; return btn.hidden || getComputedStyle(btn).display === "none" ? null : btn.textContent.trim(); })(),
     };
   });
   await page.evaluate(() => { document.getElementById("searchQuery").value = ""; window.dwbKeyboard.clearHighlights(); });
@@ -154,7 +155,7 @@ async function run() {
   await tapParagraph();
   const typing = await editing();
   check("stuknięcie w akapit = pisanie → „Gotowe”", typing.focus && typing.btn === "Gotowe", JSON.stringify(typing));
-  await page.tap("#docDismissBtn");
+  await page.tap((await page.evaluate(() => document.body.classList.contains("ph-bar-on"))) ? ".ph-hidekb" : "#docDismissBtn");
   await page.waitForTimeout(250);
   const afterDone = await editing();
   check("„Gotowe” zdejmuje fokus i kursor z dokumentu", !afterDone.focus && !afterDone.sel && !afterDone.btn, JSON.stringify(afterDone));

@@ -263,13 +263,14 @@ async function run() {
   await page.setViewportSize({ width: 390, height: 780 });
   await page.waitForTimeout(500);
   await idle(page);
+  // dawny pasek formatowania na telefonie zastąpił rząd poleceń (app/phone-bar.js)
   const bar = await page.evaluate(() => {
-    const b = document.getElementById("formatToolbar");
+    const b = document.querySelector(".ph-strip");
     const kids = Array.from(b.children).filter((c) => c.offsetParent);
     const tops = new Set(kids.map((c) => { const r = c.getBoundingClientRect(); return Math.round((r.top + r.bottom) / 2 / 6); }));
     return { rows: tops.size, scroll: b.scrollWidth > b.clientWidth, fade: b.classList.contains("more-r"), h: b.getBoundingClientRect().height, pageScroll: document.documentElement.scrollWidth > innerWidth };
   });
-  check("telefon: pasek Edycji w jednym rzędzie, przewija się w bok z wygaszeniem, strona się nie rozjeżdża", bar.rows === 1 && bar.h < 48 && !bar.pageScroll && (!bar.scroll || bar.fade), JSON.stringify(bar));
+  check("telefon: rząd poleceń w jednym rzędzie, przewija się w bok z wygaszeniem, strona się nie rozjeżdża", bar.rows === 1 && bar.h < 52 && !bar.pageScroll && (!bar.scroll || bar.fade), JSON.stringify(bar));
   await caretTo(page, 0, true);
   await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("insert")).then(() => page.evaluate(() => document.getElementById("insertMenuBtn").click()));
   const popBox = await page.evaluate(() => { const r = document.querySelector(".compose-pop").getBoundingClientRect(); return { l: r.left, r: r.right, b: r.bottom, w: innerWidth, h: innerHeight }; });

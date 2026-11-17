@@ -56,6 +56,8 @@ async function main() {
 
   // ── motyw ────────────────────────────────────────────────────────────────
   await page.emulateMedia({ colorScheme: "dark" });
+  // aplikacja zmienia motyw po zdarzeniu „change” z matchMedia — bez czekania test czasem czytał jasny
+  await page.waitForFunction(() => document.documentElement.dataset.theme === "dark", null, { timeout: 3000 }).catch(() => {});
   // wstążka: motyw w Plik → Opcje; bez wstążki — w menu ⋯
   if (await page.evaluate(() => document.body.classList.contains("rb-on"))) await page.evaluate(() => dwbBackstage.open("opts"));
   else await page.click("#appMenuBtn");

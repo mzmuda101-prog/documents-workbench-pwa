@@ -4432,3 +4432,54 @@ body.rb-on .app { padding-bottom: max(4px, var(--safe-bottom)); }
   /* tryb i Cofnij są u góry — w pasku nad dokumentem już ich nie ma (bez dubli) */
   body.has-document .doc-toolbar .mode-switch, body.has-document .doc-toolbar #undoBtn { display: none; }
 }
+
+/* ── Telefon 7b: rząd poleceń karty i arkusz kart (app/phone-bar.js; makieta v4 .acc/.sheet) ──
+   Dawny pasek nad dokumentem (tryb, ↶ ↷, ¶, zoom, formatowanie) przeszedł do rzędu i arkusza
+   (Edycja) i na górę (tryb, Cofnij) — na telefonie go nie ma. Szukanie zostaje na wyspie
+   (ustawienie „Wyspa szukania u dołu”, wyłączona = jak w makiecie). */
+.ph-cmd[hidden], .ph-cmd [hidden] { display: none !important; }
+body.tb-float .doc-toolbar-row-2, body.tb-float #formatToolbar { display: none !important; }
+body.ph-no-island .doc-island { display: none !important; }
+body.ph-bar-on .doc-dismiss.is-done { display: none; } /* „Gotowe” przy pisaniu = ⌄ w rzędzie */
+body.tb-float.ph-bar-on .doc-viewport {
+  padding-bottom: calc(var(--island-h, 0px) + var(--ph-bar-h, 0px) + 18px);
+  scroll-padding-bottom: calc(var(--island-h, 0px) + var(--ph-bar-h, 0px) + 18px);
+}
+.ph-cmd {
+  position: absolute; left: 10px; right: 10px; z-index: 28;
+  border: 1px solid var(--border); border-radius: 18px; background: var(--surface);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 10%, transparent);
+}
+.ph-cmd.is-kb { left: 0; right: 0; border-radius: 0; border-width: 1px 0 0; }
+.ph-row { display: flex; align-items: center; gap: 4px; padding: 4px 6px; }
+.ph-tsw {
+  flex: none; display: inline-flex; align-items: center; gap: 4px; height: 44px; padding: 0 10px; border: 0; border-radius: 10px;
+  background: var(--accent-light); color: var(--accent); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.ph-tsw.is-ctx { background: color-mix(in srgb, #7a3fb5 14%, transparent); color: #7a3fb5; }
+.ph-strip { display: flex; gap: 2px; flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.ph-strip::-webkit-scrollbar { display: none; }
+.ph-ic, .ph-hidekb {
+  flex: none; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 10px;
+  background: none; color: var(--ink-2); cursor: pointer;
+}
+.ph-ic[aria-pressed="true"], .ph-item[aria-pressed="true"] { background: var(--accent-light); color: var(--accent); }
+.ph-tsw, .ph-ic, .ph-hidekb, .ph-item, .ph-chip, .ph-done { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+.ph-tsw:focus-visible, .ph-ic:focus-visible, .ph-hidekb:focus-visible, .ph-item:focus-visible, .ph-chip:focus-visible, .ph-done:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ph-sheet { display: grid; grid-template-rows: auto minmax(0, 1fr); height: min(302px, 46vh); }
+.ph-sheet-h { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 8px 6px 6px 10px; }
+.ph-chips { display: flex; gap: 6px; flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.ph-chips::-webkit-scrollbar { display: none; }
+.ph-chip { flex: none; height: 36px; padding: 0 14px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; }
+.ph-chip[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent, #fff); font-weight: 600; }
+.ph-chip.is-ctx { border-color: #7a3fb5; color: #7a3fb5; }
+.ph-chip.is-ctx[aria-selected="true"] { background: #7a3fb5; color: #fff; }
+.ph-done { flex: none; height: 44px; padding: 0 10px; border: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
+.ph-sheet-b { overflow: auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 4px; padding: 4px 10px 14px; overscroll-behavior: contain; }
+.ph-item {
+  min-width: 0; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 10px; border: 0; border-radius: 10px;
+  background: var(--panel, var(--field)); color: var(--ink); font: inherit; font-size: 14px; text-align: left; cursor: pointer;
+}
+.ph-item svg { flex: none; color: var(--accent); }
+.ph-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media print { .ph-cmd { display: none !important; } }

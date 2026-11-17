@@ -55,12 +55,54 @@ async function run() {
   const undone = await page.evaluate(() => ({ text: document.querySelector(".docx-preview-host").textContent.includes("XYZ"), st: document.getElementById("phStatus").textContent }));
   check("Cofnij u góry cofa pisanie", !undone.text && undone.st === "Edycja", JSON.stringify(undone));
 
+  // ── 7b: rząd poleceń i arkusz kart ─────────────────────────────────────────
+  check("Edycja: rząd poleceń u dołu, karta Główne, dawny pasek nad dokumentem schowany",
+    (await vis("#phCmd")) && (await page.evaluate(() => document.querySelector(".ph-tsw-t").textContent)) === "Główne" && !(await vis("#formatToolbar")) && !(await vis(".doc-toolbar-row-2")));
+  const selectWord = () => page.evaluate(() => {
+    const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).find((x) => x.isContentEditable && /\w{6,}/.test(x.textContent));
+    const w = document.createTreeWalker(p, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode()) && !/\w{6,}/.test(n.textContent));
+    const m = n.textContent.match(/\w{6,}/); const r = document.createRange(); r.setStart(n, m.index); r.setEnd(n, m.index + m[0].length);
+    p.focus(); const s = getSelection(); s.removeAllRanges(); s.addRange(r); return m[0];
+  });
+  const boldNow = () => page.evaluate(() => { const s = getSelection(); return s.rangeCount ? Number(getComputedStyle(s.getRangeAt(0).startContainer.parentElement).fontWeight) : 0; });
+  const word = await selectWord();
+  await sleep(200);
+  await page.tap('.ph-strip [data-act="click:#fmtBold"]');
+  await sleep(600);
+  const b1 = { w: await boldNow(), pressed: await page.evaluate(() => document.querySelector('.ph-strip [data-act="click:#fmtBold"]').getAttribute("aria-pressed")) };
+  check("rząd: B pogrubia zaznaczenie i jest wciśnięte", b1.w >= 600 && b1.pressed === "true", JSON.stringify({ word, ...b1 }));
+  await page.tap(".ph-tsw");
+  await sleep(400);
+  const sh = await page.evaluate(() => ({ sheet: !document.querySelector(".ph-sheet").hidden, row: !document.querySelector(".ph-row").hidden, chips: [...document.querySelectorAll(".ph-chip")].map((c) => c.textContent), items: document.querySelectorAll(".ph-sheet-b .ph-item").length }));
+  check("arkusz: karty jako chipy, polecenia z podpisami, rząd schowany", sh.sheet && !sh.row && sh.chips.join("|") === "Główne|Wstaw|Układ|Recenzja|Widok|Asystent" && sh.items >= 10, JSON.stringify(sh));
+  await page.tap('.ph-sheet-b [data-act="click:#fmtBold"]');
+  await sleep(600);
+  check("arkusz: Pogrubienie działa na tym samym zaznaczeniu (zdejmuje)", (await boldNow()) < 600 && (await page.evaluate(() => getSelection().toString())) === word);
+  await page.tap('.ph-chip[data-tab="insert"]');
+  await sleep(200);
+  check("arkusz: zmiana karty pokazuje jej polecenia", (await page.evaluate(() => document.querySelector(".ph-sheet-b .ph-item span").textContent)) === "Tabela");
+  await page.tap(".ph-done");
+  await sleep(300);
+  check("Gotowe: z powrotem rząd (karta Wstaw)", await page.evaluate(() => document.querySelector(".ph-sheet").hidden && !document.querySelector(".ph-row").hidden && document.querySelector(".ph-tsw-t").textContent === "Wstaw"));
+  // wyspa wyłączona (jak w makiecie): rząd stoi przy dolnej krawędzi
+  await page.evaluate(() => { const b = document.getElementById("phIslandOpt"); b.checked = false; b.dispatchEvent(new Event("change")); });
+  await sleep(500);
+  const noIsl = await page.evaluate(() => ({ island: getComputedStyle(document.getElementById("docIsland")).display, gap: Math.round(document.querySelector(".doc-panel").getBoundingClientRect().bottom - document.getElementById("phCmd").getBoundingClientRect().bottom) }));
+  check("bez wyspy: wyspa schowana, rząd przy dole", noIsl.island === "none" && noIsl.gap <= 16, JSON.stringify(noIsl));
+  await page.evaluate(() => { const b = document.getElementById("phIslandOpt"); b.checked = true; b.dispatchEvent(new Event("change")); });
+  await sleep(300);
+
   await page.tap("#appMenuBtn");
   await sleep(300);
   check("⋯: jest „Zapisz”", await vis("#phSaveMenuItem"));
   await page.evaluate(() => appFrame.setMenuOpen(false));
   await sleep(200);
 
+  await page.tap("#phModeBtn");
+  await sleep(250);
+  await page.locator(".compose-pop [role=menuitemradio]").nth(2).tap();
+  await sleep(500);
+  check("Czytanie: bez rzędu poleceń", !(await vis("#phCmd")));
   await page.tap("#phBackBtn");
   await sleep(800);
   check("←: dokument zamknięty, ekran startowy", await page.evaluate(() => !originalFileBytes && !document.querySelector(".hero").classList.contains("has-file")));

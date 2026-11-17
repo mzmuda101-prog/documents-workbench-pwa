@@ -41,6 +41,15 @@ const makeImage = (page, w, h, type = "image/png") => page.evaluateHandle(async 
   return new File([blob], `test.${type.split("/")[1]}`, { type });
 }, [w, h, type]);
 
+// telefon (app/phone-bar.js): polecenie z arkusza kart — przycisk karty, chip karty, polecenie
+async function phCmd(p, tab, act) {
+  if (await p.evaluate(() => document.querySelector(".ph-sheet").hidden)) { await p.tap(".ph-tsw"); await p.waitForTimeout(250); }
+  await p.tap(`.ph-chip[data-tab="${tab}"]`);
+  await p.waitForTimeout(150);
+  await p.tap(`.ph-sheet-b [data-act="${act}"]`);
+  await p.waitForTimeout(250);
+}
+
 async function run() {
   const browser = await pw[ENGINE].launch({ headless: true });
   const context = await browser.newContext({ serviceWorkers: "block", viewport: { width: 1280, height: 860 } });
@@ -180,15 +189,13 @@ async function run() {
   await tp.waitForSelector(".docx-preview-host p.docx-editable-p", { timeout: 20000 });
   await idle(tp);
   await tp.evaluate(() => focusParagraphAtOffset(0, 0));
-  await tp.tap("#insertMenuBtn");
-  await tp.tap(".compose-pop-insert .compose-item-label:text-is('Tabela')");
+  await phCmd(tp, "insert", "table"); // telefon: Wstaw → Tabela w arkuszu kart (phone-bar.js)
   const pick = await tp.evaluate(() => { const r = document.querySelector(".compose-pop-table").getBoundingClientRect(); return { r: r.right, w: innerWidth, btn: document.querySelector(".table-pick button").getBoundingClientRect().width }; });
   check("telefon: siatka tabeli mieści się, pola ≥ 30 px do palca", pick.r <= pick.w && pick.btn >= 30, JSON.stringify(pick));
   await tp.tap(".table-pick button[data-r='2'][data-c='2']");
   await idle(tp);
   check("telefon: tap w siatkę wstawia tabelę 2×2", JSON.stringify(await tables(tp)) === JSON.stringify(["| / |"]), JSON.stringify(await tables(tp)));
-  await tp.tap("#tableToolsBtn");
-  await tp.tap(".compose-pop-tabletools .compose-item-label:text-is('Wiersz poniżej')");
+  await phCmd(tp, "table", "tbl:rowBelow"); // karta Tabela pojawia się w arkuszu, gdy kursor stoi w tabeli
   await idle(tp);
   check("telefon: tap „Tabela → Wiersz poniżej”", (await tables(tp))[0].split(" / ").length === 3, JSON.stringify(await tables(tp)));
   const f2 = await makeImage(tp, 800, 400);

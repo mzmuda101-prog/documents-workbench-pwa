@@ -53,6 +53,15 @@ const scrollToPara = (page, i) => page.evaluate((i) => {
 }, i);
 
 async function pickInPopover(page, layout) {
+  // telefon (phone-bar.js): wybór widoku w panelu Widok — dymku przy „100%” tam już nie ma
+  if (await page.evaluate(() => matchMedia("(max-width: 768px)").matches)) {
+    await page.evaluate(() => dwbShortcuts.openToolPanel("panel-view"));
+    await page.waitForTimeout(400);
+    await page.click(`#viewLayoutPanel .view-layout-opt[data-layout="${layout}"]`);
+    await page.evaluate(() => setSidebarOpen(false));
+    await idle(page);
+    return;
+  }
   if (await page.evaluate(() => document.getElementById("viewPop")?.hidden !== false)) await page.click("#zoomNow");
   await page.waitForFunction(() => document.getElementById("viewPop")?.hidden === false, null, { timeout: 5000 }).catch(async () => {
     throw new Error("dymek się nie otworzył: " + JSON.stringify(await page.evaluate(() => ({ hidden: document.getElementById("viewPop")?.hidden, exp: document.getElementById("zoomNow").getAttribute("aria-expanded"), r: document.getElementById("zoomNow").getBoundingClientRect().toJSON() }))));
@@ -101,24 +110,25 @@ async function run() {
   check("tabele w Widoku mobilnym: domyślnie w ekranie; „pełny rozmiar” szerzej, przewijane w bok z wygaszeniem; strona bez przewijania w bok",
     tFit.sw <= tFit.w + 1 && tKeep.sw > tKeep.w + 100 && tKeep.fade && tKeep.page && tBack.sw <= tBack.w + 1, JSON.stringify({ tFit, tKeep, tBack }));
 
-  // dymek z paska
-  await page.click("#zoomNow");
+  // wybór widoku na telefonie: panel Widok (dawniej dymek przy „100%” na pasku)
+  await page.evaluate(() => dwbShortcuts.openToolPanel("panel-view"));
+  await page.waitForTimeout(400);
   const pop = await page.evaluate(() => {
-    const el = document.getElementById("viewPop");
+    const el = document.getElementById("viewLayoutPanel");
     const r = el.getBoundingClientRect();
     return {
-      open: !el.hidden, inside: r.left >= 0 && r.right <= window.innerWidth,
+      open: isSidebarOpen() && r.height > 0, inside: r.left >= 0 && r.right <= window.innerWidth,
       opts: [...el.querySelectorAll(".view-layout-opt")].map((b) => `${b.dataset.layout}:${b.getAttribute("aria-checked")}`).join(","),
       names: [...el.querySelectorAll(".vl-name")].map((n) => n.textContent).join("|"),
       auto: el.querySelector('[data-layout="auto"] .vl-desc').textContent,
       note: el.querySelector(".view-layout-note").textContent,
     };
   });
-  check("stuknięcie w procent otwiera wybór widoku w granicach ekranu", pop.open && pop.inside, JSON.stringify(pop));
+  check("panel Widok pokazuje wybór widoku w granicach ekranu", pop.open && pop.inside, JSON.stringify(pop));
   check("wybór: Auto / Widok mobilny / Widok desktopowy, zaznaczone Auto", pop.opts === "auto:true,mobile:false,desktop:false" && pop.names === "Auto|Widok mobilny|Widok desktopowy", JSON.stringify(pop));
   check("Auto mówi, co teraz działa, i dla jakiej sytuacji jest pamiętane", pop.auto === "Teraz: Widok mobilny" && /dotykowy w pionie/.test(pop.note), JSON.stringify(pop));
-  await page.keyboard.press("Escape");
-  check("Esc zamyka dymek", await page.evaluate(() => document.getElementById("viewPop").hidden));
+  await page.evaluate(() => setSidebarOpen(false));
+  await page.waitForTimeout(300);
 
   // niezapisany tekst + miejsce w dokumencie
   await page.evaluate(() => document.querySelector('.mode-btn[data-mode="edit"]').click());
@@ -224,7 +234,7 @@ async function run() {
   await page.evaluate(() => { zoomLevelEl.value = "1.5"; zoomLevelEl.dispatchEvent(new Event("input", { bubbles: true })); });
   const z1 = await look(page);
   check("suwak w Widoku mobilnym: większe litery, więcej linii, bez przewijania w bok", z1.reflow && z1.lines > z0.lines && z1.overflowX <= 1 && z1.label === "150%", JSON.stringify({ z0, z1 }));
-  await page.click("#zoomFitBtn");
+  await page.evaluate(() => document.getElementById("zoomFitBtn").click()); // na telefonie: Widok → Dopasuj (phone-bar.js)
   check("„Dopasuj” w Widoku mobilnym wraca do 100%", (await look(page)).label === "100%");
 
   // Widok mobilny przy 200%: litery ×2, wcięcia wolniej (√zoom) — tekst wypełnia ekran jak w Wordzie
@@ -246,7 +256,7 @@ async function run() {
   const i2 = await ind();
   check("Widok mobilny 200%: litery ×2, wcięcia i margines tylko ~×1,4, bez przewijania w bok",
     i2.h > i1.h * 1.8 && i2.indent < i1.indent * 1.6 && i2.indent > i1.indent * 1.2 && i2.body < i1.body * 1.6 && i2.ox <= 1, JSON.stringify({ i1, i2 }));
-  await page.click("#zoomFitBtn");
+  await page.evaluate(() => document.getElementById("zoomFitBtn").click());
 
   // Widok desktopowy, plik BEZ rozmiaru strony: stała kartka A4, zoom = zdjęcie (tekst się nie przekłada)
   await openDoc(page, "sample");
@@ -269,10 +279,11 @@ async function run() {
 
   // EN
   await page.evaluate(() => setLanguage("en"));
-  await page.click("#zoomNow");
-  const en = await page.evaluate(() => [...document.querySelectorAll("#viewPop .vl-name")].map((n) => n.textContent).join("|") + "/" + document.querySelector("#viewPop .view-layout-note").textContent);
+  await page.evaluate(() => { setSidebarOpen(true); document.getElementById("panel-view").open = true; });
+  await page.waitForTimeout(300);
+  const en = await page.evaluate(() => [...document.querySelectorAll("#viewLayoutPanel .vl-name")].map((n) => n.textContent).join("|") + "/" + document.querySelector("#viewLayoutPanel .view-layout-note").textContent);
   check("EN: Mobile view / Desktop view", en.startsWith("Auto|Mobile view|Desktop view/Remembered for: touch screen, portrait"), en);
-  await page.keyboard.press("Escape");
+  await page.evaluate(() => setSidebarOpen(false));
   await page.evaluate(() => setLanguage("pl"));
   await phone.close();
 

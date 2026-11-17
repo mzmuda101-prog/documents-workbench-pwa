@@ -4547,12 +4547,13 @@ const composeUi = (() => {
   // Aa — zmiana wielkości liter (jak w Wordzie); pozycje pokazują efekt na sobie
   const caseBtn = document.getElementById("fmtCaseBtn");
   caseBtn?.addEventListener("mousedown", (e) => e.preventDefault());
-  caseBtn?.addEventListener("click", () => openPop(caseBtn, (el) => {
+  function buildCaseMenu(el) {
     el.classList.add("compose-pop-case");
     [["sentence", "caseSentence"], ["lower", "caseLower"], ["upper", "caseUpper"], ["title", "caseTitle"], ["toggle", "caseToggle"]].forEach(([mode, key]) => {
       popItem(el, { label: t(key), onPick: () => { if (!changeTextCase(mode)) toast(t("caseNoText"), "info"); } });
     });
-  }));
+  }
+  caseBtn?.addEventListener("click", () => openPop(caseBtn, buildCaseMenu));
   alignBtn?.addEventListener("click", () => openPop(alignBtn, buildAlignMenu));
   spacingBtn?.addEventListener("mousedown", (e) => e.preventDefault());
   spacingBtn?.addEventListener("click", () => {
@@ -4968,5 +4969,13 @@ const composeUi = (() => {
     });
   }
 
-  return { alignSvg: (k) => alignSvg(k), openColorMenu: (anchor) => openPop(anchor, buildColorMenu), openTablePicker, openSymbolPicker, pickImage, insertToday, openPageSetupPart, openTabsForm, openLayoutForm, openFormFieldMenu, openTablePart, stepIndentAtCaret, openMenu, openFontForm, commentAction, commentById, showCommentById, commentRanges, richRunEl: (r) => richRunEl(r), openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, stampPageNumbers, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, clearIndentAt, hasTextRule, clearRuleAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
+  // menu przycisku paska formatowania otwarte przy INNYM przycisku (rząd poleceń telefonu, phone-bar.js)
+  function openMenuFor(id, anchor) {
+    const build = { fmtCaseBtn: buildCaseMenu, fmtAlignBtn: buildAlignMenu, fmtColorBtn: buildColorMenu, fmtListBtn: buildListMenu, fmtSpacingBtn: buildSpacingMenu }[id];
+    if (!build) return;
+    if (id === "fmtSpacingBtn") spacingAnchor = anchor;
+    openPop(anchor, build);
+  }
+
+  return { openMenuFor, alignSvg: (k) => alignSvg(k), openColorMenu: (anchor) => openPop(anchor, buildColorMenu), openTablePicker, openSymbolPicker, pickImage, insertToday, openPageSetupPart, openTabsForm, openLayoutForm, openFormFieldMenu, openTablePart, stepIndentAtCaret, openMenu, openFontForm, commentAction, commentById, showCommentById, commentRanges, richRunEl: (r) => richRunEl(r), openPageSetup, insertNote, openHeaderFooterForm, fixPreviewPageNumbers, pageNumberSelector, pageNumberText, stampPageNumbers, openImageAlt, openCommentForm, paintCommentHighlights, loadComments, applyColor, insertTable, tableAction, tableTab, insertImageFile, imageEdit, showImageCard, hideImageCard, insertToc, insertFormField, applyList, changeListLevel, endListAt, clearIndentAt, hasTextRule, clearRuleAt, plainStyleAt, isBoxParagraph, openLinkForm, openBookmarkForm, removeLink, hideLinkCard, openNewDialog, createNew, applyStyle, applyAlign, insertPageBreak, insertHrule, insertText, syncState };
 })();

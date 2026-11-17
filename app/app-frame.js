@@ -798,7 +798,7 @@ const appFrame = (() => {
   window.dwbDocTopInset = () => (tbFloat ? (tbTucked ? TB_PEEK_COVER : tbH) : 0);
   // …i u dołu wyspa (0, gdy schowana: przewinięcie, pisanie z klawiaturą)
   function islandShown() {
-    if (!tbFloat || tbTucked || !islandEl) return false;
+    if (!tbFloat || tbTucked || !islandEl || document.body.classList.contains("ph-no-island")) return false;
     return !document.body.classList.contains("kb-open") || islandEl.contains(document.activeElement);
   }
   window.dwbDocBottomInset = () => (islandShown() ? islandH + ISLAND_GAP : 0);

@@ -364,7 +364,10 @@ const dwbRibbon = (() => {
   root.addEventListener("click", (e) => {
     const b = e.target.closest("[data-rb-act]");
     if (!b || b.disabled) return;
-    const a = b.dataset.rbAct;
+    run(b.dataset.rbAct, b);
+  });
+  // jedno wykonanie polecenia dla wstążki i rzędu poleceń telefonu (phone-bar.js)
+  function run(a, b) {
     if (a.startsWith("panel:")) { dwbShortcuts?.openToolPanel(a.slice(6)); return; }
     if (a.startsWith("align:")) { cu()?.applyAlign(a.slice(6)); return; }
     if (a.startsWith("click:")) { document.querySelector(a.slice(6))?.click(); return; }
@@ -373,7 +376,7 @@ const dwbRibbon = (() => {
     if (a.startsWith("tbl:")) { cu()?.tableAction(a.slice(4)); return; }
     if (a.startsWith("tblp:")) { const [caps, drop] = TABLE_PARTS[a.slice(5)]; cu()?.openTablePart(b, caps, drop); return; }
     ACT[a]?.(b);
-  });
+  }
   // przyciski kart nie zabierają kursora z dokumentu (jak pasek formatowania)
   root.addEventListener("mousedown", (e) => {
     if (e.target.closest(".rb-btn, .rb-tab, .rb-nudge, .rb-file, .rb-edit")) e.preventDefault();
@@ -496,5 +499,5 @@ const dwbRibbon = (() => {
     return !!p;
   }
 
-  return { select, reveal, isOn: () => on, current: () => current, prefs: () => ({ ...prefs, peek }), setShow, setDens, setLayout };
+  return { select, reveal, run, isOn: () => on, current: () => current, prefs: () => ({ ...prefs, peek }), setShow, setDens, setLayout };
 })();

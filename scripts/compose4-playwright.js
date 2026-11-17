@@ -29,6 +29,15 @@ const savedZip = async (page) => {
 const docXml = async (page) => (await savedZip(page)).file("word/document.xml").async("string");
 const sections = (page) => page.evaluate(() => [...document.querySelectorAll(".docx-preview-host section.docx")].map((s) => ({ h: s.querySelector(":scope>header")?.textContent || "", f: s.querySelector(":scope>footer")?.textContent || "" })));
 
+// telefon (app/phone-bar.js): polecenie z arkusza kart — przycisk karty, chip karty, polecenie
+async function phCmd(p, tab, act) {
+  if (await p.evaluate(() => document.querySelector(".ph-sheet").hidden)) { await p.tap(".ph-tsw"); await p.waitForTimeout(250); }
+  await p.tap(`.ph-chip[data-tab="${tab}"]`);
+  await p.waitForTimeout(150);
+  await p.tap(`.ph-sheet-b [data-act="${act}"]`);
+  await p.waitForTimeout(250);
+}
+
 async function run() {
   const browser = await pw[ENGINE].launch({ headless: true });
   const context = await browser.newContext({ serviceWorkers: "block", viewport: { width: 1280, height: 860 } });
@@ -240,16 +249,13 @@ async function run() {
   await tp.waitForSelector(".docx-preview-host p.docx-editable-p", { timeout: 20000 });
   await idle(tp);
   await select(tp, 3, 0, 6);
-  await tp.evaluate(() => document.getElementById("formatToolbar").scrollLeft = 9999);
-  await tp.tap("#fmtColorBtn");
+  await phCmd(tp, "home", "menu:fmtColorBtn"); // telefon: Główne → Kolor czcionki w arkuszu (phone-bar.js)
   const cp = await tp.evaluate(() => { const r = document.querySelector(".compose-pop-color")?.getBoundingClientRect(); return r && { l: r.left, r: r.right, w: innerWidth }; });
   check("telefon: paleta kolorów mieści się na ekranie", cp && cp.l >= 0 && cp.r <= cp.w, JSON.stringify(cp));
   await tp.tap('.compose-pop-color .color-swatch[aria-label="Zielony"] >> nth=1');
   await idle(tp);
   check("telefon: tap w kolor koloruje zaznaczenie", /rgb\(0, 176, 80\)/.test(await paraHtml(tp, 3)), (await paraHtml(tp, 3)).slice(0, 200));
-  await tp.evaluate(() => document.getElementById("formatToolbar").scrollLeft = 0);
-  await tp.tap("#insertMenuBtn");
-  await tp.tap(".compose-pop-insert .compose-item-label:text-is('Nagłówek, stopka, numer strony…')");
+  await phCmd(tp, "insert", "hf");
   await tp.waitForSelector(".compose-pop-hf", { timeout: 5000 }); // okienko czyta najpierw stan z pliku
   const hfBox = await tp.evaluate(() => { const r = document.querySelector(".compose-pop-hf")?.getBoundingClientRect(); return r && { l: r.left, r: r.right, w: innerWidth }; });
   check("telefon: okienko nagłówka i stopki mieści się na ekranie", hfBox && hfBox.l >= 0 && hfBox.r <= hfBox.w, JSON.stringify(hfBox));
