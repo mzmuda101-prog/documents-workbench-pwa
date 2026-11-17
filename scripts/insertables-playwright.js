@@ -47,7 +47,8 @@ async function newPage(browser, opts = {}) {
   await page.evaluate(() => document.getElementById("heroSplash")?.remove());
   return { context, page, errors };
 }
-const idle = (page) => page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 20000 }).then(() => page.waitForTimeout(450));
+const idle = (page) => page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && !inlineLocksPending, null, { timeout: 20000 })
+  .then(() => page.evaluate(() => waitInlineStructuralIdle())).then(() => page.waitForTimeout(ENGINE === "webkit" ? 450 : 50)); // gotowość = nakładka + kolejka (jak schema-playwright.js); WebKit kończy jeszcze po niej (Cofnij wyglądu, pola tekstowe) — tam dawna pauza
 async function openSample(page, buf = SAMPLE) {
   await page.locator("#fileInput").setInputFiles({ name: "elementy.docx", mimeType: DOCX_MIME, buffer: buf });
   await idle(page);

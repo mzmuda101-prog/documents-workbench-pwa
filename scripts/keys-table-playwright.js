@@ -20,7 +20,9 @@ const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingm
 const ENGINE = process.env.ENGINE === "webkit" ? "webkit" : "chromium";
 const ONLY = process.env.ONLY || "";
 const KEYS = { bs: ["Backspace", false], del: ["Delete", true], enterStart: ["Enter", false], enterEnd: ["Enter", true], enter: ["Enter", false] };
-const idle = (page) => page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 20000 }).then(() => page.waitForTimeout(350));
+// gotowość = nakładka + kolejka zmian struktury (jak schema-playwright.js) zamiast stałych 350 ms
+const idle = (page) => page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && !inlineLocksPending, null, { timeout: 20000 })
+  .then(() => page.evaluate(() => waitInlineStructuralIdle())).then(() => page.waitForTimeout(50));
 
 // stan dokumentu w zapisie tabeli: rodzaje z pliku (scripts/keys-state.js — ten sam odczyt co
 // wyrocznia Worda), kursor z ekranu
@@ -108,6 +110,12 @@ async function main() {
         await caretAt(page, ctx.at, atEnd);
         await page.keyboard.press(press);
         await idle(page);
+        // WebKit odkłada kursor po przerysowaniu (dawniej krył to stały sen 350 ms) — czekamy na
+        // kursor w akapicie, najwyżej 2 s; brak po tym czasie = prawdziwy wynik (@-1)
+        await page.waitForFunction(() => {
+          const s = getSelection();
+          return s.rangeCount && collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).some((p) => p.contains(s.anchorNode));
+        }, null, { timeout: 2000 }).catch(() => {});
         cell.got = await readState(page);
         cell.status = want === "?" ? "open" : cell.got === want ? "ok" : "fail";
       } catch (e) {

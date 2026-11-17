@@ -40,7 +40,10 @@ function rng(seed) {
   return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 const hash = (s) => [...s].reduce((h, c) => (Math.imul(h, 31) + c.charCodeAt(0)) >>> 0, 7);
-const idle = (page, timeout = 30000) => page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout }).then(() => page.waitForTimeout(300));
+// gotowość = nakładka + kolejka zmian struktury (jak schema-playwright.js); dawniej stałe 300 ms po
+// każdej edycji — ok. 55 s samego czekania na przebieg
+const idle = (page, timeout = 30000) => page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && !inlineLocksPending, null, { timeout })
+  .then(() => page.evaluate(() => waitInlineStructuralIdle())).then(() => page.waitForTimeout(50));
 
 // I2: akapity treści na ekranie (te, które aplikacja mapuje na akapity pliku) vs akapity zapisanego
 // pliku — liczba i tekst w tej samej kolejności. Tekst z ekranu tak, jak go czyta zapis

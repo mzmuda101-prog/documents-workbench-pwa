@@ -15,7 +15,8 @@ const OPS = Number(process.env.OPS || 12);
 const MOD = process.platform === "darwin" ? "Meta" : "Control";
 const results = [];
 const check = (name, ok, detail) => results.push({ name, ok: !!ok, detail });
-const idle = (page) => page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && !inlineLocksPending, null, { timeout: 30000 }).then(() => page.waitForTimeout(300));
+const idle = (page) => page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && !inlineLocksPending, null, { timeout: 30000 })
+  .then(() => page.evaluate(() => waitInlineStructuralIdle())).then(() => page.waitForTimeout(50)); // gotowość = nakładka + kolejka (jak schema-playwright.js) zamiast stałej pauzy
 
 const docXml = (page) => page.evaluate(async () => {
   const z = await JSZip.loadAsync(await buildDocumentForSave());
