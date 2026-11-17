@@ -205,6 +205,11 @@ schowane.
   włączona (jak dotąd); wyłączona = jak w makiecie (szukanie: Widok → Znajdź i zamień).
 - W Czytaniu na telefonie nie ma paska poleceń (jak w makiecie); widok i powiększenie — szczypanie
   i panel Widok (klucz na wyspie).
+- v1.01.15 (zrzut Mateusza z iPhone'a): wyspa = Szukaj · Zapisz (z liczbą zmian) · klucz · tryb ▾
+  (górny pasek zwija się przy przewijaniu, więc tryb i zapis są też pod kciukiem). Tryb skupienia
+  zszedł z wyspy (karta Widok; na wyspie tylko jako wyjście, gdy włączony), pigułki „niezapisane”
+  i „Sugerowanie” nad wyspą schowane (dublowały Zapisz i tryb). Mateusz: panel narzędzi (klucz)
+  docelowo może nie być potrzebny w tej formie — do przemyślenia później.
 
 ## Zasady techniczne
 

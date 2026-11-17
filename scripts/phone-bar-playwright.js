@@ -50,6 +50,8 @@ async function run() {
   await sleep(600);
   const dirty = await page.evaluate(() => ({ st: document.getElementById("phStatus").textContent, undo: document.getElementById("phUndoBtn").disabled }));
   check("po pisaniu: „1 niezapisane · Edycja”, Cofnij aktywne", dirty.st === "1 niezapisane · Edycja" && !dirty.undo, JSON.stringify(dirty));
+  const isl = await page.evaluate(() => ({ save: !!document.getElementById("phIslandSave").offsetParent, n: document.querySelector("#phIslandSave .ph-isl-n").textContent, dirty: document.getElementById("phIslandSave").classList.contains("is-dirty"), mode: document.getElementById("phIslandMode").dataset.mode, focus: !!document.querySelector(".doc-island #focusModeBtn")?.offsetParent, pills: getComputedStyle(document.querySelector(".doc-island-status")).display }));
+  check("wyspa: Zapisz z liczbą zmian, tryb Edycja, bez skupienia i bez pigułek", isl.save && isl.n === "1" && isl.dirty && isl.mode === "edit" && !isl.focus && isl.pills === "none", JSON.stringify(isl));
   await page.tap("#phUndoBtn");
   await sleep(600);
   const undone = await page.evaluate(() => ({ text: document.querySelector(".docx-preview-host").textContent.includes("XYZ"), st: document.getElementById("phStatus").textContent }));
@@ -98,7 +100,7 @@ async function run() {
   await page.evaluate(() => appFrame.setMenuOpen(false));
   await sleep(200);
 
-  await page.tap("#phModeBtn");
+  await page.tap("#phIslandMode"); // tryb też z wyspy (górny pasek zwija się przy przewijaniu)
   await sleep(250);
   await page.locator(".compose-pop [role=menuitemradio]").nth(2).tap();
   await sleep(500);

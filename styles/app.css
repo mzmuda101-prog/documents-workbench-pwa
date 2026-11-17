@@ -4483,3 +4483,16 @@ body.tb-float.ph-bar-on .doc-viewport {
 .ph-item svg { flex: none; color: var(--accent); }
 .ph-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media print { .ph-cmd { display: none !important; } }
+
+/* Telefon — wyspa: Szukaj · Zapisz · klucz · tryb (prośba Mateusza 2026-11-17). Skupienie jest w karcie
+   Widok; na wyspie zostaje tylko jako wyjście, gdy jest włączone. Pełny ekran — w menu ⋯. */
+.ph-isl { display: none; }
+body.tb-float .doc-island .ph-isl { display: inline-flex; align-items: center; justify-content: center; position: relative; }
+:root:not(.focus-mode) body.tb-float .doc-island #focusModeBtn { display: none; }
+.doc-island #phIslandSave.is-dirty { background: var(--accent); border-color: var(--accent); color: #fff; }
+.ph-isl-n { position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--surface); color: var(--accent); box-shadow: 0 0 0 1px var(--accent-border); font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
+.ph-isl-n[hidden] { display: none; }
+.doc-island #phIslandMode { color: var(--accent); }
+.doc-island #phIslandMode[data-mode="suggest"] { color: var(--warning); }
+/* pigułki nad wyspą dublowały się: liczba zmian jest na Zapisz, Sugerowanie na przycisku trybu i u góry */
+body.tb-float .doc-island .doc-island-status { display: none; }

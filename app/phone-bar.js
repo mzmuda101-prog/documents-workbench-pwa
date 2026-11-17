@@ -35,6 +35,18 @@ const dwbPhoneBar = (() => {
     status.textContent = m === "read" ? t(NAME.read) : [n ? t("phUnsaved", { n }) : "", t(NAME[m])].filter(Boolean).join(" · ");
     const src = $("undoBtn");
     undo.disabled = !src || src.disabled;
+    if (islMode) {
+      islMode.dataset.mode = m;
+      islMode.querySelector(".ph-mode-ico").innerHTML = svg(ICONS[m]);
+      islMode.setAttribute("aria-label", t("phModeAria", { mode: t(NAME[m]) }));
+    }
+    if (islSave) {
+      islSave.classList.toggle("is-dirty", dirty);
+      const badge = islSave.querySelector(".ph-isl-n");
+      badge.hidden = !n;
+      badge.textContent = n;
+      islSave.setAttribute("aria-label", saveBtn?.getAttribute("aria-label") || t("save"));
+    }
   }
   let q = 0;
   const soon = () => { cancelAnimationFrame(q); q = requestAnimationFrame(sync); };
@@ -46,6 +58,19 @@ const dwbPhoneBar = (() => {
     if (typeof appFrame !== "undefined") appFrame.setMenuOpen?.(false);
     $("heroSaveBtn")?.click();
   });
+  const islSave = $("phIslandSave"), islMode = $("phIslandMode");
+  function openModeMenu(anchor) {
+    if (typeof composeUi === "undefined") return;
+    const cur = mode();
+    composeUi.openMenu(anchor, ["edit", "suggest", "read"].map((m) => ({
+      label: t(NAME[m]), desc: t(DESC[m]), icon: svg(ICONS[m], 16), checked: m === cur,
+      onPick: () => document.querySelector(`.mode-btn[data-mode="${m}"]`)?.click(),
+    })));
+  }
+  // wyspa u dołu (prośba Mateusza 2026-11-17): Zapisz i tryb pod kciukiem — górny pasek zwija się przy przewijaniu
+  islMode?.addEventListener("click", () => openModeMenu(islMode));
+  islSave?.addEventListener("mousedown", (e) => e.preventDefault());
+  islSave?.addEventListener("click", () => $("heroSaveBtn")?.click());
   modeBtn.addEventListener("click", () => {
     if (typeof composeUi === "undefined") return;
     const cur = mode();
