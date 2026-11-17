@@ -436,8 +436,113 @@ const dwbPaste = (() => {
     // kursor po wklejeniu: koniec ostatniego wklejonego bloku (composePastePlan — ten sam plan co zapis)
     const plan = composePastePlan(edit.blocks, offset === 0);
     pendingInlineCursor = { paraIndex: index + plan.lastParaOffset, offset: plan.lastTextLen };
-    await applyDocumentEdit(edit);
+    const n = await applyDocumentEdit(edit);
+    if (n > 0) offerListOptions(plan, index, offset);
   }
 
-  return { parse, apply, fromHtml, fromMarkdown, looksLikeMarkdown, flatten };
+  // ── Opcje wklejania (jak w Wordzie): wklejka zostaje taka jak źródło, a gdy jej linie wyglądają
+  // na listę („1. 2. 3.”, „• • •”), obok pojawia się przycisk „Zamień na listę numerowaną /
+  // punktowaną” — jedno kliknięcie = prawdziwa lista bez wpisanych znaczników (jeden krok Cofnij).
+  const NUM_RE = /^\s*(?:\d{1,3}[.)]|[a-zA-Z][.)])[ \u00A0\t]+\S/;
+  const BUL_RE = /^\s*[\u2022\u25E6\u25AA\u25AB\u25CF\u25CB\u25A0\u25A1\u25C6\u25C7\u25BA\u27A2\u2023\u2043\u00B7*\-\u2013][ \u00A0\t]+\S/;
+  let optsEl = null, optsCleanup = null;
+  function hideListOptions() {
+    optsCleanup?.();
+    optsCleanup = null;
+    optsEl?.remove();
+    optsEl = null;
+  }
+  function listGroups(plan, index, offset) {
+    // akapit każdego wklejonego bloku (ten sam plan co zapis); pierwszy blok sklejony z tekstem przed
+    // kursorem nie zaczyna akapitu — pomijamy
+    const rows = [];
+    let off = 0;
+    plan.items.forEach((it) => {
+      if (it.block?.type === "table") { off += it.block.rows.reduce((n, r) => n + r.length, 0); return; }
+      if (it.block && it.block.type === "p" && !(it.merge && offset > 0)) {
+        const text = plain(it.block.runs || []);
+        rows.push({ i: index + off, kind: NUM_RE.test(text) ? "number" : BUL_RE.test(text) ? "bullet" : null });
+      } else rows.push({ i: index + off, kind: null });
+      off += 1;
+    });
+    // ciągi co najmniej 2 akapitów tego samego rodzaju — każdy jako osobna lista
+    const groups = [];
+    let cur = null;
+    rows.forEach((r) => {
+      if (r.kind && cur && cur.kind === r.kind && r.i === cur.indices[cur.indices.length - 1] + 1) cur.indices.push(r.i);
+      else { cur = r.kind ? { kind: r.kind, indices: [r.i] } : null; if (cur) groups.push(cur); }
+    });
+    return groups.filter((g) => g.indices.length >= 2);
+  }
+  function offerListOptions(plan, index, offset) {
+    hideListOptions();
+    const groups = listGroups(plan, index, offset);
+    if (!groups.length) return;
+    const lastIdx = Math.max(...groups.map((g) => g.indices[g.indices.length - 1]));
+    const el = document.createElement("div");
+    el.className = "paste-opts";
+    el.setAttribute("role", "group");
+    el.setAttribute("aria-label", t("pasteOpts"));
+    const ico = document.createElement("span");
+    ico.className = "paste-opts-ico";
+    ico.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>';
+    ico.title = t("pasteOpts");
+    el.append(ico);
+    const convert = (gs, btn) => {
+      // druga opcja (np. punktowana część tej samej wklejki) zostaje do kliknięcia
+      btn.remove();
+      if (!el.querySelector(".paste-opts-btn")) hideListOptions();
+      const done = applyDocumentEdit({ op: "list", indices: gs.flatMap((g) => g.indices), groups: gs.map((g) => ({ indices: g.indices, kind: g.kind })), kind: gs[0].kind, toggle: false, stripMarkers: true });
+      if (optsEl === el) Promise.resolve(done).then(() => requestAnimationFrame(() => requestAnimationFrame(place)));
+    };
+    ["number", "bullet"].forEach((kind) => {
+      const gs = groups.filter((g) => g.kind === kind);
+      if (!gs.length) return;
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "paste-opts-btn";
+      b.textContent = t(kind === "number" ? "pasteToNumbered" : "pasteToBullets");
+      b.addEventListener("mousedown", (e) => e.preventDefault());
+      b.addEventListener("click", () => convert(gs, b));
+      el.append(b);
+    });
+    const x = document.createElement("button");
+    x.type = "button";
+    x.className = "paste-opts-x";
+    x.setAttribute("aria-label", t("toastClose"));
+    x.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+    x.addEventListener("click", hideListOptions);
+    el.append(x);
+    document.body.append(el);
+    optsEl = el;
+    // pod ostatnim akapitem listy (po przerysowaniu), w granicach obszaru dokumentu
+    const place = () => {
+      // podgląd bywa przerysowany (nowy element) — zawsze bieżący
+      const cur = docCanvasEl?.querySelector(".docx-preview-host");
+      const p = cur ? collectPreviewParagraphElements(cur)[lastIdx] : null;
+      const V = docViewportEl.getBoundingClientRect();
+      const r = p?.getBoundingClientRect();
+      if (!r || r.bottom < V.top || r.top > V.bottom) { el.hidden = true; return; }
+      el.hidden = false;
+      const w = el.offsetWidth, h = el.offsetHeight;
+      const y = Math.min(r.bottom + 6, V.bottom - h - 6);
+      el.style.top = `${Math.round(y)}px`;
+      el.style.left = `${Math.round(Math.max(V.left + 8, Math.min(r.left, V.right - w - 8)))}px`;
+    };
+    requestAnimationFrame(() => requestAnimationFrame(place));
+    // znika jak w Wordzie: pisanie dalej, klik gdzie indziej, Esc
+    const onKey = (e) => { if (e.key === "Escape" || (!e.metaKey && !e.ctrlKey && e.key.length === 1) || e.key === "Enter" || e.key === "Backspace") hideListOptions(); };
+    const onDown = (e) => { if (!el.contains(e.target)) hideListOptions(); };
+    const onScroll = () => requestAnimationFrame(place);
+    document.addEventListener("keydown", onKey, true);
+    document.addEventListener("pointerdown", onDown, true);
+    docViewportEl?.addEventListener("scroll", onScroll, { passive: true });
+    optsCleanup = () => {
+      document.removeEventListener("keydown", onKey, true);
+      document.removeEventListener("pointerdown", onDown, true);
+      docViewportEl?.removeEventListener("scroll", onScroll);
+    };
+  }
+
+  return { parse, apply, fromHtml, fromMarkdown, looksLikeMarkdown, flatten, hideListOptions };
 })();

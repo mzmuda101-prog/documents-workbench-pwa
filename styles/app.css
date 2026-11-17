@@ -4512,3 +4512,15 @@ body.tb-float .doc-island .doc-island-status { display: none; }
 .mk-sum-t b { color: var(--ink); font-weight: 600; }
 .mk-sum .mk-btn { width: 26px; height: 26px; }
 .mk-sum-p { white-space: nowrap; }
+
+/* Opcje wklejania (paste-rich.js): po wklejce, która wygląda na listę — „Zamień na listę …” */
+.paste-opts { position: fixed; z-index: 45; display: flex; align-items: center; gap: 4px; padding: 4px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); box-shadow: 0 2px 4px rgba(16, 32, 64, .08), 0 10px 24px -10px rgba(16, 32, 64, .35); font-size: 12.5px; }
+.paste-opts[hidden] { display: none; }
+.paste-opts-ico { display: grid; place-items: center; width: 26px; height: 26px; color: var(--muted); }
+.paste-opts-btn { height: 28px; padding: 0 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--field); color: var(--ink); font: inherit; font-weight: 500; cursor: pointer; white-space: nowrap; }
+@media (hover: hover) { .paste-opts-btn:hover { border-color: var(--accent-border); background: var(--accent-light); color: var(--accent); } }
+.paste-opts-x { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; }
+@media (hover: hover) { .paste-opts-x:hover { background: var(--accent-light); color: var(--ink); } }
+.paste-opts-btn:focus-visible, .paste-opts-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (pointer: coarse) { .paste-opts-btn { height: 40px; } .paste-opts-x { width: 40px; height: 40px; } }
+@media print { .paste-opts { display: none !important; } }

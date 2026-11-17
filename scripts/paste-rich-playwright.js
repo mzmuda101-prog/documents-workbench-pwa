@@ -190,6 +190,31 @@ const paraTexts = (xml) => (xml.match(/<w:p[ >][\s\S]*?<\/w:p>/g) || []).map((p)
     numOf("krok dwa i pół") && numOf("krok dwa i pół") === numOf("krok trzy") && numOf("krok trzy") === numOf("krok cztery"),
     JSON.stringify(["krok dwa i pół", "krok trzy", "krok cztery"].map((t) => [t, numOf(t)])));
 
+  // ── Opcje wklejania: wklejka jak w źródle, a „Zamień na listę numerowaną / punktowaną” jednym klikiem ──
+  await freshPara(page, 2);
+  await paste(page, { "text/html": '<html xmlns:o="urn:schemas-microsoft-com:office:office"><body><p class=MsoNormal>Lista A:</p><p class=MsoNormal>1. Pierwsze pytanie?</p><p class=MsoNormal>2. Drugie pytanie?</p><p class=MsoNormal>• punkt jeden</p><p class=MsoNormal>• punkt dwa</p></body></html>', "text/plain": "Lista A:\n1. Pierwsze pytanie?\n2. Drugie pytanie?\n• punkt jeden\n• punkt dwa" });
+  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 15000 });
+  await sleep(700);
+  const opts = await page.evaluate(() => { const e = document.querySelector(".paste-opts"); return e && !e.hidden ? [...e.querySelectorAll(".paste-opts-btn")].map((b) => b.textContent) : null; });
+  check("Opcje wklejania: po wklejce „1. 2.” i „• •” — przyciski listy numerowanej i punktowanej", JSON.stringify(opts) === JSON.stringify(["Zamień na listę numerowaną", "Zamień na listę punktowaną"]), JSON.stringify(opts));
+  await page.click('.paste-opts-btn:has-text("numerowaną")');
+  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 15000 });
+  await sleep(700);
+  await page.click('.paste-opts-btn:has-text("punktowaną")');
+  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 15000 });
+  await sleep(700);
+  pps = paraTexts((await docXml(page)).doc);
+  const isList = (t) => /<w:numPr>/.test(pps.find((x) => x.text === t)?.xml || "");
+  check("„Zamień na listę”: prawdziwe listy bez wpisanych „1.” i „•”, opcje znikają",
+    isList("Pierwsze pytanie?") && isList("Drugie pytanie?") && isList("punkt jeden") && isList("punkt dwaZA") && !isList("PRZED Lista A:") && !pps.some((x) => /^(1\.|•) /.test(x.text)) && !(await page.evaluate(() => !!document.querySelector(".paste-opts"))),
+    JSON.stringify(pps.filter((x) => /pytanie|punkt|Lista A/.test(x.text)).map((x) => [x.text, /<w:numPr>/.test(x.xml)])));
+  // zwykły tekst bez listy — bez opcji; pisanie dalej chowa opcje
+  await freshPara(page, 2);
+  await paste(page, { "text/plain": "Zwykły pierwszy\nZwykły drugi" });
+  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 15000 });
+  await sleep(600);
+  check("wklejka bez linii listy: bez Opcji wklejania", !(await page.evaluate(() => !!document.querySelector(".paste-opts"))));
+
   check("brak błędów JS", !errors.length, errors.slice(0, 3).join(" | "));
   await browser.close();
   const failed = results.filter((r) => !r.ok);

@@ -1209,17 +1209,21 @@ const composeNumIdOf = (p) => composeDirectChild(composeDirectChild(composeDirec
 
 // Ręcznie wpisany punktor na początku akapitu („• tekst”, „▪<tab>tekst”) — przy włączeniu listy Word
 // go usuwa (zostaje numer / punktor listy, nie „1. • tekst”). Nagranie Mateusza 2026-11-17.
-// Tylko znaki punktorów — „- ” i „1. ” zostają (to bywa treść, np. myślnik albo numer w tekście).
+// Zwykle tylko znaki punktorów — „- ” i „1. ” bywają treścią. broad (Opcje wklejania → „Zamień na
+// listę”, wyraźny wybór): też „1.”, „1)”, „a)”, „-”, „–”, „*”.
 const COMPOSE_MANUAL_BULLET = /^[\u2022\u25E6\u25AA\u25AB\u25CF\u25CB\u25A0\u25A1\u25C6\u25C7\u25BA\u27A2\u2023\u2043\u00B7]/;
-function composeStripManualBullet(p) {
-  // tekst akapitu w kolejności: w:t (zwykły tekst) i w:tab; bez usuniętego tekstu (w:delText)
+const COMPOSE_MANUAL_MARKER = /^(?:[\u2022\u25E6\u25AA\u25AB\u25CF\u25CB\u25A0\u25A1\u25C6\u25C7\u25BA\u27A2\u2023\u2043\u00B7*\-\u2013]|\d{1,3}[.)]|[a-zA-Z][.)])/;
+function composeStripManualBullet(p, broad = false) {
+  // tekst akapitu w kolejności: w:t (zwykły tekst) i w:tab; bez usuniętego tekstu (w:del)
   const inDel = (n) => { for (let a = n.parentNode; a && a !== p; a = a.parentNode) if (a.localName === "del" || a.localName === "moveFrom") return true; return false; };
   const nodes = Array.from(p.getElementsByTagNameNS(W_NS, "*")).filter((n) => (n.localName === "t" || n.localName === "tab") && n.parentNode?.localName === "r" && !inDel(n));
   const first = nodes.findIndex((n) => n.localName === "tab" || n.textContent.length);
-  if (first < 0 || nodes[first].localName !== "t" || !COMPOSE_MANUAL_BULLET.test(nodes[first].textContent)) return false;
-  // po znaku musi być odstęp (spacja albo tabulator) — „•tekst” bez odstępu to treść
+  if (first < 0 || nodes[first].localName !== "t") return false;
   const t0 = nodes[first];
-  const rest = t0.textContent.slice(1);
+  const m = (broad ? COMPOSE_MANUAL_MARKER : COMPOSE_MANUAL_BULLET).exec(t0.textContent);
+  if (!m) return false;
+  // po znaczniku musi być odstęp (spacja albo tabulator) — „•tekst”, „1.5 m” to treść
+  const rest = t0.textContent.slice(m[0].length);
   const nextTab = nodes[first + 1]?.localName === "tab" ? nodes[first + 1] : null;
   if (rest.length ? !/^[ \u00A0\t]/.test(rest) : !nextTab && !/^[ \u00A0]/.test(nodes[first + 1]?.textContent || "")) return false;
   t0.textContent = rest.replace(/^[ \u00A0\t]+/, "");
@@ -1227,11 +1231,20 @@ function composeStripManualBullet(p) {
     if (nextTab) nextTab.parentNode.removeChild(nextTab);
     else if (nodes[first + 1]) nodes[first + 1].textContent = nodes[first + 1].textContent.replace(/^[ \u00A0]+/, "");
   }
-  if (!t0.textContent) t0.removeAttribute("xml:space");
   return true;
 }
 
 async function applyListInZip(zip, xml, edit) {
+  // kilka list naraz, jednym krokiem Cofnij (Opcje wklejania): każda grupa jak osobne włączenie listy
+  if (Array.isArray(edit.groups)) {
+    let out = xml, n = 0;
+    for (const g of edit.groups) {
+      const r = await applyListInZip(zip, out, { ...edit, groups: null, indices: g.indices, kind: g.kind || edit.kind });
+      out = r.xml;
+      n += r.count;
+    }
+    return { xml: out, count: n, kind: edit.kind };
+  }
   const doc = composeParse(xml);
   const paragraphs = collectParagraphElements(doc.documentElement, "all");
   let targets = (edit.indices || []).map((i) => paragraphs[i]).filter(Boolean);
@@ -1302,7 +1315,7 @@ async function applyListInZip(zip, xml, edit) {
   if (!numId && kind === "bullet") numId = Array.from(idx.nums.entries()).find(([, a]) => a === absId)?.[0] || null;
   if (!numId) numId = newNum(kind === "number" && !wholeId);
   targets.forEach((p) => {
-    composeStripManualBullet(p);
+    composeStripManualBullet(p, !!edit.stripMarkers);
     const pPr = composeEnsurePPr(p);
     const old = composeDirectChild(pPr, "numPr");
     const ilvl = old && composeDirectChild(old, "ilvl")?.getAttributeNS(W_NS, "val");
