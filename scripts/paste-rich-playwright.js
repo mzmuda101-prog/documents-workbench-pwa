@@ -92,6 +92,16 @@ const paraTexts = (xml) => (xml.match(/<w:p[ >][\s\S]*?<\/w:p>/g) || []).map((p)
     return dwbPaste.parse(dt);
   });
   check("zwykły tekst bez formatowania → dawne wklejanie", plain === null, JSON.stringify(plain));
+  // Word bez formatowania (same p.MsoNormal; łamanie wiersza <br>): zwykły tekst ma \n w obu miejscach
+  // i linie „1. …”, więc wyglądał na Markdown — osobne akapity z „•” zlepiały się w jeden (2026-11-17)
+  const office = await page.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.setData("text/html", '<html xmlns:o="urn:schemas-microsoft-com:office:office"><body><!--StartFragment--><p class=MsoNormal>Lista A:<o:p></o:p></p><p class=MsoNormal>1. Pierwsze pytanie?<o:p></o:p></p><p class=MsoNormal>2. Drugie pytanie?<o:p></o:p></p><p class=MsoNormal>Nagłówek:<br>\ndopisek<o:p></o:p></p><p class=MsoNormal>• punkt jeden<o:p></o:p></p><p class=MsoNormal>• punkt dwa<o:p></o:p></p><!--EndFragment--></body></html>');
+    dt.setData("text/plain", "Lista A:\n1. Pierwsze pytanie?\n2. Drugie pytanie?\nNagłówek:\ndopisek\n\n• punkt jeden\n• punkt dwa");
+    return (dwbPaste.parse(dt) || []).map((b) => `${b.type}:${b.runs.map((r) => (r.break ? "⏎" : r.text)).join("")}`);
+  });
+  check("Word bez formatowania: akapity jak w Wordzie (<p> = akapit, <br> = łamanie), bez zgadywania Markdownu",
+    JSON.stringify(office) === JSON.stringify(["p:Lista A:", "p:1. Pierwsze pytanie?", "p:2. Drugie pytanie?", "p:Nagłówek:⏎dopisek", "p:• punkt jeden", "p:• punkt dwa"]), JSON.stringify(office));
 
   // ── HTML jak z Notatek ──
   await freshPara(page, 1);

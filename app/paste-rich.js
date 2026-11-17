@@ -305,6 +305,12 @@ const dwbPaste = (() => {
       blocks = fromHtml(html);
       // HTML bez żadnego formatowania (np. z edytora tekstu), a tekst wygląda na Markdown
       const rich = blocks.some((b) => b.type !== "p" || b.runs.some((r) => !r.break && (r.bold || r.italic || r.underline || r.strike || r.link || r.code || r.highlight)));
+      // Word / Outlook / OneNote (HTML z „Mso…”): podział na akapity jest w HTML-u (<p> = akapit,
+      // <br> = łamanie wiersza). Ich zwykły tekst ma \n w obu miejscach, a linie „1. …” wyglądają
+      // na Markdown — wklejka zlepiała wtedy osobne akapity (np. linie z „•”) w jeden (nagranie
+      // Mateusza 2026-11-17). Z Office: zawsze struktura z HTML-a, jak w Wordzie.
+      const office = /urn:schemas-microsoft-com:office|class="?Mso/i.test(html);
+      if (!rich && office) return blocks.length ? blocks : null;
       if (!rich && text && looksLikeMarkdown(text)) blocks = fromMarkdown(text);
       else if (!rich) return null;
     } else if (text && looksLikeMarkdown(text)) {
