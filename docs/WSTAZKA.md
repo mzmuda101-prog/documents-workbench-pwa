@@ -17,7 +17,7 @@ nie zmienia motywu.
 | 4 | Dolny pasek (v1.01.06) | Karty otwartych dokumentów (przewijane) + strona, wyrazy, błędy, język, powiększenie, „Sugerowanie”. | — |
 | 5 | Mini pasek (v1.01.07) | Nad zaznaczeniem, pod nim gdy brak miejsca, gaśnie przy przewijaniu. | — |
 | 6 | Opcje wstążki (6a v1.01.09, 6b Klasyczna v1.01.10) | Klasyczna (duże przyciski, nazwy grup) / Uproszczona; Zawsze / Chowaj przy przewijaniu / Tylko karty (Ctrl+F1); gęstość Mysz/Dotyk. | — |
-| 7 | Telefon | Pasek u góry (wstecz, cofnij, nazwa, tryb, ⋯); rząd poleceń nad klawiaturą; arkusz kart w miejscu klawiatury; Czytanie bez dodatkowych przycisków. | — |
+| 7 | Telefon (7a v1.01.13) | Pasek u góry (wstecz, cofnij, nazwa, tryb, ⋯); rząd poleceń nad klawiaturą; arkusz kart w miejscu klawiatury; Czytanie bez dodatkowych przycisków. | — |
 | 8 | Znaczniki recenzji | Licznik „N zmian · M komentarzy” nad kolumną dymków, poprzedni/następny, Akceptuj wszystkie; Recenzja → Znaczniki: Wszystkie / Proste / Bez. Reszta jak dziś (`review-margin.js`). | — |
 
 ## Etap 1a — co weszło (2026-11-16)
@@ -177,6 +177,19 @@ schowane.
   Powiększenia i Wyglądu (decyzje z przeglądu). Funkcje aplikacji spoza makiety dołożone do
   najbliższych grup (Nagłówek i stopka, Spis treści, Zakładka, Komentarz, Pole formularza,
   Narzędzia edycji, wyrównanie/kierunek/rozłożenie w Tabeli). Gęstość Dotyk dotyczy Uproszczonej.
+
+## Etap 7a — górny pasek telefonu (v1.01.13)
+
+- `app/phone-bar.js`: do 768 px z otwartym plikiem nagłówek = ← (Zamknij do ekranu startowego,
+  pyta o niezapisane jak dotąd) · Cofnij (tylko Edycja) · nazwa + „N niezapisane · tryb” · tryb ▾
+  (menu Edycja / Sugerowanie / Czytanie z opisami) · ⋯. Zapisz przeszedł do ⋯ (pierwsza pozycja).
+  Tryb i Cofnij zniknęły z paska nad dokumentem (bez dubli). Zwijanie nagłówka zostaje.
+- Czytanie na telefonie bez pływającego „Edytuj” (doc-comfort.js); szeroko bez zmian.
+- Decyzje Mateusza (2026-11-17): ← = zamknij do ekranu startowego; wyspa szukania — ustawienie,
+  domyślnie jak dziś, do wyboru „jak w makiecie” (bez wyspy) — wchodzi w 7b.
+- Przy wstążce dolny pasek prawie przy krawędzi okna (4 px).
+- Dalej 7b: rząd poleceń karty nad klawiaturą + arkusz kart (chipy, polecenia z podpisami),
+  ustawienie wyspy, zastąpienie paska nad dokumentem.
 
 ## Zasady techniczne
 

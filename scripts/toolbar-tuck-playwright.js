@@ -76,7 +76,7 @@ async function run() {
   // ── wyspa u dołu ──
   const isl = await page.evaluate(() => {
     const island = document.getElementById("docIsland");
-    const ms = document.querySelector(".mode-switch").getBoundingClientRect();
+    const ms = document.getElementById("formatMarksBtn").getBoundingClientRect(); // tryb jest u góry (phone-bar.js) — w rzędzie zostaje ¶
     const zg = document.querySelector(".zoom-group").getBoundingClientRect();
     return {
       shown: !island.hidden,
@@ -89,7 +89,7 @@ async function run() {
   });
   check("wyspa u dołu: szukanie i narzędzia przeniesione", isl.shown && isl.search && isl.tools, JSON.stringify(isl));
   check("pasek stanu na telefonie schowany", isl.statusHidden);
-  check("Czytanie: reszta paska w jednym rzędzie (zoom obok Czytanie/Edycja)", isl.oneRow);
+  check("Czytanie: reszta paska w jednym rzędzie (zoom obok ¶; tryb u góry)", isl.oneRow);
   check("wyspa unosi się nad dołem obszaru dokumentu", isl.bottomGap >= 6 && isl.bottomGap <= 16, String(isl.bottomGap));
   const end = await page.evaluate(async () => {
     const vp = document.getElementById("docViewport");
@@ -175,7 +175,11 @@ async function run() {
   } else check("skok do sekcji: są skróty sekcji", false);
 
   // Edycja: zaznaczenie tekstu przywraca pasek (formatowanie)
-  await page.locator('.mode-btn[data-mode="edit"]').tap();
+  // tryb zmienia się u góry (phone-bar.js): przycisk trybu → menu → Edycja
+  if (await page.evaluate(() => appFrame.isHeroCollapsed())) { await page.locator(".hero-grip").tap(); await page.waitForTimeout(400); }
+  await page.locator("#phModeBtn").tap();
+  await page.waitForTimeout(250);
+  await page.locator('.compose-pop [role=menuitemradio]').first().tap();
   await page.waitForTimeout(500);
   s = await state();
   check("Edycja: odstęp nadąża za wyższym paskiem", Math.abs(s.pad - s.tbH) <= 1, `${s.pad} vs ${s.tbH}`);

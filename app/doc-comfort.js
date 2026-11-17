@@ -37,6 +37,8 @@ const dwbComfort = (() => {
   }
   function showReadHint(point) {
     if (!originalFileBytes || !readOnlyMode) return;
+    // telefon: bez pływającego „Edytuj” — tryb zmienia się u góry (makieta v4, phone-bar.js)
+    if (matchMedia("(max-width: 768px)").matches) return;
     hideReadHint();
     const at = point || lastPoint || caretPointFallback();
     hintEl = document.createElement("div");

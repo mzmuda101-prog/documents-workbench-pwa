@@ -4406,3 +4406,29 @@ body.rb-on .workspace { padding-top: 0; }
 body.rb-on .rb-rail { top: 0; }
 body.rb-on .main { gap: 8px; }
 body.rb-on .status-bar { padding: 4px 8px; }
+/* przy wstążce dolny pasek prawie przy krawędzi okna (wyjątek od marginesu obrzeża — prośba Mateusza) */
+body.rb-on .app { padding-bottom: max(4px, var(--safe-bottom)); }
+
+/* ── Telefon: górny pasek jak w makiecie v4 (app/phone-bar.js; etap 7 wstążki) ──────────────
+   ← zamknij · Cofnij · nazwa i „N niezapisane · tryb” · tryb ▾ · ⋯. Bez pliku i szeroko — jak dotąd. */
+.ph-lead, .ph-mode, .ph-status, .ph-only-item { display: none; }
+@media (max-width: 768px) {
+  .hero.has-file { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 2px; padding-left: 4px; padding-right: 6px; }
+  .hero.has-file .ph-lead { display: flex; align-items: center; }
+  .hero.has-file .hero-logo, .hero.has-file .hero-meta, .hero.has-file #heroSaveBtn { display: none; }
+  .hero.has-file .hero-left { justify-content: center; min-width: 0; }
+  .hero.has-file .hero-info { align-items: center; text-align: center; min-width: 0; }
+  .hero.has-file .hero-title { font-size: 14px; max-width: 100%; }
+  .hero.has-file .ph-status { display: block; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .hero.has-file .hero-right { gap: 2px; }
+  .hero.has-file .ph-mode { display: inline-flex; }
+  body.ph-reading .hero.has-file #phUndoBtn { display: none; }
+  .ph-qb { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 10px; background: none; color: var(--ink-2); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .ph-qb:disabled { opacity: .35; cursor: default; }
+  .ph-qb:focus-visible, .ph-mode:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .ph-mode { align-items: center; gap: 2px; height: 36px; padding: 0 8px; border: 0; border-radius: 9px; background: var(--accent-light); color: var(--accent); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .ph-mode[data-mode="suggest"] { background: color-mix(in srgb, var(--warning) 14%, transparent); color: var(--warning); }
+  body.has-document .app-menu .ph-only-item { display: flex; }
+  /* tryb i Cofnij są u góry — w pasku nad dokumentem już ich nie ma (bez dubli) */
+  body.has-document .doc-toolbar .mode-switch, body.has-document .doc-toolbar #undoBtn { display: none; }
+}
