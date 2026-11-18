@@ -207,9 +207,16 @@ async function run() {
   await page.evaluate(() => typeof dwbRibbon !== "undefined" && dwbRibbon?.isOn() && dwbRibbon.select("view")).then(() => page.click("#focusModeBtn"));
   await page.waitForTimeout(300);
   const focus = await page.evaluate(() => document.documentElement.classList.contains("focus-mode") || document.body.classList.contains("focus-mode"));
-  await page.keyboard.press("Escape");
-  await page.waitForTimeout(300);
   check("tryb skupienia: włącza się przyciskiem", focus);
+  // wstążka: tablet bez klawiatury nie ma Esc — wyjście przyciskiem w rzędzie 1 (pasek i rząd poleceń są schowane)
+  if (await page.evaluate(() => document.body.classList.contains("rb-on"))) {
+    await page.click("#rbFocusExit");
+    await page.waitForTimeout(300);
+    check("tryb skupienia: „Skupienie” u góry wychodzi", await page.evaluate(() => !document.documentElement.classList.contains("focus-mode")));
+  } else {
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(300);
+  }
   const chip = await page.$("#sectionChips button:nth-child(3), #sectionChips .section-chip:nth-child(3)");
   if (chip) {
     // od góry dokumentu — po powrocie na kartę (open-docs.js) widok wraca w miejsce pracy,

@@ -55,7 +55,10 @@ const dwbView = (() => {
       if (panelWasOpen) setSidebarOpen(false); // bez zapamiętywania wyboru (to nie jest świadome zamknięcie)
       moveHeroControls(true);
       // na dotyku nie ma Esc — mówimy o przycisku
-      if (!opts.silent) toast(t(matchMedia("(pointer: coarse)").matches ? "focusModeOnTouch" : "focusModeOn"), "info");
+      if (!opts.silent) {
+        const rb = document.body.classList.contains("rb-on") ? "Rb" : "";
+        toast(t((matchMedia("(pointer: coarse)").matches ? "focusModeOnTouch" : "focusModeOn") + rb), "info");
+      }
     } else {
       moveHeroControls(false);
       if (panelWasOpen) setSidebarOpen(true);
@@ -105,6 +108,8 @@ const dwbView = (() => {
   }
 
   btn?.addEventListener("click", toggle);
+  // wstążka: tryb skupienia chowa rząd poleceń i dolny pasek — wyjście stoi w rzędzie 1 (dotyk nie ma Esc)
+  document.getElementById("rbFocusExit")?.addEventListener("click", () => set(false));
   menuItem?.addEventListener("click", toggle);
   fsItem?.addEventListener("click", () => (fsElement() ? exitFullscreen() : enterFullscreen()));
 
