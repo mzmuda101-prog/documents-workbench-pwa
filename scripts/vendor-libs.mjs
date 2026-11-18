@@ -110,12 +110,14 @@ function patchBundle() {
   // 7) Wcięcie tabeli (w:tblInd w:w="…" w:type="dxa"): docx-preview czytał je jak wcięcie akapitu
   //    (atrybuty left/start) — tabela zawsze stała przy marginesie. W Wordzie (tryb 2013+) to
   //    odległość krawędzi tabeli od marginesu, także ujemna (tabela wysunięta w lewo).
+  //    --dwb-tblind: wcięcie PODANE (wprost albo w stylu) — w trybie zgodności < 15 Word liczy je do
+  //    tekstu komórki, nie do krawędzi (applyLegacyTableIndent, wyrocznia probe-table-indent.js).
   const reTblInd = /case"ind":case"tblInd":this\.parseIndentation\((\w+),(\w+)\);break;/;
   if (!reTblInd.test(src)) throw new Error("łatka tblInd: wzorzec nie pasuje (nowa wersja docx-preview?)");
   const mParser = src.match(/parseIndentation\(\w+,\w+\)\{var \w+=(\w+)\.lengthAttr\(/);
   if (!mParser) throw new Error("łatka tblInd: brak globalXmlParser w parseIndentation");
   const XP = mParser[1];
-  src = src.replace(reTblInd, (_, el, st) => `case"ind":this.parseIndentation(${el},${st});break;case"tblInd":{var __ty=${XP}.attr(${el},"type");if(!__ty||__ty==="dxa"){var __w=${XP}.lengthAttr(${el},"w");__w&&(${st}["margin-inline-start"]=__w)}}break;`);
+  src = src.replace(reTblInd, (_, el, st) => `case"ind":this.parseIndentation(${el},${st});break;case"tblInd":{${st}["--dwb-tblind"]="1";var __ty=${XP}.attr(${el},"type");if(!__ty||__ty==="dxa"){var __w=${XP}.lengthAttr(${el},"w");__w&&(${st}["margin-inline-start"]=__w)}}break;`);
   console.log("  ✅  łatka: wcięcie tabeli (w:tblInd)");
 
   // 8) Wyrównanie strony w pionie (sectPr w:vAlign: top / center / both / bottom — Word:
@@ -400,6 +402,28 @@ function patchBundle() {
   if (!reStyleVals.test(src)) throw new Error("łatka ramek akapitu: wzorzec renderStyleValues nie pasuje");
   src = src.replace(reStyleVals, (_, t, e, r) => `renderStyleValues(${t},${e}){for(let ${r} in ${t})${r}.startsWith("$")?${e}.setAttribute(${r}.slice(1),${t}[${r}]):${r}.startsWith("--")?${e}.style.setProperty(${r},${t}[${r}]):${e}.style[${r}]=${t}[${r}]}`);
   console.log("  ✅  łatka: ramka akapitu z odstępem i linią „między” (--dwb-pbdr)");
+
+  // 29) Odstęp „automatyczny” (w:beforeAutospacing / w:afterAutospacing — styl „Normal (Web)”, tekst
+  //     wklejony ze strony): Word daje 14 pt, docx-preview brał zapasowe w:before/w:after (zwykle 5 pt).
+  //     W komórce tabeli Word go zdejmuje na początku i końcu komórki (applyCellAutospacing) — stąd
+  //     znacznik --dwb-asb / --dwb-asa („1” automatyczny, „0” jawnie wyłączony albo zwykła wartość).
+  //     Wyrocznia probe-autospacing.js (2026-11-18): treść 27,5 pt na akapit, komórka jak zwykły tekst.
+  const reSpacing = /(parseSpacing\((\w+),(\w+)\)\{var (\w+)=(\w+)\.lengthAttr\(\2,"before"\),(\w+)=\5\.lengthAttr\(\2,"after"\),\w+=\5\.intAttr\(\2,"line",null\),\w+=\5\.attr\(\2,"lineRule"\);)(if\(\4&&\(\3\["margin-top"\]=\4\),\6&&\(\3\["margin-bottom"\]=\6\),)/;
+  if (!reSpacing.test(src)) throw new Error("łatka odstępu automatycznego: wzorzec parseSpacing nie pasuje (nowa wersja docx-preview?)");
+  src = src.replace(reSpacing, (_, head, t, e, r, X, o, tail) => head
+    + `${X}.attr(${t},"beforeAutospacing")!=null?(${X}.boolAttr(${t},"beforeAutospacing",!1)?(${r}="14pt",${e}["--dwb-asb"]="1"):${e}["--dwb-asb"]="0"):${r}&&(${e}["--dwb-asb"]="0");`
+    + `${X}.attr(${t},"afterAutospacing")!=null?(${X}.boolAttr(${t},"afterAutospacing",!1)?(${o}="14pt",${e}["--dwb-asa"]="1"):${e}["--dwb-asa"]="0"):${o}&&(${e}["--dwb-asa"]="0");`
+    + tail);
+  console.log("  ✅  łatka: odstęp automatyczny 14 pt (--dwb-asb / --dwb-asa)");
+
+  // 30) Podział strony na SAMYM końcu dokumentu (nic po nim — ani akapitu): Word nie robi pustej strony,
+  //     docx-preview robił (wyrocznia probe-trailing-break.js 2026-11-18: br w osobnym akapicie i na
+  //     końcu akapitu → 1 strona; po nim pusty akapit albo pageBreakBefore → 2). Sprawozdanie_zadanie_3:
+  //     5 stron zamiast 4. Pusta ostatnia część po podziale (bez własnej sekcji) znika.
+  const reTail = /(splitBySection\(\w+,\w+\)\{var \w+=\{sectProps:null,elements:\[\],pageBreak:!1\},(\w+)=\[\w+\];[\s\S]*?\})(let (\w+)=null;for\(let (\w+)=\2\.length-1;)/;
+  if (!reTail.test(src)) throw new Error("łatka podziału na końcu: wzorzec splitBySection nie pasuje (nowa wersja docx-preview?)");
+  src = src.replace(reTail, (_, head, o, tail) => `${head}if(${o}.length>1&&!${o}[${o}.length-1].elements.length&&!${o}[${o}.length-1].sectProps&&${o}[${o}.length-2].pageBreak){${o}.pop();${o}[${o}.length-1].pageBreak=!1}${tail}`);
+  console.log("  ✅  łatka: bez pustej strony po podziale na końcu dokumentu");
   fs.writeFileSync(OUT, src);
 }
 

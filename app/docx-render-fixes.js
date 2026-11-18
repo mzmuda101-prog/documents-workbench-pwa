@@ -396,6 +396,7 @@ function watchParagraphLayout(wrapper) {
       if (!wrapper.isConnected) { mo.disconnect(); return; }
       applyContextualSpacing(wrapper);
       if (touched.size) applyParagraphBorders(wrapper, touched); // grupa ramki: akapit i jego sąsiedzi
+      if (touched.size) applyCellAutospacing(wrapper, touched); // nowy pierwszy / ostatni akapit komórki
       fixEmptyParagraphHeights(wrapper);
       touched.forEach((p) => { if (p.isConnected) { zeroWhitespaceRun(p); hangTrailingSpace(p); addFallbackSymbolLine(p); } });
       const just = [...touched].filter((p) => p.isConnected && p.classList.contains("dwb-justify"));
@@ -737,14 +738,15 @@ function addTableBorderHeights(host) {
       // minimum wiersza (w:trHeight) + linia; wiersz „dokładnie” (data-dwb-hrule, łatka 19): linia mieści się w podanej wysokości (wyrocznia: 1000 tw = 66,7 px)
       const h = tr.dataset.dwbHrule === "exact" ? 0 : cssLengthPx(tr.style.height);
       if (h) tr.style.height = `${Math.round((h + extra) * 100) / 100}px`;
-      // Wiersz bez minimum (wysokość z treści): Chrome rysuje linię 0,5 pt jako 1 px (też na
-      // Retinie) i tyle dokłada do wiersza, Word 0,67 px. Kolokwium 18.11: +0,33 px na wiersz,
-      // 9 wierszy na stronie = wiersz tabeli mniej niż w Wordzie. Nadmiar zdejmuje pusty blok
-      // ::after z ujemnym marginesem (app.css) — zlewa się z odstępem po ostatnim akapicie.
+      // Wiersz bez minimum (wysokość z treści): przeglądarka dokłada do wiersza linię zaokrągloną
+      // do pikseli ekranu — Chrome 0,5 pt = 1 px (też na Retinie), Safari na Retinie 0,5 px — a Word
+      // 0,67 px. Kolokwium 18.11: Chrome +0,33 px na wiersz (wiersz tabeli mniej na stronie), Safari
+      // 2× −0,17 px (podziały stron o setki px dalej). Różnicę w obie strony wyrównuje pusty blok
+      // ::after (app.css): ujemny margines zlewa się z odstępem po akapicie, dodatnia wysokość dokłada.
       else if (tr.dataset.dwbHrule !== "exact") cells.forEach((td) => {
         const cs = getComputedStyle(td);
         const over = ((parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0)) / 2 - extra;
-        if (over > 0.05 && over < 1) td.style.setProperty("--dwb-row-over", `${-Math.round(over * 1000) / 1000}px`);
+        if (Math.abs(over) > 0.05 && Math.abs(over) < 1) td.style.setProperty("--dwb-row-over", `${-Math.round(over * 1000) / 1000}px`);
       });
       n++;
     });
@@ -836,6 +838,67 @@ function applyParagraphBorders(host, scope) {
     p.setAttribute("data-dwb-bdr", "");
     n++;
   }
+  return n;
+}
+
+// Odstęp „automatyczny” (Normal (Web), łatka 29: 14 pt) w komórce tabeli: Word zdejmuje go przed
+// PIERWSZYM akapitem komórki i po OSTATNIM (wyrocznia probe-autospacing.js 2026-11-18: jedyny akapit
+// w komórce = jak zwykły tekst, dwa — 14 pt tylko między nimi). Sprawozdanie_zadanie_3: wiersze
+// tabeli z opisami w Normal (Web) o 7,5 pt wyższe niż w Wordzie. Scope: komórki edytowanych akapitów.
+function applyCellAutospacing(host, scope) {
+  if (!host) return 0;
+  const cells = scope ? new Set([...scope].map((p) => p.isConnected && p.closest?.("td, th")).filter(Boolean)) : host.querySelectorAll("section.docx td, section.docx th");
+  let n = 0;
+  for (const td of cells) {
+    const kids = [...td.children].filter((c) => c.tagName === "P");
+    kids.forEach((p) => { p.removeAttribute("data-dwb-as-first"); p.removeAttribute("data-dwb-as-last"); });
+    const first = td.firstElementChild?.tagName === "P" ? td.firstElementChild : null;
+    const last = td.lastElementChild?.tagName === "P" ? td.lastElementChild : null;
+    if (first && getComputedStyle(first).getPropertyValue("--dwb-asb").trim() === "1") { first.setAttribute("data-dwb-as-first", ""); n++; }
+    if (last && getComputedStyle(last).getPropertyValue("--dwb-asa").trim() === "1") { last.setAttribute("data-dwb-as-last", ""); n++; }
+  }
+  return n;
+}
+
+// Tryb zgodności pliku (w:compat/w:compatSetting compatibilityMode): 15 = Word 2013+. Brak ustawień
+// albo brak wpisu — Word otwiera plik w trybie starszym (wyrocznia probe-table-indent.js: jak 14).
+async function docxCompatMode(bytes) {
+  try {
+    const zip = await loadDocxZipCached(bytes);
+    const xml = await zip.file("word/settings.xml")?.async("string");
+    const m = xml && /compatibilityMode"[^>]*w:val="(\d+)"|w:val="(\d+)"[^>]*compatibilityMode"/.exec(xml);
+    return m ? parseInt(m[1] || m[2], 10) || 0 : 0;
+  } catch (_) { return 15; } // nie wiemy — bez zmian w układzie
+}
+
+// Wcięcie tabeli w trybie zgodności < 15 (wyrocznia probe-table-indent.js 2026-11-18): podane
+// w:tblInd (wprost albo ze stylu, np. „Normal Table” 0 dxa) Word liczy do TEKSTU pierwszej komórki —
+// lewa linia tabeli wychodzi przed margines o lewy margines komórki; w trybie 15 do linii. Bez
+// tblInd linia stoi na marginesie w każdym trybie. Kolokwium 18.11 (bez settings.xml): tekst komórek
+// 7,2 px dalej w prawo niż w Wordzie. --dwb-tblind z łatki 7 (vendor-libs.mjs).
+function applyLegacyTableIndent(host, compat) {
+  if (!host || compat >= 15) return 0;
+  let n = 0;
+  host.querySelectorAll("section.docx table").forEach((table) => {
+    if (table.dataset.dwbTind != null || getComputedStyle(table).getPropertyValue("--dwb-tblind").trim() !== "1") return;
+    const cell = table.rows[0]?.cells[0];
+    if (!cell) return;
+    // tekst komórki (za linią i marginesem komórki, jak je rysuje przeglądarka) staje tam, gdzie
+    // stała lewa krawędź tabeli
+    const ccs = getComputedStyle(cell);
+    const scale = table.offsetWidth ? table.getBoundingClientRect().width / table.offsetWidth : 1;
+    // lewa krawędź treści komórki zmierzona na pierwszym bloku (Chrome i Safari różnie liczą pół linii
+    // przy border-collapse); bez bloku — z linii i marginesu komórki
+    const blk = cell.firstElementChild;
+    const contentLeft = blk ? blk.getBoundingClientRect().left - (parseFloat(getComputedStyle(blk).marginLeft) || 0) * scale
+      : cell.getBoundingClientRect().left + (cell.clientLeft + (parseFloat(ccs.paddingLeft) || 0)) * scale;
+    const shift = (contentLeft - table.getBoundingClientRect().left) / scale;
+    if (!(shift > 0.05)) return;
+    const ml = parseFloat(getComputedStyle(table).marginLeft) || 0;
+    table.dataset.dwbTind = String(Math.round(shift * 1000) / 1000);
+    table.style.marginLeft = `${Math.round((ml - shift) * 1000) / 1000}px`;
+    n++;
+  });
   return n;
 }
 

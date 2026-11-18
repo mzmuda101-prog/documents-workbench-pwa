@@ -5,6 +5,7 @@
 //   FRESH=1 — PDF-y z Worda od nowa (domyślnie z pamięci, dopóki plik się nie zmienił)
 //   SAVE_PAGES=1 — zapisz też nasze kartki (<plik>-app-sN.png)
 //   DPR=2 — ekran Retina (Mac, iPad): cienkie linie tabel zaokrąglane do 0,5 px, nie do 1 px
+//   ENGINE=webkit — Safari / iPad (inne zaokrąglenia i metryki krojów niż Chromium)
 //
 // Wzorcem jest Word, nie poprzedni render aplikacji: porównanie z samą sobą pilnowałoby tylko,
 // żeby nic się nie zmieniło — także gdy wcześniej było źle. Word (Microsoft Word dla Maca,
@@ -94,7 +95,7 @@ function wordPdf(file) {
 }
 
 async function run() {
-  const browser = await pw.chromium.launch({ headless: true });
+  const browser = await pw[process.env.ENGINE === "webkit" ? "webkit" : "chromium"].launch({ headless: true });
   const report = [];
   let context = null;
   for (const file of files) {

@@ -348,6 +348,54 @@ async function run() {
   check("⌘ (krój zastępczy 1,172 em) podnosi linijkę Arial 11 pt o ~0,38 px", Math.abs(st.cmd - st.plain - 0.383) < 0.15, JSON.stringify(st));
   check("← (jest w Arialu) nie podnosi linijki", Math.abs(st.left - st.plain) < 0.05, JSON.stringify(st));
 
+  // ── wcięcie tabeli a tryb zgodności (wyrocznia probe-table-indent.js): tblInd 0 + margines komórki
+  //    5,4 pt; tryb 15 — tekst komórki 7,2 px od marginesu, tryb 14 / bez ustawień — na marginesie ──
+  const JSZipT = require("jszip");
+  const tbB = ["top", "left", "bottom", "right", "insideH", "insideV"].map((s) => `<w:${s} w:val="single" w:sz="4" w:space="0" w:color="000000"/>`).join("");
+  const tblXml = (txt) => `<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblInd w:w="0" w:type="dxa"/><w:tblBorders>${tbB}</w:tblBorders><w:tblCellMar><w:left w:w="108" w:type="dxa"/><w:right w:w="108" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w="3000" w:type="dxa"/></w:tcPr><w:p><w:r>${t(txt)}</w:r></w:p></w:tc></w:tr></w:tbl>`;
+  const indentOf = async (mode) => {
+    const zip = await JSZipT.loadAsync(await buildDocx({ body: [`<w:p><w:r>${t(`Tekst ${mode}`)}</w:r></w:p>`, tblXml(`Komorka ${mode}`), "<w:p/>"] }));
+    zip.file("word/settings.xml", (await zip.file("word/settings.xml").async("string")).replace(/w:val="15"/, `w:val="${mode}"`));
+    const f = path.join(os.tmpdir(), `dwb-word-render-c${mode}-${process.pid}.docx`);
+    fs.writeFileSync(f, await zip.generateAsync({ type: "nodebuffer" }));
+    await page.evaluate(() => { if (typeof setDirtyState === "function") setDirtyState(false); });
+    await page.setInputFiles("#fileInput", f);
+    await page.waitForFunction((m) => document.getElementById("loadingOverlay")?.classList.contains("hidden") && [...document.querySelectorAll(".docx-preview-host p")].some((p) => p.textContent === `Komorka ${m}`), mode, { timeout: 20000 });
+    fs.rmSync(f, { force: true });
+    await page.waitForTimeout(400);
+    return page.evaluate((m) => {
+      const ps = [...document.querySelectorAll(".docx-preview-host section.docx p")];
+      const x = (txt) => { const rg = document.createRange(); rg.selectNodeContents(ps.find((p) => p.textContent === txt)); return rg.getBoundingClientRect().left; };
+      return Math.round((x(`Komorka ${m}`) - x(`Tekst ${m}`)) * 100) / 100;
+    }, mode);
+  };
+  const ind15 = await indentOf("15"), ind14 = await indentOf("14");
+  // Word tryb 15: tekst komórki 5,75 pt = 7,67 px od marginesu (margines komórki + linia); u nas linia 1 px
+  check("wcięcie tabeli, tryb 15: tekst komórki o margines komórki od marginesu (Word 7,67 px)", Math.abs(ind15 - 7.67) < 0.6, JSON.stringify({ ind15, ind14 }));
+  check("wcięcie tabeli, tryb 14: tekst komórki na marginesie, linia przed nim (jak Word)", Math.abs(ind14) < 0.3, JSON.stringify({ ind15, ind14 }));
+
+  // ── odstęp automatyczny (probe-autospacing.js) i podział strony na końcu (probe-trailing-break.js) ──
+  const asSty = `<w:style w:type="paragraph" w:styleId="NormalWeb"><w:name w:val="Normal (Web)"/><w:basedOn w:val="Normal"/><w:pPr><w:spacing w:before="100" w:beforeAutospacing="1" w:after="100" w:afterAutospacing="1" w:line="240" w:lineRule="auto"/></w:pPr></w:style>`;
+  const asT = (txt) => `<w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r>${t(txt)}</w:r></w:p>`;
+  const asW = (txt) => `<w:p><w:pPr><w:pStyle w:val="NormalWeb"/></w:pPr><w:r>${t(txt)}</w:r></w:p>`;
+  const asCell = (c) => `<w:tc><w:tcPr><w:tcW w:w="3000" w:type="dxa"/></w:tcPr>${c}</w:tc>`;
+  const asTbl = `<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders>${tbB}</w:tblBorders></w:tblPr><w:tblGrid><w:gridCol w:w="3000"/><w:gridCol w:w="3000"/></w:tblGrid><w:tr>${asCell(asT("Wa1"))}${asCell(asW("Wc1"))}</w:tr><w:tr>${asCell(asT("Wa2"))}${asCell(asT("x"))}</w:tr></w:tbl>`;
+  const f6 = path.join(os.tmpdir(), `dwb-word-render-as-${process.pid}.docx`);
+  fs.writeFileSync(f6, await buildDocx({ body: [asT("Wprzed"), asW("Wb1"), asW("Wb2"), asT("Wpo"), asTbl, asT("Ostatni"), '<w:p><w:r><w:br w:type="page"/></w:r></w:p>'], styles: asSty }));
+  await page.evaluate(() => { if (typeof setDirtyState === "function") setDirtyState(false); });
+  await page.setInputFiles("#fileInput", f6);
+  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && [...document.querySelectorAll(".docx-preview-host p")].some((p) => p.textContent === "Wc1"), null, { timeout: 20000 });
+  fs.rmSync(f6, { force: true });
+  await page.waitForTimeout(400);
+  const as = await page.evaluate(() => {
+    const ps = [...document.querySelectorAll(".docx-preview-host section.docx p")];
+    const top = (txt) => { const rg = document.createRange(); rg.selectNodeContents(ps.find((p) => p.textContent === txt)); return rg.getBoundingClientRect().top * 0.75; };
+    return { body: top("Wb2") - top("Wb1"), row: top("Wa2") - top("Wa1"), pages: document.querySelector(".docx-preview-host").querySelectorAll(".docx-wrapper > section.docx").length, hosts: document.querySelectorAll(".docx-preview-host").length };
+  });
+  check("odstęp automatyczny (Normal (Web)) w treści: 14 pt (Word 27,5 pt na akapit)", Math.abs(as.body - 27.5) < 0.3, JSON.stringify(as));
+  check("odstęp automatyczny w komórce: zdjęty na brzegach komórki (wiersz jak zwykły tekst, Word 14 pt)", Math.abs(as.row - 14) < 0.4, JSON.stringify(as));
+  check("podział strony na samym końcu dokumentu: bez pustej strony (Word 1)", as.pages === 1, JSON.stringify(as));
+
   await browser.close();
   const real = errors.filter((e) => !/ResizeObserver/.test(e));
   if (real.length) check("bez błędów w konsoli", false, real.join(" | ").slice(0, 400));

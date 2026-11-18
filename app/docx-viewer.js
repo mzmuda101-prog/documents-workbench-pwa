@@ -87,6 +87,7 @@ async function renderDocxPreview(bytes, container, opts = {}) {
   applyRunDefaultsToParagraphs(wrapper); // pusty / nowy akapit: krój i rozmiar dokumentu, nie aplikacji
   lowerTableStylePrecedence(wrapper); // styl akapitu wygrywa ze stylem tabeli (kolejność Worda)
   applyContextualSpacing(wrapper); // listy bez odstępów między punktami (styl „Akapit z listą”)
+  applyCellAutospacing(wrapper); // odstęp automatyczny (Normal (Web)) zdjęty na brzegach komórki tabeli (Word)
   if (!mobileReflow) applyParagraphBorders(wrapper); // ramka akapitu: pole z grupy, grubość + odstęp od tekstu (Word); widok mobilny skaluje wcięcia sam
   applyWordSuperscripts(wrapper); // indeksy: 2/3 rozmiaru w dół do pół punktu (Word)
   addTrailingBreakLines(wrapper); // Shift+Enter na końcu akapitu = jeszcze jedna linijka (Word)
@@ -104,6 +105,7 @@ async function renderDocxPreview(bytes, container, opts = {}) {
     applyMergedCellFirstLine(wrapper); // scalenie w pionie: 1. wiersz ≥ pierwsza linijka (Word)
     addCellMarginsToRowMinimum(wrapper); // marginesy komórek ponad minimum wysokości wiersza (Word)
     addTableBorderHeights(wrapper); // linie tabeli ponad wysokość wiersza (Word)
+    applyLegacyTableIndent(wrapper, await docxCompatMode(bytes)); // wcięcie tabeli do tekstu komórki w starszym trybie zgodności (Word)
     applySectionStartSpacing(wrapper); // odstęp „przed” na początku sekcji minus „po” z poprzedniej strony (Word)
     positionAnchoredDrawings(wrapper); // logotypy / zdjęcia z oblewaniem — miejsce jak w Wordzie (po układzie akapitów)
   }

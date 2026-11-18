@@ -2385,9 +2385,14 @@ section.docx p { min-height: 1lh; }
 .doc-canvas.doc-reflow-mode .docx table.docx_dwblayout > tr,
 .doc-canvas.doc-reflow-mode .docx table.docx_dwblayout > tr > td { display: block; width: auto !important; }
 .doc-canvas.doc-reflow-mode .docx table.docx_dwblayout > colgroup { display: none; }
-/* Linia tabeli 0,5 pt: przeglądarka liczy ją jako 1 px, Word 0,67 px — nadmiar zdjęty z wysokości
-   wiersza (addTableBorderHeights w docx-render-fixes.js) */
-section.docx td[style*="--dwb-row-over"]::after { content: ""; display: block; margin-top: var(--dwb-row-over); }
+/* Linia tabeli 0,5 pt: przeglądarka liczy ją w pikselach ekranu (Chrome 1 px, Safari 2× 0,5 px), Word
+   0,67 px — różnica zdjęta albo dołożona do wysokości wiersza (addTableBorderHeights w docx-render-fixes.js) */
+section.docx td[style*="--dwb-row-over"]::after { content: ""; display: block; margin-top: min(var(--dwb-row-over), 0px); height: max(var(--dwb-row-over), 0px); }
+/* Odstęp automatyczny (łatka 29) zdjęty na brzegach komórki tabeli, jak w Wordzie (applyCellAutospacing) */
+section.docx :is(td, th) > p[data-dwb-as-first] { margin-top: 0 !important; }
+section.docx :is(td, th) > p[data-dwb-as-last] { margin-bottom: 0 !important; }
+/* Wcięcie tabeli podane w pliku (łatka 7) — znacznik tylko tej tabeli, nie zagnieżdżonych w niej */
+@property --dwb-tblind { syntax: "*"; inherits: false; }
 /* Strona po jawnym podziale (łatka 25 w vendor-libs.mjs): Word pomija odstęp „przed” pierwszego
    akapitu (probe-before-top.js); na początku dokumentu i sekcji zostaje */
 section.docx[data-dwb-break-start] > article:first-of-type > p:first-child { margin-top: 0 !important; }
