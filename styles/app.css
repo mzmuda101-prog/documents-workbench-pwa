@@ -4568,3 +4568,20 @@ body.tb-float .doc-island .doc-island-status { display: none; }
 /* Wstążka przyklejona do górnej krawędzi okna, jak w Sheet: górne rogi proste, bez ramki i odstępu nad nią */
 body.rb-on .app { padding-top: max(0px, var(--safe-top)); }
 body.rb-on .ribbon { border-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
+
+/* Tryb skupienia przy wstążce: włącza go przycisk na dolnym pasku (jak w Wordzie), a że pasek i rząd
+   poleceń wtedy znikają, wychodzi się przyciskiem „Skupienie” w rzędzie 1 — na tablecie bez klawiatury
+   nie ma Esc */
+.rb-fm-exit { display: none; }
+:root.focus-mode body.rb-on .rb-fm-exit {
+  display: inline-flex; flex: none; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 9px; cursor: pointer;
+  border: 1px solid var(--accent-border); background: var(--accent-light); color: var(--accent); font: inherit; font-size: 13px; font-weight: 600;
+}
+@media (hover: hover) { :root.focus-mode body.rb-on .rb-fm-exit:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); } }
+.rb-fm-exit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+body.rb-on .status-bar #focusModeBtn { width: 26px; min-width: 0; height: 24px; min-height: 0; margin-left: 4px; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--muted); }
+body.rb-on .status-bar #focusModeBtn svg { width: 15px; height: 15px; }
+body.rb-on .status-bar #focusModeBtn .rb-lbl { display: none; }
+body.rb-on .status-bar #focusModeBtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (hover: hover) { body.rb-on .status-bar #focusModeBtn:hover { background: color-mix(in srgb, var(--muted) 14%, transparent); color: var(--ink); } }
+body.rb-on:not(.has-document) .status-bar #focusModeBtn { display: none; }

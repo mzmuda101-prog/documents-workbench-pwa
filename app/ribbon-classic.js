@@ -97,7 +97,7 @@ const dwbRibbonClassic = (() => {
       G("rbGForms", [B("panel:panel-forms")]),
     ],
     view: [
-      G("rbGModes", [B("click:#focusModeBtn"), ST(S("fullscreen"))]),
+      G("rbGModes", [ST(S("fullscreen"))]), // tryb skupienia: dolny pasek, jak w Wordzie
       G("rbGShow", [ST(S("panel:panel-structure", { icon: IC.navp, key: "rbNavPane" }), S("sectionStrip"), S("click:#formatMarksBtn", { icon: IC.marks }))]),
     ],
     ai: [
