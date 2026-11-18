@@ -3205,6 +3205,13 @@ body:not(.has-document) #printPreviewMenuItem, body:not(.has-document) #pageSetu
 .dwb-col-keep { break-inside: avoid; }
 /* granica w środku akapitu (jak w Wordzie): „dystans” o zerowej szerokości do linijki granicy,
    pod nim pas pełnej szerokości — wiersze akapitu, które by na niego wpadły, schodzą pod niego */
+/* przerwa strony między wierszami tabeli (page-breaks.js): rola wiersza bez linii, nie <tr> */
+.dwb-page-gap.dwb-gap-row { display: table-row; column-span: none; }
+.dwb-page-gap.dwb-gap-row > .dwb-gap-cell { display: table-cell; padding: 0; border: none; }
+/* powtórzony wiersz nagłówka tabeli u góry strony (kopia do oglądania, shadow DOM) */
+.dwb-page-repeat { position: absolute; z-index: 1; pointer-events: none; user-select: none; }
+.doc-reflow-mode .dwb-page-repeat { display: none; }
+@media print { .dwb-page-repeat { display: none !important; } }
 .dwb-page-gap-spacer { float: left; width: 0; height: 0; margin: 0; padding: 0; border: 0; user-select: none; }
 /* szerszy o znacznik akapitu (pasek 6 px z lewej) — kolor kartki zakrywa podświetlenie na marginesach */
 .dwb-page-gap.dwb-gap-split { float: left; clear: left; width: calc(100% + 24px); margin-left: -12px; }

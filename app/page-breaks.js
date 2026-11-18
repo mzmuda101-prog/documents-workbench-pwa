@@ -31,6 +31,8 @@ const dwbPageBreaks = (() => {
   const KEY = "dwb-page-breaks-v1";
   const GAP_KEY = "dwb-page-gaps-v1";
   const GAP = 22; // przerwa między kartkami — jak między kartkami z jawnym podziałem
+  // odstępy stron w kartce: między blokami i między wierszami tabeli (dwb-gap-row)
+  const GAP_SEL = ":scope > article > .dwb-page-gap, :scope > article > table .dwb-page-gap";
   const box = document.getElementById("showPageBreaks");
   const gapBox = document.getElementById("hideWhiteSpace");
   let timer = 0;
@@ -52,7 +54,7 @@ const dwbPageBreaks = (() => {
   }
 
   function clear(h = host()) {
-    h?.querySelectorAll(".dwb-page-break, .dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-margin-guide").forEach((el) => el.remove());
+    h?.querySelectorAll(".dwb-page-break, .dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-margin-guide, .dwb-page-repeat").forEach((el) => el.remove());
     h?.querySelectorAll("section.dwb-gapped").forEach((sec) => { sec.classList.remove("dwb-gapped"); sec.style.removeProperty("--dwb-sec-min"); });
   }
 
@@ -371,6 +373,15 @@ const dwbPageBreaks = (() => {
   // pisanie przesuwa treść o całe linijki, więc wychodzi poza pas. Podgląd wydruku — bez histerezy.
   const STICKY = 1.5;
   let lastFit = new WeakMap();
+  // O ile odstęp naprawdę przesunął treść za nim: w środku akapitu fitSplit dopasowuje go do linijki,
+  // a WebKit stawia linijki w pikselach ekranu — rzeczywiste przesunięcie różni się od planu (data-shift)
+  // o ułamek piksela. Pomiar odejmujący plan widział przy następnym liczeniu „zmianę”, odstęp był
+  // budowany od nowa o 1 px inaczej — i tak na zmianę (przewodnik w WebKit, ¶ ruszało stronę).
+  function gapDisplacement(g) {
+    const d = parseFloat(g.dataset.disp);
+    return Number.isFinite(d) ? d : parseFloat(g.dataset.shift) || 0;
+  }
+
   function paginateSection(sec, { includeNotes = false, blockBreaks = false, decided = null } = {}) {
     // sekcje ciągłe (Word: nowa sekcja na tej samej stronie) = kolejne <article> tej samej kartki
     const articles = [...sec.querySelectorAll(":scope > article")];
@@ -405,7 +416,7 @@ const dwbPageBreaks = (() => {
     for (const a of articles) {
       if (!multiColumn(a)) continue;
       let top = (a.getBoundingClientRect().top - secRect.top) / scale;
-      for (const g of sec.querySelectorAll(":scope > article > .dwb-page-gap")) if (g.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING) top -= parseFloat(g.dataset.shift) || 0;
+      for (const g of sec.querySelectorAll(GAP_SEL)) if (g.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING) top -= gapDisplacement(g);
       columnPages(a, top < pageH - bottomZone ? pageH - bottomZone - top : bodyH, bodyH, scale);
     }
     const contentTop = (article.getBoundingClientRect().top - secRect.top) / scale;
@@ -415,7 +426,7 @@ const dwbPageBreaks = (() => {
     // Położenia BEZ obecnych odstępów między stronami (każdy przesuwa dalszą treść o data-shift) —
     // przeliczenie nie musi ich zdejmować (dawniej zdejmowanie i wstawianie co chwilę przestawiało
     // przewijanie: skok do sekcji, „Wróć”, zoom, zmiana widoku).
-    const gaps = [...sec.querySelectorAll(":scope > article > .dwb-page-gap")].map((g) => ({ top: (g.getBoundingClientRect().top - secRect.top) / scale, shift: parseFloat(g.dataset.shift) || 0 }));
+    const gaps = [...sec.querySelectorAll(GAP_SEL)].map((g) => ({ top: (g.getBoundingClientRect().top - secRect.top) / scale, shift: gapDisplacement(g) }));
     if (gaps.length) u.forEach((x) => { let d = 0; for (const g of gaps) if (g.top <= x.top) d += g.shift; x.top -= d; x.bottom -= d; });
     // Przypisy DOLNE na dole strony z odnośnikiem (jak w Wordzie; podgląd wydruku: includeNotes).
     // Każda linijka zna przypisy, do których ma odnośnik; mieści się na stronie tylko razem z nimi
@@ -479,10 +490,19 @@ const dwbPageBreaks = (() => {
           if (u[b].multi) {
             block = u[b].el; // zestaw kolumn (strona) w całości: odstęp przed nim (column-span: all)
           } else if (u[b].row) {
-            // tabela przechodzi w całości (gdy się mieści na stronie)
-            const head = u.findIndex((x) => x.row && topBlock(x.el, article) === topBlock(u[b].el, article));
-            if (head > first) b = head;
-            if (u[b] === u.find((x) => x.row && topBlock(x.el, article) === topBlock(u[b].el, article))) block = topBlock(u[b].el, article);
+            // Tabela dzieli się między wierszami, jak w Wordzie i w podglądzie wydruku (dawniej szła
+            // w całości na następną stronę — Kolokwium 18.11: od strony 3 każda strona w Edycji inna niż
+            // w Wordzie). W całości idzie, gdy na tej stronie zostałyby same wiersze nagłówka
+            // powtarzanego albo nic; tabela w tabeli — przez wiersz tabeli zewnętrznej.
+            const tbl = topBlock(u[b].el, article);
+            const head = u.findIndex((x) => x.row && topBlock(x.el, article) === tbl);
+            const tr = u[b].el.tagName === "TR" ? u[b].el : null;
+            const own = tr && tr.closest("table") === tbl && tbl.tagName === "TABLE";
+            const onlyHeaders = own && [...tbl.rows].slice(0, tr.rowIndex).every((r) => r.dataset.dwbHeader === "1");
+            if (b === head || !own || onlyHeaders) {
+              if (head > first) b = head;
+              if (u[b] === u[head]) block = tbl;
+            } else block = tr;
           } else if (u[b].i === 0) {
             block = topBlock(u[b].el, article);
           } else if (canSplit(u[b].el)) {
@@ -688,7 +708,9 @@ const dwbPageBreaks = (() => {
         const label = t("pageBreakLabel", { n: page });
         if (gaps && cut.block) {
           const block = cut.block;
-          const move = sheetTop + res.pageH + GAP + res.padT - (cut.top + shift); // pierwsza linijka nowej strony
+          // wiersz tabeli na nowej stronie stoi pod powtórzonym nagłówkiem (cut.header, jak w Wordzie)
+          const head = block.tagName === "TR" && cut.header ? cut.header : null;
+          const move = sheetTop + res.pageH + GAP + res.padT + (head?.h || 0) - (cut.top + shift); // pierwsza linijka nowej strony
           if (cut.line) {
             // w środku akapitu: pas pływający od linijki granicy (at), wysokość dociągana po wstawieniu
             items.push({ kind: "gap", block, line: cut.line, el: cut.el, at: Math.round((cut.top + shift) * 10) / 10, inset: Math.round(Math.max(1, cut.h / 2) * 10) / 10, height: Math.round(move * 10) / 10, shift: move, bandTop: Math.round(sheetTop + res.pageH), label });
@@ -701,7 +723,8 @@ const dwbPageBreaks = (() => {
           const mb = prev ? Math.max(0, parseFloat(getComputedStyle(prev).marginBottom) || 0) : 0;
           const mt = Math.max(0, parseFloat(getComputedStyle(block).marginTop) || 0);
           // z odstępem między blokami ich marginesy już się nie łączą (mb + mt zamiast max)
-          items.push({ kind: "gap", block, line: 0, height: Math.max(0, Math.round((move - Math.min(mb, mt)) * 10) / 10), shift: move, bandTop: Math.round(sheetTop + res.pageH), label });
+          items.push({ kind: "gap", block, line: 0, height: Math.max(0, Math.round((move - Math.min(mb, mt)) * 10) / 10), shift: move, bandTop: Math.round(sheetTop + res.pageH), label,
+            head: head && { rows: head.rows, table: head.table, top: Math.round((sheetTop + res.pageH + GAP + res.padT) * 10) / 10 } });
           shift += move;
           sheetTop += res.pageH + GAP;
         } else {
@@ -718,7 +741,7 @@ const dwbPageBreaks = (() => {
     });
     // bez zmian (np. przeliczenie po przewinięciu, zoomie, skoku) — nic nie ruszamy
     const same = want.every(({ sec, items, guides, minH }) => {
-      const gapEls = [...sec.querySelectorAll(":scope > article > .dwb-page-gap")];
+      const gapEls = [...sec.querySelectorAll(GAP_SEL)];
       const bands = [...sec.querySelectorAll(":scope > .dwb-page-gap-band")];
       const seams = [...sec.querySelectorAll(":scope > .dwb-page-break")];
       const guideEls = [...sec.querySelectorAll(":scope > .dwb-page-margin-guide")];
@@ -737,7 +760,7 @@ const dwbPageBreaks = (() => {
           && parseFloat(guideEls[i].style.getPropertyValue("--dwb-guide-left")) === x.insetLeft
           && parseFloat(guideEls[i].style.getPropertyValue("--dwb-guide-right")) === x.insetRight)
         && (sec.style.getPropertyValue("--dwb-sec-min") || "") === (minH ? `${minH}px` : "");
-    }) && h.querySelectorAll(".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-break, .dwb-page-margin-guide").length === want.reduce((n, w) => n + w.items.reduce((m, x) => m + (x.kind === "gap" ? (x.line ? 3 : 2) : 1), 0) + w.guides.length, 0);
+    }) && h.querySelectorAll(".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-break, .dwb-page-margin-guide, .dwb-page-repeat").length === want.reduce((n, w) => n + w.items.reduce((m, x) => m + (x.kind === "gap" ? (x.line ? 3 : 2) + (x.head ? 1 : 0) : 1), 0) + w.guides.length, 0);
     if (same) return;
     // zmiana: akapit widoczny u góry zostaje na swoim miejscu na ekranie (jak zakotwiczenie przewijania);
     // tuż po przerysowaniu — akapit sprzed przerysowania (document.js, reloadFromBytes)
@@ -788,6 +811,15 @@ const dwbPageBreaks = (() => {
             gap.style.background = getComputedStyle(sec).backgroundColor;
             x.block.before(spacer, gap);
             splits.push({ sec, spacer, gap, x });
+          } else if (x.block.tagName === "TR") {
+            // przerwa między wierszami tabeli: element w roli wiersza (display: table-row), nie <tr> —
+            // nie wchodzi do table.rows ani numeracji wierszy (narzędzia tabeli, plik)
+            gap.classList.add("dwb-gap-row");
+            const cell = document.createElement("div");
+            cell.className = "dwb-gap-cell";
+            gap.appendChild(cell);
+            x.block.before(gap);
+            if (x.head) sec.appendChild(repeatedHeadOverlay(sec, x.head));
           } else x.block.before(gap);
           const band = document.createElement("div");
           band.className = "dwb-page-gap-band";
@@ -825,6 +857,47 @@ const dwbPageBreaks = (() => {
     }
   }
 
+  // Powtórzony wiersz nagłówka tabeli u góry strony w Edycji (Word: „Powtórz jako wiersz nagłówka”).
+  // Kopia tylko do oglądania w zamkniętym shadow DOM: wyszukiwanie, liczniki wyrazów, pisownia,
+  // edycja i mapowanie akapitów na plik jej nie widzą. Wygląd przepisany z obliczonych stylów
+  // oryginału (style dokumentu nie sięgają do shadow DOM).
+  function styledClone(el, deep = true) {
+    const c = el.cloneNode(false);
+    if (c.nodeType !== 1) return c;
+    [...c.attributes].forEach((a) => { if (!/^(colspan|rowspan)$/i.test(a.name)) c.removeAttribute(a.name); });
+    const cs = getComputedStyle(el);
+    let css = "";
+    for (let i = 0; i < cs.length; i++) { const k = cs[i]; if (!k.startsWith("--")) css += `${k}:${cs.getPropertyValue(k)};`; }
+    c.style.cssText = css;
+    if (deep) el.childNodes.forEach((n) => { if (n.nodeType === 1 || n.nodeType === 3) c.appendChild(styledClone(n)); });
+    return c;
+  }
+  function repeatedHeadOverlay(sec, head) {
+    const r = sec.getBoundingClientRect();
+    const scale = r.width / sec.offsetWidth || 1;
+    const tb = head.table.getBoundingClientRect();
+    const wrap = document.createElement("div");
+    wrap.className = "dwb-page-repeat";
+    wrap.setAttribute("aria-hidden", "true");
+    wrap.contentEditable = "false";
+    wrap.style.top = `${head.top}px`;
+    wrap.style.left = `${Math.round((tb.left - r.left) / scale * 10) / 10}px`;
+    wrap.style.width = `${Math.round(tb.width / scale * 10) / 10}px`;
+    const root = wrap.attachShadow({ mode: window.__dwbOpenShadow ? "open" : "closed" }); // testy: __dwbOpenShadow
+    const t = styledClone(head.table, false);
+    t.style.margin = "0";
+    t.style.width = "100%";
+    t.style.height = "auto"; // obliczona wysokość oryginału = cała tabela, kopia to tylko nagłówek
+    t.style.minHeight = "0";
+    const cg = head.table.querySelector(":scope > colgroup");
+    if (cg) t.appendChild(cg.cloneNode(true));
+    const body = document.createElement("tbody");
+    head.rows.forEach((row) => body.appendChild(styledClone(row)));
+    t.appendChild(body);
+    root.appendChild(t);
+    return wrap;
+  }
+
   function relayoutTextboxes(h) {
     if (typeof dwbTextbox !== "undefined") dwbTextbox.relayout?.(h);
   }
@@ -844,6 +917,9 @@ const dwbPageBreaks = (() => {
     if (!ln) return;
     const err = local(ln[0]) - (x.at + x.shift);
     if (Math.abs(err) > 0.3) gap.style.height = `${Math.max(0, Math.round((x.height - err) * 10) / 10)}px`;
+    // rzeczywiste przesunięcie linijki granicy (po dopasowaniu) — do pomiaru przy następnym liczeniu
+    const now = textLines(x.el)[x.line];
+    if (now) gap.dataset.disp = String(Math.round((local(now[0]) - x.at) * 1000) / 1000);
   }
 
   // Pierwszy akapit widoczny w obszarze dokumentu i jego położenie na ekranie.
@@ -906,7 +982,7 @@ const dwbPageBreaks = (() => {
     // (ostatnia kartka ma wysokość pełnych stron) — obserwator rozmiaru milczał. Odstęp strony
     // zostawał przy starym akapicie: tekst wjeżdżał pod pas „str. N” albo zostawała pusta dziura
     // (zgłoszenie 2026-10-05). Każda zmiana akapitów → przeliczenie; własne odstępy pomijamy.
-    const ours = (n) => n.nodeType === 1 && n.matches?.(".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-break, .dwb-page-margin-guide");
+    const ours = (n) => n.nodeType === 1 && n.matches?.(".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-break, .dwb-page-margin-guide, .dwb-page-repeat");
     // Raz na zawsze (zgłoszenie 2026-10-06: „przy różnych manewrach coś wjeżdża, jakby nie było
     // układu strony”): obserwujemy rozmiar KAŻDEGO bloku treści kartki (akapit, tabela, obraz).
     // Cokolwiek zmieni wysokość bloku — suwak obrazu, formatowanie, pole formularza, krój, który

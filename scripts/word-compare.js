@@ -6,6 +6,7 @@
 //   SAVE_PAGES=1 — zapisz też nasze kartki (<plik>-app-sN.png)
 //   DPR=2 — ekran Retina (Mac, iPad): cienkie linie tabel zaokrąglane do 0,5 px, nie do 1 px
 //   ENGINE=webkit — Safari / iPad (inne zaokrąglenia i metryki krojów niż Chromium)
+//   VIEW=edit — strony widoku Edycji zamiast Podglądu wydruku (oba mają dzielić strony jak Word)
 //
 // Wzorcem jest Word, nie poprzedni render aplikacji: porównanie z samą sobą pilnowałoby tylko,
 // żeby nic się nie zmieniło — także gdy wcześniej było źle. Word (Microsoft Word dla Maca,
@@ -125,6 +126,41 @@ async function run() {
       return !busy && now - window.__wcQuietSince > 1200;
     }, null, { timeout: 60000, polling: 100 });
     await page.evaluate(() => { window.__wcQuietSince = 0; });
+    // VIEW=edit — strony widoku Edycji (to, co użytkownik widzi przy pisaniu: odstępy „str. N”), nie
+    // Podgląd wydruku. Oba mają dzielić strony jak Word; dawniej mierzony był tylko wydruk, a Edycja
+    // przenosiła całe tabele na następną stronę (Kolokwium 18.11, zgłoszenie 2026-11-18).
+    let editPages = null;
+    if (process.env.VIEW === "edit") {
+      await page.evaluate(() => document.querySelector('.mode-btn[data-mode="edit"]')?.click());
+      await page.waitForTimeout(2500);
+      // dokument przewija się w swoim oknie — okno przeglądarki na całą wysokość, żeby każda strona
+      // była narysowana (zrzut poza widokiem byłby pusty)
+      const docH = await page.evaluate(() => document.querySelector(".docx-preview-host")?.scrollHeight || 2000);
+      await page.setViewportSize({ width: 1300, height: Math.min(32000, Math.ceil(docH + 600)) });
+      await page.waitForTimeout(2500);
+      await page.addStyleTag({ content: "#loadingOverlay, #toastContainer, .toast-container, .cursor-hint, [class*='hint-bubble'], .dwb-page-margin-guide { visibility: hidden !important; } * { caret-color: transparent !important; }" });
+      await page.evaluate(async () => { document.activeElement?.blur?.(); window.getSelection()?.removeAllRanges(); await document.fonts.ready; });
+      await page.waitForTimeout(500);
+      const clips = await page.evaluate(() => {
+        const out = [];
+        for (const sec of document.querySelectorAll(".docx-preview-host .docx-wrapper > section.docx")) {
+          const r = sec.getBoundingClientRect();
+          const scale = r.height / sec.offsetHeight || 1;
+          const pageH = (parseFloat(sec.dataset.dwbPageH) || sec.offsetHeight) * scale;
+          // nowa strona: za pasem przerwy albo na kresce (granica w środku czegoś wyższego niż strona)
+          const tops = [r.top, ...[...sec.querySelectorAll(":scope > .dwb-page-gap-band, :scope > .dwb-page-break")]
+            .map((b) => (b.classList.contains("dwb-page-break") ? b.getBoundingClientRect().top : b.getBoundingClientRect().bottom))].sort((a, b) => a - b);
+          tops.forEach((y) => out.push({ x: r.left, y: y + window.scrollY, width: r.width, height: pageH }));
+        }
+        return out;
+      });
+      const ours = [];
+      for (const c of clips) ours.push(`data:image/png;base64,${(await page.screenshot({ clip: c, fullPage: true, animations: "disabled" })).toString("base64")}`);
+      if (process.env.SAVE_PAGES) ours.forEach((u, i) => fs.writeFileSync(path.join(OUT, `${name}-edit-s${i + 1}.png`), Buffer.from(u.split(",")[1], "base64")));
+      editPages = ours;
+    }
+    let ours = editPages;
+    if (!ours) {
     // nasze kartki: Podgląd wydruku w 100 %
     await page.evaluate(() => dwbPrint.open());
     await page.waitForSelector(".pp-sheet", { timeout: 30000 });
@@ -133,12 +169,13 @@ async function run() {
     await page.addStyleTag({ content: "#loadingOverlay, .pp-bar, .pp-warn, .pp-page-label, #toastContainer, .toast-container, .cursor-hint, [class*='hint-bubble'] { visibility: hidden !important; } .pp-zone { display: none !important; }" });
     await page.waitForTimeout(500);
     const sheets = await page.$$(".pp-sheet");
-    const ours = [];
+    ours = [];
     for (const s of sheets) ours.push(`data:image/png;base64,${(await s.screenshot({ animations: "disabled" })).toString("base64")}`);
     // SAVE_PAGES=1 — nasze kartki jako PNG obok nakładek (do porównania „na oko” z PDF-em Worda)
     if (process.env.SAVE_PAGES) ours.forEach((u, i) => fs.writeFileSync(path.join(OUT, `${name}-app-s${i + 1}.png`), Buffer.from(u.split(",")[1], "base64")));
     if (process.env.DEBUG_SHEETS) console.log("   kartka 2:", JSON.stringify(await page.evaluate(() => { const p = [...document.querySelectorAll('.pp-sheet[data-page="2"] p')].find((x) => /Witanie/.test(x.textContent)); const b = getComputedStyle(p, "::before"); return { h: p.getBoundingClientRect().height, cls: p.className, st: p.getAttribute("style"), before: [b.content, b.fontFamily, b.fontSize, b.lineHeight, b.display, b.verticalAlign], spans: [...p.querySelectorAll("*")].map((x) => { const c = getComputedStyle(x); return [x.tagName, c.fontFamily, c.fontSize, c.lineHeight, c.verticalAlign, Math.round(x.getBoundingClientRect().height * 10) / 10]; }), body: document.body.className, root: document.documentElement.className }; })));
     await page.evaluate(() => dwbPrint.close());
+    }
     // strony Worda (pdf.js aplikacji) i porównanie — w przeglądarce, na kanwach
     const pdfB64 = fs.readFileSync(pdf).toString("base64");
     const res = await page.evaluate(async ({ pdfB64, ours, PAGE_W }) => {

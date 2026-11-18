@@ -324,7 +324,7 @@ function applyRunDefaultsToParagraphs(host) {
 // odstęp przed, gdy poprzedni akapit ma ten sam styl, i odstęp po, gdy następny ma ten sam styl.
 // Styl = klasa docx_<id> (akapit bez stylu: brak klasy = styl domyślny). Sąsiad tylko w tym samym
 // pojemniku (komórka tabeli, strona) — jak w Wordzie.
-const PAGE_LAYOUT_OWN = ".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-break, .dwb-page-gap-band, .dwb-page-margin-guide";
+const PAGE_LAYOUT_OWN = ".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-break, .dwb-page-gap-band, .dwb-page-margin-guide, .dwb-page-repeat";
 function docxParagraphStyleKey(el) {
   return [...el.classList].find((c) => c.startsWith("docx_")) || "";
 }
@@ -383,7 +383,7 @@ function watchParagraphLayout(wrapper) {
   let pending = false;
   const touched = new Set(); // akapity z pisaniem — spacje na końcu liczone tylko dla nich
   const mo = new MutationObserver((list) => {
-    const own = (n) => n.nodeType === 1 && n.matches?.(".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-break");
+    const own = (n) => n.nodeType === 1 && n.matches?.(".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-break, .dwb-page-repeat");
     for (const m of list) {
       // przerwy stron (page-breaks.js) to nie pisanie — inaczej przeliczenia granic i akapitów się nakręcały
       if (m.type === "childList" && [...m.addedNodes, ...m.removedNodes].every(own)) continue;
