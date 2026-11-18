@@ -129,8 +129,10 @@ function paintFrHighlights() {
   }
 }
 
-function focusFrMatch(index) {
+// opts.scroll === false — zaznacz bez przewijania (odświeżenie po zmianie dokumentu)
+function focusFrMatch(index, opts = {}) {
   if (!frMatches.length) return;
+  const scroll = opts.scroll !== false;
   const i = ((index % frMatches.length) + frMatches.length) % frMatches.length;
   docCanvasEl?.querySelectorAll(".search-hit-active").forEach((el) => el.classList.remove("search-hit-active"));
   frActiveIndex = i;
@@ -141,13 +143,13 @@ function focusFrMatch(index) {
     CSS.highlights.set("dwb-find-active", new Highlight(m.range));
     const r = m.range.getBoundingClientRect();
     const vr = docViewportEl.getBoundingClientRect();
-    if (r.top < vr.top + 40 || r.bottom > vr.bottom - 40) {
+    if (scroll && (r.top < vr.top + 40 || r.bottom > vr.bottom - 40)) {
       docViewportEl.scrollTo({ top: docViewportEl.scrollTop + r.top - vr.top - vr.height / 2, behavior: "smooth" });
     }
   } else {
     if (frHighlightApi) CSS.highlights.delete("dwb-find-active");
     m.el?.classList.add("search-hit", "search-hit-active");
-    m.el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (scroll) m.el?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
   frPreviewEl?.querySelectorAll(".fr-preview-item").forEach((b) => b.classList.toggle("is-active", Number(b.dataset.index) === i));
   syncFrStatus();
@@ -196,7 +198,11 @@ function syncFrStatus() {
   frStatusEl.textContent = parts.join(" · ");
 }
 
-async function runFindReplaceScan() {
+// opts.keepView — odświeżenie wyników po zmianie dokumentu (przerysowanie, łatka akapitów): to samo
+// trafienie co przed zmianą, bez przewijania. Dawniej skok do pierwszego trafienia przewijał dokument
+// płynnie po każdej zmianie formatu przy wpisanym szukaniu (i zamykał otwarte okienka).
+async function runFindReplaceScan(opts = {}) {
+  const prevActive = frActiveIndex;
   clearFrHighlights();
   frMatches = [];
   frActiveIndex = -1;
@@ -233,12 +239,12 @@ async function runFindReplaceScan() {
   if (searchCountEl) searchCountEl.textContent = frMatches.length ? t("searchMatches", { count: frMatches.length }) : t("searchNoMatches");
   paintFrHighlights();
   renderFrPreview();
-  if (frMatches.length) focusFrMatch(0);
+  if (frMatches.length) focusFrMatch(opts.keepView ? Math.max(0, Math.min(prevActive, frMatches.length - 1)) : 0, { scroll: !opts.keepView });
   else syncFrStatus();
 }
 
-function runDocumentSearch() {
-  return runFindReplaceScan();
+function runDocumentSearch(opts) {
+  return runFindReplaceScan(opts);
 }
 
 function stepFrMatch(delta) {

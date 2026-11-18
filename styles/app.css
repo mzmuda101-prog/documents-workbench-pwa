@@ -3100,6 +3100,8 @@ html.iv-side .app { margin-right: var(--iv-side-app, 50vw); }
   min-height: 0 !important; padding: 0 !important; transform: none !important; zoom: 1 !important; --doc-zoom: 1;
 }
 .dwb-pp-src .docx-preview-host { max-width: none; }
+/* Render w tle pełnego przerysowania (document.js: makeRenderBuffer) — kopia płótna poza ekranem */
+.doc-canvas.dwb-render-buffer { position: fixed !important; left: -40000px !important; top: 0 !important; visibility: hidden !important; pointer-events: none !important; }
 .pp-overlay {
   position: fixed; inset: 0; z-index: 9000; display: flex; flex-direction: column;
   background: var(--bg, #e9edf3); color: var(--ink);

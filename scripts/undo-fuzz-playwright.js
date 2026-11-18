@@ -64,7 +64,8 @@ async function run() {
     // akapit edytowalny z tekstem (losowy). Najpierw czekamy, aż taki jest: po zmianie stylu/listy
     // dokument się przerysowuje i (zwłaszcza w WebKit) chwilę nie jest edytowalny — dawniej
     // przeczekiwała to sztywna pauza 1,7 s po każdej operacji.
-    const editableReady = () => page.waitForFunction(() => collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))
+    // (aria-busy: przerysowanie w tle — stary widok jeszcze na ekranie, zaraz podmieniony)
+    const editableReady = () => page.waitForFunction(() => !docCanvasEl.hasAttribute("aria-busy") && typeof inlineLocksPending !== "undefined" && !inlineLocksPending && collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))
       .some((p) => p.isContentEditable && !p.dataset.lock && p.textContent.trim().length > 25 && !p.closest("td")), null, { timeout: 15000 });
     const target = async () => (await editableReady(), page.evaluate((r) => {
       const ps = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).filter((p) => p.isContentEditable && !p.dataset.lock && p.textContent.trim().length > 25 && !p.closest("td"));

@@ -6,6 +6,7 @@
 //   node scripts/reload-bench.js                 (przewodnik.docx + ~100 stron, CPU ×4)
 //   CPU=1 PARAS=4500 node scripts/reload-bench.js
 //   MOBILE=1 node scripts/reload-bench.js        (telefon: Widok mobilny)
+//   ONLY=cofnij SMALL=1 node scripts/reload-bench.js  (jedna operacja, tylko przewodnik — bisekcja)
 //
 // Wymaga serwera testowego (python3 scripts/test-server.py 7823).
 const fs = require("fs");
@@ -77,7 +78,8 @@ async function measureDoc(browser, file, label) {
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: CPU });
 
   const rows = [];
-  for (const op of OPS) {
+  // ONLY=cofnij — tylko operacje, których nazwa zawiera to słowo (bisekcja, szybki pomiar)
+  for (const op of OPS.filter((o) => !process.env.ONLY || o.name.toLowerCase().includes(process.env.ONLY.toLowerCase()))) {
     // akapit treści w środku dokumentu, długi (bez blokady), na środku ekranu
     const target = await page.evaluate(() => {
       const ps = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"));
@@ -90,7 +92,13 @@ async function measureDoc(browser, file, label) {
     const before = await page.evaluate(([i, sel]) => {
       const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[i];
       p.closest(".docx-edit-root")?.focus();
-      if (sel) { const r = document.createRange(); const tn = p.querySelector("span")?.firstChild || p.firstChild; r.setStart(tn, 3); r.setEnd(tn, 12); getSelection().removeAllRanges(); getSelection().addRange(r); }
+      if (sel) {
+        // pierwszy fragment tekstu z co najmniej 12 znakami (akapit bywa podzielony na krótkie przebiegi)
+        const tw = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+        let tn = tw.nextNode();
+        while (tn && tn.data.length < 12) tn = tw.nextNode();
+        const r = document.createRange(); r.setStart(tn, 3); r.setEnd(tn, 12); getSelection().removeAllRanges(); getSelection().addRange(r);
+      }
       else placeCaret(p, 10);
       return { text: p.textContent.slice(0, 30) };
     }, [target, !!op.select]);
@@ -122,15 +130,16 @@ async function measureDoc(browser, file, label) {
     const after = await where();
     await page.waitForTimeout(1500);
     const late = await where();
-    rows.push({ op: op.name, ms, renders: after.renders, jump: Math.round(after.top - before.top), lateJump: Math.round(late.top - before.top), caret: after.caretPara === after.pi ? (op.select ? (after.selText ? "zaznaczenie zostało" : "zaznaczenie zgubione") : `ok (${after.caretOff})`) : `inny akapit (${after.caretPara} zamiast ${after.pi})` });
+    rows.push({ op: op.name, ms, renders: after.renders, jump: Math.round(after.top - before.top), lateJump: Math.round(late.top - before.top), caret: after.caretPara === after.pi ? (op.select ? (after.selText ? "zaznaczenie zostało" : "zaznaczenie zgubione") : `ok (${after.caretOff})`) : `inny akapit (${after.caretPara} zamiast ${after.pi})`,
+      lateCaret: late.caretPara === late.pi ? `ok (${late.caretOff})` : `inny (${late.caretPara})` });
     await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
     await page.evaluate(() => { if (typeof setDirtyState === "function") setDirtyState(false); });
     await cdp.send("Emulation.setCPUThrottlingRate", { rate: CPU });
   }
   await context.close();
   console.log(`\n■ ${label} (CPU ×${CPU})`);
-  console.log("  operacja                   czas     render  przeskok (od razu / po 1,5 s)  kursor");
-  rows.forEach((r) => console.log(`  ${r.op.padEnd(26)} ${String(r.ms).padStart(6)} ms  ${r.renders ? "PEŁNY " : "—     "}  ${String(r.jump).padStart(6)} / ${String(r.lateJump).padStart(6)} px      ${r.caret}`));
+  console.log("  operacja                   czas     render  przeskok (od razu / po 1,5 s)  kursor (od razu / po 1,5 s)");
+  rows.forEach((r) => console.log(`  ${r.op.padEnd(26)} ${String(r.ms).padStart(6)} ms  ${r.renders ? "PEŁNY " : "—     "}  ${String(r.jump).padStart(6)} / ${String(r.lateJump).padStart(6)} px      ${r.caret} / ${r.lateCaret}`));
   if (errors.length) console.log(`  błędy strony: ${errors.slice(0, 2).join(" | ")}`);
   return rows;
 }
@@ -139,7 +148,7 @@ async function measureDoc(browser, file, label) {
   const browser = await pw.chromium.launch({ headless: true });
   const out = {};
   out.przewodnik = await measureDoc(browser, path.join(ROOT, "docs/samples/przewodnik.docx"), "przewodnik.docx (8 stron)");
-  out.duzy = await measureDoc(browser, await bigDocx(PARAS), `wygenerowany, ${PARAS} akapitów (~${Math.round(PARAS / 15)} stron)`);
+  if (!process.env.SMALL) out.duzy = await measureDoc(browser, await bigDocx(PARAS), `wygenerowany, ${PARAS} akapitów (~${Math.round(PARAS / 15)} stron)`);
   await browser.close();
   fs.mkdirSync(path.join(ROOT, "output"), { recursive: true });
   fs.writeFileSync(path.join(ROOT, "output/reload-bench.json"), JSON.stringify(out, null, 1));

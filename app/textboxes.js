@@ -724,7 +724,9 @@ const dwbTextbox = (() => {
     }
 
     function afterRender(wrapper) {
-      if (!pendingSelect || !docCanvasEl?.contains(wrapper)) return;
+      // render głównego dokumentu — także w tle (document.js: .dwb-render-buffer trafia potem do płótna);
+      // nie podgląd wydruku ani łatka akapitów
+      if (!pendingSelect || !(docCanvasEl?.contains(wrapper) || wrapper.closest?.(".dwb-render-buffer"))) return;
       const want = pendingSelect;
       pendingSelect = null;
       const t0 = performance.now();

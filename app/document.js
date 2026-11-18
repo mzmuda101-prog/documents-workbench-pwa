@@ -165,6 +165,12 @@ async function loadSampleDocument(name = "sample") {
 // opts.anchor — miejsce zapamiętane wcześniej (np. stan Cofnij); null = bez przywracania.
 let renderScrollAnchor = null; // { anchor, until } — dla pierwszego przeliczenia odstępów stron
 async function reloadFromBytes(bytes, opts = {}) {
+  // stary widok zostaje na ekranie w trakcie renderu w tle — klawisze z tego czasu trzymamy i dopisujemy
+  // po przerysowaniu (holdTypingWhile; wewnątrz applyDocumentEdit już trzymane — wtedy bez zmian)
+  if (typeof holdTypingWhile === "function" && typeof typingHeld === "function" && !typingHeld()) return holdTypingWhile(() => reloadFromBytesNow(bytes, opts), -1);
+  return reloadFromBytesNow(bytes, opts);
+}
+async function reloadFromBytesNow(bytes, opts = {}) {
   originalFileBytes = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   const shown = !!docCanvasEl?.querySelector(".docx-preview-host p");
   const anchor = opts.anchor !== undefined ? opts.anchor : shown ? captureDocScrollAnchor() : null;
@@ -223,6 +229,18 @@ async function clearOcrMarks() {
   return n;
 }
 
+// Niewidoczna kopia płótna do renderu w tle (renderCurrentDocument): poza ekranem, bez wpływu na
+// przewijanie (fixed), ta sama szerokość układu co płótno.
+function makeRenderBuffer() {
+  const b = document.createElement("div");
+  b.className = `${docCanvasEl.className} dwb-render-buffer`;
+  b.style.cssText = docCanvasEl.style.cssText;
+  b.style.width = `${docCanvasEl.offsetWidth}px`;
+  b.setAttribute("aria-hidden", "true");
+  docCanvasEl.parentElement.appendChild(b);
+  return b;
+}
+
 async function renderCurrentDocument(opts = {}) {
   if (!originalFileBytes || currentFileType !== "docx") return;
   const quiet = !opts.newFile && (quietRenderOnce || !!docCanvasEl?.querySelector(".docx-preview-host p"));
@@ -230,13 +248,30 @@ async function renderCurrentDocument(opts = {}) {
   loadingOverlayEl.classList.toggle("loading-quiet", quiet);
   setLoading(true, t("renderingDoc"));
   const overlayTimer = quiet ? setTimeout(() => loadingOverlayEl.classList.remove("loading-quiet"), 400) : null;
+  // Przerysowanie POKAZANEGO dokumentu (Cofnij, lista, linia, komentarz, nagłówek…) rysuje się w tle,
+  // w niewidocznej kopii płótna (te same klasy, styl i szerokość, ten sam rodzic — te same reguły CSS
+  // i pomiary). Stary widok zostaje na ekranie do końca; potem w jednym kroku (bez klatki pomiędzy):
+  // podmiana, odstępy stron i przewinięcie. Dawniej przez ~0,2–0,5 s widać było dokument bez odstępów
+  // stron (przeskok o ~200 px) i bez kursora (reload-bench, 2026-11-18).
+  const buffer = quiet && !opts.newFile && !window.__dwbNoRenderBuffer && docCanvasEl?.parentElement && docCanvasEl.querySelector(".docx-preview-host p") ? makeRenderBuffer() : null; // __dwbNoRenderBuffer: render na miejscu (porównanie, awaria)
+  // stary widok na ekranie, ale zaraz zostanie podmieniony: czytniki ekranu i testy wiedzą, że trwa zmiana
+  if (buffer) docCanvasEl.setAttribute("aria-busy", "true");
   try {
     hideEmptyState();
     const [, headingStyles, composeStyles] = await Promise.all([
-      renderDocxPreview(originalFileBytes, docCanvasEl),
+      renderDocxPreview(originalFileBytes, buffer || docCanvasEl),
       typeof readHeadingStyleClasses === "function" ? readHeadingStyleClasses(originalFileBytes) : new Map(),
       typeof readComposeStyleClasses === "function" ? readComposeStyleClasses(originalFileBytes) : new Map(),
+      buffer && typeof dwbPageBreaks !== "undefined" ? dwbPageBreaks.prepare?.().catch(() => {}) : null, // (wynik pomijany)
     ]);
+    if (buffer) {
+      // arkusze <style> po przeniesieniu budują się od nowa z TEKSTU elementu — reguły dopisane przez
+      // CSSOM (insertRule: krój dokumentu na akapicie, kolejność stylów tabeli…) by przepadły
+      buffer.querySelectorAll("style").forEach((el) => {
+        try { if (el.sheet?.cssRules) el.textContent = [...el.sheet.cssRules].map((r) => r.cssText).join("\n"); } catch (_) { /* obcy arkusz */ }
+      });
+      docCanvasEl.replaceChildren(...buffer.childNodes); // stary widok znika dopiero teraz
+    }
     docHeadingStyleClasses = headingStyles;
     if (typeof docComposeStyleClasses !== "undefined") docComposeStyleClasses = composeStyles;
     // podgląd = plik: od teraz śledzimy tylko akapity, które coś zmieni (paczka F)
@@ -245,12 +280,17 @@ async function renderCurrentDocument(opts = {}) {
     renderStructurePanel(documentStructure);
     if (typeof semanticDocumentRendered === "function") semanticDocumentRendered();
     // find-replace-workbench.js jest leniwy — bez niego wyjątek zatrzymałby włączenie edycji poniżej
-    if (searchQueryEl?.value.trim() && typeof runDocumentSearch === "function") runDocumentSearch();
+    if (searchQueryEl?.value.trim() && typeof runDocumentSearch === "function") runDocumentSearch({ keepView: !opts.newFile });
     setupInlineEditingAfterRender();
     refreshOcrMarksState();
     if (typeof restoreFormatMarks === "function") restoreFormatMarks();
     if (typeof syncMobileDocZoomAfterRender === "function") syncMobileDocZoomAfterRender();
+    // odstępy stron od razu (ustawienia stylów wczytane w trakcie renderu — tylko mikrozadania, bez
+    // klatki z dokumentem bez odstępów); przewinięcie przywraca potem reloadFromBytes
+    if (buffer && typeof dwbPageBreaks !== "undefined") await dwbPageBreaks.compute();
   } finally {
+    buffer?.remove();
+    if (buffer) docCanvasEl.removeAttribute("aria-busy");
     clearTimeout(overlayTimer);
     setLoading(false);
     loadingOverlayEl.classList.remove("loading-quiet");
@@ -481,7 +521,7 @@ async function patchParagraphsInPlace(indices, { content = false } = {}) {
     // jak po renderCurrentDocument: nagłówki w panelu Struktura, wyniki wyszukiwania, znaki ¶, OCR
     documentStructure = analyzeDocumentDom(docCanvasEl);
     renderStructurePanel(documentStructure);
-    if (searchQueryEl?.value.trim() && typeof runDocumentSearch === "function") runDocumentSearch();
+    if (searchQueryEl?.value.trim() && typeof runDocumentSearch === "function") runDocumentSearch({ keepView: true });
     refreshOcrMarksState();
     if (typeof restoreFormatMarks === "function") restoreFormatMarks();
   }

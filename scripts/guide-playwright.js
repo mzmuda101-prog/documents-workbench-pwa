@@ -125,7 +125,8 @@ async function run() {
   await page.keyboard.type("pogrubione");
   await page.fill(".cf-author", "Ola");
   await page.click(".compose-pop-form .lf-ok");
-  await page.waitForFunction(() => !inlineLocksPending && document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 10000 });
+  // (przerysowanie w tle: aria-busy na płótnie; pole edycji powstaje po nim)
+  await page.waitForFunction(() => !inlineLocksPending && !docCanvasEl.hasAttribute("aria-busy") && !!document.querySelector(".docx-edit-root") && document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 10000 });
   await page.waitForTimeout(500);
   const cx = await page.evaluate(async () => (await (await JSZip.loadAsync(originalFileBytes)).file("word/comments.xml").async("string")));
   check("rozdz. 13: komentarz z pogrubieniem przyciskiem B z paska", /<w:b\/><\/w:rPr><w:t xml:space="preserve">pogrubione/.test(cx), cx.slice(-400));

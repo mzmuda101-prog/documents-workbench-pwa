@@ -1022,5 +1022,7 @@ const dwbPageBreaks = (() => {
   }
   document.fonts?.ready?.then(() => schedule(0));
 
-  return { schedule, compute, enabled, paginate, gapsOn, setGaps };
+  // prepare: ustawienia stylów pliku (razem z następnym, wdowy) wczytane z góry — document.js woła je
+  // w trakcie renderu w tle, żeby compute() po podmianie nie czekało na plik (bez klatki pośredniej)
+  return { schedule, compute, enabled, paginate, gapsOn, setGaps, prepare: ensureKeepInfo };
 })();

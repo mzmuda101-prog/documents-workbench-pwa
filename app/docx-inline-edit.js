@@ -3071,10 +3071,13 @@ function setupInlineEditingAfterRender() {
   const bytes = originalFileBytes;
   const seq = ++inlineSetupSeq;
   inlineLocksPending = true;
+  // „gotowe” dopiero PO włączeniu edycji i ustawieniu kursora (syncInlineEditMode) — dawniej znacznik
+  // schodził mikrozadanie wcześniej: waitDocReady widziało gotowy dokument bez pola edycji i klawisze
+  // trzymane w trakcie przerysowania (holdTypingWhile) szły donikąd (autokorekta „1. n…” → „Umer”)
   refreshInlineEditBaseline(bytes)
     .then(() => markLockedParagraphs(bytes))
-    .finally(() => { if (seq === inlineSetupSeq) inlineLocksPending = false; }) // tylko ostatni render zdejmuje
-    .then(() => { syncInlineEditMode(); refreshFontFamilyList(); });
+    .then(() => { syncInlineEditMode(); refreshFontFamilyList(); })
+    .finally(() => { if (seq === inlineSetupSeq) inlineLocksPending = false; }); // tylko ostatni render zdejmuje
 }
 
 function mergeInlineEditsIntoBytes() {
