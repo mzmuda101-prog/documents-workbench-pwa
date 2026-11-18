@@ -163,6 +163,20 @@ async function run() {
   check("po przeładowaniu: Chowaj przy przewijaniu + Klasyczna zostają", kept.show === "auto" && kept.layout === "classic" && /rb-classic/.test(kept.cls) && /rb-show-auto/.test(kept.cls), JSON.stringify(kept));
   await page.evaluate(() => { dwbRibbon.setShow("pin"); dwbRibbon.setDens("mouse"); dwbRibbon.setLayout("simple"); });
 
+  // Esc w polu Szukaj (wstążka): wyjście z pola — pole wraca do zwykłej szerokości, podświetlenia znikają
+  {
+    const w0 = await page.evaluate(() => Math.round(document.querySelector(".rb-act .doc-search").getBoundingClientRect().width));
+    await page.click("#searchQuery");
+    await page.keyboard.type("Wstęp");
+    await page.waitForTimeout(400);
+    const w1 = await page.evaluate(() => Math.round(document.querySelector(".rb-act .doc-search").getBoundingClientRect().width));
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(350);
+    const st = await page.evaluate(() => ({ inField: document.activeElement?.id === "searchQuery", w: Math.round(document.querySelector(".rb-act .doc-search").getBoundingClientRect().width), hl: (CSS.highlights?.get?.("dwb-search")?.size) || 0 }));
+    check("Esc w Szukaj: wyjście z pola, pole wraca do zwykłej szerokości", w1 > w0 && !st.inField && st.w === w0, JSON.stringify({ w0, w1, ...st }));
+    await page.fill("#searchQuery", "");
+  }
+
   await browser.close();
   const real = errors.filter((e) => !/ResizeObserver/.test(e));
   if (real.length) check("bez błędów w konsoli", false, real.join(" | ").slice(0, 400));
