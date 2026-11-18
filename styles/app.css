@@ -2385,6 +2385,9 @@ section.docx p { min-height: 1lh; }
 .doc-canvas.doc-reflow-mode .docx table.docx_dwblayout > tr,
 .doc-canvas.doc-reflow-mode .docx table.docx_dwblayout > tr > td { display: block; width: auto !important; }
 .doc-canvas.doc-reflow-mode .docx table.docx_dwblayout > colgroup { display: none; }
+/* Linia tabeli 0,5 pt: przeglądarka liczy ją jako 1 px, Word 0,67 px — nadmiar zdjęty z wysokości
+   wiersza (addTableBorderHeights w docx-render-fixes.js) */
+section.docx td[style*="--dwb-row-over"]::after { content: ""; display: block; margin-top: var(--dwb-row-over); }
 .dwb-page-anchor img { max-width: none; }
 
 /* Tabulatory rozłożone wg pozycji (docx-render-fixes.js → layoutTabStops): wypełnienie kropkami

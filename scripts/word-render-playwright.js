@@ -98,7 +98,11 @@ async function fixtureTables() {
   const bc = '<w:tcBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="000000"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="000000"/></w:tcBorders>';
   const mrow = (txt, trPr) => `<w:tr><w:trPr>${trPr}</w:trPr><w:tc><w:tcPr><w:tcW w:w="4000" w:type="dxa"/>${bc}</w:tcPr><w:p><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/><w:sz w:val="20"/></w:rPr>${t(txt)}</w:r></w:p></w:tc></w:tr>`;
   const marg = `<w:tbl><w:tblPr><w:tblW w:w="4000" w:type="dxa"/><w:tblCellMar><w:top w:w="200" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid>${mrow("Min A", '<w:trHeight w:val="340"/><w:jc w:val="center"/>')}${mrow("Min B", '<w:trHeight w:val="340"/>')}${mrow("Exact A", '<w:trHeight w:val="1000" w:hRule="exact"/>')}${mrow("Exact B", '<w:trHeight w:val="1000" w:hRule="exact"/>')}</w:tbl>`;
-  z.file("word/document.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${NS}><w:body>${merged}${P("Obok scalenia")}${mergedSide}${P("Przed marginesami")}${marg}${P("Między tabelami")}${big}${P("Koniec")}${SECT()}</w:body></w:document>`);
+  // wiersze bez minimum (wysokość z treści), Calibri 11 pt, po 8 pt, 1,08: Word 23 pt = 30,67 px na
+  // wiersz (wyrocznia probe-row-bottom.js, Kolokwium 18.11) — linia 0,5 pt to 0,67 px, nie 1 px
+  const crow = (txt) => `<w:tr>${cell("", "", "").replace("<w:p></w:p>", `<w:p><w:pPr><w:spacing w:after="160" w:line="259" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr>${t(txt)}</w:r></w:p>`)}</w:tr>`;
+  const content = `<w:tbl><w:tblPr><w:tblW w:w="4000" w:type="dxa"/>${b}</w:tblPr><w:tblGrid><w:gridCol w:w="4000"/></w:tblGrid>${crow("Treść 1")}${crow("Treść 2")}${crow("Treść 3")}</w:tbl>`;
+  z.file("word/document.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${NS}><w:body>${merged}${P("Obok scalenia")}${mergedSide}${P("Przed marginesami")}${marg}${P("Przed treścią")}${content}${P("Między tabelami")}${big}${P("Koniec")}${SECT()}</w:body></w:document>`);
   return z.generateAsync({ type: "nodebuffer" });
 }
 
@@ -228,7 +232,7 @@ async function run() {
     const minA = tr("Min A");
     return { row: r1.getBoundingClientRect().height, pair: m2.getBoundingClientRect().top - m1.getBoundingClientRect().top, pairSide: top("Obok 2") - top("Obok 1"), head: !!tr("Nagłówek tabeli")?.dataset.dwbHeader,
       minFirst: top("Min B") - top("Min A"), min: top("Exact A") - top("Min B"), exact: top("Exact B") - top("Exact A"),
-      rowAlign: getComputedStyle(minA.cells[0].querySelector("p")).textAlign };
+      rowAlign: getComputedStyle(minA.cells[0].querySelector("p")).textAlign, content: top("Treść 3") - top("Treść 2") };
   });
   check("wiersz tabeli: 17 pt + linia 0,5 pt (jak Word, 23,33 px)", Math.abs(tb.row - 17.5 * 4 / 3) < 0.4, JSON.stringify(tb));
   // WebKit wkłada całą treść komórki scalonej do PIERWSZEGO wiersza (17,2 px zamiast 12,5) — tak
@@ -241,6 +245,7 @@ async function run() {
   check("minimum wiersza bez marginesów komórki — marginesy ponad nie (Word 36,7 px)", Math.abs(tb.min - 36.67) < 0.6, JSON.stringify(tb));
   check("pierwszy wiersz bez górnej linii tabeli — tej samej wysokości co kolejny", Math.abs(tb.minFirst - tb.min) < 0.3, JSON.stringify(tb));
   check("wiersz „dokładnie” (hRule exact): linia i marginesy w środku (Word 66,7 px)", Math.abs(tb.exact - 66.67) < 0.6, JSON.stringify(tb));
+  check("wiersz z treścią (bez minimum): linia 0,5 pt dolicza 0,67 px, nie 1 px (Word 30,67 px)", Math.abs(tb.content - 30.67) < 0.15, JSON.stringify(tb));
   check("w:trPr/w:jc to położenie wiersza — tekst komórki dalej do lewej", tb.rowAlign === "left" || tb.rowAlign === "start", JSON.stringify(tb));
   await page.evaluate(() => dwbPrint.open());
   await page.waitForSelector('.pp-sheet[data-page="2"]', { timeout: 20000 });

@@ -736,6 +736,15 @@ function addTableBorderHeights(host) {
       // minimum wiersza (w:trHeight) + linia; wiersz „dokładnie” (data-dwb-hrule, łatka 19): linia mieści się w podanej wysokości (wyrocznia: 1000 tw = 66,7 px)
       const h = tr.dataset.dwbHrule === "exact" ? 0 : cssLengthPx(tr.style.height);
       if (h) tr.style.height = `${Math.round((h + extra) * 100) / 100}px`;
+      // Wiersz bez minimum (wysokość z treści): Chrome rysuje linię 0,5 pt jako 1 px (też na
+      // Retinie) i tyle dokłada do wiersza, Word 0,67 px. Kolokwium 18.11: +0,33 px na wiersz,
+      // 9 wierszy na stronie = wiersz tabeli mniej niż w Wordzie. Nadmiar zdejmuje pusty blok
+      // ::after z ujemnym marginesem (app.css) — zlewa się z odstępem po ostatnim akapicie.
+      else if (tr.dataset.dwbHrule !== "exact") cells.forEach((td) => {
+        const cs = getComputedStyle(td);
+        const over = ((parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0)) / 2 - extra;
+        if (over > 0.05 && over < 1) td.style.setProperty("--dwb-row-over", `${-Math.round(over * 1000) / 1000}px`);
+      });
       n++;
     });
   });
@@ -1051,16 +1060,23 @@ function zeroWhitespaceRun(p) {
 
 // Symbol spoza kroju tekstu: Word rysuje go krojem zastępczym i linijka bierze JEGO wysokość
 // (wyrocznia 2026-10-25, Arial 11 pt, interlinia 1,15 = 19,33 px): ✓ ✗ ☐ ⛶ (Segoe UI Symbol) +2,7–3 px,
-// ＋ (pełna szerokość, MS Mincho) +2,3 px; strzałki ← → ↩ ↶, ⌘ (są w Arialu) i ⇄ ⋯ (Cambria Math) ~0.
+// ＋ (pełna szerokość, MS Mincho) +2,3 px. Strzałki, operatory i znaki techniczne (U+2190–23FF) spoza
+// zestawu zwykłych krojów (WGL4: ← → ↔ ≤ ≠ ∑ √ ⌂ … są w Arialu, Times i Calibri — bez zmian):
+// ⌘ ↶ ⇄ ⋯ — krój zastępczy 1,172 em (wyrocznia probe-sym-pitch.js 2026-11-18: Arial i Times 11 pt,
+// 1,15: +0,287 pt na akapit; Calibri 1,221 em wyższy sam — bez zmian). Dawniej wpisane jako ~0:
+// tabela skrótów „przewodnika” 1,4 pt niższa niż w Wordzie.
 // Przeglądarka przy interlinii liczbowej metryk kroju zastępczego nie bierze — linijki z symbolami
 // były niższe („przewodnik”: −6 px na stronie). Dodatek liczymy na każdą linijkę z takim symbolem
 // (metryka kroju w em × rozmiar × mnożnik interlinii akapitu − wysokość linijki) i dokładamy akapitowi
 // jako dopełnienie od dołu: wysokość akapitu jak w Wordzie, bez zmian w DOM-ie tekstu. Dawniej
 // <span> z większą interlinią przy znaku — pudełko w środku linijki rozjeżdżało się z pomiarem
 // granic stron po literach i w Edycji granice przeskakiwały (test przewodnika, menu „Układ”).
-const FALLBACK_SYM = /[\u2600-\u27BF\u2B00-\u2BFF]|[\u3000-\u9FFF\uAC00-\uD7AF\uFF00-\uFFEF]|[\uD83C-\uD83E][\uDC00-\uDFFF]/g;
+const FALLBACK_SYM = /[\u2190-\u23FF\u2600-\u27BF\u2B00-\u2BFF]|[\u3000-\u9FFF\uAC00-\uD7AF\uFF00-\uFFEF]|[\uD83C-\uD83E][\uDC00-\uDFFF]/g;
 const FALLBACK_CJK = /[\u3000-\u9FFF\uAC00-\uD7AF\uFF00-\uFFEF]/;
-const FALLBACK_EM = { seg: 1.315, cjk: 1.284 }; // Segoe UI Symbol, MS Mincho (wyrocznia)
+const FALLBACK_TECH = /[\u2190-\u23FF]/;
+// U+2190–23FF obecne w zwykłych krojach (WGL4) — rysowane krojem tekstu, linijka bez zmian
+const WGL4_TECH = new Set("←↑→↓↔↕↨∂∆∏∑−∕∙√∞∟∩∫≈≠≡≤≥⌂⌐⌠⌡");
+const FALLBACK_EM = { seg: 1.315, cjk: 1.284, tech: 1.172 }; // Segoe UI Symbol, MS Mincho, ⌘ ⇄ ⋯ (wyrocznia)
 const OWN_SYMBOL_FONT = /symbol|segoe|wingdings|webdings|dingbat|emoji|mincho|gothic|simsun|mingliu|yahei|malgun|batang|gulim|meiryo|hiragino|pingfang|noto sans cjk|noto serif cjk/i;
 function addFallbackSymbolLines(host) {
   if (!host) return 0;
@@ -1094,7 +1110,9 @@ function addFallbackSymbolLine(p) {
         range.setEnd(t, mt.index + mt[0].length);
         const r = range.getClientRects()[0];
         if (!r) continue;
-        const h = parseFloat(ecs.fontSize) * FALLBACK_EM[FALLBACK_CJK.test(mt[0]) ? "cjk" : "seg"] * m;
+        const tech = FALLBACK_TECH.test(mt[0]);
+        if (tech && WGL4_TECH.has(mt[0])) continue;
+        const h = parseFloat(ecs.fontSize) * FALLBACK_EM[tech ? "tech" : FALLBACK_CJK.test(mt[0]) ? "cjk" : "seg"] * m;
         const key = [...perLine.keys()].find((k) => Math.abs(k - r.top / scale) < 4) ?? r.top / scale;
         perLine.set(key, Math.max(perLine.get(key) || 0, h));
       }

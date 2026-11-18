@@ -4,6 +4,7 @@
 //   node scripts/word-compare.js a.docx b.docx (własne pliki — zostają na komputerze)
 //   FRESH=1 — PDF-y z Worda od nowa (domyślnie z pamięci, dopóki plik się nie zmienił)
 //   SAVE_PAGES=1 — zapisz też nasze kartki (<plik>-app-sN.png)
+//   DPR=2 — ekran Retina (Mac, iPad): cienkie linie tabel zaokrąglane do 0,5 px, nie do 1 px
 //
 // Wzorcem jest Word, nie poprzedni render aplikacji: porównanie z samą sobą pilnowałoby tylko,
 // żeby nic się nie zmieniło — także gdy wcześniej było źle. Word (Microsoft Word dla Maca,
@@ -105,7 +106,7 @@ async function run() {
     await context?.close();
     // okno wyższe niż kartka (A3 = 1587 px): zrzut kartki wyższej niż okno obcinał jej dół —
     // treść i stopka z dołu strony wychodziły jako „tylko Word” (do 2026-10-09 w każdym pomiarze)
-    context = await browser.newContext({ serviceWorkers: "block", viewport: { width: 1300, height: 1700 } });
+    context = await browser.newContext({ serviceWorkers: "block", viewport: { width: 1300, height: 1700 }, deviceScaleFactor: +process.env.DPR || 1 });
     await context.addInitScript(() => sessionStorage.setItem("introPlayed", "true"));
     const page = await context.newPage();
     page.on("dialog", (d) => d.accept().catch(() => {}));
