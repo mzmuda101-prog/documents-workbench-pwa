@@ -129,6 +129,18 @@ const dwbRibbon = (() => {
   }
   if (tableBtn) new MutationObserver(syncTableTab).observe(tableBtn, { attributes: true, attributeFilter: ["hidden"] });
 
+  // Esc w polu Szukaj (wstążka): wyjście z pola do dokumentu — pole wraca do zwykłej szerokości.
+  // Po obsłudze z keyboard.js (czyszczenie podświetleń trafień), dlatego w następnym takcie; jak w Sheet.
+  const searchEl = document.getElementById("searchQuery");
+  searchEl?.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || !on || e.isComposing) return;
+    setTimeout(() => {
+      if (document.activeElement !== searchEl) return; // coś innego już przeniosło fokus
+      if (typeof docViewportEl !== "undefined" && docViewportEl) docViewportEl.focus({ preventScroll: true });
+      else searchEl.blur();
+    }, 0);
+  });
+
   // ── przewijany rząd z podpowiedzią ───────────────────────────────────────
   function hinted() { try { return JSON.parse(sessionStorage.getItem(HINT_KEY) || "[]"); } catch (_) { return []; } }
   function markHinted(key) { try { sessionStorage.setItem(HINT_KEY, JSON.stringify([...hinted(), key])); } catch (_) {} }
