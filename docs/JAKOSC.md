@@ -80,6 +80,17 @@ w aplikacji „zgłoś błąd” zapisujący ostatnie akcje + stan → plik, z k
   ten sam plik i ten sam odczyt stanu w prawdziwym Wordzie (wynik wprost do tabeli)
 
 **Dalej:**
+- (2026-11-18) **Wysoki wiersz tabeli w Edycji** — świadomie NIE na razie: Podgląd wydruku dzieli
+  wiersz między strony jak Word (`splitRowsAtPages`), Edycja przenosi go w całości (tabela między
+  wierszami już się dzieli — v1.01.24). Pomiar: w 23 prawdziwych plikach z Pulpitu ani jednego
+  wiersza dzielonego przez Word (licznik `tr[data-pp-split]` w renderze wydruku; plik sztuczny
+  z 30-linijkową komórką — 1). Zysk ~0, ryzyko duże: odstępy wewnątrz komórek (każda w innym
+  miejscu), pomiar stron musiałby odliczać je osobno (`gapDisplacement` per komórka), test
+  stabilności przeliczeń. Wrócić przy pierwszym prawdziwym pliku z takim wierszem — wzorzec:
+  `cellLines`/`pushLineTo` z wydruku + odstęp w akapicie (`fitSplit`) w każdej komórce.
+- (2026-11-18) Zgodność z Wordem mierzyć też w Edycji i Safari: `VIEW=edit`, `ENGINE=webkit DPR=2`
+  w `scripts/word-compare.js` (Edycja 80,8 % ≈ wydruk 81,5 % na 23 plikach; reszta różnicy to
+  szum miernika wierszy na odręcznych obrazach).
 0. **(następny etap, 2026-11-10) Przeładowania dokumentu.** Gdzie przerysowanie CAŁEGO dokumentu
    jest niepotrzebne albo da się je zastąpić czymś lepszym (zmiana tylko dotkniętych akapitów,
    jak przy Enter/Backspace). Punkt wyjścia (spis 2026-11-09): każda operacja z paska/menu idzie
