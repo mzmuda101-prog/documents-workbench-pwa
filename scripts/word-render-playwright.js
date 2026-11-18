@@ -306,6 +306,48 @@ async function run() {
   check("stopka dosunięta do dołu (dół tekstu ~0,5 cm od krawędzi, nie pod marginesem 2 cm)", ft.bottom > ft.pageH - 30 && ft.bottom <= ft.pageH - 15, JSON.stringify(ft));
   check("podgląd wydruku: wcięcie stylu akapitu w stopce zostaje (36 pt = 48 px)", Math.abs(ft.ml - 48) < 0.6 && Math.abs(ft.left - (75.6 + 48)) < 2, JSON.stringify(ft));
 
+  // ── początek strony i symbole (czwarty dokument; wyrocznia probe-before-top / probe-sym-pitch) ──
+  await page.evaluate(() => { if (window.dwbPrint?.isOpen()) dwbPrint.close(); if (typeof setDirtyState === "function") setDirtyState(false); });
+  const file4 = path.join(os.tmpdir(), `dwb-word-render-s-${process.pid}.docx`);
+  const { buildDocx } = require("../tools/word-oracle/build-docx");
+  const head = (txt, extra = "") => `<w:p><w:pPr>${extra}<w:spacing w:before="320" w:after="160"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="40"/></w:rPr>${t(txt)}</w:r></w:p>`;
+  const arial = (txt) => `<w:p><w:pPr><w:spacing w:after="120" w:line="276" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="22"/></w:rPr>${t(txt)}</w:r></w:p>`;
+  // ramki akapitu (wyrocznia probe-para-group.js): grupa = jedno pole; linia = grubość + odstęp
+  const bside = (n, sz, sp) => `<w:${n} w:val="single" w:sz="${sz}" w:space="${sp}" w:color="000000"/>`;
+  const bbox = (sz, sp, between = "") => `<w:pBdr>${bside("top", sz, sp)}${bside("left", sz, 4)}${bside("bottom", sz, sp)}${bside("right", sz, 4)}${between}</w:pBdr>`;
+  const bp = (txt, bdr) => `<w:p><w:pPr>${bdr}<w:spacing w:after="0"/></w:pPr><w:r>${t(txt)}</w:r></w:p>`;
+  const plainP = (txt) => `<w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r>${t(txt)}</w:r></w:p>`;
+  const boxes = [plainP("Przed ramka"), ...["Ga1", "Ga2", "Ga3"].map((x) => bp(x, bbox(4, 1))), plainP("Miedzy ramkami"),
+    ...["Gb1", "Gb2"].map((x) => bp(x, bbox(34, 1))), plainP("Przed miedzy"), ...["Gc1", "Gc2"].map((x) => bp(x, bbox(4, 1, bside("between", 4, 1)))), plainP("Po ramkach")];
+  const sect = '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1417" w:right="1417" w:bottom="1417" w:left="1417" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>';
+  fs.writeFileSync(file4, await buildDocx({ body: [head("Start dokumentu"), arial("Zwykla linijka"), arial("Skrot Ctrl/⌘+F"), arial("Strzalka a ← b"),
+    '<w:p><w:r><w:br w:type="page"/></w:r></w:p>', head("Po podziale strony"), head("Po podziale przed", "<w:pageBreakBefore/>"),
+    `<w:p><w:pPr><w:spacing w:after="160"/>${sect}</w:pPr><w:r>${t("Koniec sekcji")}</w:r></w:p>`, head("Nowa sekcja"),
+    ...boxes] }));
+  await page.setInputFiles("#fileInput", file4);
+  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && [...document.querySelectorAll(".docx-preview-host p")].some((p) => p.textContent === "Nowa sekcja"), null, { timeout: 20000 });
+  fs.rmSync(file4, { force: true });
+  await page.waitForTimeout(600);
+  const st = await page.evaluate(() => {
+    const ps = [...document.querySelectorAll(".docx-preview-host section.docx p")];
+    const p = (txt) => ps.find((x) => x.textContent === txt);
+    const mt = (txt) => parseFloat(getComputedStyle(p(txt)).marginTop);
+    const h = (txt) => p(txt).getBoundingClientRect().height;
+    const tt = (txt) => { const rg = document.createRange(); rg.selectNodeContents(p(txt)); return rg.getBoundingClientRect().top * 0.75; };
+    const bx = { a0: tt("Ga1") - tt("Przed ramka"), a1: tt("Ga2") - tt("Ga1"), a3: tt("Miedzy ramkami") - tt("Ga3"), b0: tt("Gb1") - tt("Miedzy ramkami"), b1: tt("Gb2") - tt("Gb1"), c1: tt("Gc2") - tt("Gc1"),
+      text: p("Ga1").getBoundingClientRect().left + parseFloat(getComputedStyle(p("Ga1")).paddingLeft) - p("Przed ramka").getBoundingClientRect().left };
+    return { bx, first: mt("Start dokumentu"), brk: mt("Po podziale strony"), pbb: mt("Po podziale przed"), sect: mt("Nowa sekcja"), plain: h("Zwykla linijka"), cmd: h("Skrot Ctrl/⌘+F"), left: h("Strzalka a ← b") };
+  });
+  check("odstęp przed na początku dokumentu zostaje (16 pt = 21,33 px)", Math.abs(st.first - 21.33) < 0.1, JSON.stringify(st));
+  check("strona po podziale (w:br, pageBreakBefore): odstęp przed pominięty jak w Wordzie", st.brk === 0 && st.pbb === 0, JSON.stringify(st));
+  check("początek sekcji: odstęp przed minus po z poprzedniej strony (16 − 8 pt = 10,67 px)", Math.abs(st.sect - 10.67) < 0.1, JSON.stringify(st));
+  const near = (v, w) => Math.abs(v - w) < 0.05;
+  check("ramka akapitu: grupa = jedno pole (Word: 16 / 14,5 / 16 pt), tekst na swoim wcięciu", near(st.bx.a0, 16) && near(st.bx.a1, 14.5) && near(st.bx.a3, 16) && Math.abs(st.bx.text) < 0.5, JSON.stringify(st.bx));
+  check("ramka akapitu 4,25 pt + odstęp 1 pt: bez zaokrąglania do pikseli (Word 19,75 pt)", near(st.bx.b0, 19.75) && near(st.bx.b1, 14.5), JSON.stringify(st.bx));
+  check("linia „między” akapitami: grubość + 2 × odstęp (Word 17 pt)", near(st.bx.c1, 17), JSON.stringify(st.bx));
+  check("⌘ (krój zastępczy 1,172 em) podnosi linijkę Arial 11 pt o ~0,38 px", Math.abs(st.cmd - st.plain - 0.383) < 0.15, JSON.stringify(st));
+  check("← (jest w Arialu) nie podnosi linijki", Math.abs(st.left - st.plain) < 0.05, JSON.stringify(st));
+
   await browser.close();
   const real = errors.filter((e) => !/ResizeObserver/.test(e));
   if (real.length) check("bez błędów w konsoli", false, real.join(" | ").slice(0, 400));

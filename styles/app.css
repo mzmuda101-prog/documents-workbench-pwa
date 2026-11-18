@@ -2388,6 +2388,29 @@ section.docx p { min-height: 1lh; }
 /* Linia tabeli 0,5 pt: przeglądarka liczy ją jako 1 px, Word 0,67 px — nadmiar zdjęty z wysokości
    wiersza (addTableBorderHeights w docx-render-fixes.js) */
 section.docx td[style*="--dwb-row-over"]::after { content: ""; display: block; margin-top: var(--dwb-row-over); }
+/* Strona po jawnym podziale (łatka 25 w vendor-libs.mjs): Word pomija odstęp „przed” pierwszego
+   akapitu (probe-before-top.js); na początku dokumentu i sekcji zostaje */
+section.docx[data-dwb-break-start] > article:first-of-type > p:first-child { margin-top: 0 !important; }
+/* Ramka akapitu jak w Wordzie (applyParagraphBorders): pole z grupy akapitów, grubość + odstęp od
+   tekstu w dopełnieniu (bez zaokrąglania do pikseli), linie rysowane tłem, boki na marginesie */
+section.docx p[data-dwb-bdr] {
+  /* styl zostaje (linia pozioma i „Ramka” rozpoznawane po border-*-style), grubość robi dopełnienie */
+  border-width: 0 !important;
+  padding-top: var(--dwb-bdr-pt) !important;
+  padding-bottom: calc(var(--dwb-bdr-pb) + var(--dwb-sym-pad, 0px)) !important;
+  padding-left: var(--dwb-bdr-ps) !important;
+  padding-right: var(--dwb-bdr-pe) !important;
+  margin-left: var(--dwb-bdr-ms) !important;
+  margin-right: var(--dwb-bdr-me) !important;
+  background-image: var(--dwb-bdr-img) !important;
+  background-position: var(--dwb-bdr-pos) !important;
+  background-size: var(--dwb-bdr-size) !important;
+  background-repeat: no-repeat !important;
+}
+section.docx p[data-dwb-bdr][style*="--dwb-bdr-mt"] { margin-top: var(--dwb-bdr-mt) !important; }
+section.docx p[data-dwb-bdr][style*="--dwb-bdr-mb"] { margin-bottom: var(--dwb-bdr-mb) !important; }
+/* Początek nowej sekcji: odstęp „przed” minus „po” ostatniego akapitu poprzedniej strony (applySectionStartSpacing) */
+section.docx > article:first-of-type > p:first-child[style*="--dwb-sect-mt"] { margin-top: var(--dwb-sect-mt) !important; }
 .dwb-page-anchor img { max-width: none; }
 
 /* Tabulatory rozłożone wg pozycji (docx-render-fixes.js → layoutTabStops): wypełnienie kropkami

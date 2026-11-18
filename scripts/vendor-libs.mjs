@@ -178,8 +178,17 @@ function patchBundle() {
   //     Typ czytamy z sekcji, która się ZACZYNA (w:type opisuje początek swojej sekcji).
   const reGroup = /groupByPageBreaks\((\w+)\)\{let (\w+)=\[\],(\w+),(\w+)=\[\2\];for\(let (\w+) of \1\)\2\.push\(\5\),\(this\.options\.ignoreLastRenderedPageBreak\|\|\5\.pageBreak\|\|this\.isPageBreakSection\(\3,\5\.sectProps\)\)&&\4\.push\(\2=\[\]\),\3=\5\.sectProps;return \4\.filter\((\w+)=>\6\.length>0\)\}/;
   if (!reGroup.test(src)) throw new Error("łatka sekcji ciągłych: wzorzec groupByPageBreaks nie pasuje (nowa wersja docx-preview?)");
-  src = src.replace(reGroup, (_, T, E, _R, O) => `groupByPageBreaks(${T}){let ${E}=[],${O}=[${E}];for(let __i=0;__i<${T}.length;__i++){let __k=${T}[__i],__n=${T}[__i+1];${E}.push(__k);if(!__n)break;let __a=__k.sectProps,__b=__n.sectProps;(__k.pageBreak||__a!==__b&&(!/^(continuous|nextColumn)$/.test(__b?.type||"")||this.isPageBreakSection(__a,__b)))&&${O}.push(${E}=[])}return ${O}.filter(__x=>__x.length>0)}`);
+  src = src.replace(reGroup, (_, T, E, _R, O) => `groupByPageBreaks(${T}){let ${E}=[],${O}=[${E}];for(let __i=0;__i<${T}.length;__i++){let __k=${T}[__i],__n=${T}[__i+1];${E}.push(__k);if(!__n)break;let __a=__k.sectProps,__b=__n.sectProps;(__k.pageBreak||__a!==__b&&(!/^(continuous|nextColumn)$/.test(__b?.type||"")||this.isPageBreakSection(__a,__b)))&&(${O}.push(${E}=[]),__n.dwbBreakStart=__k.pageBreak&&__a===__b)}return ${O}.filter(__x=>__x.length>0)}`);
   console.log("  ✅  łatka: sekcje ciągłe na tej samej stronie (nowa kartka tylko przy podziale / sekcji „następna strona”)");
+
+  // 25) Kartka zaczęta jawnym podziałem strony (w:br page, w:pageBreakBefore) — nie nową sekcją —
+  //     dostaje data-dwb-break-start. Word (tryb 15) pomija tam odstęp „przed” pierwszego akapitu
+  //     (wyrocznia probe-before-top.js 2026-11-18: 16 pt → 0), a na początku dokumentu i sekcji go
+  //     rysuje. Sprawozdania z Pythona: treść od strony 2 o 21 px niżej niż w Wordzie. Reguła w app.css.
+  const reBreakStart = /let (\w+)=(\w+)\[(\w+)\]\[0\]\.sectProps,(\w+)=this\.createPageElement\(this\.className,\1\);/;
+  if (!reBreakStart.test(src)) throw new Error("łatka początku strony po podziale: wzorzec renderSections nie pasuje (nowa wersja docx-preview?)");
+  src = src.replace(reBreakStart, (m, _y, o, tt, ft) => `${m}${o}[${tt}][0].dwbBreakStart&&${ft}.setAttribute("data-dwb-break-start","");`);
+  console.log("  ✅  łatka: kartka po jawnym podziale strony oznaczona (data-dwb-break-start)");
 
   // 12) Znak końca akapitu (w:pPr/w:rPr): kolor i rozmiar. Kolorem Word rysuje punktor/numer listy,
   //     gdy poziom listy nie ma własnego koloru (czerwony akapit = czerwona kropka). docx-preview
@@ -355,6 +364,42 @@ function patchBundle() {
   if (!reAlt.test(src)) throw new Error("łatka altChunk: wzorzec renderAltChunk nie pasuje (nowa wersja docx-preview?)");
   src = src.replace(reAlt, (m, _t, e) => `${m}${e}.setAttribute("sandbox","");`);
   console.log("  ✅  łatka: altChunk w ramce z sandbox");
+
+  // 26) Kierunek tekstu w komórce (w:textDirection lrTb) = poziomo, jak w Wordzie. docx-preview
+  //     mapował lrTb na pionowy zapis (vertical-lr). Dawniej poprawione ręcznie w bundlu (ed57cf1) —
+  //     przebudowa biblioteki by to skasowała.
+  const reLrTb = /lrTb:\{writingMode:"vertical-lr",transform:"none"\}/;
+  if (!reLrTb.test(src)) throw new Error("łatka lrTb: wzorzec kierunku tekstu nie pasuje (nowa wersja docx-preview?)");
+  src = src.replace(reLrTb, 'lrTb:{writingMode:"horizontal-tb",transform:"none"}');
+  console.log("  ✅  łatka: lrTb = tekst poziomo");
+
+  // 27) Sekcja bez własnego nagłówka / stopki danego rodzaju pokazuje nagłówek poprzedniej sekcji
+  //     („Połącz z poprzednim”, jak w Wordzie — probe-section-app.js). docx-preview zostawiał pustą
+  //     stronę. Dawniej poprawione ręcznie w bundlu (1ff137e) — przebudowa by to skasowała.
+  const reHfCall = /this\.renderHeaderFooter\((\w+)\.(header|footer)Refs,/g;
+  if ((src.match(reHfCall) || []).length !== 2) throw new Error("łatka nagłówków dziedziczonych: wzorzec wywołań renderHeaderFooter nie pasuje (nowa wersja docx-preview?)");
+  src = src.replace(reHfCall, (_, s, kind) => `this.renderHeaderFooter(this.__dwbRefs(${s},"${kind}Refs"),`);
+  const reHfDef = /\}(renderHeaderFooter\(\w+,\w+,\w+,\w+,\w+\)\{if\()/;
+  if (!reHfDef.test(src)) throw new Error("łatka nagłówków dziedziczonych: wzorzec definicji renderHeaderFooter nie pasuje");
+  src = src.replace(reHfDef, (_, def) => "}__dwbRefs(s,key){this.__dwbM=this.__dwbM||new Map;let m=this.__dwbM.get(s);if(!m){m={};this.__dwbM.set(s,m)}if(!(key in m)){const own=s[key]||[],prev=(this.__dwbLast||{})[key]||[],out=[...own];for(const r of prev)own.some(o=>o.type===r.type)||out.push(r);m[key]=out.length?out:s[key];(this.__dwbLast=this.__dwbLast||{})[key]=out}return m[key]}" + def);
+  console.log("  ✅  łatka: nagłówki / stopki dziedziczone z poprzedniej sekcji");
+
+  // 28) Ramka akapitu (w:pBdr): docx-preview robił z niej zwykłą ramkę CSS każdego akapitu — bez
+  //     odstępu od tekstu (w:space) i bez linii „między” (w:between), a sąsiednie akapity z tą samą
+  //     ramką miały każdy własną górę i dół. Pełny opis boków idzie do --dwb-pbdr
+  //     („bok:grubość styl kolor/odstęp|…”); układ jak w Wordzie robi applyParagraphBorders.
+  const rePBdr = /case"pBdr":this\.parseBorderProperties\((\w+),(\w+)\);break;/;
+  if (!rePBdr.test(src)) throw new Error("łatka ramek akapitu: wzorzec pBdr nie pasuje (nowa wersja docx-preview?)");
+  const reBorderFn = /parseBorderProperties\(\w+,\w+\)\{for\(let \w+ of (\w+)\.elements\(\w+\)\)switch\(\w+\.localName\)\{case"start":case"left":\w+\["border-left"\]=(\w+)\.valueOfBorder/;
+  const mBorder = reBorderFn.exec(src);
+  if (!mBorder) throw new Error("łatka ramek akapitu: wzorzec parseBorderProperties nie pasuje");
+  const [, XB, PTB] = mBorder;
+  src = src.replace(rePBdr, (_, k, e) => `case"pBdr":this.parseBorderProperties(${k},${e}),${e}["--dwb-pbdr"]=${XB}.elements(${k}).map(__b=>__b.localName.replace(/^start$/,"left").replace(/^end$/,"right")+":"+${PTB}.valueOfBorder(__b)+"/"+(${XB}.attr(__b,"space")||0)).join("|");break;`);
+  // zmienne CSS (--dwb-…) w stylu wpisanym w element: style[k]=v ich nie ustawia, setProperty tak
+  const reStyleVals = /renderStyleValues\((\w+),(\w+)\)\{for\(let (\w+) in \1\)\3\.startsWith\("\$"\)\?\2\.setAttribute\(\3\.slice\(1\),\1\[\3\]\):\2\.style\[\3\]=\1\[\3\]\}/;
+  if (!reStyleVals.test(src)) throw new Error("łatka ramek akapitu: wzorzec renderStyleValues nie pasuje");
+  src = src.replace(reStyleVals, (_, t, e, r) => `renderStyleValues(${t},${e}){for(let ${r} in ${t})${r}.startsWith("$")?${e}.setAttribute(${r}.slice(1),${t}[${r}]):${r}.startsWith("--")?${e}.style.setProperty(${r},${t}[${r}]):${e}.style[${r}]=${t}[${r}]}`);
+  console.log("  ✅  łatka: ramka akapitu z odstępem i linią „między” (--dwb-pbdr)");
   fs.writeFileSync(OUT, src);
 }
 

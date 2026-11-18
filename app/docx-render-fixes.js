@@ -395,6 +395,7 @@ function watchParagraphLayout(wrapper) {
       pending = false;
       if (!wrapper.isConnected) { mo.disconnect(); return; }
       applyContextualSpacing(wrapper);
+      if (touched.size) applyParagraphBorders(wrapper, touched); // grupa ramki: akapit i jego sąsiedzi
       fixEmptyParagraphHeights(wrapper);
       touched.forEach((p) => { if (p.isConnected) { zeroWhitespaceRun(p); hangTrailingSpace(p); addFallbackSymbolLine(p); } });
       const just = [...touched].filter((p) => p.isConnected && p.classList.contains("dwb-justify"));
@@ -747,6 +748,116 @@ function addTableBorderHeights(host) {
       });
       n++;
     });
+  });
+  return n;
+}
+
+// Ramka akapitu (w:pBdr) jak w Wordzie (wyrocznia probe-para-border.js, probe-para-group.js 2026-11-18):
+// • sąsiednie akapity z tą samą ramką i tymi samymi wcięciami to JEDNO pole — góra nad pierwszym,
+//   dół pod ostatnim, między nimi tylko linia „między” (w:between), jeśli jest;
+// • każda linia dokłada do wysokości grubość + odstęp od tekstu (w:space; „między”: grubość + 2 ×
+//   odstęp); lewa/prawa stoją na marginesie — tekst zostaje na swoim wcięciu;
+// • grubość dokładna: przeglądarka zaokrągla ramkę CSS do pikseli (4,25 pt → 5 px, 0,5 pt → 1 px;
+//   laboratorium: −1 pt na każdy blok kodu). Linie rysujemy tłem (gradient), wysokość robi padding.
+// docx-preview dawał każdemu akapitowi pełną ramkę CSS bez odstępów. Opis boków: --dwb-pbdr (łatka 28).
+// Tylko linie ciągłe (styl solid); kreskowane / podwójne zostają ramką CSS jak dawniej.
+const PBDR_PROPS = ["--dwb-bdr-pt", "--dwb-bdr-pb", "--dwb-bdr-ps", "--dwb-bdr-pe", "--dwb-bdr-ms", "--dwb-bdr-me", "--dwb-bdr-mt", "--dwb-bdr-mb", "--dwb-bdr-img", "--dwb-bdr-pos", "--dwb-bdr-size"];
+function parsePBdr(v) {
+  const sides = {};
+  for (const part of String(v || "").trim().replace(/^["']|["']$/g, "").split("|")) {
+    const m = /^(\w+):(.*)\/([\d.]+)$/.exec(part.trim());
+    if (!m) continue;
+    const val = m[2].trim();
+    if (val === "none") continue;
+    const w = /^([\d.]+)pt\s+(\S+)\s+(.+)$/.exec(val);
+    if (!w) return null;
+    sides[m[1]] = { w: parseFloat(w[1]) * PT_PX, style: w[2], color: w[3], sp: parseFloat(m[3]) * PT_PX };
+  }
+  return sides;
+}
+function applyParagraphBorders(host, scope) {
+  // widok mobilny (tekst do szerokości telefonu): stron nie ma, wcięcia skaluje własna reguła — bez zmian
+  if (!host || host.closest?.(".doc-reflow-mode")) return 0;
+  const ps = scope ? [...new Set([...scope].filter((p) => p.isConnected).map((p) => p.parentElement))].flatMap((par) => [...par.children].filter((c) => c.tagName === "P"))
+    : [...host.querySelectorAll("section.docx p")];
+  // najpierw stan bez naszych zmian (przerysowanie, edycja, inne poprawki zmieniły marginesy)
+  for (const p of ps) if (p.hasAttribute("data-dwb-bdr")) { p.removeAttribute("data-dwb-bdr"); PBDR_PROPS.forEach((k) => p.style.removeProperty(k)); }
+  const info = new Map();
+  for (const p of ps) {
+    const raw = getComputedStyle(p).getPropertyValue("--dwb-pbdr");
+    if (!raw.trim()) continue;
+    const sides = parsePBdr(raw);
+    if (!sides) continue;
+    const cs = getComputedStyle(p);
+    // bok zdjęty w podglądzie (Enter w linii poziomej: nowy akapit bez ramki) — nie rysujemy go
+    for (const s of ["top", "bottom", "left", "right"]) if (sides[s] && cs[`border${s[0].toUpperCase()}${s.slice(1)}Style`] === "none") delete sides[s];
+    if (!sides.top && !sides.bottom && !sides.left && !sides.right) continue;
+    if (Object.values(sides).some((s) => s.style !== "solid")) continue;
+    info.set(p, { sides, key: `${raw.trim()}#${cs.marginLeft}#${cs.marginRight}`, cs });
+  }
+  let n = 0;
+  const dpr = typeof devicePixelRatio === "number" && devicePixelRatio > 0 ? devicePixelRatio : 1;
+  const px = (v) => `${Math.round(v * 1000) / 1000}px`;
+  for (const [p, it] of info) {
+    const prev = p.previousElementSibling, next = p.nextElementSibling;
+    const first = !(prev && info.get(prev)?.key === it.key);
+    const last = !(next && info.get(next)?.key === it.key);
+    const { top, bottom, left, right, between } = it.sides;
+    const cs = it.cs;
+    const num = (k) => parseFloat(cs[k]) || 0;
+    // dopełnienie symbolu (--dwb-sym-pad) reguła z app.css dolicza osobno — tu bez niego
+    let pt = num("paddingTop"), pb = p.hasAttribute("data-dwb-sym-pad") ? parseFloat(p.style.paddingBottom) || 0 : num("paddingBottom");
+    const imgs = [], pos = [], size = [];
+    const line = (s, x, y, w, h) => { imgs.push(`linear-gradient(${s.color}, ${s.color})`); pos.push(`${x} ${y}`); size.push(`${w} ${h}`); };
+    const thick = (w) => Math.max(w, 1 / dpr); // rysunek co najmniej 1 piksel ekranu; wysokość liczy grubość z pliku
+    if (first && top) { line(top, "0", "0", "100%", px(thick(top.w))); pt += top.w + top.sp; }
+    if (!first && between) { line(between, "0", px(between.sp), "100%", px(thick(between.w))); pt += between.w + 2 * between.sp; }
+    if (last && bottom) { line(bottom, "0", "100%", "100%", px(thick(bottom.w))); pb += bottom.w + bottom.sp; }
+    // pole ciągłe w środku grupy z liniami bocznymi: odstęp między akapitami w środku pola (jak Word)
+    let mt = null, mb = null;
+    if (left || right) {
+      if (!last) { const gap = Math.max(num("marginBottom"), parseFloat(getComputedStyle(next).marginTop) || 0); pb += gap; mb = 0; }
+      if (!first) mt = 0;
+    }
+    let ms = num("marginLeft"), me = num("marginRight"), pl = num("paddingLeft"), pr = num("paddingRight");
+    if (left) { line(left, "0", "0", px(thick(left.w)), "100%"); ms -= left.w + left.sp; pl += left.w + left.sp; }
+    if (right) { line(right, "100%", "0", px(thick(right.w)), "100%"); me -= right.w + right.sp; pr += right.w + right.sp; }
+    p.style.setProperty("--dwb-bdr-pt", px(pt));
+    p.style.setProperty("--dwb-bdr-pb", px(pb));
+    p.style.setProperty("--dwb-bdr-ps", px(pl));
+    p.style.setProperty("--dwb-bdr-pe", px(pr));
+    p.style.setProperty("--dwb-bdr-ms", px(ms));
+    p.style.setProperty("--dwb-bdr-me", px(me));
+    if (mt != null) p.style.setProperty("--dwb-bdr-mt", px(mt));
+    if (mb != null) p.style.setProperty("--dwb-bdr-mb", px(mb));
+    p.style.setProperty("--dwb-bdr-img", imgs.length ? imgs.join(", ") : "none");
+    p.style.setProperty("--dwb-bdr-pos", pos.join(", ") || "0 0");
+    p.style.setProperty("--dwb-bdr-size", size.join(", ") || "auto");
+    p.setAttribute("data-dwb-bdr", "");
+    n++;
+  }
+  return n;
+}
+
+// Pierwsza strona nowej sekcji (nie po jawnym podziale — tam odstęp znika całkiem, app.css): Word
+// rysuje odstęp „przed” pierwszego akapitu pomniejszony o odstęp „po” ostatniego akapitu poprzedniej
+// strony — łączenie odstępów jak między sąsiednimi akapitami (wyrocznia probe-before-top.js
+// 2026-11-18: przed 16 pt, po 0 / 8 / 20 pt → 16 / 8 / 0 pt). Przez zmienną + regułę w app.css.
+function applySectionStartSpacing(host) {
+  if (!host) return 0;
+  let n = 0;
+  const pages = [...host.querySelectorAll(".docx-wrapper > section.docx")];
+  pages.forEach((sec, i) => {
+    const first = sec.querySelector(":scope > article:first-of-type > p:first-child");
+    if (!first) return;
+    first.style.removeProperty("--dwb-sect-mt");
+    if (i === 0 || sec.hasAttribute("data-dwb-break-start")) return;
+    const last = pages[i - 1].querySelector(":scope > article:last-of-type > :last-child");
+    const after = last ? Math.max(0, parseFloat(getComputedStyle(last).marginBottom) || 0) : 0;
+    const before = Math.max(0, parseFloat(getComputedStyle(first).marginTop) || 0);
+    if (!(after > 0.05 && before > 0.05)) return;
+    first.style.setProperty("--dwb-sect-mt", `${Math.round(Math.max(0, before - after) * 100) / 100}px`);
+    n++;
   });
   return n;
 }
@@ -1126,7 +1237,9 @@ function addFallbackSymbolLine(p) {
     return false;
   }
   if (!had || Math.abs(parseFloat(p.dataset.dwbSymPad) - extra) > 0.2) {
-    const b0 = had ? base : parseFloat(getComputedStyle(p).paddingBottom) || 0;
+    // dopełnienie wpisane w akapit (punktor, addMarkerLineSpace) — nie obliczone: ramka akapitu
+    // (applyParagraphBorders) dokłada swoje regułą i liczy dopełnienie symbolu sama
+    const b0 = had ? base : parseFloat(p.style.paddingBottom) || 0;
     p.dataset.dwbSymBase = String(b0);
     p.dataset.dwbSymPad = String(Math.round(extra * 100) / 100);
     p.style.setProperty("--dwb-sym-b0", `${b0}px`);

@@ -193,7 +193,8 @@ const composeUi = (() => {
     if (!key.startsWith("custom:")) return false;
     const cs = getComputedStyle(p);
     const bg = cs.backgroundColor;
-    const border = ["Top", "Right", "Bottom", "Left"].some((s) => parseFloat(cs[`border${s}Width`]) > 0 && cs[`border${s}Style`] !== "none");
+    // ramka akapitu ułożona jak w Wordzie (applyParagraphBorders) ma grubość 0 — linie rysuje tło
+    const border = p.hasAttribute("data-dwb-bdr") || ["Top", "Right", "Bottom", "Left"].some((s) => parseFloat(cs[`border${s}Width`]) > 0 && cs[`border${s}Style`] !== "none");
     // tło: widoczne, nie białe (styl „Normal (Web)” ma białe cieniowanie — to nie ramka)
     const m = String(bg || "").match(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?/);
     const tinted = m && (m[4] === undefined || parseFloat(m[4]) > 0.05) && Math.min(+m[1], +m[2], +m[3]) < 246;
