@@ -1,3 +1,4 @@
+// @ts-check
 // spell-worker.js — ortografia offline (Hunspell w WebAssembly) w osobnym wątku.
 // Słowniki: lib/hunspell/dict (PL: sjp.pl 2026-09-01, EN: dictionary-en) — ładowane przy
 // pierwszym skanie, potem z cache service workera. Nic nie wychodzi z urządzenia.

@@ -1,3 +1,4 @@
+// @ts-check
 // theme-boot.js — motyw ustawiony ZANIM strona się narysuje (bez mignięcia jasnym przy ciemnym).
 // Ładowany synchronicznie w <head> (CSP nie pozwala na skrypt wpisany w HTML). Brak klucza = motyw
 // systemowy; reszta (nasłuch zmiany systemu, wybór w menu ⋯) — ui-controls.js.

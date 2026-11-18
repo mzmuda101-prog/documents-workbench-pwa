@@ -1,3 +1,4 @@
+// @ts-check
 // DOCX package metadata — read/write docProps/core.xml (title, author, keywords).
 
 const CP_NS = "http://schemas.openxmlformats.org/package/2006/metadata/core-properties";

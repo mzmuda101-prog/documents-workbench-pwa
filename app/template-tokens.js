@@ -1,3 +1,4 @@
+// @ts-check
 // Template tokens — {{placeholder}} vs !snippet (separate syntax, composable workflow).
 
 const PLACEHOLDER_TOKEN_RE = /\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}/g;

@@ -1,0 +1,32 @@
+{
+	"$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+	"files": { "includes": ["app/**/*.js", "!app/spell-worker.js", "sw.js"] },
+	"formatter": { "enabled": false },
+	"assist": { "enabled": false },
+	"linter": {
+		"rules": {
+			"preset": "none",
+			"correctness": {
+				"noConstAssign": "error",
+				"noUnreachable": "error",
+				"noSelfAssign": "error",
+				"noSwitchDeclarations": "error",
+				"noInvalidUseBeforeDeclaration": "error",
+				"useIsNan": "error",
+				"noPrecisionLoss": "error"
+			},
+			"suspicious": {
+				"noDuplicateCase": "error",
+				"noDuplicateObjectKeys": "error",
+				"noDuplicateClassMembers": "error",
+				"noDuplicateParameters": "error",
+				"noSelfCompare": "error",
+				"noCompareNegZero": "error",
+				"noAsyncPromiseExecutor": "error",
+				"noDebugger": "error",
+				"noFallthroughSwitchClause": "warn",
+				"noShadowRestrictedNames": "error"
+			}
+		}
+	}
+}

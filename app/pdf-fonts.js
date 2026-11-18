@@ -1,3 +1,4 @@
+// @ts-check
 // PDF → DOCX: osadzanie czcionek z PDF w pliku .docx (word/fonts/*.odttf).
 // Gdy na komputerze/telefonie nie ma kroju z PDF (np. Bahnschrift na Macu), Word i podgląd
 // aplikacji użyliby zastępczego — inne szerokości liter, inne zawijanie wierszy. Osadzona

@@ -1,3 +1,4 @@
+// @ts-check
 // self-check.js — strażnik spójności dokumentu (2026-10-06).
 //
 // Błędy edytora rzadko widać od razu: zapis gubi poprawkę akapitu, link prowadzi do zakładki,

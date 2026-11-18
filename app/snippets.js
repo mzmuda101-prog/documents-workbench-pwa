@@ -1,3 +1,4 @@
+// @ts-check
 // Snippets — localStorage blocks triggered by !name; composable with {{placeholders}}.
 
 const SNIPPETS_STORAGE_KEY = "documents-workbench-snippets";

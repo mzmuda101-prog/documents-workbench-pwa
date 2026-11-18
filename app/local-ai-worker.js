@@ -1,3 +1,4 @@
+// @ts-check
 // local-ai-worker.js — model językowy na urządzeniu (WebGPU), osobny wątek dla local-ai.js.
 // KOPIA 1:1 w sheet-workbench-pwa/app i documents-workbench-pwa/app — zmieniaj oba pliki.
 //

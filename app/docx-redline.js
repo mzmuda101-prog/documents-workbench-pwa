@@ -1,3 +1,4 @@
+// @ts-check
 // docx-redline.js — plik z poprawkami Worda (w:ins / w:del) z dwóch wersji: „przed” i „po”.
 //
 // Jeden silnik dla dwóch funkcji:

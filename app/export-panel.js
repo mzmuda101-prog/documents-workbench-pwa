@@ -1,3 +1,4 @@
+// @ts-check
 // Panel „Eksport” — TXT / HTML / Markdown z aktualnego dokumentu (razem z Twoimi edycjami) + druk / PDF.
 // Wszystko lokalnie: budujemy z DOM podglądu, nic nie opuszcza urządzenia.
 

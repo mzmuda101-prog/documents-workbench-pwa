@@ -136,13 +136,17 @@
     "test:all": "node scripts/run-tests.mjs --all && npm run test:stress",
     "bench": "node scripts/perf-bench.js",
     "bench:reload": "node scripts/reload-bench.js",
-    "replay": "node scripts/replay-report.js"
+    "replay": "node scripts/replay-report.js",
+    "check": "tsc -p jsconfig.json",
+    "lint": "biome lint"
   },
   "license": "MIT",
   "type": "commonjs",
   "devDependencies": {
+    "@biomejs/biome": "2.6.8",
     "esbuild": "^0.28.1",
-    "playwright": "1.60.0"
+    "playwright": "1.60.0",
+    "typescript": "7.0.2"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.3.1",

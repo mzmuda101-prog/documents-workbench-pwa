@@ -1,3 +1,4 @@
+// @ts-check
 // spell-check.js — ortografia w panelu „Korekta” (słownik Hunspell, offline, bez AI).
 //
 // Skan: wyrazy z akapitów dokumentu → unikalne → spell-worker.js (Hunspell) → lista błędnych

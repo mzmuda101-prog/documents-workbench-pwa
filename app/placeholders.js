@@ -1,3 +1,4 @@
+// @ts-check
 // Placeholder fields — scan {{name}} tokens and fill via XML replace.
 
 async function scanPlaceholders(bytes) {

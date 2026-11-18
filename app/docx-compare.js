@@ -1,3 +1,4 @@
+// @ts-check
 // DOCX comparison primitives.  Deliberately read-only: both packages stay untouched.
 // The panel uses paragraph alignment first, then a word-level diff for changed paragraphs.
 

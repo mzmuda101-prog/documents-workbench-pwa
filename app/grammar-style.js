@@ -1,3 +1,4 @@
+// @ts-check
 // Grammar / typography rules — offline scan on paragraph text from DOCX XML.
 
 const NBSP = "\u00A0";
