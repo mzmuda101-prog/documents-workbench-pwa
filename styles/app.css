@@ -4564,3 +4564,7 @@ body.tb-float .doc-island .doc-island-status { display: none; }
 .paste-opts-btn:focus-visible, .paste-opts-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 @media (pointer: coarse) { .paste-opts-btn { height: 40px; } .paste-opts-x { width: 40px; height: 40px; } }
 @media print { .paste-opts { display: none !important; } }
+
+/* Wstążka przyklejona do górnej krawędzi okna, jak w Sheet: górne rogi proste, bez ramki i odstępu nad nią */
+body.rb-on .app { padding-top: max(0px, var(--safe-top)); }
+body.rb-on .ribbon { border-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
