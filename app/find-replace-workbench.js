@@ -4,6 +4,7 @@
 // historia ostatnich fraz.
 
 let frMatches = []; // [{ paraIndex, occurrence, start, end, text, context, el }]
+let frScannedFind = ""; // fraza, dla której są frMatches — ↑↓ po zmianie frazy szukają od nowa
 let frActiveIndex = -1;
 let frOtherCount = 0; // trafienia poza treścią (nagłówki, stopki, przypisy)
 
@@ -235,6 +236,7 @@ async function runFindReplaceScan(opts = {}) {
   frMatches = doc ? scanFindMatchesInDoc(doc, edit, edit.scope, override).map((m) => ({ ...m, el: paras[m.paraIndex] })) : [];
   frOtherCount = edit.scope === "all" ? await countInOtherParts(originalFileBytes, edit) : 0;
   frRemember("find", edit.find);
+  frScannedFind = edit.find;
 
   if (searchCountEl) searchCountEl.textContent = frMatches.length ? t("searchMatches", { count: frMatches.length }) : t("searchNoMatches");
   paintFrHighlights();
@@ -248,7 +250,7 @@ function runDocumentSearch(opts) {
 }
 
 function stepFrMatch(delta) {
-  if (!frMatches.length) { runFindReplaceScan(); return; }
+  if (!frMatches.length || buildFrEdit().find !== frScannedFind) { runFindReplaceScan(); return; }
   focusFrMatch(frActiveIndex + delta);
 }
 
