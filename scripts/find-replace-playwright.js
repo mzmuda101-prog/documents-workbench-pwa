@@ -45,6 +45,19 @@ async function run() {
     const domHits = (window.CSS?.highlights?.get("dwb-find")?.size || 0) + document.querySelectorAll(".search-hit").length;
     if (!domHits) return { ok: false, step: "scan", msg: `Brak trafień DOM dla: ${needle}` };
 
+    // nowa fraza wpisana na starą i ↓ (bez „Odznacz”) = szukanie nowej frazy, nie krok po starych trafieniach
+    const other = words.find((w) => w.toLowerCase() !== needle.toLowerCase());
+    if (other) {
+      q.value = other;
+      q.dispatchEvent(new Event("input", { bubbles: true }));
+      document.getElementById("frNextBtn").click();
+      for (let i = 0; i < 50 && !frMatches.some((m) => m.text?.toLowerCase() === other.toLowerCase()); i++) await new Promise((res) => setTimeout(res, 100));
+      const cur = frMatches[frActiveIndex];
+      if (cur?.text?.toLowerCase() !== other.toLowerCase()) return { ok: false, step: "arrow-new-query", msg: `↓ po zmianie frazy na „${other}” stoi na „${cur?.text}”` };
+      q.value = needle;
+      await runDocumentSearch();
+    }
+
     const preview = countReplacePreview(texts, { op: "replace", find: needle, replace: markerOne, regex: false, scope: "all" });
     if (!preview.hits) return { ok: false, step: "preview", msg: "Podgląd XML — 0 trafień" };
     if (!document.querySelector(".fr-preview-item")) {
