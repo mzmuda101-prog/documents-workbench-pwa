@@ -65,7 +65,7 @@
             <button class="btn" type="button" id="pdfConvOcrNo">${T("Zostaw jako obraz", "Keep as image")}</button>
           </div>
         </div>
-        <p class="pdfconv-note">${T("Plik jest przetwarzany na tym urządzeniu — nigdzie nie jest wysyłany.", "The file is processed on this device — it is never uploaded.")}</p>
+        <p class="pdfconv-note">${T("Plik jest przetwarzany na tym urządzeniu — nigdzie nie jest wysyłany. Zamiana jest w wersji testowej: po konwersji sprawdź wynik.", "The file is processed on this device — it is never uploaded. Conversion is in testing: check the result afterwards.")}</p>
         <div class="pdfconv-actions"><button class="btn" type="button" id="pdfConvCancel">${T("Anuluj", "Cancel")}</button></div>
       </div>`;
     document.body.appendChild(d);

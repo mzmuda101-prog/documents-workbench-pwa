@@ -1218,27 +1218,26 @@
             <div class="doc-viewport" id="docViewport" tabindex="0" role="region" data-i18n-aria="docRegionAria" aria-label="Dokument">
               <div class="empty-state" id="emptyState">
                 <div class="empty-icon" aria-hidden="true">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="8" y1="13" x2="16" y2="13" />
-                    <line x1="8" y1="17" x2="14" y2="17" />
+                    <path d="M14 2v6h6M8 13h8M8 17h6" />
                   </svg>
                 </div>
-                <h2 id="emptyTitle" data-i18n="emptyTitle">Otwórz dokument .docx lub .pdf</h2>
-                <p id="emptySub" data-i18n="emptySub">Plik zostaje w przeglądarce — bez wysyłania na serwer.</p>
-                <p class="empty-beta" id="emptyPdfBeta"><span class="beta-tag">beta</span> <span data-i18n="emptyPdfBeta">Zamiana PDF → .docx jest w wersji testowej — po konwersji sprawdź wynik.</span></p>
+                <!-- Układ jak docs/makiety/start-v1.html: krótki tytuł, jedno zdanie, główny przycisk + trzy
+                     równe, lista ostatnich. Informacja „beta” o PDF jest w oknie zamiany PDF (pdf-import.js). -->
+                <h2 id="emptyTitle" data-i18n="emptyTitle">Otwórz dokument</h2>
+                <p id="emptySub" data-i18n="emptySub">Word (.docx), PDF albo zdjęcie kartki. Plik zostaje na tym urządzeniu — nic nie jest wysyłane na serwer.</p>
                 <div class="draft-recovery" id="draftRecovery" hidden aria-live="polite"></div>
                 <div class="empty-actions" id="emptyActions">
                   <button class="btn primary" id="emptyOpenBtn" type="button" data-i18n="emptyOpen">Otwórz plik…</button>
-                  <button class="btn" id="emptyNewBtn" type="button" data-i18n="emptyNew">Nowy dokument…</button>
+                  <button class="btn" id="emptyNewBtn" type="button"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M12 12v6M9 15h6"/></svg><span data-i18n="emptyNewShort">Nowy dokument</span></button>
                   <!-- tytuł obiecuje zdjęcie dokumentu — przycisk od razu tutaj (audyt D3) -->
-                  <button class="btn" id="emptyPhotoBtn" type="button" data-i18n="photoDoc">Zdjęcie dokumentu</button>
-                  <button class="btn" id="emptySampleBtn" type="button" data-i18n="emptySample">Przewodnik po aplikacji</button>
+                  <button class="btn" id="emptyPhotoBtn" type="button"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3"/></svg><span data-i18n="emptyPhoto">Zdjęcie kartki</span></button>
+                  <button class="btn" id="emptySampleBtn" type="button"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg><span data-i18n="emptyGuide">Przewodnik</span></button>
                 </div>
                 <!-- Ostatnio otwierane (doc-comfort.js): kopie na tym urządzeniu, „✕” usuwa z listy -->
                 <section class="recent-files" id="recentFiles" hidden aria-live="polite"></section>
-                <p class="empty-drop-hint" id="emptyDropHint" data-i18n="emptyDropHint">albo przeciągnij plik .docx lub .pdf w dowolne miejsce okna — PDF zamieni się w edytowalny .docx</p>
+                <p class="empty-drop-hint" id="emptyDropHint" data-i18n="emptyDropHint">albo przeciągnij plik w dowolne miejsce okna</p>
               </div>
               <div class="doc-zoom-shell" id="docZoomShell">
                 <div class="doc-canvas hidden" id="docCanvas"></div>

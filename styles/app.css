@@ -883,16 +883,17 @@ html.is-mobile .dwb-page-margin-guide { display: none; }
   );
 }
 
+/* Ekran startowy (docs/makiety/start-v1.html): całość wyśrodkowana na pełnej wysokości — bez pustej
+   połowy ekranu, gdy nie ma ostatnich plików. Tytuł wyraźnie większy niż tekst (30 px wobec 14 px). */
 .empty-state {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
-  min-height: 360px; color: var(--muted); text-align: center; padding: 32px 24px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
+  min-height: 100%; box-sizing: border-box; color: var(--muted); text-align: center; padding: 32px 24px;
 }
 .empty-icon {
-  width: 64px; height: 64px; border-radius: 18px; background: var(--accent-light);
+  width: 56px; height: 56px; border-radius: 16px; background: var(--accent-light);
   color: var(--accent); display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 18%, transparent);
 }
-.empty-state h2 { font-size: 18px; color: var(--ink); font-weight: 700; }
+.empty-state h2 { margin: 0; font-size: 30px; line-height: 1.15; letter-spacing: -0.01em; color: var(--ink); font-weight: 700; }
 /* Wejście raz na sesję, gdy gaśnie intro (ui-controls.js): ikona → tytuł → opis → przyciski.
    Start 200 ms po zgaśnięciu intro (w połowie jego zanikania), odstępy nierówne, nic nie blokuje. */
 .empty-state.intro-reveal > * { animation: dwb-rise-in 300ms var(--ease-out) 200ms backwards; }
@@ -902,7 +903,8 @@ html.is-mobile .dwb-page-margin-guide { display: none; }
 .empty-state.intro-reveal > .recent-files, .empty-state.intro-reveal > .empty-drop-hint { animation-delay: 340ms; }
 @keyframes dwb-rise-in { from { opacity: 0; transform: translateY(8px); } }
 @media (prefers-reduced-motion: reduce) { .empty-state.intro-reveal > * { animation-name: dwb-fade-in; } }
-.empty-state p { font-size: 13px; max-width: 320px; line-height: 1.45; }
+.empty-state p { margin: 0; font-size: 14px; max-width: 44ch; line-height: 1.45; }
+#emptySub { margin-top: -8px; }
 
 .search-hit { outline: 2px solid color-mix(in srgb, var(--warning) 55%, transparent); outline-offset: 2px; border-radius: 2px; }
 .search-hit-active { outline-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
@@ -1202,7 +1204,16 @@ html.is-mobile body.has-document .doc-panel {
   }
   .docx-preview-host { max-width: 100%; }
   .doc-zoom-shell { overflow: visible; min-width: min-content; }
-  .empty-state { min-height: 300px; padding: 28px 18px; }
+  .empty-state { padding: 20px 16px 28px; gap: 16px; }
+  .empty-state h2 { font-size: 26px; }
+  /* trzy przyciski pod głównym: jeden rząd równych kafelków (dawniej krzywa piramidka 2+1+1) */
+  .empty-state .empty-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+  .empty-state .empty-actions .btn.primary { grid-column: 1 / -1; block-size: 52px; font-size: 16px; }
+  .empty-state .empty-actions .btn:not(.primary) { flex-direction: column; gap: 2px; block-size: 64px; padding: 6px 4px; font-size: 12.5px; white-space: normal; line-height: 1.2; }
+  /* są ostatnie pliki: lista od razu pod przyciskami — bez dużej ikony i opisu, tytuł do lewej */
+  .empty-state:has(.recent-files:not([hidden])) { justify-content: flex-start; }
+  .empty-state:has(.recent-files:not([hidden])) :is(.empty-icon, #emptySub) { display: none; }
+  .empty-state:has(.recent-files:not([hidden])) h2 { align-self: flex-start; font-size: 24px; }
 
   html.is-mobile .sidebar {
     top: auto; bottom: 0; left: 0; right: 0;
@@ -1664,10 +1675,10 @@ body:not(.has-document) .doc-toolbar { display: none; }
 .draft-more-list .draft-card { padding-block: 8px; }
 .draft-more-list .draft-actions { margin-top: 4px; }
 .empty-state p.draft-note { font-size: 11.5px; color: var(--muted); margin: 0; max-width: none; text-align: center; }
-.empty-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 6px; }
-.empty-actions .btn { flex: none; padding: 10px 16px; border-radius: 12px; }
-.empty-drop-hint { font-size: 12px !important; color: var(--muted); margin: 0; }
-.empty-beta { font-size: 12px !important; color: var(--muted); margin: -2px 0 0; }
+.empty-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.empty-actions .btn { flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px; block-size: 44px; padding: 0 16px; border-radius: 12px; }
+.empty-actions .btn.primary { padding: 0 22px; }
+.empty-drop-hint { font-size: 12.5px !important; color: var(--muted); }
 .beta-tag { display: inline-block; padding: 0 6px; border-radius: var(--r-full); background: var(--accent-light); color: var(--accent); font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; vertical-align: 1px; }
 body.drag-active .doc-panel { outline: 2px dashed var(--accent); outline-offset: -6px; }
 
@@ -1687,7 +1698,7 @@ body.drag-active .doc-panel { outline: 2px dashed var(--accent); outline-offset:
   .hero-left { gap: 10px; }
   .hero-logo svg { width: 32px; height: 32px; }
   .hero-title { font-size: 14.5px; }
-  .hero-sub { font-size: 11.5px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hero-sub { display: none; } /* ucięty podpis nic nie mówił — na telefonie sama nazwa */
   .hero.has-file .hero-sub { display: none; }
   .hero-meta { font-size: 11.5px; }
   /* na wąsko zostają słowa; akapity i sposób zapisu są w panelu Plik */
@@ -3580,21 +3591,46 @@ body.dwb-painting .docx-preview-host * {
 @media (hover: hover) { .status-page:hover { color: var(--accent); background: var(--accent-light); } }
 
 /* ekran startowy: ostatnio otwierane */
-.recent-files { width: min(460px, 100%); margin: 14px auto 0; text-align: left; }
+.recent-files { width: min(560px, 100%); margin: 0 auto; text-align: left; }
 .recent-files[hidden] { display: none; }
-.recent-title { margin: 0 0 6px; font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
-.recent-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; } /* minmax: długa nazwa nie wypycha ✕ za ekran; bez max-height — plików najwyżej 6 */
-.recent-item { display: flex; align-items: stretch; gap: 4px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--panel); }
-.recent-open {
-  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
-  padding: 8px 12px; border: 0; background: none; border-radius: 12px; font: inherit; text-align: left; color: var(--ink); cursor: pointer;
+.recent-title { margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.recent-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; } /* minmax: długa nazwa nie wypycha ✕ za ekran */
+/* wiersz: typ pliku · nazwa i data (+ starsze wersje) · ✕ */
+.recent-item {
+  position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; column-gap: 12px;
+  padding: 8px 6px 8px 12px; border: 1px solid var(--border-subtle); border-radius: 12px; background: var(--panel);
 }
-.recent-name { max-width: 100%; overflow-wrap: anywhere; font-size: 13.5px; font-weight: 600; } /* cała nazwa, bez ucinania: wersje („…aneks nr 3/4…”) różnią się przy końcu, a plików jest najwyżej 6 */
-.recent-meta { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.recent-del { flex: none; width: 40px; border: 0; background: none; border-radius: 12px; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
-.recent-open:focus-visible, .recent-del:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent); }
+.recent-type {
+  inline-size: 32px; block-size: 32px; margin-top: 4px; border-radius: 8px; display: grid; place-items: center;
+  font-size: 10px; font-weight: 700; letter-spacing: .02em; background: var(--accent-light); color: var(--accent);
+}
+.recent-type.is-pdf { background: var(--danger-bg); color: var(--danger); }
+.recent-body { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 8px; }
+/* cała karta otwiera plik (::after na całej karcie); „starsze wersje”, wersje i ✕ leżą nad nim */
+.recent-open {
+  flex: 1 1 100%; min-width: 0; padding: 0; border: 0; background: none; font: inherit; text-align: left; color: var(--ink); cursor: pointer;
+}
+.recent-open::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+.recent-item { border-radius: 12px; }
+.recent-older, .recent-versions, .recent-del { position: relative; z-index: 1; }
+.recent-name { max-width: 100%; overflow-wrap: anywhere; font-size: 14px; font-weight: 600; } /* cała nazwa, bez ucinania: wersje („…aneks nr 3/4…”) różnią się przy końcu */
+.recent-meta { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.recent-older {
+  min-height: 24px; padding: 0; border: 0; background: none; font: inherit; font-size: 12.5px; font-weight: 600;
+  color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
+.recent-versions { flex: 1 1 100%; list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 2px; }
+.recent-versions[hidden] { display: none; }
+.recent-version {
+  inline-size: 100%; min-height: 32px; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 4px 10px;
+  border: 0; border-radius: 8px; background: color-mix(in srgb, var(--surface) 70%, transparent); font: inherit; font-size: 12.5px;
+  color: var(--ink-2); font-variant-numeric: tabular-nums; cursor: pointer;
+}
+.recent-del { inline-size: 36px; block-size: 36px; display: grid; place-items: center; border: 0; background: none; border-radius: 10px; color: var(--muted); cursor: pointer; }
+:is(.recent-del, .recent-older, .recent-version):focus-visible, .recent-open:focus-visible::after { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent); }
 @media (hover: hover) {
-  .recent-open:hover { background: var(--accent-light); color: var(--accent); }
+  .recent-item:has(.recent-open:hover) { border-color: var(--border); background: color-mix(in srgb, var(--panel) 92%, var(--accent)); }
+  .recent-version:hover { background: var(--accent-light); color: var(--accent); }
   .recent-del:hover { background: var(--danger-bg); color: var(--danger); }
 }
 
@@ -4275,6 +4311,15 @@ body.rb-on .status-bar .status-dirty { display: none; }
    Dawny panel boczny: ten sam ruch (280 ms, --ease-drawer) i to samo przypinanie (sidebar-docked),
    ale jeden panel naraz, za szyną; bez pinezki leży na marginesie (dokument się nie przesuwa). */
 .rb-rail { display: none; }
+/* Bez pliku: narzędzia do dokumentu znikają (szyna, wysuwany panel, tryb, powiększenie), szukanie
+   jest wyszarzone (core.js syncDocumentShellClass). Przypięty panel wraca sam po otwarciu pliku. */
+body.rb-on:not(.has-document) .rb-rail,
+body.rb-on:not(.has-document) .sidebar,
+body:not(.has-document) #rbModeBtn,
+body:not(.has-document) .status-bar .zoom-group,
+body:not(.has-document) #skipToDoc { display: none; }
+body.rb-on:not(.has-document) .main, :root.sidebar-docked.sidebar-open body.rb-on:not(.has-document) .main { margin-left: 0; }
+body:not(.has-document) :is(.doc-search, .doc-search-nav) { opacity: 0.5; }
 body.rb-on .rb-rail {
   position: absolute; left: 0; top: 2px; bottom: 0; z-index: 2; width: 44px; padding: 8px 0; box-sizing: border-box;
   display: flex; flex-direction: column; align-items: center; gap: 4px; border-radius: var(--r-xl);

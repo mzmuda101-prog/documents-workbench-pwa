@@ -284,8 +284,10 @@ const dwbComfort = (() => {
   // ── D17: ostatnio otwierane ───────────────────────────────────────────────
   // Kopia pliku (do 15 MB) + uchwyt (Chrome/Edge — wtedy otwieramy świeżą wersję z dysku).
   const RECENT_DB = "dwb-recent";
-  const RECENT_MAX = 6;
+  const RECENT_MAX = 6; // różnych nazw
+  const RECENT_OLDER_MAX = 3; // starszych wersji pliku o tej samej nazwie (lista je zwija)
   const RECENT_MAX_BYTES = 15 * 1024 * 1024;
+  const RECENT_TOTAL_BYTES = 60 * 1024 * 1024; // ponad to starsze wersje wypadają pierwsze
   let recentDb = null;
   function rdb() {
     if (!recentDb) {
@@ -320,9 +322,23 @@ const dwbComfort = (() => {
       const rec = { id, name: file.name, size: file.size, type: file.type || "", openedAt: Date.now(), bytes, handle: handle || null };
       await rtx("readwrite", (s) => { try { s.put(rec); } catch (_) { s.put({ ...rec, handle: null }); } });
       const all = await recentAll();
-      const extra = all.slice(RECENT_MAX);
+      const extra = recentOverflow(all);
       if (extra.length) await rtx("readwrite", (s) => { extra.forEach((x) => s.delete(x.id)); });
     } catch (_) { /* tryb prywatny / brak miejsca — bez listy */ }
+  }
+  // Co wypada z listy (all: od najnowszego): ponad RECENT_MAX nazw, ponad RECENT_OLDER_MAX starszych
+  // wersji jednej nazwy, a ponad RECENT_TOTAL_BYTES — starsze wersje (najnowszej nie ruszamy).
+  function recentOverflow(all) {
+    const perName = new Map();
+    let bytes = 0;
+    return all.filter((rec) => {
+      const n = perName.get(rec.name);
+      if (n === undefined && perName.size >= RECENT_MAX) return true;
+      if (n !== undefined && (n >= RECENT_OLDER_MAX + 1 || bytes + rec.size > RECENT_TOTAL_BYTES)) return true;
+      perName.set(rec.name, (n || 0) + 1);
+      bytes += rec.size;
+      return false;
+    });
   }
   async function openRecent(rec) {
     let file = null;
@@ -337,16 +353,27 @@ const dwbComfort = (() => {
     if (typeof openDocumentFiles === "function") await openDocumentFiles([item]);
     else await ingestFile(item.file, item.handle ? { handle: item.handle } : {});
   }
-  function whenText(ts) {
+  function whenText(ts, withTime) {
     const d = new Date(ts);
     const loc = I18N[currentLang]?.locale || "pl-PL";
     const today = new Date();
-    if (d.toDateString() === today.toDateString()) return d.toLocaleTimeString(loc, { hour: "numeric", minute: "2-digit" });
+    const time = d.toLocaleTimeString(loc, { hour: "numeric", minute: "2-digit" });
+    const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+    if (d.toDateString() === today.toDateString()) return t("recentToday", { t: time });
+    if (d.toDateString() === yesterday.toDateString()) return withTime ? t("recentYesterdayAt", { t: time }) : t("recentYesterday");
     // starszy niż ten rok — z rokiem, inaczej „9 paź” sprzed roku wygląda jak tegoroczny
-    return d.toLocaleDateString(loc, d.getFullYear() === today.getFullYear() ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" });
+    const date = d.toLocaleDateString(loc, d.getFullYear() === today.getFullYear() ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" });
+    return withTime ? `${date}, ${time}` : date;
+  }
+  const svgX = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+  async function openRecentFrom(btn, rec) {
+    btn.disabled = true;
+    try { await openRecent(rec); } catch (e) { log(String(e?.message || e), "error"); toast(t("recentOpenFailed"), "error"); }
+    btn.disabled = false;
   }
   let recentJob = 0;
   // target: inne miejsce na listę (ekran Plik — backstage.js) — tam lista jest też przy otwartym pliku
+  // Pliki o tej samej nazwie = jedna pozycja (najnowsza), starsze wersje zwinięte pod nią.
   async function renderRecent(target) {
     const host = target || document.getElementById("recentFiles");
     if (!host) return;
@@ -357,14 +384,24 @@ const dwbComfort = (() => {
     host.replaceChildren();
     host.hidden = !list.length;
     if (!list.length) return;
+    const groups = new Map();
+    list.forEach((rec) => { if (!groups.has(rec.name)) groups.set(rec.name, []); groups.get(rec.name).push(rec); });
     const h = document.createElement("h3");
     h.className = "recent-title";
     h.textContent = t("recentTitle");
     const ul = document.createElement("ul");
     ul.className = "recent-list";
-    list.forEach((rec) => {
+    groups.forEach((recs, fileName) => {
+      const [rec, ...older] = recs;
       const li = document.createElement("li");
       li.className = "recent-item";
+      const type = document.createElement("span");
+      const isPdf = /\.pdf$/i.test(fileName);
+      type.className = `recent-type${isPdf ? " is-pdf" : ""}`;
+      type.setAttribute("aria-hidden", "true");
+      type.textContent = isPdf ? "PDF" : "DOCX";
+      const body = document.createElement("div");
+      body.className = "recent-body";
       const open = document.createElement("button");
       open.type = "button";
       open.className = "recent-open";
@@ -376,29 +413,62 @@ const dwbComfort = (() => {
       const meta = document.createElement("span");
       meta.className = "recent-meta";
       meta.textContent = `${whenText(rec.openedAt)} · ${formatFileSize(rec.size)}`;
-      open.append(name, meta);
-      open.addEventListener("click", async () => {
-        open.disabled = true;
-        try { await openRecent(rec); } catch (e) { log(String(e?.message || e), "error"); toast(t("recentOpenFailed"), "error"); }
-        open.disabled = false;
-      });
+      meta.id = `recentMeta${ul.childElementCount}${target ? "b" : ""}`;
+      open.setAttribute("aria-describedby", meta.id);
+      open.append(name);
+      open.addEventListener("click", () => openRecentFrom(open, rec));
+      body.append(open, meta); // data w jednej linii z „+3 starsze wersje”
+      if (older.length) {
+        const label = () => (versions.hidden ? t(older.length === 1 ? "recentOlderOne" : "recentOlderFew", { n: older.length }) : t("recentOlderHide"));
+        const more = document.createElement("button");
+        more.type = "button";
+        more.className = "recent-older";
+        const versions = document.createElement("ul");
+        versions.className = "recent-versions";
+        versions.hidden = true;
+        versions.id = `recentVer${ul.childElementCount}${target ? "b" : ""}`;
+        more.setAttribute("aria-controls", versions.id);
+        more.setAttribute("aria-expanded", "false");
+        more.textContent = label();
+        more.addEventListener("click", () => {
+          versions.hidden = !versions.hidden;
+          more.setAttribute("aria-expanded", String(!versions.hidden));
+          more.textContent = label();
+        });
+        older.forEach((v) => {
+          const vli = document.createElement("li");
+          const vb = document.createElement("button");
+          vb.type = "button";
+          vb.className = "recent-version";
+          const when = document.createElement("span");
+          when.textContent = whenText(v.openedAt, true);
+          const size = document.createElement("span");
+          size.textContent = formatFileSize(v.size);
+          vb.append(when, size);
+          vb.setAttribute("aria-label", t("recentOpenVersion", { name: v.name, when: when.textContent }));
+          vb.addEventListener("click", () => openRecentFrom(vb, v));
+          vli.append(vb);
+          versions.append(vli);
+        });
+        body.append(more, versions);
+      }
       const del = document.createElement("button");
       del.type = "button";
       del.className = "recent-del";
-      del.textContent = "✕";
+      del.innerHTML = svgX;
       del.setAttribute("aria-label", t("recentRemove", { name: rec.name }));
       del.dataset.hint = "";
       del.dataset.hintPl = "Usuń z listy (plik na dysku zostaje)";
       del.dataset.hintEn = "Remove from the list (the file on disk stays)";
       del.addEventListener("click", async () => {
-        await rtx("readwrite", (s) => s.delete(rec.id)).catch(() => {});
+        await rtx("readwrite", (s) => { recs.forEach((r) => s.delete(r.id)); }).catch(() => {});
         renderRecent(target);
         toast(t("recentRemoved", { name: rec.name }), "success", {
           action: t("undoAction"),
-          onAction: () => rtx("readwrite", (s) => s.put(rec)).catch(() => {}).then(() => renderRecent(target)),
+          onAction: () => rtx("readwrite", (s) => { recs.forEach((r) => s.put(r)); }).catch(() => {}).then(() => renderRecent(target)),
         });
       });
-      li.append(open, del);
+      li.append(type, body, del);
       ul.append(li);
     });
     host.append(h, ul);

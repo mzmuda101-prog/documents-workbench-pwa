@@ -642,6 +642,11 @@ function syncDocumentShellClass() {
   if (closeDocBtn) closeDocBtn.classList.toggle("hidden", !originalFileBytes);
   const closePanelBtn = document.getElementById("closeDocPanelBtn");
   if (closePanelBtn) closePanelBtn.classList.toggle("hidden", !originalFileBytes);
+  // Bez pliku szukanie i ↑ ↓ są wyszarzone i poza kolejnością Tab (miejsce zostaje — nic nie skacze).
+  ["searchQuery", "frPrevBtn", "frNextBtn"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = !originalFileBytes;
+  });
 }
 
 function syncDocViewportHeight() {
