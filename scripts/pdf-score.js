@@ -53,15 +53,22 @@ async function run() {
     try { localStorage.setItem("dwb.forms.shade", "0"); } catch (_) { /* nic */ }
   });
   const page = await context.newPage();
-  await page.goto(APP_URL, { waitUntil: "load" });
-  await page.evaluate(() => document.getElementById("heroSplash")?.remove());
-  await page.addStyleTag({ content: ".dwb-page-break{display:none!important}.toast,#toastHost{display:none!important}" });
-  await page.evaluate(() => window.addEventListener("dwb:pdf-converted", (e) => (window.__conv = e.detail)));
+  // Każdy plik na świeżej stronie: pomiar chowa elementy do zrzutu i zmienia powiększenie — po dużym
+  // pliku następny potrafił się nie skończyć (2026-11-20: 3 min czekania i koniec całego przebiegu).
+  const fresh = async () => {
+    await page.goto(APP_URL, { waitUntil: "load" });
+    await page.evaluate(() => document.getElementById("heroSplash")?.remove());
+    await page.addStyleTag({ content: ".dwb-page-break{display:none!important}.toast,#toastHost{display:none!important}" });
+    await page.evaluate(() => window.addEventListener("dwb:pdf-converted", (e) => (window.__conv = e.detail)));
+  };
+  const failed = [];
 
   const results = {};
   for (const file of files) {
     const name = path.basename(file);
     const bytes = fs.readFileSync(file);
+    try {
+    await fresh();
     // 1) oryginał: strony jako obrazy (1 pt = 4/3 px, jak kartka w podglądzie przy 100%)
     const orig = await page.evaluate(async (b64) => {
       await loadLazyScript("app/pdf-import.js");
@@ -249,8 +256,14 @@ async function run() {
     const p = prev[name];
     const delta = (k) => (p && p[k] != null && r[k] != null ? ` (${r[k] - p[k] >= 0 ? "+" : ""}${(r[k] - p[k]).toFixed(1)})` : "");
     console.log(`${name.padEnd(48)} wygląd ${String(r.look).padStart(5)}%${delta("look")}  najsłabsza s.${r.worstPage} ${r.worst}%  słowa z PDF ${r.words == null ? "—" : r.words + "%"}${delta("words")}  ${(ms / 1000).toFixed(1)} s`);
+    } catch (e) {
+      // jeden zły plik nie przerywa pomiaru całej puli — zostaje na liście „nie udało się”
+      failed.push(name);
+      console.log(`${name.padEnd(48)} NIE UDAŁO SIĘ: ${String(e?.message || e).split("\n")[0].slice(0, 120)}`);
+    }
   }
   await browser.close();
+  if (failed.length) console.log(`\nNie udało się (${failed.length}, poza średnią): ${failed.join(", ")}`);
   const looks = Object.values(results).map((r) => r.look);
   const avg = Math.round((looks.reduce((a, b) => a + b, 0) / looks.length) * 10) / 10;
   const prevAvg = history.runs[history.runs.length - 1]?.avg;

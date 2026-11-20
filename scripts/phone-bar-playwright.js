@@ -80,6 +80,11 @@ async function run() {
   await page.tap('.ph-sheet-b [data-act="click:#fmtBold"]');
   await sleep(600);
   check("arkusz: Pogrubienie działa na tym samym zaznaczeniu (zdejmuje)", (await boldNow()) < 600 && (await page.evaluate(() => getSelection().toString())) === word);
+  // Cofnij obok Ponów (górny pasek z „Cofnij” bywa schowany przy otwartym arkuszu)
+  const firstTwo = await page.evaluate(() => [...document.querySelectorAll(".ph-sheet-b .ph-item span")].slice(0, 2).map((x) => x.textContent));
+  await page.tap('.ph-sheet-b [data-act="click:#undoBtn"]');
+  await sleep(600);
+  check("arkusz Główne: Cofnij i Ponów na początku, Cofnij cofa (pogrubienie wraca)", firstTwo.join("|") === "Cofnij|Ponów" && (await boldNow()) >= 600, JSON.stringify({ firstTwo, w: await boldNow() }));
   await page.tap('.ph-chip[data-tab="insert"]');
   await sleep(200);
   check("arkusz: zmiana karty pokazuje jej polecenia", (await page.evaluate(() => document.querySelector(".ph-sheet-b .ph-item span").textContent)) === "Tabela");

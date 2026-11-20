@@ -102,6 +102,7 @@ const dwbPhoneBar = (() => {
   const panel = document.querySelector(".doc-panel");
   const ribbonRoot = $("ribbon");
   const IC = {
+    undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/>',
     redo: '<path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h1"/>',
     bold: '<path d="M6 12h9a4 4 0 0 1 0 8H6V4h8a4 4 0 0 1 0 8"/>',
     italic: '<path d="M19 4h-9M14 20H5M15 4 9 20"/>',
@@ -134,7 +135,8 @@ const dwbPhoneBar = (() => {
   };
   // [akcja, klucz podpisu, ikona (gdy wstążka nie ma swojej), id kontrolki do stanu „wciśnięty”]
   const TABS = {
-    home: [["click:#redoBtn", "phRedo", IC.redo], ["click:#fmtBold", "phBold", IC.bold, "fmtBold"], ["click:#fmtItalic", "phItalic", IC.italic, "fmtItalic"], ["click:#fmtUnderline", "phUnderline", IC.under, "fmtUnderline"],
+    // Cofnij obok Ponów: górny pasek z „Cofnij” chowa się przy otwartym arkuszu — sam „Ponów” wyglądał jak brak cofania
+    home: [["click:#undoBtn", "phUndo", IC.undo], ["click:#redoBtn", "phRedo", IC.redo], ["click:#fmtBold", "phBold", IC.bold, "fmtBold"], ["click:#fmtItalic", "phItalic", IC.italic, "fmtItalic"], ["click:#fmtUnderline", "phUnderline", IC.under, "fmtUnderline"],
       ["click:#fmtStrike", "phStrike", IC.strike, "fmtStrike"], ["menu:fmtColorBtn", "phColor", IC.color], ["highlight", "rbHighlight"], ["style", "paraStyleLabel", IC.pil],
       ["bullets", "rbBullets"], ["numbering", "rbNumbering"], ["menu:fmtListBtn", "listLabel", IC.listlv], ["menu:fmtAlignBtn", "phAlign", IC.al], ["menu:fmtSpacingBtn", "spacingLabel", IC.spacing],
       ["indent", "indentMore"], ["outdent", "indentLess"], ["menu:fmtCaseBtn", "phCase", IC.caseI], ["click:#fmtClearBtn", "phClear", IC.clear]],
