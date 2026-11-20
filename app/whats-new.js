@@ -7,6 +7,11 @@
 
 const WHATS_NEW = [
   {
+    v: "v1.01.36",
+    pl: ["PDF → Word: skan zapisany przez skaner na ogromnej stronie jest zmniejszany do A4 w całości — dawniej każda strona szła na 3 poziome kartki z tekstem wielkości 49 pt."],
+    en: ["PDF → Word: a scan saved on a huge page is scaled down to A4 as a whole — each page used to become 3 landscape sheets with 49 pt text."],
+  },
+  {
     v: "v1.01.35",
     pl: ["PDF → Word: wykłady i notatki z LaTeX-a — polskie litery są poprawne („Możemy”, a nie „Mo»emy”), słowa mają spacje, a wiersze stoją w dobrej kolejności."],
     en: ["PDF → Word: LaTeX lectures and notes — Polish letters are correct, words keep their spaces and lines stay in the right order."],
