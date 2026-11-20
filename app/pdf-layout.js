@@ -422,12 +422,21 @@
   // każdy zakreślony wiersz robił się osobną tabelą o stałej szerokości (przesunięty tekst, zła
   // kolejność przy zawiniętym zakreśleniu, ucięcie na telefonie). Teraz litery dostają tło
   // (w:shd w runie, jak zakreślenie w Wordzie), a prostokąt znika z rysunków i z tabel.
+  // Zakreślenie z warstwy adnotacji (r.annot) jest nim na pewno. Tło narysowane w treści — tylko
+  // samotne: komórki tabeli stykają się z sąsiednimi tłami albo liniami (tak wyglądała tabela
+  // w „informacje_ubezpieczenie…”: tło w każdej komórce z jednym wierszem tekstu).
   function applyHighlights(raw, frags) {
     const taken = new Set();
     const glyphs = frags.filter((f) => f.type === "text").flatMap((f) => f.glyphs);
+    const near = (a, b2, d) => a.x0 <= b2.x1 + d && a.x1 >= b2.x0 - d && a.y0 <= b2.y1 + d && a.y1 >= b2.y0 - d;
+    const edges = [...raw.rects.filter((o) => o.x1 - o.x0 < raw.width * 0.97 || o.y1 - o.y0 < raw.height * 0.97), ...raw.lines.map((l) => ({ x0: Math.min(l.x0, l.x1), x1: Math.max(l.x0, l.x1), y0: Math.min(l.y0, l.y1), y1: Math.max(l.y0, l.y1), line: true }))];
+    // zakreślenie zawiniętego tekstu: prostokąty linii pod sobą o innych brzegach — to nie komórki
+    const stackedLine = (a, o) => !o.line && Math.abs(a.x0 - o.x0) > 2 && Math.abs(a.x1 - o.x1) > 2;
+    const alone = (r) => !edges.some((o) => o !== r && near(r, o, 1) && !stackedLine(r, o));
     for (const r of raw.rects) {
       const w = r.x1 - r.x0, h = r.y1 - r.y0;
       if (!r.color || r.color === "ffffff" || w < 4 || h < 4) continue;
+      if (!r.annot && !alone(r)) continue;
       const inside = glyphs.filter((g) => {
         const cx = (g.x + g.x1) / 2, cy = g.y - g.size * 0.3;
         return cx >= r.x0 - 0.5 && cx <= r.x1 + 0.5 && cy >= r.y0 - 0.5 && cy <= r.y1 + 0.5;
