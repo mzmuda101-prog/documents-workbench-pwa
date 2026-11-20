@@ -7,6 +7,19 @@
 
 const WHATS_NEW = [
   {
+    v: "v1.01.33",
+    pl: [
+      "PDF → Word: zakreślenia z PDF-a są tłem tekstu, jak w Wordzie — tekst nie przesuwa się, nie zmienia kolejności i nie ucina się na telefonie.",
+      "Linie do wpisywania („recover ______ energy”) widać na całą długość, ze spacjami po obu stronach — także w widoku mobilnym.",
+      "Wydruk zachowuje zakreślenia, tło komórek i linie tabulatorów.",
+    ],
+    en: [
+      "PDF → Word: highlights from a PDF become text shading, like in Word — text no longer shifts, changes order or gets cut off on phones.",
+      "Fill-in lines (“recover ______ energy”) show at full length with spaces on both sides — in mobile view too.",
+      "Printing keeps highlights, cell shading and tab lines.",
+    ],
+  },
+  {
     v: "v1.01.32",
     pl: [
       "Nowy ekran startowy: krótszy tytuł, równe przyciski, a na telefonie ostatnie pliki od razu widoczne.",

@@ -108,6 +108,7 @@
         p.push('<w:highlight w:val="yellow"/>');
       }
       if (t.underline) p.push('<w:u w:val="single"/>');
+      if (t.shade) p.push(`<w:shd w:val="clear" w:color="auto" w:fill="${t.shade.toUpperCase()}"/>`); // kolejność w rPr: u → shd → vertAlign
       if (t.vert) p.push(`<w:vertAlign w:val="${t.vert}"/>`);
       return p.length ? `<w:rPr>${p.join("")}</w:rPr>` : "";
     }

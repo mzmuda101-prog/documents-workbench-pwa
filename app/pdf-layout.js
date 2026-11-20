@@ -417,6 +417,35 @@
   }
 
   // ---------------------------------------------------------------- tabele z linii/teł
+  // Podświetlenie tekstu (zakreślacz z PDF-a): kolorowy prostokąt na wysokość jednej linii, który
+  // ciasno obejmuje litery z tej jednej linii. Dawniej trafiał do detectTables jako tło komórki —
+  // każdy zakreślony wiersz robił się osobną tabelą o stałej szerokości (przesunięty tekst, zła
+  // kolejność przy zawiniętym zakreśleniu, ucięcie na telefonie). Teraz litery dostają tło
+  // (w:shd w runie, jak zakreślenie w Wordzie), a prostokąt znika z rysunków i z tabel.
+  function applyHighlights(raw, frags) {
+    const taken = new Set();
+    const glyphs = frags.filter((f) => f.type === "text").flatMap((f) => f.glyphs);
+    for (const r of raw.rects) {
+      const w = r.x1 - r.x0, h = r.y1 - r.y0;
+      if (!r.color || r.color === "ffffff" || w < 4 || h < 4) continue;
+      const inside = glyphs.filter((g) => {
+        const cx = (g.x + g.x1) / 2, cy = g.y - g.size * 0.3;
+        return cx >= r.x0 - 0.5 && cx <= r.x1 + 0.5 && cy >= r.y0 - 0.5 && cy <= r.y1 + 0.5;
+      });
+      const ink = inside.filter((g) => !g.isSpace);
+      if (!ink.length) continue;
+      const size = Math.max(...ink.map((g) => g.size));
+      const ys = ink.map((g) => g.y);
+      if (Math.max(...ys) - Math.min(...ys) > size * 0.5) continue; // kilka linii = tło akapitu/komórki
+      if (h > size * 1.9) continue;
+      const x0 = Math.min(...ink.map((g) => g.x)), x1 = Math.max(...ink.map((g) => g.x1));
+      if (x1 - x0 < w * 0.6) continue; // tekst zajmuje mały kawałek prostokąta = komórka, nie zakreślenie
+      for (const g of inside) g.shade = r.color;
+      taken.add(r);
+    }
+    return taken.size ? { ...raw, rects: raw.rects.filter((r) => !taken.has(r)) } : raw;
+  }
+
   function detectTables(raw, frags, W, H) {
     const tol = 1.6;
     let rects = raw.rects.filter((r) => {
@@ -906,8 +935,21 @@
             const endX = next ? next.x : run[run.length - 1].x1;
             const tail = glyphs.slice(j).filter((x) => !x.isSpace);
             const isPageNo = next && p === line.parts.length - 1 && tail.length <= 6 && tail.every((x) => !/[.…_]/.test(x.u));
+            // Linia do wpisywania („recover ________ energy”): spacje przed i za linią zostają, a linia
+            // kończy się tam, gdzie podkreślniki — dawniej sklejała się ze słowami po obu stronach.
+            const blank = leader === "underscore" && !isPageNo;
+            const lastTok = toks[toks.length - 1];
+            // spacja w PDF-ie bywa znakiem albo samą przerwą między literami — liczymy obie
+            const gap = (a, b2) => a && b2 && b2.x - a.x1 > g.size * 0.15;
+            const before = glyphs[i - 1], last = run[run.length - 1];
+            if (blank && before && (before.isSpace || gap(before, run[0])) && lastTok?.type === "text" && !/\s$/.test(lastTok.text)) lastTok.text += " ";
+            const spaceAfter = blank && next && (glyphs[j - 1].isSpace || gap(last, next));
             if (!next) {
               toks.push({ type: "tab", pos: endX - regionX0, leader, align: "left", startX: run[0].x, endX, fill: true, trailing: true });
+            } else if (spaceAfter) {
+              const lineEnd = run[run.length - 1].x1;
+              toks.push({ type: "tab", pos: lineEnd - regionX0, leader, align: "left", leaderTo: lineEnd, startX: run[0].x, fill: true, keepSpaces: true });
+              pushText(glyphs[j - 1].isSpace ? glyphs[j - 1] : next, " ");
             } else {
               toks.push({ type: "tab", pos: endX - regionX0, leader, align: isPageNo ? "right" : "left", leaderTo: endX, startX: run[0].x, fill: true });
             }
@@ -942,7 +984,7 @@
     }
     // spacje na brzegach tekstu przy tabulatorze
     for (let k = 0; k < toks.length; k++) {
-      if (toks[k].type !== "tab") continue;
+      if (toks[k].type !== "tab" || toks[k].keepSpaces) continue; // linia do wpisywania: spacje to część zdania
       if (k > 0 && toks[k - 1].type === "text") toks[k - 1].text = toks[k - 1].text.replace(/ +$/, "");
       if (k + 1 < toks.length && toks[k + 1].type === "text") toks[k + 1].text = toks[k + 1].text.replace(/^ +/, "");
     }
@@ -963,9 +1005,10 @@
       hScale: g.xScale && Math.abs(g.xScale - 1) > 0.05 ? Math.round(g.xScale * 100) : null,
       spacing: g.fitSpacing && Math.abs(g.fitSpacing) >= 2 ? g.fitSpacing : null,
       hl: !!g.doubt, // słowo z OCR o mniejszej pewności — żółte „do sprawdzenia”
+      shade: g.shade || null, // zakreślenie z PDF-a (applyHighlights)
     };
     if (s.vert) s.size = Math.round(size * 2 / 1.0) / 2; // indeks: zachowaj prawdziwy rozmiar
-    s.key = [s.font, s.size, s.bold, s.italic, s.color, s.vert, s.underline, s.strike, s.hScale, s.spacing, s.hl].join("|");
+    s.key = [s.font, s.size, s.bold, s.italic, s.color, s.vert, s.underline, s.strike, s.hScale, s.spacing, s.hl, s.shade].join("|");
     return s;
   }
 
@@ -1602,6 +1645,7 @@
     frags = mergeFieldFrags(frags, annotationFrags(raw, opts));
     const bulletShapes = shapeBullets(raw, frags);
     applyLinks(frags, raw.annotations);
+    raw = applyHighlights(raw, frags);
     const { tables, leftovers } = detectTables(raw, frags, W, H);
     const rules = applyUnderlines(frags, leftovers.hSegs);
 
