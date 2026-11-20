@@ -354,6 +354,13 @@ async function run() {
   check("stopka „Strona N z M” jako pola PAGE/NUMPAGES", st.footerPage, "");
   check("stopka nie została w treści", !st.paras.some((p) => /^Strona \d+ z \d+$/.test(p.trim())), "");
   check("spis treści: tabulator z kropkami", st.dotTab, "");
+  // LaTeX (kodowanie T1 bez mapy znaków): „Mo»emy wi¦c” → „Możemy więc”; cudzysłów » i ± przy spacji/cyfrze zostają
+  const t1Fix = await page.evaluate(() => {
+    const mk = (str, y = 100) => [...str].map((c, i) => ({ u: c, x: i * 6, y, size: 12, fontRef: "f1", t1: DWPdf._T1_PL[c] || null }));
+    const run = (str) => { const g = mk(str); DWPdf._fixT1Polish(g); return g.map((x) => x.u).join(""); };
+    return [run("Mo»emy wi¦c zapisa¢ ªatwo"), run("» cytat « 5±2")];
+  });
+  check("PDF z LaTeX-a (T1): polskie litery w słowach, cudzysłów i ± bez zmian", t1Fix[0] === "Możemy więc zapisać łatwo" && t1Fix[1] === "» cytat « 5±2", JSON.stringify(t1Fix));
   check("zakreślenie: tło w tekście (w:shd w runie), nie tabela", st.hlRun && !st.hlInTable, JSON.stringify({ hlRun: st.hlRun, hlInTable: st.hlInTable }));
   check("linia do wpisywania: tabulator z podkreśleniem, spacje przed i za", st.blank, "");
   // linia to tło na całą szerokość pola (dawniej podkreślenie jednej spacji = krótka kreska)

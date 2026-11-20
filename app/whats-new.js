@@ -7,6 +7,11 @@
 
 const WHATS_NEW = [
   {
+    v: "v1.01.35",
+    pl: ["PDF → Word: wykłady i notatki z LaTeX-a — polskie litery są poprawne („Możemy”, a nie „Mo»emy”), słowa mają spacje, a wiersze stoją w dobrej kolejności."],
+    en: ["PDF → Word: LaTeX lectures and notes — Polish letters are correct, words keep their spaces and lines stay in the right order."],
+  },
+  {
     v: "v1.01.34",
     pl: ["Telefon: w arkuszu „Główne” jest teraz „Cofnij” obok „Ponów” — nie trzeba go szukać w górnym pasku."],
     en: ["Phone: the “Home” sheet now has “Undo” next to “Redo” — no need to look for it in the top bar."],

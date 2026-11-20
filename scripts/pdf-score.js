@@ -64,8 +64,10 @@ async function run() {
   const failed = [];
 
   const results = {};
+  // ta sama nazwa w dwóch folderach (Laboratorium_3.pdf) — z folderem, inaczej wyniki nadpisują się w historii
+  const dup = (f) => files.filter((o) => path.basename(o) === path.basename(f)).length > 1;
   for (const file of files) {
-    const name = path.basename(file);
+    const name = dup(file) ? `${path.basename(path.dirname(file))}/${path.basename(file)}` : path.basename(file);
     const bytes = fs.readFileSync(file);
     try {
     await fresh();
@@ -89,7 +91,10 @@ async function run() {
         await p.render({ canvasContext: ctx, viewport: vp, annotationMode: pdfjs.AnnotationMode.ENABLE }).promise; // z wyglądem pól formularza — jak w przeglądarce PDF
         pages.push(c.toDataURL("image/png"));
         const tc = await p.getTextContent();
-        tc.items.forEach((it) => String(it.str).split(/\s+/).forEach((w) => { if (/\p{L}{3,}/u.test(w)) words.add(w.replace(/[.,:;()„”"!?]/g, "")); }));
+        // wzorzec słów też po kodowaniu T1 z LaTeX-a („Mo»emy” → „Możemy”), jak w konwersji (pdf-extract fixT1Polish)
+        const T1 = { "¡": "ą", "¢": "ć", "¦": "ę", "ª": "ł", "«": "ń", "±": "ś", "¹": "ź", "»": "ż" };
+        const t1 = (w) => w.replace(/(?<=\p{L})[¡¢¦ª«±¹»]|[¡¢¦ª«±¹»](?=\p{L})/gu, (c) => T1[c]);
+        tc.items.forEach((it) => String(it.str).split(/\s+/).forEach((w) => { if (/\p{L}{3,}/u.test(w)) words.add(t1(w).replace(/[.,:;()„”"!?]/g, "")); }));
       }
       try { await (doc.loadingTask || doc).destroy(); } catch (_) { /* nic */ }
       return { pages, words: [...words] };
@@ -252,7 +257,7 @@ async function run() {
       ms,
     };
     results[name] = r;
-    if (process.env.IMAGES) scores.forEach((s, i) => s.img && fs.writeFileSync(path.join(IMG_DIR, `${name}-s${i + 1}.png`), Buffer.from(s.img.split(",")[1], "base64")));
+    if (process.env.IMAGES) scores.forEach((s, i) => s.img && fs.writeFileSync(path.join(IMG_DIR, `${name.replace(/\//g, " - ")}-s${i + 1}.png`), Buffer.from(s.img.split(",")[1], "base64")));
     const p = prev[name];
     const delta = (k) => (p && p[k] != null && r[k] != null ? ` (${r[k] - p[k] >= 0 ? "+" : ""}${(r[k] - p[k]).toFixed(1)})` : "");
     console.log(`${name.padEnd(48)} wygląd ${String(r.look).padStart(5)}%${delta("look")}  najsłabsza s.${r.worstPage} ${r.worst}%  słowa z PDF ${r.words == null ? "—" : r.words + "%"}${delta("words")}  ${(ms / 1000).toFixed(1)} s`);

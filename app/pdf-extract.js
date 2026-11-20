@@ -478,7 +478,18 @@
           const spacingDir = vertical ? 1 : -1;
           // Macierz tekst → strona: CTM × Tm × przesunięcie (tx, ty+rise).
           const base = mul(gs.ctm, tm);
-          const emH = size * (fontMatrix[3] ? Math.abs(fontMatrix[3]) * 1000 : 1);
+          let emH = size * (fontMatrix[3] ? Math.abs(fontMatrix[3]) * 1000 : 1);
+          // Type3 (np. bitmapowe fonty LaTeX-a z dvips: macierz 0,00403) — skala macierzy nie mówi,
+          // ile ma „em”: tekst 30 pt wychodził jako 120 pt (spacje i wiersze z rozmiaru — „Wnaszym”).
+          // Bierzemy ten rozmiar, przy którym litery mają zwykłą szerokość (0,3–1 em), jak pdf.js.
+          if (font.isType3Font && fontMatrix[3] && Math.abs(Math.abs(fontMatrix[3]) - 0.001) > 1e-6) {
+            const advs = args[0].filter((g) => typeof g !== "number" && !g.isSpace && g.width > 0).map((g) => g.width * Math.abs(fontMatrix[0]) * size);
+            if (advs.length) {
+              const avg = advs.reduce((a, b) => a + b, 0) / advs.length;
+              const fits = (em) => avg / em >= 0.3 && avg / em <= 1;
+              if (!fits(emH) && fits(size)) emH = size;
+            }
+          }
           // Rozmiar na stronie = długość wektora osi Y tekstu.
           const yScale = Math.hypot(base[2], base[3]);
           const xScale = Math.hypot(base[0], base[1]);
@@ -500,7 +511,10 @@
             const charW = vertical ? adv - spacing * dir : adv + spacing * dir;
             const p0 = apply(base, gx, ty + gs.rise);
             const p1 = apply(base, gx + adv * hs, ty + gs.rise);
-            const u = g.unicode || "";
+            let u = g.unicode || "";
+            // Font w kodowaniu T1 (LaTeX, „Cork”) bez własnej mapy znaków: pdf.js czyta polskie litery jak
+            // Latin-1 („Mo»emy”, „wi¦c”). Kandydat do zamiany — rozstrzyga sąsiedztwo liter (fixT1Polish).
+            const t1 = T1_PL[u] || null;
             // Znak o kodzie sterującym, ale WIDOCZNY: albo rysunek (szare tła etykiet malowane
             // tysiącami „\n” co 0,2 pt — formularz DC-85), albo litera z zepsutym kodem (ą/Ę
             // w tym samym PDF). Rozstrzyga pdf-layout po rozpoznaniu kształtu (glyphFixes):
@@ -535,6 +549,7 @@
                 order: order++,
                 xScale: xScale / (yScale || 1),
                 paint,
+                t1,
               });
             }
             x += vertical ? -charW : charW;
@@ -677,12 +692,29 @@
       }
     } catch (_) { /* adnotacje są dodatkiem */ }
 
+    fixT1Polish(glyphs);
     return {
       width: viewport.width,
       height: viewport.height,
       glyphs, rects, lines, graphics, images, annotations,
       opCount: fnArray.length,
     };
+  }
+
+  // Kodowanie T1 (Cork) z LaTeX-a: polskie litery na miejscach znaków Latin-1.
+  const T1_PL = { "\u00a1": "ą", "\u00a2": "ć", "\u00a6": "ę", "\u00aa": "ł", "\u00ab": "ń", "\u00b1": "ś", "\u00b9": "ź", "\u00bb": "ż",
+    "\u0081": "Ą", "\u0082": "Ć", "\u0086": "Ę", "\u008a": "Ł", "\u008b": "Ń", "\u0091": "Ś", "\u0099": "Ź", "\u009b": "Ż" };
+  // Zamiana tylko wewnątrz słowa (litera obok, ten sam font) — prawdziwy cudzysłów » czy znak ± stoi
+  // przy spacji albo cyfrze i zostaje bez zmian.
+  function fixT1Polish(glyphs) {
+    const isL = (g) => g && /\p{L}/u.test(g.u) && !g.t1;
+    for (let i = 0; i < glyphs.length; i++) {
+      const g = glyphs[i];
+      if (!g.t1) continue;
+      const near = (k) => glyphs[k] && glyphs[k].fontRef === g.fontRef && Math.abs(glyphs[k].y - g.y) < g.size * 0.3 && (isL(glyphs[k]) || glyphs[k].t1);
+      if (near(i - 1) || near(i + 1)) g.u = g.t1;
+    }
+    for (const g of glyphs) delete g.t1;
   }
 
   function segLine([x0, y0, x1, y1], width, color, order) {
@@ -784,6 +816,8 @@
   NS.extractPage = extractPage;
   NS.parseFontName = parseFontName;
   NS.readSfntInfo = readSfntInfo;
+  NS._fixT1Polish = fixT1Polish;
+  NS._T1_PL = T1_PL;
   NS._mul = mul;
   NS._apply = apply;
 })(typeof globalThis !== "undefined" ? globalThis : window);
