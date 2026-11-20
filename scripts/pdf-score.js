@@ -52,7 +52,7 @@ async function run() {
     // wyróżnienie pól formularza (ramki, tło) to interfejs jak znaczniki granic stron — na wydruku znika
     try { localStorage.setItem("dwb.forms.shade", "0"); } catch (_) { /* nic */ }
   });
-  const page = await context.newPage();
+  let page = await context.newPage();
   // Każdy plik na świeżej stronie: pomiar chowa elementy do zrzutu i zmienia powiększenie — po dużym
   // pliku następny potrafił się nie skończyć (2026-11-20: 3 min czekania i koniec całego przebiegu).
   const fresh = async () => {
@@ -70,7 +70,9 @@ async function run() {
     const name = dup(file) ? `${path.basename(path.dirname(file))}/${path.basename(file)}` : path.basename(file);
     const bytes = fs.readFileSync(file);
     try {
+    if (page.isClosed()) page = await context.newPage(); // po awarii karty (brak pamięci) — dalej z nową
     await fresh();
+    if (process.env.SCORE_DEBUG) console.error(`  [oryginał] ${name}`);
     // 1) oryginał: strony jako obrazy (1 pt = 4/3 px, jak kartka w podglądzie przy 100%)
     const orig = await page.evaluate(async (b64) => {
       await loadLazyScript("app/pdf-import.js");
@@ -81,7 +83,10 @@ async function run() {
       const words = new Set();
       for (let i = 1; i <= doc.numPages; i++) {
         const p = await doc.getPage(i);
-        const vp = p.getViewport({ scale: 4 / 3 });
+        // 1 pt = 4/3 px, ale najwyżej 2000 px na dłuższym boku: skan 2261 × 3329 pt dawał 3000 × 4400 px
+        // na stronę i karta padała z braku pamięci (A4 = 1123 px — zwykłe strony bez zmian)
+        const vp1 = p.getViewport({ scale: 1 });
+        const vp = p.getViewport({ scale: Math.min(4 / 3, 2000 / Math.max(vp1.width, vp1.height)) });
         const c = document.createElement("canvas");
         c.width = Math.round(vp.width);
         c.height = Math.round(vp.height);
@@ -100,6 +105,7 @@ async function run() {
       return { pages, words: [...words] };
     }, bytes.toString("base64"));
 
+    if (process.env.SCORE_DEBUG) console.error(`  [konwersja] ${name}`);
     // 2) konwersja w aplikacji (skan: „Rozpoznaj tekst”)
     await page.evaluate(() => { window.__conv = null; if (typeof setDirtyState === "function") setDirtyState(false); });
     const t0 = Date.now();
@@ -135,7 +141,8 @@ async function run() {
     });
     const secs = await page.$$("section.docx");
     const conv = [];
-    for (const s of secs.slice(0, orig.pages.length)) {
+    // wszystkie kartki: wysoka strona (długa notatka z Notatek, paragon) wychodzi jako kilka kartek A4
+    for (const s of secs.slice(0, Math.max(orig.pages.length, 60))) {
       await s.evaluate((el) => el.scrollIntoView({ block: "start" }));
       await page.waitForTimeout(80);
       const box = await s.boundingBox();
@@ -144,6 +151,7 @@ async function run() {
     const text = await page.evaluate(() => [...document.querySelectorAll("section.docx")].map((s) => s.innerText).join(" "));
     await page.evaluate(() => document.querySelectorAll("[data-score-hidden]").forEach((el) => { el.style.visibility = ""; delete el.dataset.scoreHidden; }));
 
+    if (process.env.SCORE_DEBUG) console.error(`  [porównanie] ${name}: ${conv.length} kartek`);
     // 3) porównanie obrazów (w przeglądarce, kanwa)
     const scores = await page.evaluate(async ({ a, b, wantImg }) => {
       const load = (src) => new Promise((r) => { const im = new Image(); im.onload = () => r(im); im.src = src; });
@@ -171,12 +179,131 @@ async function run() {
         return cur;
       };
       const out = [];
+      // Konwersja tnie wysoką stronę na kartki A4 (pdf-ocr / pdf-convert). Wtedy kartki tej strony
+      // sklejamy w jeden obraz — dawniej strona 1 (cała notatka) szła do porównania z samą kartką 1
+      // i długie notatki miały 4–14%, choć wynik był dobry.
+      const As = await Promise.all(a.map(load));
+      const Bs = await Promise.all(b.map(load));
+      let groups = As.map((_, i) => (Bs[i] ? [Bs[i]] : []));
+      // Notatka wyeksportowana jako wąski pasek na kartce A4 (Notatki na iPhonie): konwersja odcina puste
+      // pole i powiększa pasek na kilka kartek. Oryginał przycinamy wtedy do treści — porównujemy treść.
+      // prostokąt z „tuszem” (ciemniejsze niż tło) na obrazie
+      // na zmniejszonej kopii (najwyżej 1500 px) — skany bywają 3000 × 4400 px i pełny odczyt pikseli
+      // kilku stron naraz wywracał kartę („Target page… closed”)
+      const inkBox = (im) => {
+        const k = Math.min(1, 1500 / Math.max(im.width, im.height));
+        const c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round(im.width * k)); c.height = Math.max(1, Math.round(im.height * k));
+        const x = c.getContext("2d");
+        x.drawImage(im, 0, 0, c.width, c.height);
+        const d = x.getImageData(0, 0, c.width, c.height).data;
+        let x0 = c.width, y0 = c.height, x1 = -1, y1 = -1;
+        for (let y = 0; y < c.height; y++) for (let xx = 0; xx < c.width; xx++) {
+          const i = (y * c.width + xx) * 4;
+          if (d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11 < 200) { if (xx < x0) x0 = xx; if (xx > x1) x1 = xx; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+        }
+        if (x1 < 0) return null;
+        const up = (v, max) => Math.min(max, Math.max(0, Math.round(v / k)));
+        return { x0: up(x0, im.width - 1), y0: up(y0, im.height - 1), x1: up(x1 + 1, im.width - 1), y1: up(y1 + 1, im.height - 1) };
+      };
+      const cropToInk = async (im, vertOnly) => {
+        const r = inkBox(im);
+        if (!r) return im;
+        const x0 = vertOnly ? 0 : r.x0, x1 = vertOnly ? im.width - 1 : r.x1;
+        const o = document.createElement("canvas");
+        o.width = x1 - x0 + 1; o.height = r.y1 - r.y0 + 1;
+        o.getContext("2d").drawImage(im, x0, r.y0, o.width, o.height, 0, 0, o.width, o.height);
+        return load(o.toDataURL("image/png"));
+      };
+      if (Bs.length > As.length && Bs[0]) {
+        const sheet = Bs[0].height / Bs[0].width;
+        const tryGroups = (list) => {
+          const n = list.map((im) => Math.max(1, Math.ceil(im.height / im.width / sheet - 0.05)));
+          if (n.reduce((x, y) => x + y, 0) !== Bs.length) return null;
+          let k = 0;
+          return n.map((c) => Bs.slice(k, (k += c)));
+        };
+        let g = tryGroups(As);
+        if (!g) {
+          const cropped = [];
+          for (const im of As) cropped.push(await cropToInk(im)); // po kolei — pamięć
+          // z ilu kartek składa się wynik danej strony: wg proporcji przyciętej treści, resztę dostaje najwyższa
+          const want = cropped.map((im) => Math.max(1, Math.round(im.height / im.width / sheet)));
+          const diff = Bs.length - want.reduce((x, y) => x + y, 0);
+          if (Math.abs(diff) <= Math.max(1, As.length)) {
+            const tall = want.indexOf(Math.max(...want));
+            want[tall] = Math.max(1, want[tall] + diff);
+            if (want.reduce((x, y) => x + y, 0) === Bs.length) {
+              let k = 0;
+              g = want.map((c) => Bs.slice(k, (k += c)));
+              cropped.forEach((im, i) => { if (g[i].length > 1) As[i] = im; });
+            }
+          }
+        }
+        if (g) groups = g;
+      }
+      const stitch = async (list) => {
+        if (list.length === 1) return list[0];
+        const w = list[0].width, h = list.reduce((s2, im) => s2 + im.height * (w / im.width), 0);
+        const c = document.createElement("canvas");
+        c.width = w; c.height = Math.round(h);
+        const x = c.getContext("2d");
+        let y = 0;
+        for (const im of list) { const ih = im.height * (w / im.width); x.drawImage(im, 0, y, w, ih); y += ih; }
+        return load(c.toDataURL("image/png"));
+      };
       for (let i = 0; i < a.length; i++) {
-        const A = await load(a[i]);
-        if (!b[i]) { out.push({ f1: 0, missing: true }); continue; }
-        const B = await load(b[i]);
-        const W = A.width, H = A.height;
-        const ma = ink(A, W, H), mb = ink(B, W, H);
+        const A = As[i];
+        if (!groups[i]?.length) { out.push({ f1: 0, missing: true }); continue; }
+        const split = groups[i].length > 1;
+        const W = split ? Math.min(1000, Math.max(A.width, 400)) : A.width;
+        const H = split ? Math.round(A.height * (W / A.width)) : A.height;
+        const ma = ink(A, W, H);
+        let mb;
+        if (split) {
+          // Pocięta strona: każda kartka (bez pustych pasów u góry/dołu, w wspólnych granicach treści)
+          // szuka swojego miejsca w oryginale blisko końca poprzedniej — cięcie zmienia odstęp w tym
+          // miejscu, a jedno przesunięcie dla całej strony sumowało te różnice w dryf w dół.
+          const sl = [];
+          for (const im of groups[i]) sl.push(await cropToInk(im, true));
+          let gx0 = Infinity, gx1 = -1;
+          for (const im of sl) { const r = inkBox(im); if (r) { gx0 = Math.min(gx0, r.x0); gx1 = Math.max(gx1, r.x1); } }
+          mb = new Uint8Array(W * H);
+          let yExp = 0;
+          for (const im of sl) {
+            if (gx1 < 0) break;
+            const sw = gx1 - gx0 + 1, sh = Math.max(1, Math.round(im.height * (W / sw)));
+            const c = document.createElement("canvas");
+            c.width = W; c.height = sh;
+            const cx2 = c.getContext("2d");
+            cx2.fillStyle = "#fff"; cx2.fillRect(0, 0, W, sh);
+            cx2.drawImage(im, gx0, 0, sw, im.height, 0, 0, W, sh);
+            const d = cx2.getImageData(0, 0, W, sh).data;
+            const m = new Uint8Array(W * sh);
+            for (let k = 0; k < W * sh; k++) m[k] = d[k * 4] * 0.3 + d[k * 4 + 1] * 0.59 + d[k * 4 + 2] * 0.11 < 200 ? 1 : 0;
+            const fit = (dx, dy, step) => {
+              let n = 0;
+              for (let y = 0; y < sh; y += step) {
+                const ty = y + dy;
+                if (ty < 0 || ty >= H) continue;
+                for (let x = 0; x < W; x += step) { const tx = x + dx; if (tx >= 0 && tx < W && m[y * W + x] && ma[ty * W + tx]) n++; }
+              }
+              return n;
+            };
+            const R = Math.round(sh * 0.25) + 20;
+            let bp = [0, yExp], bv = -1;
+            for (let dy = yExp - R; dy <= yExp + R; dy += 4) for (let dx = -8; dx <= 8; dx += 4) { const v = fit(dx, dy, 3); if (v > bv) { bv = v; bp = [dx, dy]; } }
+            const [px, py] = bp;
+            bv = -1;
+            for (let dy = py - 3; dy <= py + 3; dy++) for (let dx = px - 3; dx <= px + 3; dx++) { const v = fit(dx, dy, 1); if (v > bv) { bv = v; bp = [dx, dy]; } }
+            for (let y = 0; y < sh; y++) {
+              const ty = y + bp[1];
+              if (ty < 0 || ty >= H) continue;
+              for (let x = 0; x < W; x++) { const tx = x + bp[0]; if (tx >= 0 && tx < W && m[y * W + x]) mb[ty * W + tx] = 1; }
+            }
+            yExp = bp[1] + sh;
+          }
+        } else mb = ink(await stitch(groups[i]), W, H);
         // Wyrównanie: przesunięcie całej kartki o kilka pikseli (marginesy zrzutu, zaokrąglenia)
         // nie jest błędem układu — szukamy najlepszego dx, dy (najpierw zgrubnie, potem dokładnie).
         const shiftMask = (m, dx, dy) => {
@@ -204,6 +331,7 @@ async function run() {
           return n;
         };
         let best = [0, 0], bv = -1;
+        if (!split) {
         for (let dy = -12; dy <= 12; dy += 2) for (let dx = -12; dx <= 12; dx += 2) {
           const v = overlap(dx, dy, 3);
           if (v > bv) { bv = v; best = [dx, dy]; }
@@ -213,6 +341,7 @@ async function run() {
         for (let dy = cy - 2; dy <= cy + 2; dy++) for (let dx = cx - 2; dx <= cx + 2; dx++) {
           const v = overlap(dx, dy, 1);
           if (v > bv) { bv = v; best = [dx, dy]; }
+        }
         }
         const mbs = shiftMask(mb, best[0], best[1]);
         mb.set(mbs);

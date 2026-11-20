@@ -378,6 +378,18 @@
     const k = A4_W / bw;
     return { x0: b.x0, y0: b.y0, k, w: A4_W, h: bh * k };
   }
+  // Skan zapisany na ogromnej stronie (skaner: 1 piksel = 1 pt — kartka A4 jako 2261 × 3329 pt).
+  // Proporcje zwykłej kartki, nie długi pasek: cała strona zmniejszona do A4. Dawniej szła do
+  // cięcia „wyższa niż 22″” (3 poziome kartki na stronę) i tekst z OCR miał 49 pt.
+  function oversizeScanNorm(raw) {
+    const w = raw.width, h = raw.height;
+    if (h / w >= 1.9 || w / h >= 1.9) return null; // długi pasek / panorama — zostaje cięcie
+    const portrait = h >= w;
+    const pw = portrait ? A4_W : A4_W * Math.SQRT2, ph = portrait ? A4_W * Math.SQRT2 : A4_W;
+    if (w <= pw * 1.5 && h <= ph * 1.5) return null; // rozmiar zbliżony do A4/A3 — bez zmian
+    const k = Math.min(pw / w, ph / h);
+    return { x0: 0, y0: 0, k, w: w * k, h: h * k };
+  }
   function normalizeRaw(raw, n) {
     const X = (x) => (x - n.x0) * n.k, Y = (y) => (y - n.y0) * n.k;
     const box = (o) => (o ? { ...o, x0: X(o.x0), x1: X(o.x1), y0: Y(o.y0), y1: Y(o.y1) } : o);
@@ -469,6 +481,13 @@
         scanImg = raw.images[idx];
         report.stripPages = (report.stripPages || 0) + 1;
       }
+      const bigNorm = !norm && scanImg && visible < 3 ? oversizeScanNorm(raw) : null;
+      if (bigNorm) {
+        const idx = raw.images.indexOf(scanImg);
+        normalizeRaw(raw, bigNorm);
+        scanImg = raw.images[idx];
+        report.oversizePages = (report.oversizePages || 0) + 1;
+      }
       if (scanImg && visible < 3) {
         const hidden = raw.glyphs.filter((g) => g.invisible && g.u.trim());
         if (hidden.length >= 3) {
@@ -480,7 +499,7 @@
           if (ocrChoice) {
             env.onProgress?.(i, n, "ocr");
             await queueOcr(async () => {
-            const res = await env.ocrPage(page, raw, (status, p) => env.onProgress?.(i, n, "ocr", p), norm ? { norm } : undefined);
+            const res = await env.ocrPage(page, raw, (status, p) => env.onProgress?.(i, n, "ocr", p), norm || bigNorm ? { norm: norm || bigNorm } : undefined);
             if (res && res.glyphs.length) {
               if (res.rotate) straightenScanPage(raw, scanImg, res.rotate);
               raw.glyphs.push(...res.glyphs);
