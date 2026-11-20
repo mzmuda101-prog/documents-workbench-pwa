@@ -7,6 +7,11 @@
 
 const WHATS_NEW = [
   {
+    v: "v1.01.31",
+    pl: ["Lepszy kontrast: szare podpisy są ciemniejsze, a niebieskie przyciski w ciemnym motywie czytelniejsze."],
+    en: ["Better contrast: grey captions are darker and blue buttons in dark mode are easier to read."],
+  },
+  {
     v: "v1.01.30",
     pl: [
       "Nowa wersja aplikacji włącza się dopiero po kliknięciu „Aktualizuj” — nie wchodzi już „po części” sama przy otwarciu.",

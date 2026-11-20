@@ -26,7 +26,7 @@
   --ink: #141c2b;
   --ink-2: #2e3d55;
   --ink-3: #185abd; /* [EN] Word-blue labels — distinct from sheet-workbench green */
-  --muted: #6b7a92;
+  --muted: #596780; /* ≥ 4,5:1 także na --bg (dawniej #6b7a92 = 4,0:1) */
   --muted-strong: #4f5f78;
   --placeholder: #a8b4c8;
 
@@ -36,6 +36,10 @@
   --accent-2: #7eb3e8;
   --accent-border: #b8d4f0;
   --on-accent: #fff; /* [EN] text on filled accent — same handle recipe as Sheet */
+  /* wypełnienie pod białym napisem (przyciski, aktywne segmenty); w ciemnym motywie ciemniejsze niż
+     --accent, bo jasnoniebieski z bielą miał 2,75:1. --accent zostaje na linki i ikony na tle. */
+  --accent-fill: var(--accent);
+  --accent-fill-h: var(--accent-h);
 
   --success: #1a7a4a;
   --success-bg: #e8f7ef;
@@ -101,11 +105,13 @@
   --ink: #e8eef8;
   --ink-2: #b8c8de;
   --ink-3: #6eb0ff;
-  --muted: #7a8da8;
+  --muted: #8b9db6; /* ≥ 4,5:1 na ciemnych kartach (dawniej #7a8da8 = 3,9:1) */
   --muted-strong: #9aadc4;
   --placeholder: #3d4f66;
 
   --accent: #4a9eff;
+  --accent-fill: #1e6bd0; /* biały napis 5,2:1 */
+  --accent-fill-h: #1a62c4;
   --accent-h: #6eb0ff;
   --accent-light: rgba(24, 48, 88, 0.88);
   --accent-2: #2a5080;
@@ -262,7 +268,7 @@ body.splashing {
 }
 .lang-switch-indicator {
   position: absolute; top: 4px; left: 4px; width: var(--lang-pill-width, 40px); height: calc(100% - 8px);
-  border-radius: var(--r-full); background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 92%, white) 0%, var(--accent) 100%);
+  border-radius: var(--r-full); background: linear-gradient(180deg, color-mix(in srgb, var(--accent-fill) 92%, white) 0%, var(--accent-fill) 100%);
   transform: translateX(var(--lang-pill-x, 0)); z-index: 0; pointer-events: none;
   transition: transform 220ms var(--ease-out);
   box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 22%, transparent);
@@ -319,11 +325,11 @@ body.splashing {
   .btn:active:not(:disabled), .icon-btn:active:not(:disabled), .tb-btn:active:not(:disabled),
   .panel-toggle:active, .logo-badge:active, .app-update-btn:active { transform: scale(0.97); }
 }
-.btn.primary { background: var(--accent); color: white; border-color: transparent; box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 28%, transparent); }
+.btn.primary { background: var(--accent-fill); color: white; border-color: transparent; box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 28%, transparent); }
 @media (hover: hover) {
-  .btn.primary:hover:not(:disabled) { background: var(--accent-h); }
+  .btn.primary:hover:not(:disabled) { background: var(--accent-fill-h); }
 }
-.panel-toggle { background: var(--accent); color: white; border-color: transparent; display: none; } /* [EN] hidden when side handle is visible */
+.panel-toggle { background: var(--accent-fill); color: white; border-color: transparent; display: none; } /* [EN] hidden when side handle is visible */
 .btn-row .btn { flex: 1 1 0; min-width: 0; }
 
 .theme-toggle {
@@ -675,7 +681,7 @@ details.panel[open] > summary { border-bottom: 1px solid var(--border-subtle); }
   content: attr(data-label); position: absolute; right: 18px; top: 3px;
   transform: scale(calc(1 / var(--doc-zoom, 1))); transform-origin: right top;
   padding: 2px 7px; border-radius: 999px; white-space: nowrap;
-  font: 600 11px/1.3 var(--font); color: #fff; background: color-mix(in srgb, var(--accent) 80%, #334);
+  font: 600 11px/1.3 var(--font); color: #fff; background: color-mix(in srgb, var(--accent-fill) 80%, #334);
 }
 /* Narożne prowadnice marginesów: od punktu marginesu do krawędzi kartki. Są nakładką,
    nie wpływają na układ ani nie trafiają do wydruku/zapisu. Pozycje TYLKO słowami kluczowymi
@@ -801,7 +807,7 @@ html.is-mobile .dwb-page-margin-guide { display: none; }
 /* bieżące ustawienie (marginesy, orientacja, rozmiar…) — widać od razu, nie tylko po kolorze napisu */
 .compose-item.is-current { background: var(--accent-light); box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent); }
 .compose-item.is-current .compose-item-label { font-weight: 700; color: var(--accent); }
-.compose-item.is-current .compose-item-icon { background: var(--accent); color: var(--on-accent); }
+.compose-item.is-current .compose-item-icon { background: var(--accent-fill); color: var(--on-accent); }
 .compose-item.is-current::after { content: "✓"; flex: none; margin-left: auto; font-weight: 700; color: var(--accent); }
 
 /* Lista z wcięciem wiszącym (docx-render-fixes.js): tekst na lewym wcięciu, numer w wysunięciu */
@@ -1273,9 +1279,9 @@ html.is-mobile body.has-document .doc-panel {
 @media (hover: hover) {
   .hero-save:hover { border-color: var(--accent-border); color: var(--accent); }
 }
-.hero-save.is-dirty { background: var(--accent); border-color: var(--accent); color: #fff; }
+.hero-save.is-dirty { background: var(--accent-fill); border-color: var(--accent); color: #fff; }
 @media (hover: hover) {
-  .hero-save.is-dirty:hover { background: var(--accent-h); color: #fff; }
+  .hero-save.is-dirty:hover { background: var(--accent-fill-h); color: #fff; }
 }
 .hero-save-count {
   display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px;
@@ -1409,7 +1415,7 @@ details.panel > summary .panel-title { flex: 1; }
 
 /* Otwarty: pełny akcent, napis czytelny — bez przezroczystości (lekcja z Sheet). */
 :root.sidebar-open .sidebar-handle {
-  background: var(--accent);
+  background: var(--accent-fill);
   border-color: var(--accent);
   color: var(--on-accent);
   opacity: 1;
@@ -1418,7 +1424,7 @@ details.panel > summary .panel-title { flex: 1; }
   box-shadow: 0 10px 26px color-mix(in srgb, var(--accent) 38%, transparent), 0 2px 6px color-mix(in srgb, var(--ink) 18%, transparent);
 }
 @media (hover: hover) {
-  :root.sidebar-open .sidebar-handle:hover { background: var(--accent-h); border-color: var(--accent-h); }
+  :root.sidebar-open .sidebar-handle:hover { background: var(--accent-fill-h); border-color: var(--accent-fill-h); }
 }
 :root.sidebar-open .sidebar-handle::before {
   border-color: rgba(255, 255, 255, 0.45);
@@ -1510,7 +1516,7 @@ details.panel > summary .panel-title { flex: 1; }
 .panel-toggle.tb-btn.is-on { color: var(--accent); background: var(--accent-light); }
 .panel-toggle-count {
   position: absolute; top: -6px; right: -6px; min-width: 17px; height: 17px; padding: 0 4px;
-  border-radius: var(--r-full); background: var(--accent); color: #fff; font-size: 10px; font-weight: 700;
+  border-radius: var(--r-full); background: var(--accent-fill); color: #fff; font-size: 10px; font-weight: 700;
   display: grid; place-items: center; box-shadow: 0 0 0 2px var(--surface);
 }
 .panel-toggle-count[hidden] { display: none; }
@@ -1520,7 +1526,7 @@ details.panel > summary .panel-title { flex: 1; }
   border: 0; background: none; color: var(--muted-strong); font: inherit; font-size: 12.5px; font-weight: 600;
   padding: 5px 11px; border-radius: 8px; cursor: pointer; transition: background var(--t), color var(--t);
 }
-.mode-btn.is-active { background: var(--accent); color: #fff; }
+.mode-btn.is-active { background: var(--accent-fill); color: #fff; }
 @media (hover: hover) {
   .mode-btn:not(.is-active):hover { color: var(--accent); }
 }
@@ -1529,7 +1535,7 @@ details.panel > summary .panel-title { flex: 1; }
 .mode-switch.has-pill { position: relative; isolation: isolate; }
 .mode-pill {
   position: absolute; top: 3px; bottom: 3px; left: 0; width: 0; z-index: 0; pointer-events: none;
-  border-radius: 8px; background: var(--accent); transform-origin: 0 50%;
+  border-radius: 8px; background: var(--accent-fill); transform-origin: 0 50%;
   box-shadow: 0 2px 6px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 .mode-switch.has-pill .mode-btn { position: relative; z-index: 1; }
@@ -1921,7 +1927,7 @@ body.kb-open .section-strip, body.kb-open .status-bar { display: none !important
 /* link „Przejdź do dokumentu” — niewidoczny, dopóki nie dostanie fokusu z Tab */
 .skip-link {
   position: fixed; top: 8px; left: 8px; z-index: 20001; transform: translateY(-160%);
-  padding: 10px 16px; border-radius: 12px; background: var(--accent); color: #fff;
+  padding: 10px 16px; border-radius: 12px; background: var(--accent-fill); color: #fff;
   font-weight: 700; font-size: 13px; text-decoration: none; box-shadow: var(--shadow-lg);
   transition: transform var(--t);
 }
@@ -2150,7 +2156,7 @@ button.stat-row { cursor: pointer; }
   font: inherit; font-size: 13.5px; font-weight: 600; box-shadow: 0 8px 24px rgba(8, 14, 28, 0.18);
 }
 .doc-dismiss[hidden] { display: none; }
-.doc-dismiss.is-done { background: var(--accent); border-color: var(--accent); color: #fff; }
+.doc-dismiss.is-done { background: var(--accent-fill); border-color: var(--accent); color: #fff; }
 .doc-dismiss:not(.is-done) .doc-dismiss-done, .doc-dismiss.is-done .doc-dismiss-clear { display: none; }
 @media (prefers-reduced-motion: no-preference) {
   .doc-dismiss:not([hidden]) { animation: dwb-dismiss-in 200ms cubic-bezier(0.22, 1, 0.36, 1); }
@@ -2212,7 +2218,7 @@ textarea.ff-pop-input { min-height: 4.5em; resize: vertical; }
   opacity: 0; pointer-events: none; transition: opacity 160ms ease, transform 160ms ease;
 }
 .zoom-badge.is-on { opacity: 1; transform: translate(-50%, 0) scale(1); }
-.zoom-badge.is-snap { background: var(--accent); color: #fff; }
+.zoom-badge.is-snap { background: var(--accent-fill); color: #fff; }
 @media (prefers-reduced-motion: reduce) { .zoom-badge { transition: none; } }
 
 /* Snippety: lista z podglądem, podpowiedzi po „!”, okno pól */
@@ -2655,7 +2661,7 @@ p.dwb-exact img { vertical-align: baseline; }
 @media (pointer: coarse) { .compose-field input, .compose-field select { font-size: 16px; height: 42px; } } /* iOS: bez przybliżania */
 .seg { display: flex; padding: 3px; gap: 2px; border: 1px solid var(--border); border-radius: 11px; background: var(--field); }
 .seg button { flex: 1; border: 0; background: none; color: var(--muted-strong); font: inherit; font-size: 12.5px; font-weight: 600; padding: 6px 8px; border-radius: 8px; cursor: pointer; }
-.seg button.is-on { background: var(--accent); color: #fff; }
+.seg button.is-on { background: var(--accent-fill); color: #fff; }
 .compose-note { margin: 0; font-size: 12.5px; color: var(--muted); }
 .compose-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .compose-actions-gap { flex: 1; }
@@ -2696,7 +2702,7 @@ p.dwb-exact img { vertical-align: baseline; }
 @media (hover: hover) {
   .lf-place:hover { background: var(--accent-light); }
 }
-.lf-place.is-on { background: var(--accent); color: #fff; }
+.lf-place.is-on { background: var(--accent-fill); color: #fff; }
 .lf-place.is-on .lf-place-sub { color: rgba(255, 255, 255, .85); }
 .lf-place-text { display: flex; flex-direction: column; min-width: 0; }
 .lf-place-label, .lf-place-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -3226,7 +3232,7 @@ body:not(.has-document) #printPreviewMenuItem, body:not(.has-document) #pageSetu
   content: attr(data-label); position: absolute; right: 30px; top: 50%;
   transform: translateY(-50%) scale(calc(1 / var(--doc-zoom, 1))); transform-origin: right center;
   padding: 1px 7px; border-radius: 999px; white-space: nowrap;
-  font: 600 10.5px/1.3 var(--font); color: #fff; background: color-mix(in srgb, var(--accent) 80%, #334);
+  font: 600 10.5px/1.3 var(--font); color: #fff; background: color-mix(in srgb, var(--accent-fill) 80%, #334);
 }
 .dwb-page-break { pointer-events: auto; cursor: row-resize; }
 section.docx.dwb-gapped { min-height: var(--dwb-sec-min) !important; }
@@ -3272,7 +3278,7 @@ section.docx.dwb-gapped { min-height: var(--dwb-sec-min) !important; }
   font: inherit; font-size: 0.9rem; min-height: 40px; padding: 8px 14px; border-radius: 10px; cursor: pointer;
   border: 1px solid var(--border); background: var(--surface); color: var(--ink);
 }
-.lai-btn.is-primary { background: var(--accent); border-color: transparent; color: #fff; }
+.lai-btn.is-primary { background: var(--accent-fill); border-color: transparent; color: #fff; }
 .lai-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .lai-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* Wynik AI — zawsze podpisany jako propozycja do sprawdzenia */
@@ -3313,7 +3319,7 @@ section.docx.dwb-gapped { min-height: var(--dwb-sec-min) !important; }
 .doc-ask-text { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--accent-light); font-size: 0.92rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .doc-ask-cite {
   display: inline-grid; place-items: center; min-width: 22px; height: 22px; margin: 0 2px; padding: 0 5px; vertical-align: 1px;
-  border: 0; border-radius: 6px; background: var(--accent); color: #fff; font: inherit; font-size: 0.75rem; font-weight: 700; cursor: pointer;
+  border: 0; border-radius: 6px; background: var(--accent-fill); color: #fff; font: inherit; font-size: 0.75rem; font-weight: 700; cursor: pointer;
 }
 .doc-ask-warn { margin: 0; font-size: 0.84rem; color: var(--warning); }
 .doc-ask-sources { display: grid; gap: 6px; }
@@ -3449,7 +3455,7 @@ body.dwb-painting .docx-preview-host * {
 }
 .toast-action:focus-visible, .toast-close:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
 @media (hover: hover) {
-  .toast-action:hover { background: var(--accent); color: var(--on-accent); }
+  .toast-action:hover { background: var(--accent-fill); color: var(--on-accent); }
   .toast-close:hover { background: var(--accent-light); color: var(--ink); }
 }
 @media (pointer: coarse) {
@@ -3549,13 +3555,13 @@ body.dwb-painting .docx-preview-host * {
 .read-hint-text { color: var(--muted-strong); white-space: nowrap; }
 .read-hint-btn {
   display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: var(--r-full);
-  padding: 6px 12px; background: var(--accent); color: var(--on-accent); font: inherit; font-weight: 700; cursor: pointer;
+  padding: 6px 12px; background: var(--accent-fill); color: var(--on-accent); font: inherit; font-weight: 700; cursor: pointer;
 }
 .read-hint-btn .read-hint-kbd { background: rgba(255, 255, 255, 0.18); border-color: rgba(255, 255, 255, 0.35); color: var(--on-accent); }
 .read-hint-close { width: 28px; height: 28px; border: 0; border-radius: var(--r-full); background: none; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
 .read-hint-btn:focus-visible, .read-hint-close:focus-visible { outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
 @media (hover: hover) {
-  .read-hint-btn:hover { background: var(--accent-h); }
+  .read-hint-btn:hover { background: var(--accent-fill-h); }
   .read-hint-close:hover { background: var(--accent-light); color: var(--ink); }
 }
 @media (pointer: coarse) {
@@ -4017,9 +4023,9 @@ body.rb-reading .rb-r1, body:not(.has-document) .rb-r1 { border-bottom: 0; }
 .rb-logo { display: inline-flex; flex: none; }
 .rb-file {
   flex: none; height: 28px; padding: 0 12px; border: 0; border-radius: 8px; cursor: pointer;
-  background: var(--accent); color: var(--on-accent); font: inherit; font-size: 13px; font-weight: 600;
+  background: var(--accent-fill); color: var(--on-accent); font: inherit; font-size: 13px; font-weight: 600;
 }
-@media (hover: hover) { .rb-file:hover { background: var(--accent-h); } }
+@media (hover: hover) { .rb-file:hover { background: var(--accent-fill-h); } }
 .rb-file:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* nazwa pliku: w Czytaniu i bez dokumentu (zamiast kart, jak w makiecie) */
 .rb-name { display: none; flex: 1 1 auto; min-width: 0; align-items: baseline; gap: 10px; padding-left: 6px; }
@@ -4162,8 +4168,8 @@ body.rb-on .status-bar .zoom-group .zg-i { display: block; }
 [data-theme="dark"] .rb-mode[data-mode="suggest"] { border-color: #7a6020; background: #3a2e10; color: #f0c860; }
 .rb-mode:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* Czytanie: „Edytuj” zamiast „Zapisz” (Zapisz zostaje, gdy są niezapisane zmiany) */
-.rb-edit { display: none; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 0; border-radius: 9px; cursor: pointer; background: var(--accent); color: var(--on-accent); font: inherit; font-size: 13px; font-weight: 600; }
-@media (hover: hover) { .rb-edit:hover { background: var(--accent-h); } }
+.rb-edit { display: none; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 0; border-radius: 9px; cursor: pointer; background: var(--accent-fill); color: var(--on-accent); font: inherit; font-size: 13px; font-weight: 600; }
+@media (hover: hover) { .rb-edit:hover { background: var(--accent-fill-h); } }
 .rb-edit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 body.rb-reading.has-document .rb-edit { display: inline-flex; }
 body.rb-reading .rb-act .hero-save:not(.is-dirty) { display: none; }
@@ -4214,7 +4220,7 @@ body.rb-reading .rb-act .hero-save:not(.is-dirty) { display: none; }
 .backstage[hidden] { display: none; }
 .backstage.is-open { transform: none; opacity: 1; visibility: visible; transition: transform 280ms var(--ease-drawer), opacity var(--t), visibility 0s; }
 @media (prefers-reduced-motion: reduce) { .backstage, .backstage.is-open { transform: none; transition: opacity var(--t), visibility 0s; } }
-.bs-nav { display: flex; flex-direction: column; gap: 2px; padding: 12px 8px; overflow-y: auto; background: var(--accent); color: var(--on-accent); }
+.bs-nav { display: flex; flex-direction: column; gap: 2px; padding: 12px 8px; overflow-y: auto; background: var(--accent-fill); color: var(--on-accent); }
 .bs-nav hr { border: 0; border-top: 1px solid color-mix(in srgb, var(--on-accent) 28%, transparent); margin: 8px 6px; }
 .bs-nav-btn {
   display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 12px; border: 0; border-radius: 8px;
@@ -4283,7 +4289,7 @@ body.rb-on .rb-rail {
 .rb-rail-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .rb-rail-n {
   position: absolute; top: 1px; right: 0; min-width: 15px; height: 15px; padding: 0 4px; box-sizing: border-box; border-radius: 8px;
-  background: var(--accent); color: var(--on-accent); font-size: 9.5px; font-weight: 700; line-height: 15px; text-align: center;
+  background: var(--accent-fill); color: var(--on-accent); font-size: 9.5px; font-weight: 700; line-height: 15px; text-align: center;
 }
 .rb-rail-n.is-warn { background: var(--danger); color: #fff; }
 .rb-rail-n[hidden] { display: none; }
@@ -4515,7 +4521,7 @@ body.tb-float.ph-bar-on .doc-viewport {
 .ph-chips { display: flex; gap: 6px; flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .ph-chips::-webkit-scrollbar { display: none; }
 .ph-chip { flex: none; height: 36px; padding: 0 14px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; white-space: nowrap; cursor: pointer; }
-.ph-chip[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent, #fff); font-weight: 600; }
+.ph-chip[aria-selected="true"] { background: var(--accent-fill); border-color: var(--accent); color: var(--on-accent, #fff); font-weight: 600; }
 .ph-chip.is-ctx { border-color: #7a3fb5; color: #7a3fb5; }
 .ph-chip.is-ctx[aria-selected="true"] { background: #7a3fb5; color: #fff; }
 .ph-done { flex: none; height: 44px; padding: 0 10px; border: 0; background: none; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
@@ -4533,7 +4539,7 @@ body.tb-float.ph-bar-on .doc-viewport {
 .ph-isl { display: none; }
 body.tb-float .doc-island .ph-isl { display: inline-flex; align-items: center; justify-content: center; position: relative; }
 :root:not(.focus-mode) body.tb-float .doc-island #focusModeBtn { display: none; }
-.doc-island #phIslandSave.is-dirty { background: var(--accent); border-color: var(--accent); color: #fff; }
+.doc-island #phIslandSave.is-dirty { background: var(--accent-fill); border-color: var(--accent); color: #fff; }
 .ph-isl-n { position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--surface); color: var(--accent); box-shadow: 0 0 0 1px var(--accent-border); font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
 .ph-isl-n[hidden] { display: none; }
 .doc-island #phIslandMode { color: var(--accent); }
