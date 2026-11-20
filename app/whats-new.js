@@ -7,6 +7,11 @@
 
 const WHATS_NEW = [
   {
+    v: "v1.01.34",
+    pl: ["Telefon: w arkuszu „Główne” jest teraz „Cofnij” obok „Ponów” — nie trzeba go szukać w górnym pasku."],
+    en: ["Phone: the “Home” sheet now has “Undo” next to “Redo” — no need to look for it in the top bar."],
+  },
+  {
     v: "v1.01.33",
     pl: [
       "PDF → Word: zakreślenia z PDF-a są tłem tekstu, jak w Wordzie — tekst nie przesuwa się, nie zmienia kolejności i nie ucina się na telefonie.",
