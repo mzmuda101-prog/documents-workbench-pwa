@@ -323,7 +323,7 @@
           annotTextId = id;
           annotGlyphs[id] = annotGlyphs[id] || [];
         }
-        gs = { ...gs, fill: "000000", stroke: "000000", fillAlpha: 1, strokeAlpha: 1, fillPattern: false, patternImage: null };
+        gs = { ...gs, fill: "000000", stroke: "000000", fillAlpha: 1, strokeAlpha: 1, fillPattern: false, patternImage: null, inAnnot: true };
         gs.ctm = mul(mul(viewport.transform, Array.from(transform || IDENTITY)), Array.from(matrix || IDENTITY));
         if (rect) {
           const vt = viewport.transform;
@@ -589,7 +589,7 @@
             const clipped = clipBox(sp.bbox, gs.clip);
             if (!clipped) continue;
             if (isFill && !fillDone && gs.fillAlpha > 0.05 && !gs.fillPattern) {
-              if (sp.rect) rects.push({ ...clipped, color: gs.fill, alpha: gs.fillAlpha, order: order++, artifact: artifactDepth > 0 });
+              if (sp.rect) rects.push({ ...clipped, color: gs.fill, alpha: gs.fillAlpha, order: order++, artifact: artifactDepth > 0, annot: !!gs.inAnnot });
               else graphics.push({ ...clipped, color: gs.fill, alpha: gs.fillAlpha, kind: "fill", cmds: sp.cmds, evenOdd, clip: gs.clip, order: order++ });
             }
             if (isStroke && gs.strokeAlpha > 0.05) {

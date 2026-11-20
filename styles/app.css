@@ -2441,7 +2441,15 @@ section.docx > article:first-of-type > p:first-child[style*="--dwb-sect-mt"] { m
   background-image: radial-gradient(circle, currentColor 0.055em, transparent 0.075em);
   background-size: 0.28em 0.28em; background-repeat: repeat-x; background-position: 0 calc(100% - 0.2em);
 }
-.docx-tab-laid.tab-line { text-decoration: underline; text-decoration-thickness: 0.06em; text-underline-offset: 0.12em; }
+/* linia przez CAŁĄ szerokość tabulatora (tło), nie podkreślenie: w środku jest jedna spacja, więc
+   podkreślenie tekstu dawało krótką kreskę („recover-   energy”) zamiast linii do wpisywania */
+/* Wydruk jak w Wordzie: tła w dokumencie (zakreślenia, cieniowanie komórek, linie i kropki tabulatorów)
+   idą na papier — przeglądarka bez tego je pomija, chyba że ktoś włączy „grafikę tła” w oknie druku. */
+@media print { section.docx { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+.docx-tab-laid.tab-line {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-size: 100% max(1px, 0.06em); background-repeat: no-repeat; background-position: 0 calc(100% - 0.1em);
+}
 
 /* Interlinia „dokładnie” jak w Wordzie: wysokość linijki = podana wartość. W przeglądarce każdy
    fragment w innej czcionce (punktor z Symbol, inny rozmiar) rozpychał linijkę o 1–3 pt —

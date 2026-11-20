@@ -56,6 +56,8 @@ const FIXTURE_HTML = `<!doctype html><html lang="pl"><head><meta charset="utf-8"
 <ol><li>Krok pierwszy<ul><li>szczegół kroku</li></ul></li><li>Krok drugi</li><li>Krok trzeci</li></ol>
 <h2>Zakres prac</h2>
 <p>Zakres obejmuje montaż i odbiór.</p>
+<p>Słowa: <mark style="background:#00e8e8;color:inherit">alfa · beta · gamma</mark></p>
+<p>1. Hamulce odzyskują __________ energię.</p>
 </body></html>`;
 
 const BIG_HTML = `<!doctype html><html lang="pl"><head><meta charset="utf-8"><style>
@@ -280,6 +282,11 @@ const docxState = (page) => page.evaluate(async () => {
     hanging: /w:hanging="/.test(doc),
     // lista Worda (pdf-convert.js assignLists): numPr w akapicie, punktor w numbering.xml, w tekście bez „•”
     listDbg: (doc.match(/<w:p>(?:(?!<\/w:p>).)*(?:Krok|szczegół)(?:(?!<\/w:p>).)*<\/w:p>/g) || []).map((x) => `${(x.match(/<w:numPr>.*?<\/w:numPr>/) || ["-"])[0]} ${(x.match(/<w:t[^>]*>[^<]*/g) || []).map((y) => y.replace(/<w:t[^>]*>/, "")).join("|")}`).join(" ## ") + " || " + numbering.replace(/<w:rPr>.*?<\/w:rPr>/g, "").slice(-700),
+    // zakreślenie z PDF-a (applyHighlights): tło w runie, nie osobna tabela z tłem
+    hlRun: /<w:shd w:val="clear" w:color="auto" w:fill="00E8E8"\/><\/w:rPr><w:t[^>]*>[^<]*alfa/.test(doc),
+    hlInTable: [...d.getElementsByTagNameNS(W, "tbl")].some((t) => t.textContent.includes("alfa")),
+    // linia do wpisywania: tabulator z podkreśleniem, spacje przed i za (jak „recover ____ energy”)
+    blank: /odzyskują <\/w:t><\/w:r><w:r>(?:<w:rPr>(?:(?!<\/w:rPr>).)*<\/w:rPr>)?<w:tab\/><\/w:r><w:r>(?:<w:rPr>(?:(?!<\/w:rPr>).)*<\/w:rPr>)?<w:t xml:space="preserve"> energię/.test(doc) && /w:leader="underscore"/.test(doc),
     tocLinks: (doc.match(/<w:hyperlink w:anchor="_Toc\d+"/g) || []).length,
     tocBookmarks: /<w:bookmarkStart w:id="\d+" w:name="_Toc1"\/>(?:(?!<\/w:p>).)*Wprowadzenie/.test(doc),
     tocHeading: /<w:pStyle w:val="TOCHeading"\/>(?:(?!<\/w:p>).)*Spis treści/.test(doc),
@@ -347,6 +354,11 @@ async function run() {
   check("stopka „Strona N z M” jako pola PAGE/NUMPAGES", st.footerPage, "");
   check("stopka nie została w treści", !st.paras.some((p) => /^Strona \d+ z \d+$/.test(p.trim())), "");
   check("spis treści: tabulator z kropkami", st.dotTab, "");
+  check("zakreślenie: tło w tekście (w:shd w runie), nie tabela", st.hlRun && !st.hlInTable, JSON.stringify({ hlRun: st.hlRun, hlInTable: st.hlInTable }));
+  check("linia do wpisywania: tabulator z podkreśleniem, spacje przed i za", st.blank, "");
+  // linia to tło na całą szerokość pola (dawniej podkreślenie jednej spacji = krótka kreska)
+  const blankLine = await page.evaluate(() => { const t = [...document.querySelectorAll(".docx-preview-host .tab-line")].find((x) => /odzyskują/.test(x.closest("p")?.textContent || "")); return t ? { w: Math.round(t.getBoundingClientRect().width), bg: getComputedStyle(t).backgroundImage, size: getComputedStyle(t).backgroundSize } : null; });
+  check("podgląd: linia do wpisywania na całą szerokość tabulatora (nie kreska)", blankLine && blankLine.w > 30 && /gradient/.test(blankLine.bg) && /^100%/.test(blankLine.size), JSON.stringify(blankLine));
   check("indeks górny (m²)", st.sup, "");
   check("spis treści: wpisy = linki do zakładek przy rozdziałach, „Spis treści” jako nagłówek spisu", st.tocLinks === 2 && st.tocBookmarks && st.tocHeading, JSON.stringify({ links: st.tocLinks, bm: st.tocBookmarks, head: st.tocHeading }));
   check("lista numerowana z zagnieżdżonym punktorem = numeracja Worda z poziomami (bez „1.” w tekście)", st.numberedLevels, st.listDbg);

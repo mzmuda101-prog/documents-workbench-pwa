@@ -151,6 +151,27 @@ function fixPageAnchoredDrawings(host) {
 // Wypełnienie kropkami/kreską (spis treści, „Miejscowość: ……”). Współrzędne bez skali widoku
 // (powiększenie robi transform). Przebiegi: najpierw wszystkie 1. tabulatory akapitów, potem 2.…
 // — jedno przeliczenie układu na przebieg, nie na każdy tabulator.
+// Widok mobilny (tekst do szerokości telefonu) nie liczy pozycji tabulatorów, więc linia do wpisywania
+// („recover ________ energy”, arkusze z PDF) znikała — zostawała pusta przerwa. Tabulator, którego
+// akapit ma tylko tabulatory z podkreśleniem, dostaje linię o stałej szerokości.
+function markReflowBlankTabs(host) {
+  const root = host?.querySelector?.(".docx-wrapper") || host;
+  if (!root) return 0;
+  let n = 0;
+  for (const sp of root.querySelectorAll("span.docx-tab")) {
+    let stops = [];
+    try { stops = JSON.parse(sp.dataset.stops || "[]").filter(([, , style]) => style !== "clear"); } catch (_) { stops = []; }
+    if (!stops.length || !stops.every(([, leader]) => leader === "underscore")) continue;
+    sp.style.display = "inline-block";
+    sp.style.width = "5em";
+    sp.style.overflow = "hidden"; // jak w layoutTabStops: dół pola = linia bazowa (CSS .docx-tab-laid)
+    if (sp.textContent !== "\u00a0") sp.innerHTML = "&nbsp;";
+    sp.classList.add("docx-tab-laid", "tab-line");
+    n++;
+  }
+  return n;
+}
+
 function layoutTabStops(host) {
   const root = host?.querySelector?.(".docx-wrapper") || host;
   if (!root) return 0;

@@ -109,6 +109,7 @@ async function renderDocxPreview(bytes, container, opts = {}) {
     applySectionStartSpacing(wrapper); // odstęp „przed” na początku sekcji minus „po” z poprzedniej strony (Word)
     positionAnchoredDrawings(wrapper); // logotypy / zdjęcia z oblewaniem — miejsce jak w Wordzie (po układzie akapitów)
   }
+  if (mobileReflow) markReflowBlankTabs(wrapper); // linie do wpisywania widoczne też na telefonie
   if (!mobileReflow) {
     layoutTabStops(wrapper); // tabulatory na pozycjach z akapitu (spis treści, formularze)
     // Czcionki osadzone w pliku (np. z PDF) docx-preview wczytuje z opóźnieniem — po ich
