@@ -82,6 +82,7 @@ const SHELL_ASSETS = [
   `./app/view-mode.js?v=${ASSET_V}`,
   `./app/keyboard.js?v=${ASSET_V}`,
   `./app/shortcuts.js?v=${ASSET_V}`,
+  `./app/whats-new.js?v=${ASSET_V}`,
   `./app/ribbon-classic.js?v=${ASSET_V}`,
   `./app/ribbon.js?v=${ASSET_V}`,
   `./app/backstage.js?v=${ASSET_V}`,
@@ -154,8 +155,9 @@ function isHeavyAsset(url) {
 
 // Lokalnie (npm run dev) pliki zmieniają się bez podbicia ?v=, więc tam zostaje
 // stale-while-revalidate — inaczej po edycji widać by było stary kod aż do release.
+const DEV_HOST = /^(?:localhost|127\.0\.0\.1|\[::1\])$/.test(self.location.hostname);
 function isImmutableAsset(url) {
-  if (/^(?:localhost|127\.0\.0\.1|\[::1\])$/.test(self.location.hostname)) return false;
+  if (DEV_HOST) return false;
   return url.searchParams.has("v");
 }
 
@@ -179,7 +181,9 @@ self.addEventListener("install", (event) => {
     // instalował wersję z PUSTĄ powłoką, a activate kasował poprzedni cache, więc
     // offline aplikacja już nie wstawała. Nieudana instalacja zostawia starą wersję
     // i przeglądarka spróbuje ponownie przy następnym wejściu.
-    caches.open(APP_CACHE).then((cache) => cache.addAll(SHELL_ASSETS))
+    // Pliki bez ?v= (index.html, manifest) prosto z serwera, nie z pamięci przeglądarki — inaczej nowa
+    // wersja mogłaby zapisać sobie starą stronę startową.
+    caches.open(APP_CACHE).then((cache) => cache.addAll(SHELL_ASSETS.map((u) => (u.includes("?v=") ? u : new Request(u, { cache: "reload" })))))
   );
 });
 
@@ -262,8 +266,21 @@ self.addEventListener("fetch", (event) => {
   // silnik AI (~27 MB wasm, lib/transformers): Transformers.js trzyma go we własnym cache (useWasmCache),
   // kopia w cache wersji aplikacji byłaby pobierana od nowa po każdym wydaniu
   if (sameOrigin && /\/lib\/transformers\/[^/]+\.wasm$/i.test(reqUrl.pathname)) return;
+  // Start aplikacji (./, index.html, ?open=…): strona z tej wersji, którą ma ten worker — nigdy
+  // nowsza z sieci. Dawniej sieć szła pierwsza i nowa strona startowała pod starym workerem: nowa
+  // wersja wchodziła „po części” sama, a „Aktualizuj” i tak się pokazywało. Teraz nowa wersja
+  // ściąga się w tle (sw.js) i włącza dopiero po „Aktualizuj” (ui-controls.js). Lokalnie (npm run dev)
+  // jak dawniej — inaczej po edycji widać by było starą stronę.
+  const scopePath = new URL(self.registration.scope).pathname;
+  if (request.mode === "navigate" && sameOrigin && !DEV_HOST && (reqUrl.pathname === scopePath || reqUrl.pathname === `${scopePath}index.html`)) {
+    event.respondWith(caches.open(APP_CACHE)
+      .then((cache) => cache.match("./index.html"))
+      .then((cached) => cached || fetch(request))
+      .catch(() => fetch(request)));
+    return;
+  }
   if (request.mode === "navigate") {
-    // Sieć najpierw (świeży index.html), ale z LIMITEM czasu. Bez niego przy słabym
+    // Inne strony (np. docs/): sieć najpierw (świeży index.html), ale z LIMITEM czasu. Bez niego przy słabym
     // zasięgu („jest kreska, a nic nie przechodzi") start z ikony wisiał na białym
     // ekranie nawet kilkadziesiąt sekund, choć cała apka leży w cache. Po limicie
     // podajemy stronę z cache; żądanie leci dalej w tle i odświeża cache na następny raz.

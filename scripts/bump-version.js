@@ -152,5 +152,8 @@ if (driftWarnings.length) {
   console.log(driftWarnings.join("\n"));
 }
 console.log(`\n🎉  Gotowe! Nowa wersja: ${newVersion}`);
+if (!read("app/whats-new.js").includes(`v: "${newVersion}"`)) {
+  console.log(`\nUWAGA: dopisz na górze app/whats-new.js wpis „Co nowego” dla ${newVersion} (PL i EN).`);
+}
 console.log(`\nCommit (styl: typ(zakres): krótki tytuł (wersja) + punkty w treści), np.:`);
 console.log(`  fix(docs): … (${newVersion})`);

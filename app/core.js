@@ -415,6 +415,7 @@ function runNextAppDialog() {
     p.textContent = opts.message;
     box.append(p);
   }
+  if (opts.body) box.append(opts.body); // gotowa treść (np. lista w „Co nowego”)
   let inputEl = null;
   if (opts.input) {
     const lab = document.createElement("label");
