@@ -544,8 +544,10 @@ function registerServiceWorker() {
     window.location.reload();
   });
 
-  // ?v= w adresie SW: każde wydanie = nowy adres = pewne wykrycie aktualizacji.
-  navigator.serviceWorker.register(`./sw.js?v=${APP_BUILD_VERSION}`).then((registration) => {
+  // Stały adres: nowe wydanie wykrywa porównanie treści sw.js (update() omija pamięć przeglądarki).
+  // Dawniej ?v= w adresie: po „Aktualizuj” strona nowej wersji rejestrowała NOWY adres, a ten
+  // instalował się drugi raz i „Aktualizuj” wracało, choć wersja była już nowa.
+  navigator.serviceWorker.register("./sw.js").then((registration) => {
     if (registration.waiting && navigator.serviceWorker.controller) showAppUpdate(registration.waiting);
     registration.addEventListener("updatefound", () => {
       const worker = registration.installing;

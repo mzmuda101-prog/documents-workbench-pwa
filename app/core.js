@@ -21,7 +21,7 @@
   }
 })();
 
-const APP_BUILD_VERSION = "v1.01.29";
+const APP_BUILD_VERSION = "v1.01.30";
 
 const IS_LOW_POWER = (() => {
   try {
@@ -415,6 +415,7 @@ function runNextAppDialog() {
     p.textContent = opts.message;
     box.append(p);
   }
+  if (opts.body) box.append(opts.body); // gotowa treść (np. lista w „Co nowego”)
   let inputEl = null;
   if (opts.input) {
     const lab = document.createElement("label");

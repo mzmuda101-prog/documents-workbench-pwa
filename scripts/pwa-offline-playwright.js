@@ -9,7 +9,10 @@
 //   2. „jest kreska, a nic nie przechodzi" (serwer nie odpowiada na nawigację):
 //      apka startuje z cache po ~3 s, a nie wisi na białym ekranie,
 //   3. pełny offline: apka startuje i otwiera przykładowy .docx (biblioteki z cache),
-//   4. nowa wersja sw.js → przycisk „Aktualizuj” → klik → strona wstaje pod NOWYM workerem.
+//   4. nowa wersja sw.js → przycisk „Aktualizuj” → klik → strona wstaje pod NOWYM workerem,
+//   5. nowa wersja NIE wchodzi sama: przed klikiem przeładowanie dalej daje starą stronę (bez
+//      „po części”), po kliku nowa strona, „Aktualizuj” nie wraca, a okno „Co nowego” zostaje
+//      i da się je otworzyć z menu.
 
 const { chromium } = require("playwright");
 const http = require("http");
@@ -27,6 +30,7 @@ const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", "
 let log = [];
 let hangNavigations = false;
 let swOverride = null; // podmieniona treść sw.js (symulacja nowego wydania)
+let indexOverride = null; // podmieniona strona startowa (nowe wydanie)
 const hung = [];
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, ORIGIN);
@@ -36,6 +40,11 @@ const server = http.createServer((req, res) => {
   if (url.pathname === "/sw.js" && swOverride) {
     res.writeHead(200, { "Content-Type": "text/javascript", "Cache-Control": "no-store" });
     res.end(swOverride);
+    return;
+  }
+  if ((url.pathname === "/" || url.pathname === "/index.html") && indexOverride) {
+    res.writeHead(200, { "Content-Type": TYPES[".html"], "Cache-Control": "no-store" });
+    res.end(indexOverride);
     return;
   }
   let file = path.join(ROOT, decodeURIComponent(url.pathname));
@@ -108,14 +117,23 @@ async function run() {
   }, SEMANTIC_MODEL_CACHES);
   const swSrc = fs.readFileSync(path.join(ROOT, "sw.js"), "utf8");
   swOverride = swSrc.replace(/CACHE_VERSION\s*=\s*"[^"]+"/, 'CACHE_VERSION = "29991231-99"');
+  indexOverride = fs.readFileSync(path.join(ROOT, "index.html"), "utf8").replace("<head>", '<head><meta name="dwb-test-release" content="new">');
+  const isNewPage = () => page.evaluate(() => !!document.querySelector('meta[name="dwb-test-release"]'));
   await page.reload({ waitUntil: "load" });
+  check("przed „Aktualizuj”: start na starej stronie (nic nie wchodzi samo)", !(await isNewPage()));
   await page.evaluate(() => navigator.serviceWorker.getRegistration().then((r) => r && r.update()));
-  const btnShown = await page.waitForFunction(() => !document.getElementById("appUpdateBtn")?.classList.contains("hidden"), null, { timeout: 10000 }).then(() => true).catch(() => false);
+  const waitBtn = () => page.waitForFunction(() => !document.getElementById("appUpdateBtn")?.classList.contains("hidden"), null, { timeout: 10000 }).then(() => true).catch(() => false);
+  let btnShown = await waitBtn();
   check("nowa wersja: przycisk „Aktualizuj” widoczny", btnShown);
+  // nowy worker już czeka — kolejne otwarcie dalej na starej stronie, z przyciskiem
+  await page.reload({ waitUntil: "load" });
+  btnShown = await waitBtn();
+  check("przeładowanie bez kliku: dalej stara strona i „Aktualizuj”", btnShown && !(await isNewPage()));
   if (btnShown) {
     // Panel zostaje OTWARTY (od 1024 px stoi obok dokumentu) — przycisk w nagłówku
     // musi być klikalny bez zamykania czegokolwiek (dawniej zasłaniał go scrim).
-    await page.evaluate(() => { window.__beforeUpdate = true; });
+    // ostatnio widziana wersja starsza niż bieżąca → po aktualizacji ma wyjść „Co nowego”
+    await page.evaluate(() => { window.__beforeUpdate = true; localStorage.setItem("documents-workbench-seen-version", "v1.01.28"); });
     const nav = page.waitForNavigation({ waitUntil: "load", timeout: 10000 }).then(() => true).catch(() => false);
     await page.click("#appUpdateBtn");
     const reloaded = await nav;
@@ -130,8 +148,28 @@ async function run() {
     }), SEMANTIC_MODEL_CACHES);
     check("klik „Aktualizuj”: przeładowanie pod nowym workerem", reloaded && state.fresh && state.controlled && state.newCache, JSON.stringify(state));
     check("aktualizacja PWA zachowuje pobrane warianty modelu", state.modelCachesKept, JSON.stringify(state));
+    check("po kliku: nowa strona", await isNewPage());
+    const dlg = () => page.evaluate(() => {
+      const d = document.querySelector("dialog.app-dialog .whats-new");
+      return d ? { title: d.closest("dialog").querySelector(".app-dialog-title")?.textContent, items: d.querySelectorAll("li").length } : null;
+    });
+    await page.waitForSelector("dialog.app-dialog .whats-new", { timeout: 5000 }).catch(() => {});
+    const shown = await dlg();
+    check("po aktualizacji: okno „Co nowego” z listą zmian", shown && shown.items > 0, JSON.stringify(shown));
+    await sleep(2500);
+    check("po aktualizacji: „Aktualizuj” nie wraca", await page.evaluate(async () =>
+      document.getElementById("appUpdateBtn")?.classList.contains("hidden") && !(await navigator.serviceWorker.getRegistration())?.waiting));
+    await page.click("dialog.app-dialog .app-dialog-btn.primary");
+    await page.reload({ waitUntil: "load" });
+    await sleep(1200);
+    check("kolejne otwarcie: „Co nowego” nie wyskakuje drugi raz", !(await dlg()));
+    // przy wstążce: Plik → Pomoc i skróty → Co nowego (ten sam przycisk co w menu ⋯ na telefonie)
+    await page.evaluate(() => document.querySelector('[data-bs-do="whatsNewMenuItem"]').click());
+    const fromMenu = await page.waitForSelector("dialog.app-dialog .whats-new", { timeout: 3000 }).then(() => dlg()).catch(() => null);
+    check("Pomoc → Co nowego: cała lista dalej dostępna", fromMenu && fromMenu.items >= 2, JSON.stringify(fromMenu));
   }
   swOverride = null;
+  indexOverride = null;
 
   check("brak błędów strony", errors.length === 0, errors.slice(0, 3).join(" | "));
   await browser.close();

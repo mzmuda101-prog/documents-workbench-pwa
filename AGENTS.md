@@ -30,6 +30,7 @@ Czysty JavaScript + HTML + CSS, bez frameworka. esbuild tylko skleja pliki w `di
 
 ## Wydanie
 - Wersja `vMAJOR.MM.PP`: `npm run release` (+1), `-- skok` (do okrągłej …0/…5), `-- minor`, `-- major`.
+- Każde wydanie: wpis na górze `app/whats-new.js` (okno „Co nowego”, PL i EN, prostym językiem).
 - Przed podaniem tekstu commita sprawdź `git log -3` — jeśli ten numer już poszedł, podbij wersję.
 - Commit: `typ(docs): krótki tytuł po polsku (vX.YY.ZZ)`, potem punkty „- …”. Bez nazw prywatnych plików użytkownika.
 
