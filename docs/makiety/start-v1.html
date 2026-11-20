@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ekran startowy v1</title>
+<style>
+  body{margin:0;background:#f6f7f9;color:#171717;font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+  .wrap{padding:16px;display:grid;gap:14px;max-width:1280px;margin:0 auto}
+  .ctl{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;font-size:13px}
+  .ctl .seg{display:inline-flex;border:1px solid #d4d4d8;border-radius:8px;overflow:hidden}
+  .ctl .seg button{border:0;background:#fff;color:#171717;padding:6px 12px;font:inherit;cursor:pointer;min-height:30px}
+  .ctl .seg button[aria-pressed=true]{background:#18181b;color:#fff}
+  .ctl .seg button:focus-visible{outline:2px solid #2563eb;outline-offset:-2px}
+  .notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+  .notes div{background:#fff;border:1px solid #e4e4e7;border-radius:10px;padding:12px 14px}
+  .notes h3{margin:0 0 6px;font-size:14px}
+  .notes p{margin:0;font-size:13px;line-height:1.5;color:#52525b}
+
+  /* ===== Makieta: paleta aplikacji po poprawce kontrastu (v1.01.31), zamknięta w .mk ===== */
+  .mk{--bg:#e8ecf4;--surface:#f2f5fb;--card:#fff;--ink:#141c2b;--ink-2:#2e3d55;--muted:#596780;
+      --accent:#185abd;--fill:#185abd;--fill-h:#134a9e;--accent-l:#e3edfa;--on-accent:#fff;
+      --border:#d3dae6;--border-s:#e4e9f1;--hover:rgba(24,90,189,.08);--pdf:#b42318;--pdf-l:#fdecea;
+      font:14px/1.45 "Space Grotesk",system-ui,-apple-system,sans-serif;color:var(--ink);background:var(--bg);
+      border:1px solid var(--border);border-radius:14px;overflow:hidden;display:grid;grid-template-rows:auto minmax(0,1fr);min-block-size:680px}
+  .mk[data-theme=dark]{--bg:#0b1018;--surface:#141d2b;--card:#1b2536;--ink:#e8eef8;--ink-2:#b8c8de;--muted:#8b9db6;
+      --accent:#4a9eff;--fill:#1e6bd0;--fill-h:#1a62c4;--accent-l:#183058;--on-accent:#fff;
+      --border:#2a3a52;--border-s:#223047;--hover:rgba(110,176,255,.1);--pdf:#ff8a7a;--pdf-l:#3a1f1d}
+  .mk button{font:inherit;color:inherit}
+  .mk [hidden]{display:none!important}
+  .mk svg{flex:none}
+  .mk :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  /* pasek u góry */
+  .top{display:flex;align-items:center;gap:10px;height:52px;padding:0 12px;background:var(--surface);border-bottom:1px solid var(--border-s)}
+  .logo{inline-size:28px;block-size:28px;border-radius:8px;background:var(--fill);color:var(--on-accent);display:grid;place-items:center}
+  .mk .file-btn{height:30px;padding:0 12px;border:0;border-radius:8px;background:var(--fill);color:var(--on-accent);font-weight:600;cursor:pointer}
+  .app-name{font-weight:700;white-space:nowrap}
+  .grow{flex:1 1 auto;min-inline-size:0}
+  .search{display:flex;align-items:center;gap:8px;inline-size:min(260px,30vw);height:32px;padding:0 10px;border:1px solid var(--border);border-radius:9px;color:var(--muted);opacity:.55}
+  .icon-btn{inline-size:36px;block-size:36px;display:grid;place-items:center;border:1px solid var(--border);border-radius:50%;background:var(--card);cursor:pointer}
+  .tag{font-size:11px;font-weight:600;color:var(--muted);border:1px dashed var(--border);border-radius:6px;padding:2px 6px;white-space:nowrap}
+
+  /* treść startu */
+  .stage{display:grid;place-items:center;padding:32px 24px;overflow:auto;min-block-size:0}
+  .start{inline-size:min(640px,100%);display:grid;justify-items:center;gap:20px;text-align:center}
+  .badge{inline-size:56px;block-size:56px;border-radius:16px;background:var(--accent-l);color:var(--accent);display:grid;place-items:center}
+  .start h1{margin:0;font-size:30px;line-height:1.15;letter-spacing:-.01em}
+  .lead{margin:-8px 0 0;color:var(--muted);max-inline-size:44ch}
+  .actions{display:flex;flex-wrap:wrap;justify-content:center;gap:8px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;block-size:44px;padding:0 16px;border:1px solid var(--border);border-radius:12px;background:var(--card);font-weight:600;cursor:pointer;white-space:nowrap}
+  .mk .btn.primary{background:var(--fill);color:var(--on-accent);border-color:transparent;padding:0 22px}
+  @media (hover:hover){.btn:hover{background:var(--hover)}.btn.primary:hover{background:var(--fill-h)}}
+  .btn:active{transform:scale(.97)}
+
+  .recent{inline-size:min(560px,100%);text-align:start;display:grid;gap:8px}
+  .recent h2{margin:0;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+  .item{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;padding:8px 6px 8px 12px;border:1px solid var(--border-s);border-radius:12px;background:var(--card)}
+  @media (hover:hover){.item:hover{border-color:var(--border);background:color-mix(in srgb,var(--card) 92%,var(--accent))}}
+  .ftype{inline-size:32px;block-size:32px;border-radius:8px;display:grid;place-items:center;font-size:10px;font-weight:700;background:var(--accent-l);color:var(--accent)}
+  .ftype.pdf{background:var(--pdf-l);color:var(--pdf)}
+  .name{font-weight:600;overflow-wrap:anywhere}
+  .meta{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .older{border:0;background:none;padding:0;margin-inline-start:6px;color:var(--accent);font-size:12.5px;font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+  .x{inline-size:36px;block-size:36px;display:grid;place-items:center;border:0;border-radius:10px;background:none;color:var(--muted);cursor:pointer}
+  .versions{grid-column:2 / -1;display:grid;gap:2px;margin-top:4px}
+  .versions[hidden]{display:none}
+  .ver{display:flex;justify-content:space-between;gap:8px;padding:6px 10px;border-radius:8px;font-size:12.5px;color:var(--ink-2);background:var(--surface)}
+  .end{margin:4px 0 0;font-size:12.5px;color:var(--muted)}
+
+  /* telefon */
+  .phone{inline-size:390px;block-size:760px;min-block-size:0;margin:0 auto;border-radius:36px;border-width:8px;border-color:#1f2937}
+  .phone .top{height:56px}
+  .phone .stage{place-items:start center;padding:20px 16px 28px}
+  .phone.first .stage{place-items:center}
+  .phone .start{gap:16px}
+  .phone .start h1{font-size:26px}
+  .phone .actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));inline-size:100%}
+  .phone .actions .primary{grid-column:1 / -1;block-size:52px;font-size:16px}
+  .phone .actions .btn:not(.primary){flex-direction:column;gap:2px;block-size:64px;padding:6px 4px;font-size:12.5px;white-space:normal}
+  .phone .end{display:none}
+  .phone.has-recent .badge,.phone.has-recent .lead{display:none}
+  .phone.has-recent .start h1{font-size:24px;justify-self:start}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 style="margin:0;font-size:20px">Ekran startowy — makieta v1</h1>
+  <div class="ctl">
+    <span>Urządzenie</span>
+    <span class="seg" data-ctl="device"><button aria-pressed="true" data-v="desktop">Komputer</button><button aria-pressed="false" data-v="phone">Telefon</button></span>
+    <span>Stan</span>
+    <span class="seg" data-ctl="state"><button aria-pressed="true" data-v="recent">Z ostatnimi plikami</button><button aria-pressed="false" data-v="first">Pierwsze uruchomienie</button></span>
+    <span>Motyw</span>
+    <span class="seg" data-ctl="theme"><button aria-pressed="true" data-v="light">Jasny</button><button aria-pressed="false" data-v="dark">Ciemny</button></span>
+  </div>
+
+  <div class="mk" id="mk">
+    <div class="top">
+      <span class="logo" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10a2 2 0 0 1 2 2v16l-3.5-2.5L12 21l-3.5-2.5L5 21V5a2 2 0 0 1 2-2z"/><path d="M9 8h6M9 12h6"/></svg></span>
+      <button class="file-btn only-desktop" type="button">Plik</button>
+      <span class="app-name">Documents Workbench</span>
+      <span class="grow"></span>
+      <span class="search only-desktop" aria-disabled="true" title="Najpierw otwórz dokument"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>Szukaj w dokumencie…</span>
+      <span class="tag only-desktop">bez pliku: wyszarzone</span>
+      <button class="icon-btn" type="button" aria-label="Menu aplikacji"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+    </div>
+    <div class="stage">
+      <div class="start">
+        <span class="badge" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h6"/></svg></span>
+        <h1>Otwórz dokument</h1>
+        <p class="lead">Word (.docx), PDF albo zdjęcie kartki. Plik zostaje na tym urządzeniu — nic nie jest wysyłane na serwer.</p>
+        <div class="actions">
+          <button class="btn primary" type="button">Otwórz plik…</button>
+          <button class="btn" type="button"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M12 12v6M9 15h6"/></svg>Nowy dokument</button>
+          <button class="btn" type="button"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3"/></svg>Zdjęcie kartki</button>
+          <button class="btn" type="button"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>Przewodnik</button>
+        </div>
+        <section class="recent" id="recent">
+          <h2>Ostatnio otwierane</h2>
+          <ul class="list">
+            <li class="item">
+              <span class="ftype" aria-hidden="true">DOCX</span>
+              <span><span class="name">Kolokwium – ściąga do nauki.docx</span><br><span class="meta">dziś, 14:10 · 21 KB</span><button class="older" type="button" aria-expanded="false" data-older>+3 starsze wersje</button></span>
+              <button class="x" type="button" aria-label="Usuń z listy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+              <div class="versions" hidden>
+                <span class="ver"><span>17 lis, 20:31</span><span>18,1 KB</span></span>
+                <span class="ver"><span>16 lis, 18:02</span><span>10,0 KB</span></span>
+                <span class="ver"><span>16 lis, 9:47</span><span>9,8 KB</span></span>
+              </div>
+            </li>
+            <li class="item">
+              <span class="ftype" aria-hidden="true">DOCX</span>
+              <span><span class="name">Pytania i odpowiedzi — wersja skrócona.docx</span><br><span class="meta">wczoraj · 5,2 KB</span></span>
+              <button class="x" type="button" aria-label="Usuń z listy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+            </li>
+            <li class="item">
+              <span class="ftype pdf" aria-hidden="true">PDF</span>
+              <span><span class="name">Regulamin zajęć.pdf</span><br><span class="meta">12 lis · 340 KB</span></span>
+              <button class="x" type="button" aria-label="Usuń z listy"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+            </li>
+          </ul>
+        </section>
+        <p class="end">albo przeciągnij plik w dowolne miejsce okna</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="notes">
+    <div><h3>Bez pliku: mniej na ekranie</h3><p>Szukanie i ↑ ↓ wyszarzone (zostają na swoim miejscu). Ukryte do otwarcia pliku: przełącznik Czytanie/Edycja, lewy pasek narzędzi i pasek powiększenia. Tab dochodzi do „Otwórz plik” po 3 krokach zamiast 12.</p></div>
+    <div><h3>Wyraźniejszy tytuł</h3><p>„Otwórz dokument” 30 px (telefon 26 px) zamiast długiego zdania 18 px. Formaty i „zostaje na urządzeniu” w jednym zdaniu pod tytułem. Informacja BETA o PDF przenosi się do okna zamiany PDF.</p></div>
+    <div><h3>Ostatnie pliki</h3><p>Jedna pozycja na nazwę pliku. Starsze wersje zwinięte pod „+3 starsze wersje”, rozwijane klikiem. Ikonka typu (DOCX / PDF). ✕ jako ikona, a nie znak tekstowy.</p></div>
+    <div><h3>Telefon</h3><p>Gdy są ostatnie pliki: bez dużej ikony i opisu, „Otwórz plik” na całą szerokość, pozostałe trzy w jednym rzędzie, lista od razu widoczna. Pierwsze uruchomienie: całość wyśrodkowana. W nagłówku bez uciętego podpisu.</p></div>
+    <div><h3>Komputer</h3><p>Całość wyśrodkowana w pionie, także bez ostatnich plików — bez pustej połowy ekranu. Strona kończy się podpowiedzią o przeciąganiu.</p></div>
+  </div>
+</div>
+<script>
+  const mk = document.getElementById("mk");
+  const state = { device: "desktop", state: "recent", theme: "light" };
+  function apply() {
+    mk.dataset.theme = state.theme;
+    mk.classList.toggle("phone", state.device === "phone");
+    mk.classList.toggle("first", state.state === "first");
+    mk.classList.toggle("has-recent", state.state === "recent");
+    document.getElementById("recent").hidden = state.state === "first";
+    document.querySelectorAll(".only-desktop").forEach((el) => { el.hidden = state.device === "phone"; });
+  }
+  document.querySelectorAll("[data-ctl]").forEach((seg) => seg.addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    seg.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    state[seg.dataset.ctl] = b.dataset.v; apply();
+  }));
+  document.querySelectorAll("[data-older]").forEach((b) => b.addEventListener("click", () => {
+    const v = b.closest(".item").querySelector(".versions");
+    v.hidden = !v.hidden; b.setAttribute("aria-expanded", String(!v.hidden));
+    b.textContent = v.hidden ? "+3 starsze wersje" : "zwiń starsze wersje";
+  }));
+  apply();
+</script>
+</body>
+</html>

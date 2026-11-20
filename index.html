@@ -19,8 +19,8 @@
     <link rel="apple-touch-icon" href="assets/images/apple-touch-icon.png?v=20261114-logo" />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin.woff2" crossorigin />
     <link rel="preload" as="font" type="font/woff2" href="assets/fonts/space-grotesk-latin-ext.woff2" crossorigin />
-    <link rel="stylesheet" href="styles/app.css?v=v1.01.30" />
-    <script src="app/theme-boot.js?v=v1.01.30"></script>
+    <link rel="stylesheet" href="styles/app.css?v=v1.01.32" />
+    <script src="app/theme-boot.js?v=v1.01.32"></script>
   </head>
   <body>
     <!-- Pierwszy przystanek Tab: skok prosto do dokumentu (panel to kilkadziesiąt kontrolek). -->
@@ -35,7 +35,7 @@
         <div class="hero-left">
           <div class="hero-logo" aria-hidden="true">
             <svg width="38" height="38" viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect width="38" height="38" rx="11" fill="var(--accent)" />
+              <rect width="38" height="38" rx="11" fill="var(--accent-fill)" />
               <path d="M12 10h14a2 2 0 0 1 2 2v16l-4-3-4 3-4-3-4 3V12a2 2 0 0 1 2-2z" stroke="white" stroke-width="1.5" fill="none" />
               <line x1="15" y1="16" x2="23" y2="16" stroke="white" stroke-width="1.5" />
               <line x1="15" y1="20" x2="23" y2="20" stroke="white" stroke-width="1.5" />
@@ -160,7 +160,7 @@
            na telefonie wracają na swoje miejsca. -->
       <header class="ribbon" id="ribbon" hidden>
         <div class="rb-r1">
-          <span class="rb-logo"><svg width="22" height="22" viewBox="0 0 38 38" fill="none" aria-hidden="true"><rect width="38" height="38" rx="9" fill="var(--accent)"/><path d="M12 10h14a2 2 0 0 1 2 2v16l-4-3-4 3-4-3-4 3V12a2 2 0 0 1 2-2z" stroke="white" stroke-width="2" fill="none"/><line x1="15" y1="16" x2="23" y2="16" stroke="white" stroke-width="2"/><line x1="15" y1="20" x2="23" y2="20" stroke="white" stroke-width="2"/></svg></span>
+          <span class="rb-logo"><svg width="22" height="22" viewBox="0 0 38 38" fill="none" aria-hidden="true"><rect width="38" height="38" rx="9" fill="var(--accent-fill)"/><path d="M12 10h14a2 2 0 0 1 2 2v16l-4-3-4 3-4-3-4 3V12a2 2 0 0 1 2-2z" stroke="white" stroke-width="2" fill="none"/><line x1="15" y1="16" x2="23" y2="16" stroke="white" stroke-width="2"/><line x1="15" y1="20" x2="23" y2="20" stroke="white" stroke-width="2"/></svg></span>
           <button type="button" class="rb-file" data-rb-act="file" data-i18n="menuFileCap" data-hint data-hint-pl="Plik: otwórz, zapisz, eksportuj, drukuj" data-hint-en="File: open, save, export, print" data-hint-delay="0.7">Plik</button>
           <div class="rb-name"><span class="rb-slot" data-rb="#heroTitle"></span><span class="rb-slot" data-rb="#heroMeta"></span></div>
           <div class="rb-strip" data-strip="tabs"><button type="button" class="rb-nudge rb-nudge-l" tabindex="-1" data-i18n-aria="rbScrollLeft" aria-label="Przewiń w lewo"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button><div class="rb-sc" role="tablist" data-i18n-aria="rbTabsAria" aria-label="Karty wstążki"><button type="button" class="rb-tab" role="tab" id="rbTab-home" data-rtab="home" aria-controls="rbPanel-home" aria-selected="true" tabindex="0"><span data-i18n="rbTabHome">Narzędzia główne</span></button><button type="button" class="rb-tab" role="tab" id="rbTab-insert" data-rtab="insert" aria-controls="rbPanel-insert" aria-selected="false" tabindex="-1"><span data-i18n="rbTabInsert">Wstaw</span></button><button type="button" class="rb-tab" role="tab" id="rbTab-layout" data-rtab="layout" aria-controls="rbPanel-layout" aria-selected="false" tabindex="-1"><span data-i18n="rbTabLayout">Układ</span></button><button type="button" class="rb-tab" role="tab" id="rbTab-review" data-rtab="review" aria-controls="rbPanel-review" aria-selected="false" tabindex="-1"><span data-i18n="rbTabReview">Recenzja</span></button><button type="button" class="rb-tab" role="tab" id="rbTab-mail" data-rtab="mail" aria-controls="rbPanel-mail" aria-selected="false" tabindex="-1"><span data-i18n="rbTabMail">Korespondencja</span></button><button type="button" class="rb-tab" role="tab" id="rbTab-view" data-rtab="view" aria-controls="rbPanel-view" aria-selected="false" tabindex="-1"><span data-i18n="rbTabView">Widok</span></button><button type="button" class="rb-tab" role="tab" id="rbTab-ai" data-rtab="ai" aria-controls="rbPanel-ai" aria-selected="false" tabindex="-1"><span data-i18n="rbTabAi">Asystent</span></button><button type="button" class="rb-tab rb-ctx" role="tab" id="rbTab-table" data-rtab="table" aria-controls="rbPanel-table" aria-selected="false" tabindex="-1" hidden><span data-i18n="rbTabTable">Tabela</span></button></div><button type="button" class="rb-nudge rb-nudge-r" tabindex="-1" data-i18n-aria="rbScrollRight" aria-label="Przewiń w prawo"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg><span class="rb-cnt"></span></button></div>
@@ -1218,27 +1218,26 @@
             <div class="doc-viewport" id="docViewport" tabindex="0" role="region" data-i18n-aria="docRegionAria" aria-label="Dokument">
               <div class="empty-state" id="emptyState">
                 <div class="empty-icon" aria-hidden="true">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="8" y1="13" x2="16" y2="13" />
-                    <line x1="8" y1="17" x2="14" y2="17" />
+                    <path d="M14 2v6h6M8 13h8M8 17h6" />
                   </svg>
                 </div>
-                <h2 id="emptyTitle" data-i18n="emptyTitle">Otwórz dokument .docx lub .pdf</h2>
-                <p id="emptySub" data-i18n="emptySub">Plik zostaje w przeglądarce — bez wysyłania na serwer.</p>
-                <p class="empty-beta" id="emptyPdfBeta"><span class="beta-tag">beta</span> <span data-i18n="emptyPdfBeta">Zamiana PDF → .docx jest w wersji testowej — po konwersji sprawdź wynik.</span></p>
+                <!-- Układ jak docs/makiety/start-v1.html: krótki tytuł, jedno zdanie, główny przycisk + trzy
+                     równe, lista ostatnich. Informacja „beta” o PDF jest w oknie zamiany PDF (pdf-import.js). -->
+                <h2 id="emptyTitle" data-i18n="emptyTitle">Otwórz dokument</h2>
+                <p id="emptySub" data-i18n="emptySub">Word (.docx), PDF albo zdjęcie kartki. Plik zostaje na tym urządzeniu — nic nie jest wysyłane na serwer.</p>
                 <div class="draft-recovery" id="draftRecovery" hidden aria-live="polite"></div>
                 <div class="empty-actions" id="emptyActions">
                   <button class="btn primary" id="emptyOpenBtn" type="button" data-i18n="emptyOpen">Otwórz plik…</button>
-                  <button class="btn" id="emptyNewBtn" type="button" data-i18n="emptyNew">Nowy dokument…</button>
+                  <button class="btn" id="emptyNewBtn" type="button"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><path d="M12 12v6M9 15h6"/></svg><span data-i18n="emptyNewShort">Nowy dokument</span></button>
                   <!-- tytuł obiecuje zdjęcie dokumentu — przycisk od razu tutaj (audyt D3) -->
-                  <button class="btn" id="emptyPhotoBtn" type="button" data-i18n="photoDoc">Zdjęcie dokumentu</button>
-                  <button class="btn" id="emptySampleBtn" type="button" data-i18n="emptySample">Przewodnik po aplikacji</button>
+                  <button class="btn" id="emptyPhotoBtn" type="button"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3z"/><circle cx="12" cy="13" r="3"/></svg><span data-i18n="emptyPhoto">Zdjęcie kartki</span></button>
+                  <button class="btn" id="emptySampleBtn" type="button"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg><span data-i18n="emptyGuide">Przewodnik</span></button>
                 </div>
                 <!-- Ostatnio otwierane (doc-comfort.js): kopie na tym urządzeniu, „✕” usuwa z listy -->
                 <section class="recent-files" id="recentFiles" hidden aria-live="polite"></section>
-                <p class="empty-drop-hint" id="emptyDropHint" data-i18n="emptyDropHint">albo przeciągnij plik .docx lub .pdf w dowolne miejsce okna — PDF zamieni się w edytowalny .docx</p>
+                <p class="empty-drop-hint" id="emptyDropHint" data-i18n="emptyDropHint">albo przeciągnij plik w dowolne miejsce okna</p>
               </div>
               <div class="doc-zoom-shell" id="docZoomShell">
                 <div class="doc-canvas hidden" id="docCanvas"></div>
@@ -1322,73 +1321,73 @@
         <p class="newdoc-foot" data-i18n="newDocFoot">Plik powstaje na tym urządzeniu. „Zapisz” zapyta, gdzie go zapisać.</p>
       </form>
     </dialog>
-    <script defer src="app/core.js?v=v1.01.30"></script>
-    <script defer src="app/language.js?v=v1.01.30"></script>
-    <script defer src="app/docx-metadata.js?v=v1.01.30"></script>
-    <script defer src="app/docx-compare.js?v=v1.01.30"></script>
-    <script defer src="app/docx-redline.js?v=v1.01.30"></script>
-    <script defer src="app/track-changes.js?v=v1.01.30"></script>
-    <script defer src="app/docx-revisions.js?v=v1.01.30"></script>
-    <script defer src="app/review-margin.js?v=v1.01.30"></script>
-    <script defer src="app/docx-forms.js?v=v1.01.30"></script>
-    <script defer src="app/doc-links.js?v=v1.01.30"></script>
-    <script defer src="app/docx-patch.js?v=v1.01.30"></script>
-    <script defer src="app/docx-compose.js?v=v1.01.30"></script>
-    <script defer src="app/textboxes.js?v=v1.01.30"></script>
-    <script defer src="app/tab-leaders.js?v=v1.01.30"></script>
-    <script defer src="app/template-tokens.js?v=v1.01.30"></script>
-    <script defer src="app/docx-run-styles.js?v=v1.01.30"></script>
-    <script defer src="app/docx-inline-edit.js?v=v1.01.30"></script>
-    <script defer src="app/doc-notes.js?v=v1.01.30"></script>
-    <script defer src="app/paste-rich.js?v=v1.01.30"></script>
-    <script defer src="app/document.js?v=v1.01.30"></script>
-    <script defer src="app/docx-render-fixes.js?v=v1.01.30"></script>
-    <script defer src="app/list-numbering.js?v=v1.01.30"></script>
-    <script defer src="app/docx-viewer.js?v=v1.01.30"></script>
-    <script defer src="app/analysis.js?v=v1.01.30"></script>
-    <script defer src="app/structure-panel.js?v=v1.01.30"></script>
-    <script defer src="app/semantic-search.js?v=v1.01.30"></script>
-    <script defer src="app/local-ai.js?v=v1.01.30"></script>
-    <script defer src="app/doc-ask.js?v=v1.01.30"></script>
-    <script defer src="app/doc-rewrite.js?v=v1.01.30"></script>
-    <script defer src="app/grammar-style.js?v=v1.01.30"></script>
-    <script defer src="app/placeholders.js?v=v1.01.30"></script>
-    <script defer src="app/snippets.js?v=v1.01.30"></script>
-    <script defer src="app/snippet-suggest.js?v=v1.01.30"></script>
-    <script defer src="app/doc-caret-nav.js?v=v1.01.30"></script>
-    <script defer src="app/doc-selection.js?v=v1.01.30"></script>
-    <script defer src="app/print-preview.js?v=v1.01.30"></script>
-    <script defer src="app/bug-report.js?v=v1.01.30"></script>
-    <script defer src="app/edit-tools.js?v=v1.01.30"></script>
-    <script defer src="app/mobile-doc-zoom.js?v=v1.01.30"></script>
-    <script defer src="app/ui-controls.js?v=v1.01.30"></script>
-    <script defer src="app/offline-status.js?v=v1.01.30"></script>
-    <script defer src="app/lazy-features.js?v=v1.01.30"></script>
-    <script defer src="app/app-frame.js?v=v1.01.30"></script>
-    <script defer src="app/touch.js?v=v1.01.30"></script>
-    <script defer src="app/pinch-zoom.js?v=v1.01.30"></script>
-    <script defer src="app/page-breaks.js?v=v1.01.30"></script>
-    <script defer src="app/format-marks.js?v=v1.01.30"></script>
-    <script defer src="app/undo.js?v=v1.01.30"></script>
-    <script defer src="app/compose-ui.js?v=v1.01.30"></script>
-    <script defer src="app/autocorrect.js?v=v1.01.30"></script>
-    <script defer src="app/self-check.js?v=v1.01.30"></script>
-    <script defer src="app/image-viewer.js?v=v1.01.30"></script>
-    <script defer src="app/drafts.js?v=v1.01.30"></script>
-    <script defer src="app/open-docs.js?v=v1.01.30"></script>
-    <script defer src="app/view-mode.js?v=v1.01.30"></script>
-    <script defer src="app/keyboard.js?v=v1.01.30"></script>
-    <script defer src="app/shortcuts.js?v=v1.01.30"></script>
-    <script defer src="app/whats-new.js?v=v1.01.30"></script>
-    <script defer src="app/ribbon-classic.js?v=v1.01.30"></script>
-    <script defer src="app/ribbon.js?v=v1.01.30"></script>
-    <script defer src="app/backstage.js?v=v1.01.30"></script>
-    <script defer src="app/rail.js?v=v1.01.30"></script>
-    <script defer src="app/mini-bar.js?v=v1.01.30"></script>
-    <script defer src="app/phone-bar.js?v=v1.01.30"></script>
-    <script defer src="app/doc-context-menu.js?v=v1.01.30"></script>
-    <script defer src="app/doc-comfort.js?v=v1.01.30"></script>
-    <script defer src="app/launch-files.js?v=v1.01.30"></script>
-    <script defer src="app/bootstrap.js?v=v1.01.30"></script>
+    <script defer src="app/core.js?v=v1.01.32"></script>
+    <script defer src="app/language.js?v=v1.01.32"></script>
+    <script defer src="app/docx-metadata.js?v=v1.01.32"></script>
+    <script defer src="app/docx-compare.js?v=v1.01.32"></script>
+    <script defer src="app/docx-redline.js?v=v1.01.32"></script>
+    <script defer src="app/track-changes.js?v=v1.01.32"></script>
+    <script defer src="app/docx-revisions.js?v=v1.01.32"></script>
+    <script defer src="app/review-margin.js?v=v1.01.32"></script>
+    <script defer src="app/docx-forms.js?v=v1.01.32"></script>
+    <script defer src="app/doc-links.js?v=v1.01.32"></script>
+    <script defer src="app/docx-patch.js?v=v1.01.32"></script>
+    <script defer src="app/docx-compose.js?v=v1.01.32"></script>
+    <script defer src="app/textboxes.js?v=v1.01.32"></script>
+    <script defer src="app/tab-leaders.js?v=v1.01.32"></script>
+    <script defer src="app/template-tokens.js?v=v1.01.32"></script>
+    <script defer src="app/docx-run-styles.js?v=v1.01.32"></script>
+    <script defer src="app/docx-inline-edit.js?v=v1.01.32"></script>
+    <script defer src="app/doc-notes.js?v=v1.01.32"></script>
+    <script defer src="app/paste-rich.js?v=v1.01.32"></script>
+    <script defer src="app/document.js?v=v1.01.32"></script>
+    <script defer src="app/docx-render-fixes.js?v=v1.01.32"></script>
+    <script defer src="app/list-numbering.js?v=v1.01.32"></script>
+    <script defer src="app/docx-viewer.js?v=v1.01.32"></script>
+    <script defer src="app/analysis.js?v=v1.01.32"></script>
+    <script defer src="app/structure-panel.js?v=v1.01.32"></script>
+    <script defer src="app/semantic-search.js?v=v1.01.32"></script>
+    <script defer src="app/local-ai.js?v=v1.01.32"></script>
+    <script defer src="app/doc-ask.js?v=v1.01.32"></script>
+    <script defer src="app/doc-rewrite.js?v=v1.01.32"></script>
+    <script defer src="app/grammar-style.js?v=v1.01.32"></script>
+    <script defer src="app/placeholders.js?v=v1.01.32"></script>
+    <script defer src="app/snippets.js?v=v1.01.32"></script>
+    <script defer src="app/snippet-suggest.js?v=v1.01.32"></script>
+    <script defer src="app/doc-caret-nav.js?v=v1.01.32"></script>
+    <script defer src="app/doc-selection.js?v=v1.01.32"></script>
+    <script defer src="app/print-preview.js?v=v1.01.32"></script>
+    <script defer src="app/bug-report.js?v=v1.01.32"></script>
+    <script defer src="app/edit-tools.js?v=v1.01.32"></script>
+    <script defer src="app/mobile-doc-zoom.js?v=v1.01.32"></script>
+    <script defer src="app/ui-controls.js?v=v1.01.32"></script>
+    <script defer src="app/offline-status.js?v=v1.01.32"></script>
+    <script defer src="app/lazy-features.js?v=v1.01.32"></script>
+    <script defer src="app/app-frame.js?v=v1.01.32"></script>
+    <script defer src="app/touch.js?v=v1.01.32"></script>
+    <script defer src="app/pinch-zoom.js?v=v1.01.32"></script>
+    <script defer src="app/page-breaks.js?v=v1.01.32"></script>
+    <script defer src="app/format-marks.js?v=v1.01.32"></script>
+    <script defer src="app/undo.js?v=v1.01.32"></script>
+    <script defer src="app/compose-ui.js?v=v1.01.32"></script>
+    <script defer src="app/autocorrect.js?v=v1.01.32"></script>
+    <script defer src="app/self-check.js?v=v1.01.32"></script>
+    <script defer src="app/image-viewer.js?v=v1.01.32"></script>
+    <script defer src="app/drafts.js?v=v1.01.32"></script>
+    <script defer src="app/open-docs.js?v=v1.01.32"></script>
+    <script defer src="app/view-mode.js?v=v1.01.32"></script>
+    <script defer src="app/keyboard.js?v=v1.01.32"></script>
+    <script defer src="app/shortcuts.js?v=v1.01.32"></script>
+    <script defer src="app/whats-new.js?v=v1.01.32"></script>
+    <script defer src="app/ribbon-classic.js?v=v1.01.32"></script>
+    <script defer src="app/ribbon.js?v=v1.01.32"></script>
+    <script defer src="app/backstage.js?v=v1.01.32"></script>
+    <script defer src="app/rail.js?v=v1.01.32"></script>
+    <script defer src="app/mini-bar.js?v=v1.01.32"></script>
+    <script defer src="app/phone-bar.js?v=v1.01.32"></script>
+    <script defer src="app/doc-context-menu.js?v=v1.01.32"></script>
+    <script defer src="app/doc-comfort.js?v=v1.01.32"></script>
+    <script defer src="app/launch-files.js?v=v1.01.32"></script>
+    <script defer src="app/bootstrap.js?v=v1.01.32"></script>
   </body>
 </html>

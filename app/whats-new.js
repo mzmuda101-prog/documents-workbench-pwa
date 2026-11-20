@@ -7,6 +7,24 @@
 
 const WHATS_NEW = [
   {
+    v: "v1.01.32",
+    pl: [
+      "Nowy ekran startowy: krótszy tytuł, równe przyciski, a na telefonie ostatnie pliki od razu widoczne.",
+      "Ostatnio otwierane: pliki o tej samej nazwie jako jedna pozycja — starsze wersje rozwiniesz pod „+3 starsze wersje”. Przy każdym pliku widać, czy to Word, czy PDF.",
+      "Bez otwartego pliku nie ma narzędzi do dokumentu (lewy pasek, tryb, powiększenie), a szukanie jest wyszarzone.",
+    ],
+    en: [
+      "New start screen: a shorter title, even buttons, and on phones your recent files are visible right away.",
+      "Recently opened: files with the same name are one entry — expand older versions under “+3 older versions”. Each file shows whether it is Word or PDF.",
+      "With no file open, document tools (left bar, mode, zoom) are hidden and search is greyed out.",
+    ],
+  },
+  {
+    v: "v1.01.31",
+    pl: ["Lepszy kontrast: szare podpisy są ciemniejsze, a niebieskie przyciski w ciemnym motywie czytelniejsze."],
+    en: ["Better contrast: grey captions are darker and blue buttons in dark mode are easier to read."],
+  },
+  {
     v: "v1.01.30",
     pl: [
       "Nowa wersja aplikacji włącza się dopiero po kliknięciu „Aktualizuj” — nie wchodzi już „po części” sama przy otwarciu.",
