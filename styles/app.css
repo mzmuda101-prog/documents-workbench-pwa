@@ -759,17 +759,16 @@ html.is-mobile .dwb-page-margin-guide { display: none; }
 .docx-preview-host p.docx-bullet-fixed.dwb-bullet-hang.docx-bullet-l1::before { content: "\25E6" !important; }
 .docx-preview-host p.docx-bullet-fixed.dwb-bullet-hang.docx-bullet-l2::before { content: "\25AA" !important; }
 
-/* Numbered / letter lists — ::before counter + negative text-indent misaligns text in edit mode */
+/* Lista numerowana bez wcięcia wiszącego: jak w Wordzie numer na lewym wcięciu, tabulator po nim
+   do najbliższego domyślnego tabulatora (w:defaultTabStop, app/list-numbering.js). Dawniej numer
+   w pudełku 1,85 em do prawej: w Czytaniu tabulator zwijał się do spacji, w Edycji (pre-wrap)
+   rozwijał na 8 spacji — tekst punktu w każdym trybie gdzie indziej. */
 .docx-preview-host p.docx-list-numbered-fixed {
   text-indent: 0 !important;
 }
 .docx-preview-host p.docx-list-numbered-fixed::before {
-  display: inline-block !important;
-  min-width: 1.85em;
-  text-align: end;
-  padding-inline-end: 0.45em;
-  vertical-align: top;
-  box-sizing: border-box;
+  white-space: pre;
+  tab-size: var(--dwb-tab-stop, 36pt);
 }
 
 /* Numer listy policzony jak w Wordzie (app/list-numbering.js) zamiast licznika CSS docx-preview */
@@ -1106,6 +1105,10 @@ html.dwb-reflow-text .doc-zoom-shell { min-width: 0; }
 .doc-canvas.doc-reflow-mode .docx table {
   display: block; max-width: 100%; overflow-x: auto;
 }
+/* Tabela dopasowana do ekranu (mobile-doc-zoom.js: szerokość 100%, stały układ kolumn) zostaje
+   tabelą — jako blok szerokość 100% miała tylko otoczka, a komórki kurczyły się do treści: szare
+   pasy wierszy (harmonogram z Excela) węższe niż strona, pusty wiersz jako kreska 4 px */
+.doc-canvas.doc-reflow-mode .docx table:not(.dwb-table-keep)[style*="table-layout: fixed"] { display: table; }
 .doc-canvas.doc-reflow-mode .docx img {
   max-width: 100% !important; height: auto !important;
 }

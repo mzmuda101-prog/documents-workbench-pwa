@@ -7,6 +7,21 @@
 
 const WHATS_NEW = [
   {
+    v: "v1.01.37",
+    pl: [
+      "Listy numerowane: tekst punktu zaczyna się w tym samym miejscu w Czytaniu, Edycji i na wydruku — jak w Wordzie (dawniej każdy tryb miał inny odstęp po numerze).",
+      "iPhone i iPad: Enter na końcu punktu listy — wpisany tekst trafia do nowego punktu, a nie do akapitu pod listą.",
+      "Wklejanie: po zamianie wklejonego tekstu na listę lub pogrubienie przycisk „Zachowaj tylko tekst” wkleja go jak Word — dokładnie tak, jak był.",
+      "PDF → Word: harmonogramy i tabele z Excela — puste szare wiersze są wierszami tabeli (dawniej obrazek), odstępy w tekście stoją jak w PDF, a na telefonie szare pasy mają całą szerokość.",
+    ],
+    en: [
+      "Numbered lists: item text starts at the same place in Reading, Editing and print — like in Word (each mode used to leave a different gap after the number).",
+      "iPhone and iPad: pressing Enter at the end of a list item — what you type goes into the new item, not the paragraph below the list.",
+      "Paste: after pasted text is turned into a list or bold, “Keep text only” pastes it like Word — exactly as it was.",
+      "PDF → Word: schedules and tables from Excel — empty grey rows are table rows (used to be a picture), gaps in text sit where they are in the PDF, and grey bands span the full width on phones.",
+    ],
+  },
+  {
     v: "v1.01.36",
     pl: ["PDF → Word: skan zapisany przez skaner na ogromnej stronie jest zmniejszany do A4 w całości — dawniej każda strona szła na 3 poziome kartki z tekstem wielkości 49 pt."],
     en: ["PDF → Word: a scan saved on a huge page is scaled down to A4 as a whole — each page used to become 3 landscape sheets with 49 pt text."],

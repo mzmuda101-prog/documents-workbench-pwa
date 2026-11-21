@@ -8,9 +8,14 @@
 // a ZAPISANY plik różnił się od podglądu (34 akapity na ekranie, 33 w pliku).
 // Musi być prawdą: to, co widać, to dokładnie to, co trafia do pliku — przy każdym tempie,
 // także na dużym dokumencie (przebudowa trwa wtedy najdłużej).
+// Błąd z 2026-11-21: WebKit (iPhone, iPad) — Enter na końcu punktu listy dawał pusty punkt bez
+// miejsca na kursor; pierwsza wpisana litera szła na początek NASTĘPNEGO akapitu.
 
 const fs = require("fs");
+const path = require("path");
+const os = require("os");
 const pw = require("playwright");
+const JSZip = require("jszip");
 const { APP_URL, DOCX_FIXTURE } = require("./docx-test-helpers");
 
 const ENGINE = process.env.ENGINE === "webkit" ? "webkit" : "chromium";
@@ -58,6 +63,50 @@ async function session(browser, loadDoc, anchorText, delay, label) {
   await context.close();
 }
 
+// lista numerowana bez wcięcia wiszącego (numer i tabulator jak w Wordzie) + akapit pod nią
+async function listDocx() {
+  const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+  const item = (t) => `<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t>${t}</w:t></w:r></w:p>`;
+  const zip = new JSZip();
+  zip.file("[Content_Types].xml", '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/numbering.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml"/></Types>');
+  zip.file("_rels/.rels", '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+  zip.file("word/_rels/document.xml.rels", '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering" Target="numbering.xml"/></Relationships>');
+  zip.file("word/numbering.xml", `<?xml version="1.0" encoding="UTF-8"?><w:numbering ${W}><w:abstractNum w:abstractNumId="0"><w:lvl w:ilvl="0"><w:start w:val="1"/><w:numFmt w:val="decimal"/><w:lvlText w:val="%1."/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="0" w:firstLine="0"/></w:pPr></w:lvl></w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num></w:numbering>`);
+  zip.file("word/document.xml", `<?xml version="1.0" encoding="UTF-8"?><w:document ${W}><w:body>${item("Punkt pierwszy.")}${item("Punkt drugi.")}<w:p><w:r><w:t>Akapit pod listą</w:t></w:r></w:p><w:sectPr/></w:body></w:document>`);
+  const file = path.join(os.tmpdir(), `dwb-inline-enter-list-${process.pid}.docx`);
+  fs.writeFileSync(file, await zip.generateAsync({ type: "nodebuffer" }));
+  return file;
+}
+
+async function listEnterAtEnd(browser) {
+  const file = await listDocx();
+  const context = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 844 } });
+  await context.addInitScript(() => sessionStorage.setItem("introPlayed", "true"));
+  const page = await context.newPage();
+  await page.goto(APP_URL, { waitUntil: "load" });
+  await page.evaluate(() => document.getElementById("heroSplash")?.remove());
+  await page.locator("#fileInput").setInputFiles(file);
+  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && !!document.querySelector(".docx-preview-host p"), null, { timeout: 30000 });
+  await page.evaluate(() => document.querySelector('.mode-btn[data-mode="edit"]').click());
+  await page.waitForSelector(".docx-edit-root");
+  await page.waitForTimeout(400);
+  // kursor na koniec klawiszem (tak jak użytkownik), nie przez Range — tylko tak WebKit gubił miejsce
+  await page.locator(".docx-preview-host p", { hasText: "Punkt drugi" }).first().click({ position: { x: 60, y: 8 } });
+  await page.keyboard.press(ENGINE === "webkit" ? "Meta+ArrowRight" : "End");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(300);
+  await page.keyboard.type("Nowy punkt");
+  const r = await page.evaluate(async () => {
+    const bytes = await buildDocumentForSave();
+    const ps = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"));
+    return { dom: ps.map((p) => `${p.getAttribute("data-dwb-num") || ""}${p.textContent}`), xml: (await extractParagraphTextsFromDocx(bytes)).map(String) };
+  });
+  check("lista: Enter na końcu punktu → tekst w nowym punkcie", r.dom[2] === "3.\tNowy punkt" && r.dom[3] === "Akapit pod listą", JSON.stringify(r.dom));
+  check("lista: zapis = podgląd (bez dodatkowego łamania wiersza)", JSON.stringify(r.xml) === JSON.stringify(r.dom.map((t) => t.replace(/^\d+\.\t/, ""))), JSON.stringify(r.xml));
+  await context.close();
+  fs.rmSync(file, { force: true });
+}
+
 async function run() {
   const browser = await pw[ENGINE].launch({ headless: true });
   const small = async (page) => {
@@ -74,6 +123,7 @@ async function run() {
   };
   try {
     for (const delay of [0, 60]) await session(browser, small, "Dane Wynajmującego", delay, "mały plik");
+    await listEnterAtEnd(browser);
     if (fs.existsSync(DOCX_FIXTURE)) await session(browser, big, "Phasellus dapibus", 0, "duży plik (3,8 MB)");
   } finally {
     await browser.close();

@@ -40,7 +40,7 @@ const dwbListNum = (() => {
       const s = await zip.file(path)?.async("string");
       return s ? new DOMParser().parseFromString(s, "application/xml") : null;
     };
-    const [numbering, styles, docXml] = await Promise.all([read("word/numbering.xml"), read("word/styles.xml"), read("word/document.xml")]);
+    const [numbering, styles, docXml, settings] = await Promise.all([read("word/numbering.xml"), read("word/styles.xml"), read("word/document.xml"), read("word/settings.xml")]);
     const abs = new Map();
     const nums = new Map();
     const root = numbering?.documentElement;
@@ -69,7 +69,9 @@ const dwbListNum = (() => {
       if (!ppr || !kids(ppr, "numPr")[0] && !kids(ppr, "pStyle")[0]) return null;
       return langOf(ppr) || langOf(p.getElementsByTagNameNS(W_NS, "r")[0]) || null;
     }) : [];
-    return { abs, nums, paraLangs, lang: defLang || (typeof currentLang !== "undefined" && currentLang === "en" ? "en-US" : "pl-PL") };
+    // domyślne tabulatory (twipy → pt); brak w:defaultTabStop = 36 pt jak w Wordzie
+    const tabPt = (parseInt(val(settings?.getElementsByTagNameNS(W_NS, "defaultTabStop")[0]), 10) || 720) / 20;
+    return { abs, nums, paraLangs, tabPt, lang: defLang || (typeof currentLang !== "undefined" && currentLang === "en" ? "en-US" : "pl-PL") };
   }
 
   function levelDef(numId, ilvl) {
@@ -218,6 +220,8 @@ const dwbListNum = (() => {
     const state = new Map(); // abstractNumId → wartości poziomów (undefined = jeszcze nie liczony)
     const seen = new Set();
     let n = 0;
+    // tabulator po numerze listy bez wcięcia wiszącego → do domyślnego tabulatora (styles/app.css)
+    host.style.setProperty("--dwb-tab-stop", `${model.tabPt}pt`);
     bodyParagraphs(host).forEach((p, i) => {
       if (p.closest(".dwb-notes")) return;
       const m = NUM_CLASS.exec(p.className || "");

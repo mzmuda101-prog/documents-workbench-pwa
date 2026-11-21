@@ -518,8 +518,18 @@
     });
     const tables = [];
     const leftovers = { hSegs: [], vSegs: [], fills: specks };
+    const failed = [];
     for (const g of groups.values()) {
       const t = buildGrid(g, frags, tol);
+      if (t) tables.push(t);
+      else failed.push(g);
+    }
+    // Pusty pas w serii pasów-tabel (Excel: szare wiersze, ostatnie jeszcze bez wpisów) — ten sam
+    // kolor i te same brzegi co wykryta tabela: też pusty wiersz tabeli, nie obraz pod tekstem
+    // (dawniej nieedytowalny i znikał w widoku telefonu).
+    const sibling = (it) => tables.some((t) => Math.abs(t.x0 - it.x0) < 1.5 && Math.abs(t.x1 - it.x1) < 1.5 && t.cells.some((c) => c.fill === it.ref.color));
+    for (const g of failed) {
+      const t = g.length === 1 && g[0].kind === "fill" && g[0].ref.color !== "ffffff" && sibling(g[0]) ? buildGrid(g, frags, tol, { allowEmpty: true }) : null;
       if (t) tables.push(t);
       else {
         for (const it of g) {
@@ -622,7 +632,7 @@
     return out.map((c) => c.sum / c.n);
   }
 
-  function buildGrid(items, frags, tol) {
+  function buildGrid(items, frags, tol, opts = {}) {
     const bx0 = Math.min(...items.map((i) => i.x0)), bx1 = Math.max(...items.map((i) => i.x1));
     const by0 = Math.min(...items.map((i) => i.y0)), by1 = Math.max(...items.map((i) => i.y1));
     if (bx1 - bx0 < 8 || by1 - by0 < 4) return null;
@@ -676,7 +686,7 @@
     // Tekst, który przecina granicę, oznacza scalenie komórek.
     const inBox = frags.filter((f) => f.type === "text" && !f.rotated && (f.x0 + f.x1) / 2 >= bx0 - 1 && (f.x0 + f.x1) / 2 <= bx1 + 1 && f.y >= by0 - 1 && f.y <= by1 + 1);
     // Pojedyncza komórka z tekstem = ramka/cieniowany akapit; wymagamy treści albo >1 komórki.
-    if (nC * nR === 1 && !inBox.length) return null;
+    if (nC * nR === 1 && !inBox.length && !opts.allowEmpty) return null;
 
     // siatka właścicieli: union-find po komórkach (scalanie, gdy brak granicy)
     const id = (r, c) => r * nC + c;
@@ -927,6 +937,37 @@
         toks.push({ type: "tab", pos: part.x0 - regionX0, leader: null, align: "left", startX: part.x0, endX: part.x1 });
         prev = null;
       }
+      // Odstępy między słowami w tym kawałku (od końca litery do początku następnego słowa).
+      // Szeroki odstęp (kilka spacji ze źródła — Excel: „SOBOTA      godz.”) staje się tabulatorem
+      // na pozycji z PDF (jak większe odstępy niżej) — dawniej zwijał się do jednej spacji i kolumna
+      // „godz.” w wierszach się rozjeżdżała. Spacje liczone szerokością kroju chybiały o 2 pt
+      // (Excel skaluje stronę, krój zastępczy) — tabulator stawia słowo dokładnie tam, gdzie w PDF.
+      // Wyjustowany tekst ma wszystkie odstępy podobnie szerokie — tam nic się nie zmienia.
+      const wordGaps = new Map(); // glif → odstęp przed nim (pt)
+      {
+        let ink = null, sawSpace = false;
+        for (const g of glyphs) {
+          if (g.isSpace) { sawSpace = true; continue; }
+          if (ink) {
+            const gap = g.x - ink.x1;
+            if (sawSpace || gap > Math.max(ink.size, g.size) * 0.17) wordGaps.set(g, gap);
+          }
+          ink = g;
+          sawSpace = false;
+        }
+      }
+      // wzór (indeksy w mniejszym kroju, znaki działań) — szerokie odstępy to układ wzoru, nie spacje
+      const inkSizes = glyphs.filter((x) => !x.isSpace).map((x) => x.size || 0);
+      const formula = Math.min(...inkSizes) < Math.max(...inkSizes) * 0.85 || glyphs.some((x) => /[=+<>±×÷∑∏∫√∞→←↔≤≥≠≈∂∆∇∈∉⊂⊃∪∩^_|]/.test(x.u || ""));
+      const wideGap = (g) => {
+        if (formula) return false;
+        const gap = wordGaps.get(g);
+        const size = g.size || 10;
+        if (gap == null || gap < size * 0.9 || gap > size * 1.6) return false;
+        const others = [...wordGaps.values()].filter((v) => v !== gap && v <= size * 1.6).sort((a, b) => a - b);
+        return !(others.length && gap < others[Math.floor(others.length / 2)] * 2.5);
+      };
+      let ink = null; // ostatnia litera (nie spacja) — szeroki odstęp liczony od niej
       // Kropki/kreski wiodące (spis treści): ≥4 kropki z rzędu → tabulator z wypełnieniem.
       let i = 0;
       while (i < glyphs.length) {
@@ -986,7 +1027,11 @@
           // spacja tylko jedna (wyjustowany tekst ma szerokie spacje, ale to dalej jedna spacja)
           const last = toks[toks.length - 1];
           if (prev && !(last && last.type === "text" && last.text.endsWith(" "))) pushText(g, " ");
-        } else pushText(g, g.u);
+        } else {
+          if (ink && wideGap(g) && toks[toks.length - 1]?.type !== "tab") toks.push({ type: "tab", pos: g.x - regionX0, leader: null, align: "left", startX: g.x });
+          pushText(g, g.u);
+          ink = g;
+        }
         prev = g;
         i++;
       }
