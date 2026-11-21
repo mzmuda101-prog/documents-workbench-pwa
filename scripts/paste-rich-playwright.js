@@ -214,6 +214,22 @@ const paraTexts = (xml) => (xml.match(/<w:p[ >][\s\S]*?<\/w:p>/g) || []).map((p)
   await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 15000 });
   await sleep(600);
   check("wklejka bez linii listy: bez Opcji wklejania", !(await page.evaluate(() => !!document.querySelector(".paste-opts"))));
+  // Markdown zamieniony przez nas → „Zachowaj tylko tekst” = jak Word: znaczniki zostają tekstem
+  await freshPara(page, 2);
+  await paste(page, { "text/plain": "1. Raz **mocno**\n2. Dwa" });
+  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && !!document.querySelector(".paste-opts"), null, { timeout: 15000 });
+  await sleep(600);
+  await page.click('.paste-opts-btn:has-text("Zachowaj tylko tekst")');
+  await page.waitForFunction(() => document.body.innerText.includes("**mocno**") && document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 15000 });
+  await sleep(600);
+  pps = paraTexts((await docXml(page)).doc);
+  const kept = pps.filter((x) => /Raz|Dwa/.test(x.text));
+  check("„Zachowaj tylko tekst”: „1. Raz **mocno**” jako zwykły tekst, bez listy i pogrubienia",
+    kept.length === 2 && kept[0].text === "PRZED 1. Raz **mocno**" && kept[1].text === "2. DwaZA" && !kept.some((x) => /<w:numPr>|<w:b w:val="1"\/>/.test(x.xml)), JSON.stringify(kept.map((x) => x.text)));
+  await page.keyboard.press(ENGINE === "webkit" ? "Meta+z" : "Control+z");
+  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 15000 });
+  await sleep(800);
+  check("„Zachowaj tylko tekst”: jedno Cofnij zdejmuje wklejkę", await page.evaluate(() => !document.body.innerText.includes("Raz") && document.body.innerText.includes("PRZED ZA")));
 
   check("brak błędów JS", !errors.length, errors.slice(0, 3).join(" | "));
   await browser.close();

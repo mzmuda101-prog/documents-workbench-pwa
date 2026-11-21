@@ -311,10 +311,13 @@ const dwbPaste = (() => {
       // Mateusza 2026-11-17). Z Office: zawsze struktura z HTML-a, jak w Wordzie.
       const office = /urn:schemas-microsoft-com:office|class="?Mso/i.test(html);
       if (!rich && office) return blocks.length ? blocks : null;
-      if (!rich && text && looksLikeMarkdown(text)) blocks = fromMarkdown(text);
-      else if (!rich) return null;
+      if (!rich && text && looksLikeMarkdown(text)) {
+        blocks = fromMarkdown(text);
+        if (blocks) blocks.plainText = text; // zamiana nasza, nie źródła — opcja „Zachowaj tylko tekst” (jak Word)
+      } else if (!rich) return null;
     } else if (text && looksLikeMarkdown(text)) {
       blocks = fromMarkdown(text);
+      if (blocks) blocks.plainText = text; // zamiana nasza, nie źródła — opcja „Zachowaj tylko tekst” (jak Word)
     }
     if (!blocks || !blocks.length) return null;
     return blocks;
@@ -407,6 +410,7 @@ const dwbPaste = (() => {
     if (inNote || single) {
       asUndoStep("undoOpPaste", () => insertInline(p, single ? blocks[0].runs : flatten(blocks)));
       onInlineParagraphInput();
+      if (blocks.plainText != null && !inNote) offerOptions(resolveParaIndex(p), [], blocks.plainText);
       return;
     }
     const index = resolveParaIndex(p);
@@ -437,7 +441,7 @@ const dwbPaste = (() => {
     const plan = composePastePlan(edit.blocks, offset === 0);
     pendingInlineCursor = { paraIndex: index + plan.lastParaOffset, offset: plan.lastTextLen };
     const n = await applyDocumentEdit(edit);
-    if (n > 0) offerListOptions(plan, index, offset);
+    if (n > 0) offerOptions(index + plan.lastParaOffset, blocks.plainText != null ? [] : listGroups(plan, index, offset), blocks.plainText);
   }
 
   // ── Opcje wklejania (jak w Wordzie): wklejka zostaje taka jak źródło, a gdy jej linie wyglądają
@@ -474,11 +478,12 @@ const dwbPaste = (() => {
     });
     return groups.filter((g) => g.indices.length >= 2);
   }
-  function offerListOptions(plan, index, offset) {
+  // groups — linie wyglądające na listę (wklejone jako tekst); plainText — wklejka zamieniona przez
+  // nas z Markdownu: przycisk „Zachowaj tylko tekst” cofa zamianę i wkleja tekst jak Word
+  function offerOptions(endIdx, groups, plainText) {
     hideListOptions();
-    const groups = listGroups(plan, index, offset);
-    if (!groups.length) return;
-    const lastIdx = Math.max(...groups.map((g) => g.indices[g.indices.length - 1]));
+    if (!groups.length && plainText == null) return;
+    const lastIdx = groups.length ? Math.max(...groups.map((g) => g.indices[g.indices.length - 1])) : endIdx;
     const el = document.createElement("div");
     el.className = "paste-opts";
     el.setAttribute("role", "group");
@@ -506,6 +511,23 @@ const dwbPaste = (() => {
       b.addEventListener("click", () => convert(gs, b));
       el.append(b);
     });
+    if (plainText != null && typeof dwbUndo !== "undefined") {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "paste-opts-btn";
+      b.textContent = t("pasteKeepText");
+      b.addEventListener("mousedown", (e) => e.preventDefault());
+      b.addEventListener("click", async () => {
+        hideListOptions();
+        await dwbUndo.undo(); // kursor wraca tam, gdzie był przed wklejeniem
+        await waitInlineStructuralIdle?.();
+        const sel = window.getSelection();
+        const node = sel?.rangeCount ? sel.getRangeAt(0).startContainer : null;
+        const p = docCaretParagraph(node?.nodeType === 1 ? node : node?.parentElement);
+        if (p) pastePlainText(p, plainText);
+      });
+      el.append(b);
+    }
     const x = document.createElement("button");
     x.type = "button";
     x.className = "paste-opts-x";

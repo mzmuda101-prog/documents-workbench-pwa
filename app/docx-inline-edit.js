@@ -1053,6 +1053,11 @@ function onDocPaste(e) {
   const text = e.clipboardData?.getData("text/plain");
   if (text == null) return;
   e.preventDefault();
+  pastePlainText(p, text);
+}
+
+// Zwykły tekst w miejscu kursora (też „Zachowaj tylko tekst” z opcji wklejania — paste-rich.js).
+function pastePlainText(p, text) {
   const lines = text.replace(/\r\n?/g, "\n").replace(/\n+$/, "").split("\n");
   if (lines.length > 1 && typeof dwbPaste !== "undefined") {
     const blocks = lines.map((line) => ({ type: "p", runs: line ? [{ text: line }] : [] }));
@@ -1737,9 +1742,32 @@ async function handleInlineEnter(p, paraIndex, e) {
   if (lineOnly && newP.textContent.replace(/\uFEFF/g, "")) p.style.borderBottom = "none";
   else if (lineOnly || wasRule) newP.style.border = "none";
   prepareEditableParagraph(newP);
+  // Pusty nowy akapit (Enter na końcu): WebKit nie stawia kursora w pustym <span> — pierwsza
+  // wpisana litera szła na początek NASTĘPNEGO akapitu (punkt listy: numer rysuje ::before, więc
+  // linijka jest, ale miejsca na kursor nie ma). Pusta linijka „dla oka” (zapis jej nie widzi).
+  // Kursor tuż przed nią, w kawałku tekstu (format dalej ten sam), bez pustych węzłów tekstu —
+  // wpisany tekst jest jedynym węzłem akapitu, jak przy zwykłym pisaniu.
+  let phHolder = null;
+  if (!newP.textContent.replace(/\uFEFF/g, "") && !newP.querySelector("br, img, svg, canvas, [contenteditable=false]")) {
+    const ph = document.createElement("br");
+    ph.dataset.dwbPh = "1";
+    phHolder = newP.lastElementChild?.localName === "span" ? newP.lastElementChild : newP;
+    const empties = [];
+    const tw = document.createTreeWalker(newP, NodeFilter.SHOW_TEXT);
+    for (let t = tw.nextNode(); t; t = tw.nextNode()) if (!t.data) empties.push(t);
+    empties.forEach((t) => t.remove());
+    phHolder.appendChild(ph);
+  }
   // Kursor w nowym akapicie OD RAZU — dawniej przeskakiwał dopiero po przebudowie pliku,
   // a wszystko wpisane w tym czasie trafiało do starego akapitu.
   placeCaret(newP, 0);
+  if (phHolder) {
+    const r = document.createRange();
+    r.setStart(phHolder, 0);
+    r.collapse(true);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(r);
+  }
   if (typing) setTypingStyle(typing);
   const beforeRuns = extractRunsFromPreviewParagraph(p);
   const afterRuns = extractRunsFromPreviewParagraph(newP);

@@ -508,6 +508,8 @@ const dwbPrint = (() => {
         try { const rules = st.sheet?.cssRules; if (rules) st.textContent = [...rules].map((r) => r.cssText).join("\n"); } catch (_) { /* arkusz niedostępny — zostaje tekst */ }
       });
       showOverlay(styles, result);
+      // odstęp domyślnych tabulatorów (list-numbering.js) — kartki stoją poza renderem, na którym go ustawiono
+      overlay?.querySelector(".pp-host")?.style.setProperty("--dwb-tab-stop", getComputedStyle(host).getPropertyValue("--dwb-tab-stop"));
     } catch (err) {
       log(`Podgląd wydruku: ${err.message || err}`, "error");
       toast(t("ppFail"), "error");
