@@ -7,6 +7,17 @@
 
 const WHATS_NEW = [
   {
+    v: "v1.01.38",
+    pl: [
+      "PDF → Word: punkt listy w tabeli zawinięty na dwa wiersze jest jednym akapitem — po dopisaniu słów tekst przelewa się jak w Wordzie (dawniej każdy wiersz był osobnym akapitem).",
+      "PDF → Word: tekst w komórce z ramką nie wchodzi już na linię i sąsiednią kolumnę.",
+    ],
+    en: [
+      "PDF → Word: a list item in a table that wraps onto two lines is one paragraph — added words flow on like in Word (each line used to be a separate paragraph).",
+      "PDF → Word: text in a bordered cell no longer runs over the line into the next column.",
+    ],
+  },
+  {
     v: "v1.01.37",
     pl: [
       "Listy numerowane: tekst punktu zaczyna się w tym samym miejscu w Czytaniu, Edycji i na wydruku — jak w Wordzie (dawniej każdy tryb miał inny odstęp po numerze).",

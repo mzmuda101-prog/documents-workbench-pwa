@@ -1167,7 +1167,10 @@
     // skan po OCR: łączymy tylko wiersze z tego samego akapitu wg rozpoznawania
     const op = prev.parts[0].glyphs[0]?.ocrPara, ol = l.parts[0].glyphs[0]?.ocrPara;
     if ((op || ol) && op !== ol) return false;
-    if (prev.tokens.some((t) => t.type === "tab") || l.tokens.some((t) => t.type === "tab")) return false;
+    // odstęp po numerze/punktorze listy („2.   Przejść…”) to nie tabulator układu — zawinięty punkt
+    // listy (w komórce tabeli z Worda) ma być jednym akapitem, nie dwoma
+    const markerTab = (t) => prev.list && Math.abs(box.x0 + t.pos - prev.list.textX) < 1;
+    if (prev.tokens.some((t) => t.type === "tab" && !markerTab(t)) || l.tokens.some((t) => t.type === "tab")) return false;
     const size = Math.max(prev.size, l.size);
     // inna wielkość liter = inny akapit (nagłówek 13 pt nad tekstem 12 pt)
     if (Math.abs(prev.size - l.size) > Math.max(0.5, size * 0.04)) return false;

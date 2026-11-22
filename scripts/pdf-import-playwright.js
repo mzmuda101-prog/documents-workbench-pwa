@@ -157,6 +157,20 @@ async function makePdfs() {
     <tr><td class="day bottom">piątek</td><td>Projektowanie instalacji</td></tr>
   </table></body></html>`, { waitUntil: "load" });
   await page.pdf({ path: path.join(TMP, "plan-pionowe-dni.pdf"), format: "A4", landscape: true, printBackground: true });
+  // Plan prac z Worda: numerowany punkt w komórce z ramką, zawinięty na dwa wiersze. Odstęp po
+  // „2.” to nie tabulator układu — punkt ma być JEDNYM akapitem; jednowierszowy punkt nie może
+  // mieć zapasu na prawo za linię komórki (tekst wchodził na sąsiednią kolumnę).
+  await page.setContent(`<!doctype html><html lang="pl"><head><meta charset="utf-8"><style>
+    body { margin: 40px; font-family: "Times New Roman", serif; font-size: 12pt; }
+    table { border-collapse: collapse; table-layout: fixed; }
+    td { border: 0.75pt solid #000; vertical-align: top; padding: 2pt; }
+    td.z { width: 250pt; } td.b { width: 120pt; }
+    .i { display: flex; } .n { width: 21pt; flex: none; }
+  </style></head><body><table>
+    <tr><td class="z"><div class="i"><span class="n">1.</span><span>Wymiana spłuczki sala nr 2, łazienka</span></div></td><td class="b"></td></tr>
+    <tr><td class="z"><div class="i"><span class="n">2.</span><span>Przejść całą posesję i pozbierać wszystkie śmieci przed wjazdem</span></div></td><td class="b"></td></tr>
+  </table></body></html>`, { waitUntil: "load" });
+  await page.pdf({ path: path.join(TMP, "plan-prac-komorki.pdf"), format: "A4", printBackground: true });
   // skan tabeli obrócony o 180° + 3° (kartka odwrotnie i krzywo w skanerze) — prostowanie + tabela Worda
   await page.setViewportSize({ width: 794, height: 1123 });
   await page.setContent(`<!doctype html><html lang="pl"><head><meta charset="utf-8"><style>body{margin:70px;font-family:Arial;font-size:15px;color:#111}table{border-collapse:collapse;width:100%}td,th{border:1.5px solid #222;padding:8px 10px;text-align:left}th{background:#ddd}</style></head><body><h2>Protokół przekazania sprzętu</h2><table><tr><th>Nazwa</th><th>Numer seryjny</th><th>Stan</th></tr><tr><td>Wiertarka udarowa</td><td>WU-2231-778</td><td>sprawna</td></tr><tr><td>Szlifierka kątowa</td><td>SK-0912-114</td><td>uszkodzona osłona</td></tr><tr><td>Poziomica laserowa</td><td>PL-5520-031</td><td>sprawna</td></tr></table><p>Przekazał: Jan Kowalczyk. Odebrał: Zofia Wójcik.</p></body></html>`, { waitUntil: "load" });
@@ -401,6 +415,22 @@ async function run() {
   });
   const days = verticalDays.cells.filter((c) => /^(czwartek|piątek)$/i.test(c.text.trim()));
   check("plan zajęć: pionowe dni są osobnymi komórkami Worda, bez sklejania tekstu", !verticalDays.merged && days.length === 2 && days.every((c) => c.vertical), JSON.stringify(verticalDays));
+
+  // --- 1c. punkt listy w komórce: jeden akapit, bez zapasu za linię komórki
+  await page.evaluate(() => { setDirtyState(false); });
+  await convert(page, path.join(TMP, "plan-prac-komorki.pdf"));
+  const cellList = await page.evaluate(async () => {
+    const z = await JSZip.loadAsync(originalFileBytes);
+    const doc = await z.file("word/document.xml").async("string");
+    const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+    const xml = new DOMParser().parseFromString(doc, "application/xml");
+    return [...xml.getElementsByTagNameNS(W, "tc")].flatMap((tc) => [...tc.getElementsByTagNameNS(W, "p")]).map((p) => ({
+      text: [...p.getElementsByTagNameNS(W, "t")].map((t) => t.textContent).join(""),
+      right: Number(p.getElementsByTagNameNS(W, "ind")[0]?.getAttributeNS(W, "right") || 0),
+    })).filter((p) => p.text.trim());
+  });
+  check("punkt listy zawinięty w komórce = jeden akapit", cellList.some((p) => /Przejść.*wjazdem/.test(p.text)), JSON.stringify(cellList));
+  check("komórka z ramką: wcięcie z prawej nie wychodzi za linię (≥ −2 pt)", cellList.length && cellList.every((p) => p.right >= -40), JSON.stringify(cellList));
 
   // --- 2. duży plik: płynność
   await page.evaluate(() => { setDirtyState(false); });

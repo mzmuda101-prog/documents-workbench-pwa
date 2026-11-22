@@ -237,7 +237,11 @@
       pPr.push(`<w:spacing w:before="${TW(before)}" w:after="0" w:line="${TW(L)}" w:lineRule="exact"/>`);
       const ind = [];
       if (b.indLeft > 0.4) ind.push(`w:left="${TW(b.indLeft)}"`);
-      if (Math.abs(b.indRight) > 0.4) ind.push(`w:right="${TW(b.indRight)}"`);
+      // W komórce z prawą linią zapas na prawo kończy się na krawędzi komórki — dalej tekst wchodził
+      // na linię i sąsiednią kolumnę (zwłaszcza po dopisaniu słów w Wordzie lub w aplikacji).
+      // Bez linii zapas zostaje: szerszy krój zastępczy nie zawija wtedy wiersza.
+      const indRight = Math.max(b.indRight || 0, ctx.minIndRight ?? -Infinity);
+      if (Math.abs(indRight) > 0.4) ind.push(`w:right="${TW(indRight)}"`);
       if (b.firstLine > 0.4) ind.push(`w:firstLine="${TW(b.firstLine)}"`);
       else if (b.firstLine < -0.4) ind.push(`w:hanging="${TW(-b.firstLine)}"`);
       if (ind.length) pPr.push(`<w:ind ${ind.join(" ")}/>`);
@@ -332,6 +336,7 @@
         const first = i === 0;
         const local = {
           images: ctx.images,
+          minIndRight: ctx.minIndRight,
           pageBreakBefore: first && ctx.pageBreakBefore,
           anchors: first ? ctx.anchors || "" : "",
           sectPr: i === n - 1 ? ctx.sectPr || "" : "",
@@ -457,7 +462,7 @@
           if (cell.blocks?.some((block) => block.rotated)) tcPr.push('<w:textDirection w:val="btLr"/>');
           let body;
           if (r === cell.r0 && cell.blocks?.length) {
-            body = this.blocksXml(cell.blocks, { x0: cell.x0 + pad, x1: cell.x1 - pad, top: cell.y0 }, { images: ctx.images });
+            body = this.blocksXml(cell.blocks, { x0: cell.x0 + pad, x1: cell.x1 - pad, top: cell.y0 }, { images: ctx.images, minIndRight: bd.right ? -pad : undefined });
           } else if (r === cell.r0) body = this.cellEmptyPara(Y[cell.r1 + 1] - Y[cell.r0]);
           else body = this.emptyPara({}, 1);
           if (!body.endsWith("</w:p>")) body += this.emptyPara({}, 1); // komórka musi kończyć się akapitem
