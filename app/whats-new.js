@@ -7,6 +7,17 @@
 
 const WHATS_NEW = [
   {
+    v: "v1.01.50",
+    pl: [
+      "Poprawki z audytu na iPadzie, telefonie i komputerze: czerwone paski zmian z marginesu nie przebijają już przez panel „Zmiany i komentarze”, okno nowego komentarza otwiera się przy zaznaczonym tekście zamiast w lewym górnym rogu, a panel „Znajdź i zamień” pokazuje teraz jedno „Brak trafień” po zamianie wszystkich wystąpień.",
+      "Wklejanie tabeli z arkusza zachowuje kolor tła komórek (np. podświetlony nagłówek), a Wytnij całego zaznaczonego akapitu nie zostawia po sobie pustej linijki — jak w Wordzie.",
+    ],
+    en: [
+      "Polish from iPad, phone, and desktop review: red margin change bars no longer bleed through the Changes & Comments panel, the new-comment popover opens beside the selected text instead of the top-left corner, and Find & Replace now shows a single \"No matches\" line after replacing all hits.",
+      "Pasting a spreadsheet table now keeps cell background shading (such as highlighted headers), and cutting an entire selected paragraph removes its empty line just like Word.",
+    ],
+  },
+  {
     v: "v1.01.49",
     pl: [
       "Konwersja PDF na Worda: punkty numerowane („1. …”, „2. …”), których dalsze wiersze zaczynają się pod samym numerem, są teraz jedną zwykłą listą Worda. Każdy punkt to jeden akapit, a punkty rozdzielone nagłówkiem dalej należą do tej samej listy. Dzięki temu po dopisaniu albo usunięciu punktu numery same się przeliczają, a układ zostaje jak w PDF.",
