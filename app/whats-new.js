@@ -7,6 +7,17 @@
 
 const WHATS_NEW = [
   {
+    v: "v1.01.47",
+    pl: [
+      "Konwersja PDF na Worda (tabele bez linii i harmonogramy): aplikacja rozpoznaje teraz jak Word także tabele całkowicie bez ramek i cieniowania (np. cenniki 3-kolumnowe, zestawienia klucz–wartość i małe tabelki), nie psując 2-kolumnowych artykułów ani paragonów.",
+      "Harmonogramy z szarymi pasami (jak z Excela): naprawiono rozstrzelenie wierszy przy wyśrodkowanej w pionie trzeciej kolumnie, zachowano pełny pas nagłówka (nie zamienia się w zakreślenie tekstu), rozdzielono krótkie linijki w komórkach (np. nazwisko i adres) oraz zatrzymano wystawanie podświetlenia aktywnego akapitu poza krawędź tabeli.",
+    ],
+    en: [
+      "PDF to Word conversion (borderless tables & schedules): the app now detects completely borderless, unshaded tables just like Word (3-column grids, key–value summaries, and small tables), while keeping two-column articles and receipts untouched.",
+      "Shaded schedule bands (such as Excel exports): fixed oversized vertical gaps when a right-hand column is vertically centered, kept the header bar as a real table row instead of a text highlight, kept short stacked lines (like name and street) as separate paragraphs, and prevented the active-paragraph focus bar from spilling outside shaded cells.",
+    ],
+  },
+  {
     v: "v1.01.46",
     pl: [
       "Konwersja PDF na Worda: aplikacja rozpoznaje teraz jak Word także tabele bez pionowych linii — nowoczesne tabele z samymi poziomymi liniami, styl akademicki (linia pod nagłówkiem i na dole), tabele z cieniowanym nagłówkiem, tabele zebrowe (naprzemienne pasy tła) oraz tabele z samą ramką zewnętrzną. Linie stają się prawdziwymi ramkami komórek zamiast obrazka w tle.",
