@@ -252,28 +252,31 @@ const composeUi = (() => {
 
   // ── spis treści ───────────────────────────────────────────────────────────
   // Numery stron z podglądu (strony = sekcje docx-preview; w trybie dopasowania do telefonu ich nie ma).
-  function previewPages() {
+  // Numery stron nagłówków dla spisu treści — jak strony Edycji (page-breaks.js): granice stron to
+  // pasy odstępów albo kreski granic. Dawniej strona = położenie / min-height kartki, a przy
+  // odstępach stron min-height to suma wszystkich stron — spis miał same „1” (testerzy AI
+  // 2026-11-27). Bez podziału na strony (wyłączony): szacunek z wysokości strony z pliku.
+  async function previewPages() {
     const pages = {};
     if (typeof shouldUseMobileReflow === "function" && shouldUseMobileReflow()) return pages;
+    if (typeof dwbPageBreaks !== "undefined") await dwbPageBreaks.compute().catch(() => {});
     const host = docCanvasEl?.querySelector(".docx-preview-host");
     if (!host) return pages;
-    // docx-preview łamie strony tylko przy jawnych podziałach — dłuższy tekst bez nich to jedna
-    // wysoka „kartka”. Numer strony szacujemy z położenia nagłówka i wysokości strony
-    // (min-height kartki = wysokość strony z pliku). Word i tak przelicza je przy „Aktualizuj pole”.
-    const sections = Array.from(host.querySelectorAll("section.docx"));
-    const startPage = new Map();
+    const geo = new Map();
     let page = 1;
-    sections.forEach((sec) => {
-      startPage.set(sec, page);
-      const ph = parseFloat(getComputedStyle(sec).minHeight) || sec.offsetHeight || 1;
-      page += Math.max(1, Math.ceil((sec.offsetHeight - 2) / ph));
+    host.querySelectorAll("section.docx").forEach((sec) => {
+      const r = sec.getBoundingClientRect();
+      const scale = r.height / sec.offsetHeight || 1;
+      const marks = [...sec.querySelectorAll(":scope > .dwb-page-gap-band, :scope > .dwb-page-break")].map((m) => parseFloat(m.style.top) || 0).sort((a, b) => a - b);
+      const ph = parseFloat(sec.dataset.dwbPageH) || parseFloat(getComputedStyle(sec).minHeight) || sec.offsetHeight || 1;
+      geo.set(sec, { start: page, top: r.top, scale, marks, ph });
+      page += marks.length ? marks.length + 1 : Math.max(1, Math.ceil((sec.offsetHeight - 2) / ph));
     });
     (documentStructure?.headings || []).forEach((h) => {
-      const sec = h.el?.closest?.("section.docx");
-      if (!sec || !Number.isFinite(h.paraIndex)) return;
-      const ph = parseFloat(getComputedStyle(sec).minHeight) || sec.offsetHeight || 1;
-      const y = h.el.getBoundingClientRect().top - sec.getBoundingClientRect().top;
-      pages[h.paraIndex] = startPage.get(sec) + Math.max(0, Math.floor(y / ph));
+      const g = geo.get(h.el?.closest?.("section.docx"));
+      if (!g || !Number.isFinite(h.paraIndex)) return;
+      const y = (h.el.getBoundingClientRect().top - g.top) / g.scale;
+      pages[h.paraIndex] = g.start + (g.marks.length ? g.marks.filter((m) => m <= y).length : Math.max(0, Math.floor(y / g.ph)));
     });
     return pages;
   }
@@ -293,10 +296,10 @@ const composeUi = (() => {
     const tocFirst = has ? collectPreviewParagraphElements(docCanvasEl?.querySelector(".docx-preview-host"))
       .findIndex((q) => Array.from(q.classList).some((c) => COMPOSE_TOC_KEYS.includes(docComposeStyleClasses.get(c)))) : index;
     const base = { op: "toc", index, title: t("tocTitle"), emptyText: t("tocEmpty") };
-    await runFileEdit({ ...base, pages: previewPages() }, null);
+    await runFileEdit({ ...base, pages: await previewPages() }, null);
     // drugi przebieg: numery stron PO wstawieniu spisu (spis sam zajmuje miejsce) — bez nowego kroku cofania
     try {
-      const pages = previewPages();
+      const pages = await previewPages();
       if (Object.keys(pages).length) {
         const { bytes } = await buildPatchedDocx(originalFileBytes, [{ ...base, pages }]);
         originalFileBytes = bytes;
