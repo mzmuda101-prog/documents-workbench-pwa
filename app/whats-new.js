@@ -7,6 +7,19 @@
 
 const WHATS_NEW = [
   {
+    v: "v1.01.40",
+    pl: [
+      "Edycja wygląda jak wydruk: nagłówek i stopka są na każdej stronie, a „Strona N z M” pokazuje właściwe numery (dawniej nagłówek był tylko na pierwszej stronie, a stopka tylko na ostatniej, z „Strona 1 z 1”). Wysoki nagłówek spycha tekst na każdej stronie, jak w Wordzie.",
+      "Spis treści: przy wpisach są prawdziwe numery stron (dawniej same „1”), a wpisy trzeciego poziomu mają numer w tej samej linii.",
+      "Telefon: pod zdjęciem zmniejszonym do szerokości ekranu nie zostaje już puste miejsce.",
+    ],
+    en: [
+      "Editing looks like print: the header and footer appear on every page and “Page N of M” shows the right numbers (the header used to appear only on page one and the footer only on the last page, with “Page 1 of 1”). A tall header pushes the text down on every page, like in Word.",
+      "Table of contents: entries show real page numbers (it used to be all “1”), and level-three entries keep the number on the same line.",
+      "Phone: no more empty space under a photo scaled down to the screen width.",
+    ],
+  },
+  {
     v: "v1.01.39",
     pl: [
       "Naprawione: po skasowaniu całego tekstu akapitu klawisz Delete w pustej linijce mógł po zapisie poprzestawiać tekst dalszej części dokumentu (np. treść tabeli w złych komórkach). Teraz plik zapisuje się dokładnie tak, jak widać.",
