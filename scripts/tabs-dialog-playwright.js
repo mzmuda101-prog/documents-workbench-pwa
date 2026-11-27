@@ -98,6 +98,39 @@ const TAB = (t) => `<w:r><w:t>${t[0]}</w:t></w:r><w:r><w:tab/></w:r><w:r><w:t>${
   await page.click(".tf-cancel");
   await idle(page);
   check("zła pozycja: komunikat; Anuluj: bez zmian w pliku", warn && (await para(2)) === "", String(warn));
+
+  // 5. tabulator prawy ustawiony przed wpisaniem Tab działa OD RAZU na żywo (bez przerysowania, AUDYT-MOBILE #12)
+  await openTabs(2);
+  await page.fill(".tf-pos", "12,5");
+  await page.selectOption(".tf-align", "right");
+  await page.click(".tf-ok");
+  await idle(page);
+  await page.evaluate(() => {
+    const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[2];
+    p.focus?.();
+    placeCaret(p, p.textContent.length);
+  });
+  await page.keyboard.press("Tab");
+  await page.waitForTimeout(150);
+  await page.keyboard.type("27 listopada 2026 r.");
+  await page.waitForTimeout(200);
+  const liveGeo = await page.evaluate(() => {
+    const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[2];
+    const hasTab = !!p.querySelector("span.docx-tab.docx-tab-laid");
+    const r = document.createRange();
+    r.selectNodeContents(p);
+    const pr = p.getBoundingClientRect();
+    const scale = p.offsetWidth ? pr.width / p.offsetWidth : 1;
+    const cs = getComputedStyle(p);
+    const origin = pr.left - (parseFloat(cs.marginLeft) || 0) * scale;
+    const rects = [...r.getClientRects()].filter((x) => x.width > 0);
+    const endPx = rects.length ? (Math.max(...rects.map((x) => x.right)) - origin) / scale : 0;
+    return { hasTab, endPx: Math.round(endPx), wantPx: Math.round(12.5 * 96 / 2.54), txt: p.textContent };
+  });
+  check("tabulator prawy: wpisanie Tab + daty wyrównuje na żywo do 12,5 cm bez przerysowania",
+    liveGeo.hasTab && Math.abs(liveGeo.endPx - liveGeo.wantPx) < 10 && liveGeo.txt.includes("27 listopada 2026 r."),
+    JSON.stringify(liveGeo));
+
   check("bez błędów strony", !errors.length, errors.join(" | "));
   await browser.close();
   let failed = 0;

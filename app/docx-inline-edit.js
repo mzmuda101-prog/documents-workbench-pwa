@@ -1963,6 +1963,43 @@ document.addEventListener("selectionchange", () => {
   p?.classList.add("dwb-tiny-active");
 });
 
+// Wstawienie tabulatora w akapicie: gdy akapit ma własne pozycje tabulatorów (np. prawy 16 cm
+// ustawiony w Układ → Tabulatory…), wstawiamy <span class="docx-tab"> i od razu liczymy układ
+// (layoutTabStops), więc tekst pisany za Tab od razu jedzie na właściwą pozycję — bez czekania
+// na przerysowanie dokumentu (AUDYT-MOBILE #12).
+async function insertTabAtCaret(p, paraIndex) {
+  let stopsJson = p?.querySelector("span.docx-tab[data-stops]")?.dataset.stops || null;
+  let dt = p?.querySelector("span.docx-tab[data-dt]")?.dataset.dt || null;
+  if (!stopsJson && p && paraIndex >= 0 && typeof composeTabsFromBytes === "function" && originalFileBytes) {
+    const stops = await composeTabsFromBytes(originalFileBytes, paraIndex).catch(() => []);
+    if (stops.length) stopsJson = JSON.stringify(stops.map((x) => [x.pos / 20, x.leader || "none", x.align || "left"]));
+  }
+  if (!stopsJson || stopsJson === "[]") {
+    insertTextAtCaret("\t");
+    return;
+  }
+  const sel = window.getSelection();
+  if (!sel?.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  range.deleteContents();
+  const host = p.closest(".docx-preview-host");
+  if (!dt) dt = String(parseFloat(getComputedStyle(host || document.documentElement).getPropertyValue("--dwb-tab-stop")) || 36);
+  const sp = document.createElement("span");
+  sp.className = "docx-tab";
+  sp.contentEditable = "false";
+  sp.dataset.stops = stopsJson;
+  sp.dataset.dt = dt;
+  sp.textContent = "\u00a0";
+  const after = document.createTextNode("");
+  range.insertNode(after);
+  range.insertNode(sp);
+  range.setStart(after, 0);
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+  if (typeof layoutTabStops === "function") layoutTabStops(p);
+}
+
 async function handleInlineTab(p, paraIndex, e) {
   // w tabeli Tab / Shift+Tab chodzi po komórkach (compose-ui.js), jak w Wordzie
   if (p.closest("td, th") && typeof composeUi !== "undefined") {
@@ -1984,7 +2021,7 @@ async function handleInlineTab(p, paraIndex, e) {
     return;
   }
   e.preventDefault();
-  insertTextAtCaret("\t");
+  await insertTabAtCaret(p, paraIndex);
   onInlineParagraphInput();
 }
 

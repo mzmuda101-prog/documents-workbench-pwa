@@ -240,6 +240,17 @@ async function tablet(browser) {
   else await page.click("#panelToggle");
   const opened = await page.evaluate(() => document.documentElement.classList.contains("sidebar-open"));
   check("< 1024: panel wysuwany, startuje schowany, ⚙ otwiera", !s.docked && !s.open && opened, JSON.stringify(s));
+  if (await page.evaluate(() => document.body.classList.contains("rb-on"))) {
+    // AUDYT-MOBILE #12: panel „Znajdź i zamień” na tablecie (820–900 px) dokuje obok dokumentu, nie zasłaniając trafień
+    await page.click('[data-rail="find"]');
+    await page.waitForTimeout(450);
+    const findDock = await page.evaluate(() => {
+      const side = document.getElementById("toolsPanel").getBoundingClientRect();
+      const main = document.querySelector(".main").getBoundingClientRect();
+      return { docked: document.documentElement.classList.contains("sidebar-docked"), sideRight: Math.round(side.right), mainLeft: Math.round(main.left) };
+    });
+    check("tablet: panel „Znajdź i zamień” staje obok dokumentu (nie zasłania tekstu)", findDock.docked && findDock.sideRight <= findDock.mainLeft + 2, JSON.stringify(findDock));
+  }
   if (errors.length) check("tablet: brak błędów w konsoli", false, errors.slice(0, 3).join(" | "));
   await context.close();
 }

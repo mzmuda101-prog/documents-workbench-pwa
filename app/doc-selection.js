@@ -308,7 +308,12 @@ const dwbSel = (() => {
     const p = deleteSpan(info);
     if (!p) return true;
     if (e.key === "Enter") handleInlineEnter(p, resolveParaIndex(p), { preventDefault() {}, shiftKey: e.shiftKey });
-    else if (e.key === "Tab") { insertTextAtCaret("\t"); onInlineParagraphInput(); }
+    else if (e.key === "Tab") {
+      const p = docCaretParagraph(getSelection()?.anchorNode);
+      const pi = p ? resolveParaIndex(p) : -1;
+      if (typeof insertTabAtCaret === "function") insertTabAtCaret(p, pi).then(() => onInlineParagraphInput());
+      else { insertTextAtCaret("\t"); onInlineParagraphInput(); }
+    }
     return true;
   }
 

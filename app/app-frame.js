@@ -82,6 +82,7 @@ const appFrame = (() => {
   const stripOpt = document.getElementById("showSectionChips");
   const narrowMq = matchMedia("(max-width: 768px)");
   const dockMq = matchMedia("(min-width: 1024px)");
+  const tabletDockMq = matchMedia("(min-width: 769px)");
 
   // ── nagłówek: plik ─────────────────────────────────────────────────────────
   function syncFile() {
@@ -447,9 +448,17 @@ const appFrame = (() => {
   // Od 1024 px staje obok: .main dostaje lewy margines = szerokość panelu, a panel
   // (dalej position:fixed — własne przewijanie) stoi na wysokości obszaru dokumentu.
   // Otwarty/zamknięty — zapamiętane (tylko świadome kliknięcia, nie start aplikacji).
-  // wstążka (rail.js): panel obok dokumentu tylko przypięty pinezką — inaczej kładzie się na marginesie
+  // wstążka (rail.js): panel obok dokumentu tylko przypięty pinezką — inaczej kładzie się na marginesie.
+  // Na tablecie (769–1023 px, np. iPad pionowo 820 px) nie ma wolnego marginesu przy kartce, więc
+  // przypięcie pinezką działa już od 769 px, a panel „Znajdź i zamień” staje obok dokumentu sam,
+  // żeby podświetlone trafienia w tekście nie były zasłonięte (AUDYT-MOBILE #12).
   const railPinned = () => { try { return localStorage.getItem("dwb-rail-pin-v1") === "1"; } catch (_) { return false; } };
-  function isDocked() { return dockMq.matches && (!document.body.classList.contains("rb-on") || railPinned()); }
+  function isDocked() {
+    if (!document.body.classList.contains("rb-on")) return dockMq.matches;
+    if (!tabletDockMq.matches) return false;
+    if (railPinned()) return true;
+    return !dockMq.matches && isSidebarOpen() && !!document.getElementById("panel-search")?.classList.contains("rb-active");
+  }
   function syncDock() {
     const docked = isDocked();
     rootEl.classList.toggle("sidebar-docked", docked);
@@ -487,6 +496,7 @@ const appFrame = (() => {
   });
   const onDockChange = () => { syncDock(); if (!isDocked() && isSidebarOpen()) origSetOpen(false); };
   dockMq.addEventListener("change", onDockChange);
+  tabletDockMq.addEventListener("change", onDockChange);
   window.addEventListener("resize", () => syncDock(), { passive: true });
   if (typeof ResizeObserver === "function" && heroEl) new ResizeObserver(() => syncDock()).observe(heroEl);
 

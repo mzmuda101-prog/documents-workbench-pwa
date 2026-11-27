@@ -4378,6 +4378,9 @@ body.rb-on #toolsPanel {
   width: clamp(288px, 22vw, 340px); padding: 10px; border-radius: var(--r-xl);
   background: var(--glass-sheen), var(--glass-bg); border: 1px solid var(--glass-border); box-shadow: var(--glass-shadow);
 }
+@media (min-width: 769px) and (max-width: 1023px) {
+  body.rb-on #toolsPanel { width: clamp(240px, 30vw, 272px); }
+}
 :root:not(.sidebar-docked) body.rb-on #toolsPanel { background: var(--surface); box-shadow: 0 2px 6px rgba(16, 32, 64, .1), 0 22px 48px -16px rgba(16, 32, 64, .4); }
 body.rb-on .sidebar-scrim, body.rb-on .sidebar-handle, body.rb-on .sidebar-finder, body.rb-on #sidebarFinderEmpty,
 body.rb-on .sidebar-group-head, body.rb-on .sidebar #panelToggle { display: none !important; }

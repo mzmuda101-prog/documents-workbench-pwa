@@ -42,6 +42,11 @@ const dwbRail = (() => {
       titleEl.textContent = item ? t({ nav: "railNav", find: "railFind", review: "railReview", proof: "railProof", ai: "railAi" }[item])
         : (sum?.querySelector("[data-i18n]")?.textContent || sum?.textContent || "").trim();
     }
+    if (typeof appFrame !== "undefined") {
+      const wasDocked = document.documentElement.classList.contains("sidebar-docked");
+      appFrame.syncDock();
+      if (wasDocked !== document.documentElement.classList.contains("sidebar-docked") && isSidebarOpen()) setSidebarOpen(true);
+    }
     sync();
   }
   function open(id) {
