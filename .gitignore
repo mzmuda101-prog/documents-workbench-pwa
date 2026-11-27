@@ -59,3 +59,6 @@ Thumbs.db
 
 # worktree agentów Claude Code (nie część repo)
 .claude/worktrees/
+
+# ── Notatki robocze planów (superpowers) ─────────────────────────
+.superpowers/
