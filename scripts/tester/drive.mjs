@@ -292,38 +292,34 @@ async function serve(name, device, dir) {
       await page.mouse.move(a[0], a[1]); await page.mouse.down(); await page.mouse.move(b[0], b[1], { steps: 12 }); await page.mouse.up();
       return { ok: true };
     },
-    // Przewija to, co jest pod punktem (najbliższy przewijany przodek, jak pod palcem/kółkiem).
-    // Mobilny WebKit w Playwrighcie nie ma kółka ani gestu przesunięcia — tam przewijamy wprost.
+    // Przewija to, co jest pod punktem (najbliższy przewijany przodek w danej osi, jak pod palcem
+    // albo kółkiem): dy w pionie, --dx=N w bok (rzędy kart, tabele). Mobilny WebKit w Playwrighcie
+    // nie ma kółka ani gestu przesunięcia — tam przewijamy wprost.
     async scroll(args) {
-      const dy = Number(args[0]) || 400, vp = page.viewportSize() || { width: 400, height: 800 };
+      const dy = Number(args.find((a) => !a.startsWith("--"))) || 0, dx = Number(flag(args, "dx")) || 0;
+      const vp = page.viewportSize() || { width: 400, height: 800 };
       const p = xy(flag(args, "xy")) || [vp.width / 2, vp.height / 2];
-      const where = (pt) => page.evaluate(([x, y]) => {
-        let el = document.elementFromPoint(x, y);
-        while (el && el !== document.documentElement) {
-          const st = getComputedStyle(el);
-          if (/(auto|scroll)/.test(st.overflowY) && el.scrollHeight > el.clientHeight + 1) break;
-          el = el.parentElement;
-        }
-        const s = el && el !== document.documentElement ? el : document.scrollingElement || document.documentElement;
-        return s.scrollTop;
-      }, pt);
-      const before = await where(p);
-      if (touch) {
-        await page.evaluate(([x, y, d]) => {
+      const run = (mode) => page.evaluate(([x, y, dx, dy, mode]) => {
+        const find = (horiz) => {
           let el = document.elementFromPoint(x, y);
           while (el && el !== document.documentElement) {
             const st = getComputedStyle(el);
-            if (/(auto|scroll)/.test(st.overflowY) && el.scrollHeight > el.clientHeight + 1) break;
+            const ok = horiz ? /(auto|scroll)/.test(st.overflowX) && el.scrollWidth > el.clientWidth + 1 : /(auto|scroll)/.test(st.overflowY) && el.scrollHeight > el.clientHeight + 1;
+            if (ok) return el;
             el = el.parentElement;
           }
-          (el && el !== document.documentElement ? el : document.scrollingElement || document.documentElement).scrollBy({ top: d });
-        }, [p[0], p[1], dy]);
-      } else {
-        await page.mouse.move(p[0], p[1]);
-        await page.mouse.wheel(0, dy);
-      }
+          return document.scrollingElement || document.documentElement;
+        };
+        const v = find(false), h = find(true);
+        if (mode === "do") { if (dy) v.scrollBy({ top: dy }); if (dx) h.scrollBy({ left: dx }); }
+        return [v.scrollTop, h.scrollLeft];
+      }, [p[0], p[1], dx, dy, mode]);
+      const before = await run("read");
+      if (touch) await run("do");
+      else { await page.mouse.move(p[0], p[1]); await page.mouse.wheel(dx, dy); }
       await page.waitForTimeout(350);
-      return { ok: true, moved: Math.round((await where(p)) - before) };
+      const after = await run("read");
+      return { ok: true, moved: Math.round(after[0] - before[0]), movedX: Math.round(after[1] - before[1]) };
     },
     async "open-file"(args) {
       const f = path.resolve(ROOT, args.join(" "));

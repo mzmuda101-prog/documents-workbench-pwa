@@ -91,6 +91,21 @@ async function run() {
   await page.tap(".ph-done");
   await sleep(300);
   check("Gotowe: z powrotem rząd (karta Wstaw)", await page.evaluate(() => document.querySelector(".ph-sheet").hidden && !document.querySelector(".ph-row").hidden && document.querySelector(".ph-tsw-t").textContent === "Wstaw"));
+  // kursor w tabeli → arkusz: karta Tabela (ostatnia, za Asystentem) widoczna bez przewijania
+  // (testerzy AI 2026-11-27, AUDYT-MOBILE #4: dwie osoby nie znalazły dodawania wiersza)
+  await page.evaluate(() => composeUi.insertTable(2, 2));
+  await page.waitForFunction(() => !document.getElementById("tableToolsBtn")?.hidden, null, { timeout: 10000 });
+  await sleep(300);
+  await page.tap(".ph-tsw");
+  await sleep(400);
+  const ctx = await page.evaluate(() => {
+    const row = document.querySelector(".ph-chips").getBoundingClientRect();
+    const c = document.querySelector('.ph-chip[data-tab="table"]')?.getBoundingClientRect();
+    return c ? { left: Math.round(c.left), right: Math.round(c.right), rowL: Math.round(row.left), rowR: Math.round(row.right) } : null;
+  });
+  check("arkusz z kursorem w tabeli: karta Tabela w całości widoczna w rzędzie kart", !!ctx && ctx.left >= ctx.rowL - 1 && ctx.right <= ctx.rowR + 1, JSON.stringify(ctx));
+  await page.tap(".ph-done");
+  await sleep(300);
   // wyspa wyłączona (jak w makiecie): rząd stoi przy dolnej krawędzi
   await page.evaluate(() => { const b = document.getElementById("phIslandOpt"); b.checked = false; b.dispatchEvent(new Event("change")); });
   await sleep(500);

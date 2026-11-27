@@ -234,6 +234,15 @@ const dwbPhoneBar = (() => {
     tsw.setAttribute("aria-expanded", String(open));
     bar.classList.toggle("is-sheet", open);
     place();
+    if (open) showChip(chips.querySelector('.ph-chip[data-tab="table"]') || chips.querySelector('.ph-chip[aria-selected="true"]'));
+  }
+  // Karta kontekstowa Tabela stoi na końcu rzędu, za ekranem — przy kursorze w tabeli rząd
+  // przewija się do niej (testerzy AI 2026-11-27: dwie osoby nie znalazły dodawania wiersza)
+  function showChip(c) {
+    if (!c) return;
+    const r = chips.getBoundingClientRect(), b = c.getBoundingClientRect();
+    if (b.right > r.right) chips.scrollLeft += b.right - r.right + 8;
+    else if (b.left < r.left) chips.scrollLeft -= r.left - b.left + 8;
   }
   function restoreSel() {
     if (!savedRange) return;

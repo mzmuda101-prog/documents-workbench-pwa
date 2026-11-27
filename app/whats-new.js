@@ -7,6 +7,17 @@
 
 const WHATS_NEW = [
   {
+    v: "v1.01.39",
+    pl: [
+      "Naprawione: po skasowaniu całego tekstu akapitu klawisz Delete w pustej linijce mógł po zapisie poprzestawiać tekst dalszej części dokumentu (np. treść tabeli w złych komórkach). Teraz plik zapisuje się dokładnie tak, jak widać.",
+      "Telefon: gdy kursor stoi w tabeli, arkusz kart od razu pokazuje kartę Tabela (wcześniej była schowana na końcu rzędu).",
+    ],
+    en: [
+      "Fixed: after clearing all text of a paragraph, pressing Delete on the empty line could shuffle text further down the document once saved (e.g. table content in the wrong cells). The file now saves exactly as shown.",
+      "Phone: with the cursor in a table, the tab sheet now shows the Table tab straight away (it used to be hidden at the end of the row).",
+    ],
+  },
+  {
     v: "v1.01.38",
     pl: [
       "PDF → Word: punkt listy w tabeli zawinięty na dwa wiersze jest jednym akapitem — po dopisaniu słów tekst przelewa się jak w Wordzie (dawniej każdy wiersz był osobnym akapitem).",

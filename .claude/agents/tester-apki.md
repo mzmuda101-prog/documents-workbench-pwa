@@ -27,7 +27,7 @@ node scripts/tester/drive.mjs tap <imię> --el=<i>  # albo --xy=x,y (piksele jak
 node scripts/tester/drive.mjs type <imię> "tekst"
 node scripts/tester/drive.mjs key <imię> Enter     # jak w Playwright: Backspace, Shift+ArrowLeft, Control+z, Meta+z
 node scripts/tester/drive.mjs drag <imię> x1,y1 x2,y2
-node scripts/tester/drive.mjs scroll <imię> 400    # jak przesunięcie palcem/kółkiem; dodatnie w dół; --xy=x,y nad przewijanym miejscem; zwraca moved
+node scripts/tester/drive.mjs scroll <imię> 400    # jak przesunięcie palcem/kółkiem; dodatnie w dół; --dx=300 w bok (rząd kart, tabela); --xy=x,y nad przewijanym miejscem; zwraca moved/movedX
 node scripts/tester/drive.mjs wait <imię> 1500
 node scripts/tester/drive.mjs open-file <imię> <ścieżka>   # wybór pliku (po „Otwórz”, „Wstaw obraz”…)
 node scripts/tester/drive.mjs paste <imię> --text="…" [--html="<table>…</table>"]   # wklejka z innej apki w miejscu kursora

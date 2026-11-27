@@ -136,6 +136,10 @@ async function run() {
   // telefon: przewijanie palcem (mouse.wheel nie działa w mobilnym WebKit)
   drive("open-file", "t-iphone", "docs/samples/przewodnik.docx");
   await sleep(2500);
+  // przewijanie w bok (rząd skrótów sekcji nad dokumentem, rząd kart w arkuszu telefonu)
+  const chip = (drive("look", "t-iphone").out?.elements || []).find((x) => x.y < 140 && x.y > 90 && x.role === "button");
+  const sx = chip ? drive("scroll", "t-iphone", "0", "--dx=250", `--xy=${chip.x},${chip.y}`) : null;
+  check("scroll w bok (--dx) przewija rząd", sx?.code === 0 && sx.out?.movedX > 0, sx?.raw || "brak rzędu skrótów na ekranie");
   const sc = drive("scroll", "t-iphone", "600", "--xy=195,500");
   check("scroll na telefonie przewija (moved > 0)", sc.code === 0 && sc.out?.moved > 0, sc.raw);
 
