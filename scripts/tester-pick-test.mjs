@@ -62,4 +62,7 @@ const a = cli(["--n=6", "--seed=7"]);
 assert.equal(a, cli(["--n=6", "--seed=7"]), "CLI powtarzalne");
 assert.equal(JSON.parse(a).length, 6);
 
+// obszar bez osób: komunikat i kod ≠ 0, nie pusty skład (przebieg z zerem testerów)
+assert.throws(() => execFileSync(process.execPath, [join(root, "scripts/tester/pick.mjs"), "--area=niema-takiego"], { encoding: "utf8", stdio: "pipe" }), /brak osób/);
+
 console.log(`PASS tester-pick: ${all.length} osób, 20 składów, pdf=${pdfAll.length}, częste/rzadkie=${ratio.toFixed(2)}`);

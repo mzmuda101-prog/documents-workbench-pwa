@@ -104,5 +104,10 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const n = args.n ? Number.parseInt(args.n, 10) : 6;
   const seed = args.seed ? Number.parseInt(args.seed, 10) : Date.now();
   if (!(n > 0) || Number.isNaN(seed)) throw new Error("--n i --seed muszą być liczbami");
-  console.log(JSON.stringify(pick(osoby, { n, area: args.area, seed }), null, 2));
+  const team = pick(osoby, { n, area: args.area, seed });
+  if (!team.length) {
+    console.error(`brak osób z obszarem „${args.area}” w docs/testerzy/osoby.md`);
+    process.exit(1);
+  }
+  console.log(JSON.stringify(team, null, 2));
 }

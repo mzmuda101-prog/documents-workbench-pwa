@@ -21,8 +21,10 @@ Pracuj w `/Users/mateuszuser/Programistyka/documents-workbench-pwa`.
 
 - `node scripts/tester/pick.mjs --n=<liczba> [--area=<obszar>]` daje osoby (JSON).
 - Imię testera: krótkie, ascii, unikalne w przebiegu (np. `t1-organizator`).
-- Osoby z „PDF z puli”: wylosuj plik z `~/.dwb-pdf-samples.txt` (pasujący do zadania, jeśli się
-  da: skan dla OCR, tabela dla tabel) i skopiuj go do `output/testerzy/$R/pliki/<krótka-nazwa>.pdf`.
+- Osoby z „PDF z puli”: wylosuj plik z `~/.dwb-pdf-samples.txt` pasujący do zadania. Sprawdź
+  rodzaj przed przydziałem: `pdftotext -l 2 "<plik>" - | wc -w` — kilka słów = skan (dla OCR),
+  dużo = tekst; tabela w tekście: `pdftotext -layout` pokazuje kolumny. Skan nie pasuje do
+  zadania z tabelą (przebieg 2026-11-27-1315: „harmonogram” okazał się odręcznym skanem) i skopiuj go do `output/testerzy/$R/pliki/<krótka-nazwa>.pdf`.
   Testerowi podaj tylko tę kopię. Prawdziwej nazwy pliku nie wpisuj nigdzie w repo.
 - Pliki z `docs/samples/` podawaj ścieżką względną.
 

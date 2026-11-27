@@ -8,7 +8,8 @@
 //   look <imię>                     zrzut (piksele CSS) + widoczne elementy do stuknięcia + pobrane pliki
 //   tap <imię> --el=<i> | --xy=x,y | "<tekst>"
 //   type <imię> "<tekst>"   key <imię> <Klawisz>   drag <imię> x1,y1 x2,y2   scroll <imię> <dy> [--xy=x,y]
-//   open-file <imię> <ścieżka>      wait <imię> <ms≤5000>   errors <imię>   stop <imię>   stop-all
+//   open-file <imię> <ścieżka>   select <imię> --el=<i> "<opcja>"   paste <imię> --text=… [--html=…]
+//   text <imię>   reopen <imię>   feel <imię>   wait <imię> <ms≤5000>   errors <imię>   stop <imię>   stop-all
 //
 // Obciążenie: najwyżej MAX_TESTERS (domyślnie 6) przeglądarek naraz, bez okna; serwer testera
 // kończy się sam po 30 min bez poleceń.
@@ -33,20 +34,33 @@ const DEVICES = {
   desktop: { engine: "chromium", viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, isMobile: false, hasTouch: false },
 };
 
-const out = (obj, code = 0) => { process.stdout.write(`${JSON.stringify(obj)}\n`); process.exit(code); };
+const out = (obj, code = 0) => { process.stdout.write(`${JSON.stringify(obj)}\n`, () => process.exit(code)); };
 const fail = (msg) => out({ error: msg }, 1);
 const sessFile = (name) => path.join(SESS, `${name}.json`);
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch (_) { return false; } };
 const flag = (args, k) => args.find((a) => a.startsWith(`--${k}=`))?.slice(k.length + 3);
 
+// Śmieci w katalogu (.DS_Store z Findera, plik w trakcie zapisu, sesja usunięta między odczytami)
+// nie mogą wywrócić poleceń wszystkich testerów naraz.
 function liveSessions() {
   if (!fs.existsSync(SESS)) return [];
-  return fs.readdirSync(SESS).flatMap((f) => {
-    const s = JSON.parse(fs.readFileSync(path.join(SESS, f), "utf8"));
-    if (alive(s.pid)) return [s];
+  return fs.readdirSync(SESS).filter((f) => f.endsWith(".json")).flatMap((f) => {
+    let s;
+    try { s = JSON.parse(fs.readFileSync(path.join(SESS, f), "utf8")); } catch (_) { return []; }
+    if (s && alive(s.pid)) return [s];
     fs.rmSync(path.join(SESS, f), { force: true }); // po padniętym serwerze
     return [];
   });
+}
+function writeSession(name, data) {
+  const tmp = `${sessFile(name)}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(data));
+  fs.renameSync(tmp, sessFile(name));
+}
+async function killHard(s) {
+  for (let i = 0; i < 25 && alive(s.pid); i++) await new Promise((r) => setTimeout(r, 200));
+  if (alive(s.pid)) { try { process.kill(s.pid, "SIGKILL"); } catch (_) { /* już nie żyje */ } }
+  fs.rmSync(sessFile(s.name), { force: true });
 }
 
 function post(port, body, timeout = 45000) {
@@ -68,8 +82,8 @@ async function client(argv) {
   const [cmd, name, ...rest] = argv;
   if (cmd === "stop-all") {
     const all = liveSessions();
-    for (const s of all) { try { await post(s.port, { cmd: "stop" }, 5000); } catch (_) { /* niżej kill */ } }
-    for (const s of all) { if (alive(s.pid)) try { process.kill(s.pid, "SIGKILL"); } catch (_) { /* już nie żyje */ } fs.rmSync(sessFile(s.name), { force: true }); }
+    await Promise.all(all.map((s) => post(s.port, { cmd: "stop" }, 3000).catch(() => {})));
+    await Promise.all(all.map(killHard));
     return out({ stopped: all.map((s) => s.name) });
   }
   if (!cmd || !name) return fail("użycie: drive.mjs <polecenie> <imię> … (opis na górze pliku)");
@@ -78,24 +92,30 @@ async function client(argv) {
   if (cmd === "start") {
     const device = flag(rest, "device") || "iphone";
     if (!DEVICES[device]) return fail(`nieznane urządzenie: ${device} (${Object.keys(DEVICES).join(", ")})`);
+    const d = new Date();
+    const run = flag(rest, "run") || `${d.toISOString().slice(0, 10)}-${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}`;
+    if (!/^[\w-]{1,60}$/.test(run)) return fail("--run: litery, cyfry, - i _");
     const live = liveSessions();
     if (live.some((s) => s.name === name)) return fail(`tester ${name} już działa — najpierw stop ${name}`);
     if (live.length >= MAX) return fail(`działa już ${live.length} przeglądarek (limit ${MAX}) — zatrzymaj któregoś testera`);
-    try { await fetch(APP_URL); } catch (_) { return fail(`apka nie odpowiada pod ${APP_URL} — uruchom: python3 scripts/test-server.py 7823`); }
-    const d = new Date();
-    const run = flag(rest, "run") || `${d.toISOString().slice(0, 10)}-${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}`;
+    try {
+      const r = await fetch(APP_URL, { signal: AbortSignal.timeout(5000) });
+      if (!r.ok) throw new Error(String(r.status));
+    } catch (_) { return fail(`apka nie odpowiada pod ${APP_URL} — uruchom: python3 scripts/test-server.py 7823`); }
     const dir = path.join(BASE, run, name);
     fs.mkdirSync(dir, { recursive: true });
     fs.mkdirSync(SESS, { recursive: true });
+    // rezerwacja imienia, zanim przeglądarka wstanie (drugi start w tym czasie = „już działa”)
+    try { fs.writeFileSync(sessFile(name), JSON.stringify({ name, pid: process.pid, ready: false }), { flag: "wx" }); } catch (_) { return fail(`tester ${name} już działa — najpierw stop ${name}`); }
     const log = fs.openSync(path.join(dir, "serve.log"), "a");
     const child = spawn(process.execPath, [fileURLToPath(import.meta.url), "serve", name, device, dir], { cwd: ROOT, detached: true, stdio: ["ignore", log, log] });
     child.unref();
-    for (let i = 0; i < 80; i++) {
+    writeSession(name, { name, pid: child.pid, ready: false });
+    for (let i = 0; i < 240; i++) {
       await new Promise((r) => setTimeout(r, 250));
-      if (fs.existsSync(sessFile(name))) {
-        const s = JSON.parse(fs.readFileSync(sessFile(name), "utf8"));
-        if (s.ready) return out({ name, device, engine: DEVICES[device].engine, dir, port: s.port });
-      }
+      let s = null;
+      try { s = JSON.parse(fs.readFileSync(sessFile(name), "utf8")); } catch (_) { /* w trakcie zapisu */ }
+      if (s?.ready) return out({ name, device, engine: DEVICES[device].engine, dir, port: s.port });
       if (!alive(/** @type {number} */ (child.pid))) break;
     }
     try { process.kill(/** @type {number} */ (child.pid), "SIGKILL"); } catch (_) { /* nie żyje */ }
@@ -105,9 +125,14 @@ async function client(argv) {
 
   const s = liveSessions().find((x) => x.name === name);
   if (!s) return fail(`tester ${name} nie działa — najpierw start ${name}`);
+  if (cmd === "stop") {
+    // zawieszona przeglądarka nie odpowie — wtedy i tak zamykamy proces
+    await post(s.port, { cmd: "stop" }, 3000).catch(() => {});
+    await killHard(s);
+    return out({ ok: true });
+  }
   let res;
   try { res = await post(s.port, { cmd, args: rest }); } catch (e) { return fail(String(e.message || e)); }
-  if (cmd === "stop") fs.rmSync(sessFile(name), { force: true });
   return out(res, res && res.error ? 1 : 0);
 }
 
@@ -117,6 +142,13 @@ async function serve(name, device, dir) {
   const spec = DEVICES[device];
   const { engine, ...ctxOpts } = spec;
   const browser = await pw[engine].launch({ headless: true });
+  // koniec: zamknięcie przeglądarki, ale najwyżej 5 s (zawieszona nie trzyma procesu)
+  const bye = async () => {
+    setTimeout(() => process.exit(0), 5000).unref();
+    await browser.close().catch(() => {});
+    process.exit(0);
+  };
+  browser.on("disconnected", () => process.exit(1)); // padła przeglądarka — sesja zniknie przy następnym liveSessions
   const context = await browser.newContext({ ...ctxOpts, serviceWorkers: "block", acceptDownloads: true, locale: "pl-PL" });
   await context.addInitScript(() => {
     sessionStorage.setItem("introPlayed", "true");
@@ -131,36 +163,42 @@ async function serve(name, device, dir) {
           kind: "file", name,
           queryPermission: async () => "granted", requestPermission: async () => "granted",
           getFile: async () => new File(parts, name),
-          createWritable: async () => ({
-            write: async (c) => { parts.push(c); },
+          createWritable: async () => {
+            parts.length = 0; // nowy zapis tym samym uchwytem = nowy plik (dawniej doklejał się do poprzedniego)
+            return {
+            write: async (c) => { parts.push(c && c.type === "write" ? c.data : c); },
             close: async () => {
               const a = document.createElement("a");
               a.href = URL.createObjectURL(new Blob(parts));
               a.download = name;
               a.click();
             },
-          }),
+            };
+          },
         };
       };
     }
   });
-  const page = await context.newPage();
+  let page = await context.newPage();
   const errors = [];
   const downloads = [];
   let chooser = null;
   let lastEls = [];
-  let shotN = 0;
-  page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
-  page.on("console", (m) => { if (m.type() === "error") errors.push(`console: ${m.text()}`); });
-  page.on("filechooser", (fc) => { chooser = fc; });
-  page.on("download", async (d) => {
+  // restart pod tym samym imieniem: numeracja zrzutów dalej (stare zostają w raporcie)
+  let shotN = Math.max(0, ...fs.readdirSync(dir).map((f) => Number(/^shot-(\d+)\.png$/.exec(f)?.[1] || 0)));
+  const attach = (pg) => {
+  pg.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+  pg.on("console", (m) => { if (m.type() === "error") errors.push(`console: ${m.text()}`); });
+  pg.on("filechooser", (fc) => { chooser = fc; });
+  pg.on("download", async (d) => {
     const dl = path.join(dir, "pobrane");
     fs.mkdirSync(dl, { recursive: true });
     let p = path.join(dl, d.suggestedFilename());
     for (let i = 2; fs.existsSync(p); i++) p = path.join(dl, d.suggestedFilename().replace(/(\.[^.]+)?$/, `-${i}$1`));
-    await d.saveAs(p);
-    downloads.push(p);
+    try { await d.saveAs(p); downloads.push(p); } catch (e) { errors.push(`zapis pobranego pliku: ${e?.message || e}`); }
   });
+  };
+  attach(page);
   await page.goto(APP_URL, { waitUntil: "load" });
   await page.evaluate(() => document.getElementById("heroSplash")?.remove());
 
@@ -190,7 +228,13 @@ async function serve(name, device, dir) {
           const name = raw.replace(/\s+/g, " ").trim().slice(0, el.isContentEditable ? 80 : 60);
           els.push({ role: el.getAttribute("role") || (el.isContentEditable ? "editable" : el.tagName.toLowerCase()), name, x: Math.round(cx), y: Math.round(cy), w: Math.round(r.width), h: Math.round(r.height), el });
         }
-        const dlg = [...document.querySelectorAll("dialog[open], [role=dialog]:not([hidden]), [role=alertdialog]:not([hidden])")].find((d) => d.getBoundingClientRect().height > 0);
+        // najwyższe widoczne okno: to, które jest pod swoim środkiem (potwierdzenie nad panelem Plik)
+        const dlg = [...document.querySelectorAll("dialog[open], [role=dialog]:not([hidden]), [role=alertdialog]:not([hidden])")].reverse().find((d) => {
+          const r = d.getBoundingClientRect();
+          if (r.height <= 0 || r.width <= 0) return false;
+          const h = document.elementFromPoint(Math.min(vw - 1, r.left + r.width / 2), Math.min(vh - 1, Math.max(0, r.top + r.height / 2)));
+          return !!h && d.contains(h);
+        });
         // otwarte okno: tylko jego elementy (reszta i tak pod spodem)
         const list = (dlg ? els.filter((e) => dlg.contains(e.el)) : els).slice(0, 120).map(({ el, ...e }) => e);
         // kursor: akapit, w którym stoi, i komórka tabeli (wiersz/kolumna od 1)
@@ -214,24 +258,28 @@ async function serve(name, device, dir) {
       lastEls = info.elements;
       return { shot, ...info, elements: info.elements.map((e, i) => ({ i, ...e })), downloads: [...downloads], fileChooserOpen: !!chooser };
     },
-    async tap(args) {
+    // gdzie stuknąć — liczone PRZED pomiarem odczucia (szukanie po tekście robi zrzut)
+    async resolveTap(args) {
       const el = flag(args, "el"), p = xy(flag(args, "xy"));
       if (el != null) {
         const e = lastEls[Number(el)];
-        if (!e) return { error: `brak elementu ${el} w ostatnim look (jest ${lastEls.length})` };
-        await tapAt(e.x, e.y);
-      } else if (p) await tapAt(p[0], p[1]);
-      else {
-        const text = args.filter((a) => !a.startsWith("--")).join(" ").trim();
-        if (!text) return { error: "podaj --el=, --xy= albo tekst" };
-        const cur = (await commands.look()).elements;
-        const low = text.toLowerCase();
-        let hits = cur.filter((e) => e.name.toLowerCase() === low);
-        if (!hits.length) hits = cur.filter((e) => e.name.toLowerCase().includes(low));
-        if (!hits.length) return { error: `nie widzę „${text}” na ekranie`, visible: cur.slice(0, 40).map((e) => `${e.i}: ${e.name}`) };
-        if (hits.length > 1) return { error: `„${text}” pasuje do ${hits.length} elementów — użyj --el=`, candidates: hits.map((e) => `${e.i}: ${e.role} „${e.name}” @${e.x},${e.y}`) };
-        await tapAt(hits[0].x, hits[0].y);
+        return e ? { at: [e.x, e.y] } : { error: `brak elementu ${el} w ostatnim look (jest ${lastEls.length})` };
       }
+      if (p) return { at: p };
+      const text = args.filter((a) => !a.startsWith("--")).join(" ").trim();
+      if (!text) return { error: "podaj --el=, --xy= albo tekst" };
+      const cur = (await commands.look()).elements;
+      const low = text.toLowerCase();
+      let hits = cur.filter((e) => e.name.toLowerCase() === low);
+      if (!hits.length) hits = cur.filter((e) => e.name.toLowerCase().includes(low));
+      if (!hits.length) return { error: `nie widzę „${text}” na ekranie`, visible: cur.slice(0, 40).map((e) => `${e.i}: ${e.name}`) };
+      if (hits.length > 1) return { error: `„${text}” pasuje do ${hits.length} elementów — użyj --el=`, candidates: hits.map((e) => `${e.i}: ${e.role} „${e.name}” @${e.x},${e.y}`) };
+      return { at: [hits[0].x, hits[0].y] };
+    },
+    async tap(args, at) {
+      const r = at ? { at } : await commands.resolveTap(args);
+      if (r.error) return r;
+      await tapAt(r.at[0], r.at[1]);
       await page.waitForTimeout(250);
       return { ok: true };
     },
@@ -240,10 +288,8 @@ async function serve(name, device, dir) {
     async drag(args) {
       const a = xy(args[0]), b = xy(args[1]);
       if (!a || !b) return { error: "drag x1,y1 x2,y2" };
-      if (touch) {
-        // dotyk: przeciągnięcie palcem przez zdarzenia CDP nie działa w WebKit — przytrzymanie myszą jak w testach
-        await page.mouse.move(a[0], a[1]); await page.mouse.down(); await page.mouse.move(b[0], b[1], { steps: 12 }); await page.mouse.up();
-      } else { await page.mouse.move(a[0], a[1]); await page.mouse.down(); await page.mouse.move(b[0], b[1], { steps: 12 }); await page.mouse.up(); }
+      // także na dotyku myszą: przeciągnięcie palcem przez zdarzenia nie działa w WebKit (jak w testach)
+      await page.mouse.move(a[0], a[1]); await page.mouse.down(); await page.mouse.move(b[0], b[1], { steps: 12 }); await page.mouse.up();
       return { ok: true };
     },
     // Przewija to, co jest pod punktem (najbliższy przewijany przodek, jak pod palcem/kółkiem).
@@ -259,7 +305,6 @@ async function serve(name, device, dir) {
           el = el.parentElement;
         }
         const s = el && el !== document.documentElement ? el : document.scrollingElement || document.documentElement;
-        if (!s.id) s.dataset.dwbScrollProbe = "1";
         return s.scrollTop;
       }, pt);
       const before = await where(p);
@@ -306,13 +351,38 @@ async function serve(name, device, dir) {
       await page.waitForTimeout(400);
       return ok ? { ok: true } : { error: "brak kursora — najpierw stuknij w miejsce wklejenia" };
     },
+    // natywna lista wyboru (krój, rozmiar, styl akapitu): okno systemu jest poza stroną
+    async select(args) {
+      const el = flag(args, "el"), label = args.filter((a) => !a.startsWith("--")).join(" ").trim();
+      const e = lastEls[Number(el)];
+      if (!e || e.role !== "select") return { error: "select --el=<i> wskazuje element „select” z ostatniego look" };
+      const handle = await page.evaluateHandle(([x, y]) => document.elementFromPoint(x, y)?.closest("select"), [e.x, e.y]);
+      const sel = handle.asElement();
+      if (!sel) return { error: "nie widzę tej listy w tym miejscu — zrób look" };
+      const options = await sel.evaluate((s) => [.../** @type {HTMLSelectElement} */ (s).options].map((o) => o.label || o.text));
+      if (!options.includes(label)) return { error: `brak opcji „${label}”`, options: options.slice(0, 60) };
+      await sel.selectOption({ label });
+      return { ok: true };
+    },
+    // zamknięcie karty i otwarcie apki od nowa w tej samej przeglądarce (pamięć przeglądarki,
+    // np. szkice, zostaje — jak po zamknięciu i ponownym otwarciu karty w Safari)
+    async reopen() {
+      await page.close().catch(() => {});
+      page = await context.newPage();
+      attach(page);
+      await page.goto(APP_URL, { waitUntil: "load" });
+      await page.evaluate(() => document.getElementById("heroSplash")?.remove());
+      chooser = null;
+      lastEls = [];
+      return { ok: true };
+    },
     async text() {
       const t = await page.evaluate(() => [...document.querySelectorAll("section.docx")].map((s) => /** @type {HTMLElement} */ (s).innerText).join("\n\n"));
       return { text: t.replace(/\n{3,}/g, "\n\n").slice(0, 6000), length: t.length };
     },
     async wait(args) { await page.waitForTimeout(Math.min(5000, Math.max(0, Number(args[0]) || 1000))); return { ok: true }; },
     async errors() { const e = errors.splice(0); return { errors: e }; },
-    async stop() { setTimeout(async () => { await browser.close().catch(() => {}); fs.rmSync(sessFile(name), { force: true }); process.exit(0); }, 50); return { ok: true }; },
+    async stop() { setTimeout(bye, 50); return { ok: true }; },
   };
 
   // ---- odczucie: każda czynność mierzona. Martwe = ekran po 700 ms taki sam jak przed (zrzuty).
@@ -323,14 +393,15 @@ async function serve(name, device, dir) {
   const MEASURED = new Set(["tap", "type", "key", "paste", "drag", "scroll"]);
   const feelLog = path.join(dir, "feel.jsonl");
   const feelBefore = () => page.evaluate(() => {
-    const st = { t0: performance.now(), first: /** @type {number|null} */ (null) };
+    const st = { t0: performance.now(), first: /** @type {number|null} */ (null), sel: false };
     const mark = () => { if (st.first == null) st.first = performance.now(); };
+    const selMark = () => { st.sel = true; mark(); };
     const mo = new MutationObserver(mark);
     mo.observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
-    document.addEventListener("selectionchange", mark, true);
+    document.addEventListener("selectionchange", selMark, true);
     addEventListener("scroll", mark, true);
     const el = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
-    /** @type {any} */ (window).__dwbFeel = { st, mo, mark, el, top: el ? el.getBoundingClientRect().top : null };
+    /** @type {any} */ (window).__dwbFeel = { st, mo, mark, selMark, el, top: el ? el.getBoundingClientRect().top : null };
   }).catch(() => {});
   const feelAfter = async (cmd) => {
     await page.waitForTimeout(700);
@@ -338,7 +409,7 @@ async function serve(name, device, dir) {
       const f = /** @type {any} */ (window).__dwbFeel;
       if (!f) return null; // strona przeładowana w trakcie — to reakcja
       f.mo.disconnect();
-      document.removeEventListener("selectionchange", f.mark, true);
+      document.removeEventListener("selectionchange", f.selMark, true);
       removeEventListener("scroll", f.mark, true);
       delete /** @type {any} */ (window).__dwbFeel;
       const reactMs = f.st.first == null ? null : Math.max(0, Math.round(f.st.first - f.st.t0));
@@ -347,7 +418,7 @@ async function serve(name, device, dir) {
         const d = Math.round(f.el.getBoundingClientRect().top - f.top);
         if (Math.abs(d) > 80) jumpPx = d;
       }
-      return { reactMs, dead: reactMs == null, jumpPx };
+      return { reactMs, dead: reactMs == null, jumpPx, selMoved: f.st.sel };
     }, cmd).catch(() => ({ reactMs: null, dead: false, jumpPx: 0, reloaded: true }));
   };
   commands.feel = async () => {
@@ -365,45 +436,59 @@ async function serve(name, device, dir) {
   };
 
   let idle = setTimeout(() => commands.stop(), IDLE_MS);
+  const handle = async (body) => {
+    clearTimeout(idle);
+    idle = setTimeout(() => commands.stop(), IDLE_MS);
+    let result;
+    try {
+      const { cmd, args = [] } = JSON.parse(body || "{}");
+      const fn = commands[cmd];
+      if (!fn) result = { error: `nieznane polecenie: ${cmd}` };
+      else if (MEASURED.has(cmd)) {
+        let at = null;
+        if (cmd === "tap") {
+          const r = await commands.resolveTap(args);
+          if (r.error) return r;
+          at = r.at;
+        }
+        const chooserBefore = chooser;
+        const shot0 = await page.screenshot(CMP_SHOT).catch(() => null);
+        await feelBefore();
+        result = await fn(args, at);
+        const feel = await feelAfter(cmd);
+        // martwe = ekran po czynności identyczny jak przed, kursor/zaznaczenie stoi i nie otwarło
+        // się okno wyboru pliku (to widzi człowiek; zmiany DOM bez widocznego skutku się nie liczą)
+        if (feel && shot0) {
+          const shot1 = await page.screenshot(CMP_SHOT).catch(() => null);
+          feel.dead = !!shot1 && shot0.equals(shot1) && !feel.selMoved && chooser === chooserBefore;
+          if (feel.dead) feel.reactMs = null;
+        }
+        if (feel) delete feel.selMoved;
+        if (!result.error && feel) {
+          result.feel = feel;
+          fs.appendFileSync(feelLog, `${JSON.stringify({ t: Date.now(), cmd, args, ...feel })}\n`);
+        }
+      } else result = await fn(args);
+    } catch (e) { result = { error: String(e?.message || e) }; }
+    return result;
+  };
+  // jedno polecenie naraz (agent potrafi wysłać kilka wywołań równolegle)
+  let chain = Promise.resolve();
   const server = http.createServer((req, res) => {
     let body = "";
     req.on("data", (c) => (body += c));
-    req.on("end", async () => {
-      clearTimeout(idle);
-      idle = setTimeout(() => commands.stop(), IDLE_MS);
-      let result;
-      try {
-        const { cmd, args = [] } = JSON.parse(body || "{}");
-        const fn = commands[cmd];
-        if (!fn) result = { error: `nieznane polecenie: ${cmd}` };
-        else if (MEASURED.has(cmd)) {
-          const shot0 = await page.screenshot(CMP_SHOT).catch(() => null);
-          await feelBefore();
-          result = await fn(args);
-          const feel = await feelAfter(cmd);
-          // martwe = ekran po czynności identyczny jak przed (to widzi człowiek; zmiany DOM bez
-          // widocznego skutku się nie liczą)
-          if (feel && shot0) {
-            const shot1 = await page.screenshot(CMP_SHOT).catch(() => null);
-            feel.dead = !!shot1 && shot0.equals(shot1);
-            if (feel.dead) feel.reactMs = null;
-          }
-          if (!result.error && feel) {
-            result.feel = feel;
-            fs.appendFileSync(feelLog, `${JSON.stringify({ t: Date.now(), cmd, args, ...feel })}\n`);
-          }
-        } else result = await fn(args);
-      } catch (e) { result = { error: String(e?.message || e) }; }
-      res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify(result));
+    req.on("end", () => {
+      chain = chain.then(() => handle(body)).then((result) => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify(result));
+      });
     });
   });
   server.listen(0, "127.0.0.1", () => {
     const addr = server.address();
     const port = typeof addr === "object" && addr ? addr.port : 0;
-    fs.writeFileSync(sessFile(name), JSON.stringify({ name, device, dir, port, pid: process.pid, ready: true }));
+    writeSession(name, { name, device, dir, port, pid: process.pid, ready: true });
   });
-  const bye = async () => { await browser.close().catch(() => {}); fs.rmSync(sessFile(name), { force: true }); process.exit(0); };
   process.on("SIGTERM", bye);
   process.on("SIGINT", bye);
 }

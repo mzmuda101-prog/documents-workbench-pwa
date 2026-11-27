@@ -32,6 +32,8 @@ node scripts/tester/drive.mjs wait <imię> 1500
 node scripts/tester/drive.mjs open-file <imię> <ścieżka>   # wybór pliku (po „Otwórz”, „Wstaw obraz”…)
 node scripts/tester/drive.mjs paste <imię> --text="…" [--html="<table>…</table>"]   # wklejka z innej apki w miejscu kursora
 node scripts/tester/drive.mjs text <imię>          # tekst dokumentu (sprawdzenie treści po zapisie)
+node scripts/tester/drive.mjs select <imię> --el=<i> "<opcja>"   # rozwijana lista (krój, rozmiar, styl akapitu); zła opcja pokaże listę
+node scripts/tester/drive.mjs reopen <imię>        # zamknij kartę i otwórz apkę od nowa (pamięć przeglądarki, np. szkice, zostaje)
 node scripts/tester/drive.mjs errors <imię>        # błędy JavaScriptu od ostatniego razu
 node scripts/tester/drive.mjs feel <imię>          # pomiary odczucia z całej sesji (na koniec, przed stop)
 node scripts/tester/drive.mjs stop <imię>
@@ -66,7 +68,8 @@ na początku). Nie zgłaszaj gustu („mogłoby być ładniejsze”) bez konkret
 Każda czynność zwraca `feel`: `dead` (stuknąłeś i nic się nie zmieniło na ekranie), `reactMs`
 (po ilu ms coś się zmieniło), `jumpPx` (treść sama przeskoczyła). Martwe stuknięcie na przycisku
 albo w tekście, reakcja ponad 300 ms czy skok to sygnał: sprawdź, czy człowiek by to poczuł,
-i jeśli tak, zapisz jako znalezisko (z liczbą z `feel`). Martwe stuknięcie w puste tło to nie błąd.
+i jeśli tak, zapisz jako znalezisko (z liczbą z `feel`). Martwe stuknięcie w puste tło to nie błąd. Skok zaraz po tym, jak sam zwinąłeś lub rozwinąłeś
+panel, to zamierzona zmiana, nie znalezisko.
 Notuj też w głowie: ile czynności zajął każdy cel i ile zająłby w Wordzie.
 
 ## Zasady

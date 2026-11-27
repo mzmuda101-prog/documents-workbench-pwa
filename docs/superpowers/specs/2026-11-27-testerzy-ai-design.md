@@ -88,7 +88,7 @@ Read (zrzuty), Write (raport). Zasady w definicji:
 - Na koniec zadania: zapis → ponowne otwarcie zapisanego pliku i sprawdzenie, czy wszystko jest.
 - Limit kroków (np. 60) i czasu. Utknięcie na 3 próbach tej samej czynności to też znalezisko
   („nie da się zrobić X”), potem iść dalej.
-- Raport: `output/testerzy/<przebieg>/<imię>.md`. Każde znalezisko: waga (Krytyczny / Ważny /
+- Raport: `output/testerzy/<przebieg>/<imię>/raport.md`. Każde znalezisko: waga (Krytyczny / Ważny /
   Drobny / Pomysł, jak w AUDYT-MOBILE), urządzenie, kroki, co się dzieje, czego oczekuje
   (jak w Wordzie), zrzut. Bez zrzutu i kroków nie ma znaleziska.
 - Model: **Sonnet** (szybszy i tańszy, wystarcza do klikania i oceny). Segregacja i naprawy
