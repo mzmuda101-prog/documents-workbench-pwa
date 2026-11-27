@@ -714,6 +714,9 @@ function clearDocumentState() {
   documentStructure = null;
   searchMatches = [];
   activeSearchIndex = -1;
+  if (typeof clearFrHighlights === "function") clearFrHighlights();
+  else if (window.CSS?.highlights) { CSS.highlights.delete("dwb-find"); CSS.highlights.delete("dwb-find-active"); }
+  if (searchQueryEl && searchQueryEl.value) { searchQueryEl.value = ""; searchQueryEl.dispatchEvent(new Event("input", { bubbles: true })); }
   if (docCanvasEl) docCanvasEl.replaceChildren();
   if (structureSummaryEl) structureSummaryEl.replaceChildren();
   if (typeof resetStructurePanelUi === "function") resetStructurePanelUi();

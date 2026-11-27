@@ -188,7 +188,10 @@ const dwbComfort = (() => {
     if (!statusPageEl) return;
     const starts = originalFileBytes ? pageStarts() : [];
     if (starts.length < 1) { statusPageEl.hidden = true; return; }
-    const ref = docViewportEl.getBoundingClientRect().top + 48;
+    const vr = docViewportEl.getBoundingClientRect();
+    // 35% wysokości widoku (maks. 240 px): na 2-stronicowym dokumencie strona 2 często nie dochodzi
+    // do samej góry ekranu przy końcu przewijania, a mimo to wypełnia widok (AUDYT-MOBILE #14).
+    const ref = vr.top + Math.min(vr.height * 0.35, 240);
     let cur = 1;
     starts.forEach((s, i) => { if (s.y <= ref) cur = i + 1; });
     statusPageEl.hidden = false;

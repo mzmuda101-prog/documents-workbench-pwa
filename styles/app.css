@@ -4249,7 +4249,8 @@ body.rb-reading .rb-act .hero-save:not(.is-dirty) { display: none; }
   .rb-mode-txt, .rb-act .hero-save-label { display: none; }
   .rb-act .hero-save-icon { display: block; }
   .rb-act .hero-save { padding: 0 10px; }
-  .rb-act .doc-search { width: 120px; }
+  .rb-act .doc-search { width: 168px; }
+  .rb-act .doc-search:focus-within { width: 210px; }
 }
 /* tryb skupienia: tylko dokument — rząd poleceń znika, rząd 1 (karty, Zapisz, ⋯) zostaje */
 :root.focus-mode body.rb-on .rb-r2 { display: none; }

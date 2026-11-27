@@ -279,8 +279,16 @@ async function renderCurrentDocument(opts = {}) {
     documentStructure = analyzeDocumentDom(docCanvasEl);
     renderStructurePanel(documentStructure);
     if (typeof semanticDocumentRendered === "function") semanticDocumentRendered();
-    // find-replace-workbench.js jest leniwy — bez niego wyjątek zatrzymałby włączenie edycji poniżej
-    if (searchQueryEl?.value.trim() && typeof runDocumentSearch === "function") runDocumentSearch({ keepView: !opts.newFile });
+    // Nowy plik: nie przenosimy starej frazy i podświetleń z poprzedniego dokumentu (AUDYT-MOBILE #12/#14);
+    // przerysowanie tego samego dokumentu: odśwież trafienia bez przewijania.
+    if (opts.newFile) {
+      if (typeof clearFrHighlights === "function") clearFrHighlights();
+      else if (window.CSS?.highlights) { CSS.highlights.delete("dwb-find"); CSS.highlights.delete("dwb-find-active"); }
+      if (searchQueryEl && searchQueryEl.value) { searchQueryEl.value = ""; searchQueryEl.dispatchEvent(new Event("input", { bubbles: true })); }
+      if (searchCountEl) searchCountEl.textContent = "";
+    } else if (searchQueryEl?.value.trim() && typeof runDocumentSearch === "function") {
+      runDocumentSearch({ keepView: true });
+    }
     setupInlineEditingAfterRender();
     refreshOcrMarksState();
     if (typeof restoreFormatMarks === "function") restoreFormatMarks();

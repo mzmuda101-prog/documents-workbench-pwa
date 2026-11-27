@@ -747,7 +747,10 @@ const composeUi = (() => {
     const p = caretParagraph();
     if (!p) return null;
     const index = resolveParaIndex(p);
-    if (index < 0) return null;
+    if (index < 0) {
+      if (p.dataset.noteKey) toast(t("bodyOnlyAction"), "info");
+      return null;
+    }
     const a = linkAtCaret();
     if (a && p.contains(a)) {
       const r = document.createRange();
