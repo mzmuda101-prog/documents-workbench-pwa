@@ -292,6 +292,7 @@ function applyMobileReflowLayout(host) {
   const section = host.querySelector("section.docx") || host.querySelector(".docx");
   if (!section) return;
   const vpW = docViewportEl?.clientWidth || window.innerWidth;
+  const toPx = (v) => (/pt$/.test(v) ? parseFloat(v) * (4 / 3) : parseFloat(v));
   // WSZYSTKIE kartki: po podziale strony docx-preview robi kolejne <section> — dawniej tylko
   // pierwsza dopasowywała się do ekranu, następne zostawały szerokie (strona przewijała się w bok)
   const sections = [...host.querySelectorAll("section.docx")];
@@ -332,6 +333,14 @@ function applyMobileReflowLayout(host) {
 
   host.querySelectorAll("table").forEach((table) => {
     table.classList.toggle("dwb-table-keep", keepTables);
+    // Linie cieńsze niż piksel (0,25 pt z PDF = 0,33 px) WebKit na telefonie gubił — wiersze bez
+    // ramek (testerzy AI 2026-11-27). Jak Word na telefonie: linia co najmniej 1 px.
+    table.querySelectorAll(":scope > tbody > tr > td, :scope > tbody > tr > th, :scope > tr > td, :scope > tr > th").forEach((c) => {
+      for (const s of ["Top", "Right", "Bottom", "Left"]) {
+        const w = c.style[`border${s}Width`], st = c.style[`border${s}Style`];
+        if (w && st && st !== "none" && st !== "hidden" && /(pt|px)$/.test(w) && toPx(w) > 0 && toPx(w) < 1) c.style[`border${s}Width`] = "1px";
+      }
+    });
     if (keepTables) {
       // tylko zewnętrzna tabela przewija się w bok (zagnieżdżona jedzie razem z nią)
       if (!table.parentElement?.closest("table")) fadeKeptTable(table);
@@ -397,14 +406,22 @@ function applyMobileReflowLayout(host) {
   // Ujemne wcięcie (zapas na prawo przy akapitach z PDF) wychodziłoby poza wąski ekran.
   // Bardzo duże wcięcie (tekst z prawej połowy kartki, np. podpis „Propozycję przygotowała…”)
   // robiło akapit szerszy niż ekran — przycinamy do 15% szerokości.
-  const toPx = (v) => (/pt$/.test(v) ? parseFloat(v) * (4 / 3) : parseFloat(v));
   host.querySelectorAll("p").forEach((p) => {
+    // w komórce tabeli wcięcie liczone od szerokości komórki: wcięcia z PDF (41 + 28 px) w komórce
+    // 87 px zostawiały 13 px na tekst — litera pod literą (testerzy AI 2026-11-27)
+    const cell = p.closest("td, th");
+    const cap = cell ? cell.clientWidth * 0.1 : vpW * 0.15;
+    // wysunięcie pierwszego wiersza (numer punktu listy) potrzebuje swojego miejsca — lewe wcięcie
+    // w komórce nie schodzi poniżej niego, inaczej numer wychodził na ramkę
+    // (listy: numer w ::before przesunięty o --dwb-hang; inne: ujemne wcięcie pierwszego wiersza)
+    const hang = cell ? Math.max(0, parseFloat(p.style.getPropertyValue("--dwb-hang")) || 0, -(parseFloat(getComputedStyle(p).textIndent) || 0)) : 0;
     for (const side of ["marginLeft", "marginRight", "marginInlineStart", "marginInlineEnd"]) {
       const v = p.style[side];
       if (!v || !/(pt|px)$/.test(v)) continue;
       const px = toPx(v);
+      const lim = /Left|Start/.test(side) ? Math.max(cap, Math.min(px, hang)) : cap;
       if (px < 0) p.style[side] = "0";
-      else if (px > vpW * 0.15) p.style[side] = `${Math.round(vpW * 0.15)}px`;
+      else if (px > lim) p.style[side] = `${Math.ceil(lim)}px`; // w górę: numer listy nie wystaje o ułamek piksela
     }
     // Wysunięcie pierwszego wiersza (ujemne text-indent) zostawało po przycięciu wcięcia: akapit
     // z wcięciem 200 pt i wysunięciem 150 pt (pliki z PDF — tytuł „Wskazówki dotyczące stoisk…”)
@@ -434,7 +451,79 @@ function applyMobileReflowLayout(host) {
       }
     });
   });
+  if (!keepTables) host.querySelectorAll("table").forEach(fitColumnsToWords);
   softenReflowIndents(host);
+}
+
+// Tabela ściśnięta do ekranu (kolumny w procentach z pliku): wąska kolumna łamała słowa w środku
+// („BRYGADZI/STA”, „uczestnikó/w”), a szeroka obok miała zapas. Kolumna dostaje co najmniej
+// szerokość swojego najdłuższego słowa kosztem kolumn z zapasem (proporcje z pliku zostają,
+// gdzie się da). Gdy zapasu brak — bez zmian (słowo się złamie, jak dotąd). Testerzy AI 2026-11-27.
+function fitColumnsToWords(table) {
+  const cols = [...table.querySelectorAll(":scope > colgroup > col")];
+  const W = table.clientWidth;
+  if (cols.length < 2 || !W || table.rows.length > 60) return;
+  const pct = cols.map((c) => parseFloat(c.style.width) || 0);
+  if (pct.some((x) => !x)) return;
+  const scale = (table.offsetWidth && table.getBoundingClientRect().width / table.offsetWidth) || 1;
+  const need = cols.map(() => 0);
+  const locked = cols.map(() => false);
+  const measured = cols.map(() => false);
+  const range = document.createRange();
+  for (const tr of table.rows) {
+    let ci = 0;
+    for (const td of tr.cells) {
+      const span = td.colSpan || 1;
+      if (span === 1 && ci < cols.length) {
+        if (td.querySelector("table, img, svg")) locked[ci] = true;
+        else {
+          measured[ci] = true;
+          const cs = getComputedStyle(td);
+          const extra = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0) + (parseFloat(cs.borderLeftWidth) || 0) + (parseFloat(cs.borderRightWidth) || 0) + 2;
+          let word = 0;
+          td.querySelectorAll("p").forEach((p) => {
+            const pcs = getComputedStyle(p);
+            const pe = (parseFloat(pcs.marginLeft) || 0) + (parseFloat(pcs.marginRight) || 0);
+            const tw = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+            for (let t = tw.nextNode(); t; t = tw.nextNode()) {
+              const re = /\S+/g;
+              for (let m = re.exec(t.data); m; m = re.exec(t.data)) {
+                range.setStart(t, m.index);
+                range.setEnd(t, m.index + m[0].length);
+                const w = [...range.getClientRects()].reduce((a, r) => a + r.width, 0) / scale + pe;
+                if (w > word) word = w;
+              }
+            }
+          });
+          need[ci] = Math.max(need[ci], word + extra);
+        }
+      }
+      ci += span;
+    }
+  }
+  const w = pct.map((x) => (x / 100) * W);
+  for (let i = 0; i < cols.length; i++) {
+    if (locked[i] || !measured[i]) need[i] = w[i];
+    else need[i] = Math.max(need[i], Math.min(w[i], 36));
+  }
+  const deficit = w.reduce((a, x, i) => a + Math.max(0, need[i] - x), 0);
+  if (deficit < 1) return;
+  const surplus = w.map((x, i) => Math.max(0, x - need[i]));
+  const total = surplus.reduce((a, b) => a + b, 0);
+  if (total < 1) return;
+  // zapasu za mało: kolumny z zapasem oddają go cały, brakujące dostają proporcjonalnie
+  const give = Math.min(total, deficit);
+  const nw = w.map((x, i) => (need[i] > x ? x + ((need[i] - x) * give) / deficit : x - (surplus[i] * give) / total));
+  const np = nw.map((x) => (x / W) * 100);
+  cols.forEach((c, i) => (c.style.width = `${np[i]}%`));
+  for (const tr of table.rows) {
+    let ci = 0;
+    for (const td of tr.cells) {
+      const span = td.colSpan || 1;
+      if (/%$/.test(td.style.width)) td.style.width = `${np.slice(ci, ci + span).reduce((a, b) => a + b, 0)}%`;
+      ci += span;
+    }
+  }
 }
 
 // Wcięcia w Widoku mobilnym rosną wolniej niż litery (jak Word: tekst ma wypełniać ekran).
