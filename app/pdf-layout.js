@@ -541,22 +541,328 @@
     }
     // tło całej strony (nie białe) też rysujemy w warstwie grafiki
     for (const r of raw.rects) if (r.x1 - r.x0 > W * 0.97 && r.y1 - r.y0 > H * 0.97 && r.color !== "ffffff") leftovers.fills.push(r);
-    return { tables: mergeStackedTables(tables), leftovers };
+    // Etap 1 (jak w Wordzie): tabele z samymi poziomymi liniami (nowoczesne tabele Worda / booktabs),
+    // sklejanie zebry (pasy cieniowane przedzielone białymi wierszami) i podział kolumn z wyrównanego tekstu
+    // wewnątrz tabel bez pionowych linii (zebra, sama ramka zewnętrzna).
+    const hTables = detectHorizontalTables(leftovers, tables, frags, tol);
+    const merged = mergeStackedTables([...tables, ...hTables], frags);
+    return { tables: refineImplicitTables(merged, frags), leftovers };
+  }
+
+  // Podział tekstu w prostokącie na wiersze i niejawne kolumny (bez pionowych linii).
+  // Używane dla tabel z poziomymi liniami, zebry oraz tabel z samą ramką zewnętrzną.
+  function lineSpansInBox(inBox, ms) {
+    const tolY = Math.max(2, ms * 0.4);
+    const byY = clusterValues(inBox.map((f) => f.y), tolY);
+    const spanGap = Math.max(ms * 0.85, 7);
+    const lines = [];
+    for (const y of byY) {
+      const fs = inBox.filter((f) => Math.abs(f.y - y) <= tolY);
+      const gs = fs.flatMap((f) => f.glyphs.filter((g) => !g.isSpace)).sort((a, b) => a.x - b.x || a.order - b.order);
+      if (!gs.length) continue;
+      const spans = [];
+      for (const g of gs) {
+        const last = spans[spans.length - 1];
+        if (last && g.x - last.x1 <= spanGap) {
+          last.x1 = Math.max(last.x1, g.x1);
+          last.glyphs.push(g);
+        } else spans.push({ x0: g.x, x1: g.x1, glyphs: [g] });
+      }
+      const top = Math.min(...fs.map((f) => f.top));
+      const bottom = Math.max(...fs.map((f) => f.bottom));
+      lines.push({ y, top, bottom, spans });
+    }
+    return lines.sort((a, b) => a.y - b.y);
+  }
+
+  function inferTextColumns(inBox, bx0, bx1) {
+    if (inBox.length < 2) return null;
+    // spis treści z kropkami wiodącymi — to akapity z tabulatorem, nie tabela
+    if (inBox.some((f) => /\.{4,}|…{2,}/.test(f.text || ""))) return null;
+    const ms = median(inBox.map((f) => f.size)) || 10;
+    const lines = lineSpansInBox(inBox, ms);
+    const multi = lines.filter((l) => l.spans.length >= 2);
+    if (multi.length < 2 || multi.length < lines.length * 0.3) return null;
+    // rzutowanie wszystkich odcinków z wierszy wielokolumnowych na oś X
+    const iv = multi.flatMap((l) => l.spans.map((s) => [s.x0, s.x1])).sort((a, b) => a[0] - b[0]);
+    const minGap = Math.max(ms * 0.85, 7);
+    const gutters = [];
+    let end = iv[0][1];
+    for (let i = 1; i < iv.length; i++) {
+      if (iv[i][0] - end >= minGap) gutters.push({ from: end, to: iv[i][0] });
+      end = Math.max(end, iv[i][1]);
+    }
+    if (!gutters.length) return null;
+    // granica kolumny: przy lewostronnym wyrównaniu kolumny po prawej — tuż przed jej tekstem (indLeft ≈ 0),
+    // inaczej (np. liczby do prawej) — w połowie przerwy
+    const cuts = gutters.map((g, gi) => {
+      const nextFrom = gi + 1 < gutters.length ? gutters[gi + 1].from : bx1 + 2;
+      const rightStarts = multi.flatMap((l) => l.spans.filter((s) => s.x0 >= g.to - 1 && s.x1 <= nextFrom + 1).map((s) => s.x0));
+      const leftAligned = rightStarts.length >= 2 && Math.max(...rightStarts) - Math.min(...rightStarts) <= 3.5;
+      if (leftAligned) return Math.max(g.from + 2, Math.min(g.to - 2, Math.min(...rightStarts) - 3));
+      return (g.from + g.to) / 2;
+    });
+    const X = [bx0, ...cuts, bx1];
+    // upewnij się, że co najmniej 2 wiersze obsadzają ≥ 2 różne kolumny
+    const colOf = (s) => {
+      const cx = (s.x0 + s.x1) / 2;
+      for (let c = 0; c < X.length - 1; c++) if (cx >= X[c] - 1 && cx <= X[c + 1] + 1) return c;
+      return 0;
+    };
+    const multiCols = lines.filter((l) => new Set(l.spans.map(colOf)).size >= 2);
+    if (multiCols.length < 2) return null;
+    return { X, lines, colOf, ms };
+  }
+
+  // Podział pasma [y0, y1] między poziomymi liniami (albo wewnątrz ramki 1×1) na pod-wiersze:
+  // nowa linia tekstu otwiera nowy wiersz, jeśli wnosi treść w kolumnie 0 lub w ≥ 2 kolumnach naraz;
+  // zawinięta kontynuacja pojedynczej kolumny (np. opis w kolumnie 1) zostaje w tym samym wierszu.
+  function splitBandRows(lines, y0, y1, colOf) {
+    const inside = lines.filter((l) => l.y > y0 - 1 && l.y < y1 + 1);
+    if (inside.length <= 1) return [y0, y1];
+    const rowGroups = [[inside[0]]];
+    for (let i = 1; i < inside.length; i++) {
+      const l = inside[i];
+      const cols = new Set(l.spans.map(colOf));
+      const prevCols = new Set(rowGroups[rowGroups.length - 1][0].spans.map(colOf));
+      const startsNew = cols.size >= 2 || (cols.has(0) && prevCols.has(0));
+      if (startsNew) rowGroups.push([l]);
+      else rowGroups[rowGroups.length - 1].push(l);
+    }
+    if (rowGroups.length <= 1) return [y0, y1];
+    const ys = [y0];
+    for (let i = 0; i + 1 < rowGroups.length; i++) {
+      const a = rowGroups[i][rowGroups[i].length - 1];
+      const b = rowGroups[i + 1][0];
+      ys.push((a.bottom + b.top) / 2);
+    }
+    ys.push(y1);
+    return ys;
+  }
+
+  // Wykrywanie tabel z samych poziomych linii (bez pionowych): nowoczesne tabele Worda i styl akademicki (booktabs).
+  function detectHorizontalTables(leftovers, existingTables, frags, tol) {
+    const cand = leftovers.hSegs.filter((s) => s.x1 - s.x0 >= 60);
+    if (cand.length < 2) return [];
+    const stacks = [];
+    for (const s of cand) {
+      const st = stacks.find((g) => Math.abs(g.x0 - s.x0) <= 6 && Math.abs(g.x1 - s.x1) <= 6);
+      if (st) {
+        st.segs.push(s);
+        st.x0 = Math.min(st.x0, s.x0);
+        st.x1 = Math.max(st.x1, s.x1);
+      } else stacks.push({ x0: s.x0, x1: s.x1, segs: [s] });
+    }
+    const used = new Set();
+    const out = [];
+    const overlapsExisting = (x0, x1, y0, y1) => existingTables.some((t) => overlap1d(t.x0, t.x1, x0, x1) > 4 && overlap1d(t.y0, t.y1, y0, y1) > 4);
+    for (const st of stacks) {
+      if (st.segs.length < 2) continue;
+      const segs = st.segs.slice().sort((a, b) => a.y - b.y);
+      // rozdziel stos, jeśli między dwiema liniami jest wielka przerwa albo proza bez kolumn
+      const groups = [[segs[0]]];
+      for (let i = 1; i < segs.length; i++) {
+        const prev = segs[i - 1], cur = segs[i];
+        const between = frags.filter((f) => f.type === "text" && !f.rotated && (f.x0 + f.x1) / 2 >= st.x0 - 2 && (f.x0 + f.x1) / 2 <= st.x1 + 2 && f.y > prev.y + 1 && f.y < cur.y - 1);
+        const hugeEmpty = !between.length && cur.y - prev.y > 40;
+        const proseGap = cur.y - prev.y > 120 && between.length > 0 && !inferTextColumns(between, st.x0, st.x1);
+        if (hugeEmpty || proseGap) groups.push([cur]);
+        else groups[groups.length - 1].push(cur);
+      }
+      for (const g of groups) {
+        if (g.length < 2) continue;
+        let yTop = g[0].y;
+        const yBot = g[g.length - 1].y;
+        if (yBot - yTop < 12) continue;
+        const bx0 = Math.min(...g.map((s) => s.x0)), bx1 = Math.max(...g.map((s) => s.x1));
+        if (overlapsExisting(bx0, bx1, yTop, yBot)) continue;
+        let inBox = frags.filter((f) => f.type === "text" && !f.rotated && (f.x0 + f.x1) / 2 >= bx0 - 2 && (f.x0 + f.x1) / 2 <= bx1 + 2 && f.y >= yTop - 1 && f.y <= yBot + 1);
+        // nagłówek nad pierwszą linią (tabela tylko z podkreśleniem nagłówka i linią na dole)
+        const msGuess = median(inBox.map((f) => f.size)) || 10;
+        const above = frags.filter((f) => f.type === "text" && !f.rotated && (f.x0 + f.x1) / 2 >= bx0 - 2 && (f.x0 + f.x1) / 2 <= bx1 + 2 && f.bottom <= yTop + 1 && f.top >= yTop - msGuess * 2.2);
+        if (above.length >= 2 && !overlapsExisting(bx0, bx1, Math.min(...above.map((f) => f.top)) - 3, yTop)) {
+          const withAbove = [...above, ...inBox];
+          if (inferTextColumns(withAbove, bx0, bx1)) {
+            const rawTop = Math.min(...above.map((f) => f.top)) - 3;
+            const prevSame = existingTables.find((t) => Math.abs(t.x0 - bx0) <= 6 && Math.abs(t.x1 - bx1) <= 6 && t.y1 <= rawTop + 2 && rawTop - t.y1 <= msGuess * 1.5);
+            yTop = prevSame ? prevSame.y1 : rawTop;
+            inBox = withAbove;
+          }
+        }
+        const inferred = inferTextColumns(inBox, bx0, bx1);
+        if (!inferred) continue;
+        const { X, lines, colOf } = inferred;
+        const ruleYs = mergeClose(clusterValues(g.map((s) => s.y), tol), 2.5);
+        const anchorYs = yTop < ruleYs[0] - 2 ? [yTop, ...ruleYs] : ruleYs;
+        const Y = [anchorYs[0]];
+        for (let k = 0; k + 1 < anchorYs.length; k++) {
+          const sub = splitBandRows(lines, anchorYs[k], anchorYs[k + 1], colOf);
+          Y.push(...sub.slice(1));
+        }
+        const nR = Y.length - 1, nC = X.length - 1;
+        if (nR < 2 || nC < 2) continue;
+        const hItems = g.map((s) => ({ kind: "h", x0: s.x0, x1: s.x1, y0: s.y - s.w / 2, y1: s.y + s.w / 2, ref: s }));
+        const cellOf = Array.from({ length: nR }, () => new Array(nC).fill(null));
+        const cells = [];
+        for (let r = 0; r < nR; r++) {
+          for (let c = 0; c < nC; c++) {
+            const cell = {
+              r0: r, r1: r, c0: c, c1: c,
+              x0: X[c], x1: X[c + 1], y0: Y[r], y1: Y[r + 1],
+              fill: null,
+              borders: {
+                top: edgeStyle(hItems, "h", Y[r], X[c], X[c + 1], tol),
+                bottom: edgeStyle(hItems, "h", Y[r + 1], X[c], X[c + 1], tol),
+                left: null,
+                right: null,
+              },
+              frags: [],
+            };
+            cells.push(cell);
+            cellOf[r][c] = cell;
+          }
+        }
+        for (const s of g) used.add(s);
+        out.push({ type: "table", x0: X[0], x1: X[nC], y0: Y[0], y1: Y[nR], top: Y[0], bottom: Y[nR], X, Y, cells, cellOf });
+      }
+    }
+    if (used.size) leftovers.hSegs = leftovers.hSegs.filter((s) => !used.has(s));
+    return out;
+  }
+
+  // Podział tabel jednokolumnowych (np. sama ramka zewnętrzna 1×1 albo sklejona zebra nR×1),
+  // gdy tekst wewnątrz tworzy wyraźną siatkę wielokolumnową, oraz podział pełnoszerokościowego
+  // wiersza (np. cieniowany nagłówek sklejony z tabelą z poziomych linii), jeśli jego tekst
+  // mieści się czysto w kolumnach tabeli bez przecinania granic.
+  function refineImplicitTables(tables, frags) {
+    return tables.map((t) => {
+      const nC = t.X.length - 1, nR = t.Y.length - 1;
+      if (nC >= 2) {
+        let changed = false;
+        const cells = [];
+        const cellOf = t.cellOf.map((row) => row.slice());
+        for (const cell of t.cells) {
+          if (cell.c0 === 0 && cell.c1 === nC - 1 && cell.r0 === cell.r1) {
+            const r = cell.r0;
+            const rowFrags = frags.filter((f) => f.type === "text" && !f.rotated && (f.x0 + f.x1) / 2 >= t.x0 - 1 && (f.x0 + f.x1) / 2 <= t.x1 + 1 && f.y >= cell.y0 - 1 && f.y <= cell.y1 + 1);
+            const gs = rowFrags.flatMap((f) => f.glyphs.filter((g) => !g.isSpace));
+            const crosses = gs.some((g) => t.X.slice(1, -1).some((x) => g.x < x - 1 && g.x1 > x + 1));
+            const colsHit = new Set(gs.map((g) => {
+              const gx = (g.x + g.x1) / 2;
+              for (let c = 0; c < nC; c++) if (gx >= t.X[c] - 1 && gx <= t.X[c + 1] + 1) return c;
+              return 0;
+            }));
+            if (gs.length && !crosses && colsHit.size >= 2) {
+              changed = true;
+              for (let c = 0; c < nC; c++) {
+                const nc = {
+                  r0: r, r1: r, c0: c, c1: c,
+                  x0: t.X[c], x1: t.X[c + 1], y0: cell.y0, y1: cell.y1,
+                  fill: cell.fill || null,
+                  borders: {
+                    top: cell.borders?.top || null,
+                    bottom: cell.borders?.bottom || null,
+                    left: c === 0 ? cell.borders?.left || null : null,
+                    right: c === nC - 1 ? cell.borders?.right || null : null,
+                  },
+                  frags: [],
+                };
+                cells.push(nc);
+                cellOf[r][c] = nc;
+              }
+              continue;
+            }
+          }
+          cells.push(cell);
+        }
+        return changed ? { ...t, cells, cellOf } : t;
+      }
+      if (nC !== 1) return t;
+      const inBox = frags.filter((f) => f.type === "text" && !f.rotated && (f.x0 + f.x1) / 2 >= t.x0 - 1 && (f.x0 + f.x1) / 2 <= t.x1 + 1 && f.y >= t.y0 - 1 && f.y <= t.y1 + 1);
+      const inferred = inferTextColumns(inBox, t.x0, t.x1);
+      if (!inferred) return t;
+      const { X, lines, colOf } = inferred;
+      let Y = t.Y;
+      // 1×1 (np. sama ramka zewnętrzna): podziel także na wiersze
+      if (nR === 1) Y = splitBandRows(lines, t.y0, t.y1, colOf);
+      const newR = Y.length - 1, newC = X.length - 1;
+      if (newR < 2 || newC < 2) return t;
+      const srcRowOf = (r) => {
+        if (nR === 1) return t.cellOf[0][0];
+        const cy = (Y[r] + Y[r + 1]) / 2;
+        for (let sr = 0; sr < nR; sr++) if (cy >= t.Y[sr] - 0.5 && cy <= t.Y[sr + 1] + 0.5) return t.cellOf[sr][0];
+        return t.cellOf[Math.min(r, nR - 1)][0];
+      };
+      const cellOf = Array.from({ length: newR }, () => new Array(newC).fill(null));
+      const cells = [];
+      for (let r = 0; r < newR; r++) {
+        const src = srcRowOf(r);
+        const origTop = nR === 1 ? (r === 0 ? src?.borders?.top || null : null) : src?.borders?.top || null;
+        const origBot = nR === 1 ? (r === newR - 1 ? src?.borders?.bottom || null : null) : src?.borders?.bottom || null;
+        for (let c = 0; c < newC; c++) {
+          const cell = {
+            r0: r, r1: r, c0: c, c1: c,
+            x0: X[c], x1: X[c + 1], y0: Y[r], y1: Y[r + 1],
+            fill: src?.fill || null,
+            borders: {
+              top: origTop,
+              bottom: origBot,
+              left: c === 0 ? src?.borders?.left || null : null,
+              right: c === newC - 1 ? src?.borders?.right || null : null,
+            },
+            frags: [],
+          };
+          cells.push(cell);
+          cellOf[r][c] = cell;
+        }
+      }
+      return { type: "table", x0: X[0], x1: X[newC], y0: Y[0], y1: Y[newR], top: Y[0], bottom: Y[newR], X, Y, cells, cellOf };
+    });
   }
 
   // Tabela z Worda bywa narysowana w kawałkach przedzielonych wierszami bez tła i krawędzi
-  // (np. „Świadczenia z tytułu…”). Kawałki o tych samych brzegach i z małą przerwą składamy
-  // z powrotem w jedną tabelę; przerwa staje się wierszem scalonym na całą szerokość.
-  function mergeStackedTables(tables) {
+  // (np. „Świadczenia z tytułu…” albo tabela zebrowa z cieniowaniem co drugiego wiersza).
+  // Kawałki o tych samych brzegach i z małą przerwą (albo z wierszem tekstu wypełniającym przerwę zebry)
+  // składamy z powrotem w jedną tabelę; puste przerwy harmonogramów (pdf-bands) zostają osobno.
+  function mergeStackedTables(tables, frags = []) {
     if (tables.length < 2) return tables;
     const sorted = tables.slice().sort((a, b) => a.y0 - b.y0);
     const out = [sorted[0]];
+    const zebraMerged = new WeakSet();
     for (let i = 1; i < sorted.length; i++) {
       const a = out[out.length - 1], b = sorted[i];
       const gap = b.y0 - a.y1;
       const sameEdges = Math.abs(a.x0 - b.x0) < 3 && Math.abs(a.x1 - b.x1) < 3;
-      if (sameEdges && gap > -1 && gap < 16) out[out.length - 1] = joinTables(a, b);
-      else out.push(b);
+      const maxRowH = Math.max(a.Y[a.Y.length - 1] - a.Y[a.Y.length - 2], b.Y[1] - b.Y[0]);
+      const zebraRow = sameEdges && gap >= 16 && gap <= Math.max(36, maxRowH * 1.8)
+        && frags.some((f) => f.type === "text" && !f.rotated && (f.x0 + f.x1) / 2 >= a.x0 - 1 && (f.x0 + f.x1) / 2 <= a.x1 + 1 && f.y > a.y1 + 1 && f.y < b.y0 - 1);
+      if (sameEdges && ((gap > -1 && gap < 16) || zebraRow)) {
+        const joined = joinTables(a, b);
+        if (zebraRow || zebraMerged.has(a)) zebraMerged.add(joined);
+        out[out.length - 1] = joined;
+      } else out.push(b);
+    }
+    // Parzysta liczba wierszy w zebrze (ostatni wiersz biały, pod ostatnim cieniowanym pasem):
+    // dołączamy ten pojedynczy wiersz, jeśli leży tuż pod tabelą w tym samym rozstawie kolumn.
+    for (let i = 0; i < out.length; i++) {
+      const t = out[i];
+      if (!zebraMerged.has(t)) continue;
+      const rowH = median(t.Y.slice(1).map((y, k) => y - t.Y[k])) || 20;
+      const nextY = i + 1 < out.length ? out[i + 1].y0 : Infinity;
+      const limitY = Math.min(t.y1 + rowH * 1.5, nextY - 2);
+      const below = frags.filter((f) => f.type === "text" && !f.rotated && (f.x0 + f.x1) / 2 >= t.x0 - 1 && (f.x0 + f.x1) / 2 <= t.x1 + 1 && f.y > t.y1 + 1 && f.y <= limitY);
+      if (!below.length) continue;
+      const ms = median(below.map((f) => f.size)) || 10;
+      const lines = lineSpansInBox(below, ms);
+      if (lines.length === 1 && lines[0].spans.length >= 2) {
+        const newY1 = Math.max(lines[0].bottom + 4, t.y1 + rowH);
+        const r = t.Y.length - 1;
+        const nC = t.X.length - 1;
+        const Y = [...t.Y, newY1];
+        const cell = { r0: r, r1: r, c0: 0, c1: nC - 1, x0: t.X[0], x1: t.X[nC], y0: t.y1, y1: newY1, fill: null, borders: { top: null, bottom: null, left: null, right: null }, frags: [] };
+        const cellOf = [...t.cellOf, new Array(nC).fill(cell)];
+        out[i] = { ...t, y1: newY1, bottom: newY1, Y, cells: [...t.cells, cell], cellOf };
+      }
     }
     return out;
   }
