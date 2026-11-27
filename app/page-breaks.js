@@ -54,7 +54,8 @@ const dwbPageBreaks = (() => {
   }
 
   function clear(h = host()) {
-    h?.querySelectorAll(".dwb-page-break, .dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-margin-guide, .dwb-page-repeat").forEach((el) => el.remove());
+    h?.querySelectorAll(".dwb-page-break, .dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-margin-guide, .dwb-page-repeat, .dwb-page-hf").forEach((el) => el.remove());
+    h?.querySelectorAll("section[data-dwb-hf-sig]").forEach((sec) => delete sec.dataset.dwbHfSig);
     h?.querySelectorAll("section.dwb-gapped").forEach((sec) => { sec.classList.remove("dwb-gapped"); sec.style.removeProperty("--dwb-sec-min"); });
   }
 
@@ -760,8 +761,8 @@ const dwbPageBreaks = (() => {
           && parseFloat(guideEls[i].style.getPropertyValue("--dwb-guide-left")) === x.insetLeft
           && parseFloat(guideEls[i].style.getPropertyValue("--dwb-guide-right")) === x.insetRight)
         && (sec.style.getPropertyValue("--dwb-sec-min") || "") === (minH ? `${minH}px` : "");
-    }) && h.querySelectorAll(".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-break, .dwb-page-margin-guide, .dwb-page-repeat").length === want.reduce((n, w) => n + w.items.reduce((m, x) => m + (x.kind === "gap" ? (x.line ? 3 : 2) + (x.head ? 1 : 0) : 1), 0) + w.guides.length, 0);
-    if (same) return;
+    }) && h.querySelectorAll(".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-break, .dwb-page-margin-guide, .dwb-page-repeat:not(.dwb-page-hf)").length === want.reduce((n, w) => n + w.items.reduce((m, x) => m + (x.kind === "gap" ? (x.line ? 3 : 2) + (x.head ? 1 : 0) : 1), 0) + w.guides.length, 0);
+    if (same) { pageHeadersFooters(h); return; }
     // zmiana: akapit widoczny u góry zostaje na swoim miejscu na ekranie (jak zakotwiczenie przewijania);
     // tuż po przerysowaniu — akapit sprzed przerysowania (document.js, reloadFromBytes)
     const pending = typeof takeRenderScrollAnchor === "function" ? takeRenderScrollAnchor() : null;
@@ -849,6 +850,7 @@ const dwbPageBreaks = (() => {
     });
     splits.forEach(fitSplit);
     relayoutTextboxes(h); // pola tekstowe za swoimi akapitami / na swoich kartkach
+    pageHeadersFooters(h);
     if (typeof syncPageScaleHeightNow === "function") syncPageScaleHeightNow(); // inaczej przewinięcie niżej obcina stary, krótszy obszar
     if (pending) restoreDocScrollAnchor(pending);
     else if (anchor && docViewportEl) {
@@ -871,6 +873,111 @@ const dwbPageBreaks = (() => {
     c.style.cssText = css;
     if (deep) el.childNodes.forEach((n) => { if (n.nodeType === 1 || n.nodeType === 3) c.appendChild(styledClone(n)); });
     return c;
+  }
+  // Nagłówek i stopka na KAŻDEJ stronie Edycji, jak na wydruku i w Wordzie (dawniej nagłówek tylko
+  // nad stroną 1, stopka tylko pod ostatnią — testerzy AI 2026-11-27, AUDYT-MOBILE #2). Oryginały
+  // zostają, gdzie są (nagłówek strony 1, stopka ostatniej strony); pozostałe strony dostają kopie
+  // tylko do oglądania (shadow DOM, jak powtarzany wiersz nagłówka tabeli) z numerem swojej strony.
+  // Wersja na stronie jak w print-preview.js (hfFor): pierwsza strona sekcji — narysowana, dalsze —
+  // parzysta (w:evenAndOddHeaders) albo domyślna; bez domyślnej po „first” — nic.
+  let evenOdd = { bytes: null, on: false };
+  function evenOddOn() {
+    if (evenOdd.bytes !== originalFileBytes) {
+      const bytes = originalFileBytes;
+      evenOdd = { bytes, on: false };
+      if (bytes && typeof loadDocxZipCached === "function") {
+        loadDocxZipCached(bytes).then((z) => z.file("word/settings.xml")?.async("string")).then((x) => {
+          if (evenOdd.bytes === bytes && /<w:evenAndOddHeaders(?![^>]*w:val="(0|false|off)")/.test(x || "")) { evenOdd.on = true; schedule(0); }
+        }).catch(() => { /* bez ustawień — bez stron parzystych */ });
+      }
+    }
+    return evenOdd.on;
+  }
+  function hfVersion(sec, tag, j, pageNo) {
+    const shown = sec.querySelector(`:scope > ${tag}:not(.dwb-hf-alt)`);
+    if (!shown) return null;
+    const alt = (k) => sec.querySelector(`:scope > ${tag}.dwb-hf-alt[data-dwb-hf="${k}"]`);
+    if (j === 0) return shown;
+    if (pageNo % 2 === 0 && evenOddOn()) { const e = shown.dataset.dwbHf === "even" ? shown : alt("even"); if (e) return e; }
+    if ((shown.dataset.dwbHf || "default") === "default") return shown;
+    return alt("default") || (shown.dataset.dwbHf === "first" ? null : shown);
+  }
+  // Kopia części z numerami tej strony: numery wpisane na chwilę w oryginał (te same reguły co
+  // podgląd wydruku: composeUi.stampPageNumbers), wygląd przepisany, tekst oryginału przywrócony.
+  function hfCopy(part, kind, page, top, box, pageNo, total, secPages) {
+    const hidden = part.classList.contains("dwb-hf-alt");
+    const shown = hidden ? part.parentElement.querySelector(`:scope > ${part.localName}:not(.dwb-hf-alt)`) : null;
+    if (hidden) { shown.style.display = "none"; part.style.display = "block"; }
+    const leaves = [...part.querySelectorAll("span")].filter((s) => !s.firstElementChild).map((s) => [s, s.textContent]);
+    try {
+      if (typeof composeUi !== "undefined" && composeUi.stampPageNumbers) composeUi.stampPageNumbers(part, pageNo, total, secPages);
+      const wrap = document.createElement("div");
+      wrap.className = "dwb-page-hf dwb-page-repeat";
+      wrap.dataset.kind = kind;
+      wrap.dataset.page = String(pageNo);
+      wrap.setAttribute("aria-hidden", "true");
+      wrap.contentEditable = "false";
+      const b = box || part.getBoundingClientRect();
+      const sr = part.parentElement.getBoundingClientRect();
+      const scale = sr.width / part.parentElement.offsetWidth || 1;
+      wrap.style.top = `${Math.round(top * 10) / 10}px`;
+      wrap.style.left = `${Math.round((b.left - sr.left) / scale * 10) / 10}px`;
+      wrap.style.width = `${Math.round(b.width / scale * 10) / 10}px`;
+      const root = wrap.attachShadow({ mode: window.__dwbOpenShadow ? "open" : "closed" });
+      const c = styledClone(part);
+      c.style.margin = "0";
+      c.style.position = "static";
+      root.appendChild(c);
+      return wrap;
+    } finally {
+      leaves.forEach(([s, txt]) => { if (s.textContent !== txt) s.textContent = txt; });
+      if (hidden) { part.style.display = ""; shown.style.display = ""; }
+    }
+  }
+  function pageHeadersFooters(h) {
+    const secs = [...h.querySelectorAll(".docx-wrapper > section.docx")];
+    const counts = secs.map((sec) => sec.querySelectorAll(":scope > .dwb-page-gap-band").length + 1);
+    const total = counts.reduce((a, b) => a + b, 0);
+    let first = 1;
+    secs.forEach((sec, si) => {
+      const n = counts[si], start = first;
+      first += n;
+      const bands = [...sec.querySelectorAll(":scope > .dwb-page-gap-band")].map((b) => parseFloat(b.style.top) || 0);
+      const sig = `${total}|${start}|${bands.join(",")}|${evenOdd.on}|${sec.offsetHeight}`;
+      if (sec.dataset.dwbHfSig === sig) return;
+      sec.querySelectorAll(":scope > .dwb-page-hf").forEach((el) => el.remove());
+      sec.dataset.dwbHfSig = sig;
+      if (!bands.length) return;
+      const sr = sec.getBoundingClientRect();
+      const scale = sr.height / sec.offsetHeight || 1;
+      const add = [];
+      // nagłówki stron 2…n: tyle samo pod górą strony, co oryginał pod górą strony 1
+      for (let j = 1; j < n; j++) {
+        const v = hfVersion(sec, "header", j, start + j);
+        if (!v) continue;
+        const show = v.classList.contains("dwb-hf-alt");
+        if (show) { v.style.display = "block"; v.parentElement.querySelector(":scope > header:not(.dwb-hf-alt)").style.display = "none"; }
+        const b = v.getBoundingClientRect();
+        if (show) { v.style.display = ""; v.parentElement.querySelector(":scope > header:not(.dwb-hf-alt)").style.display = ""; }
+        add.push(hfCopy(v, "header", j, bands[j - 1] + GAP + (b.top - sr.top) / scale, b, start + j, total, n));
+      }
+      // stopki stron 1…n−1: tyle samo nad dołem strony, co oryginał nad dołem ostatniej strony
+      // (stopka rośnie od dołu — jej dół zostaje na miejscu dołu narysowanej, jak w podglądzie wydruku)
+      const shownF = sec.querySelector(":scope > footer:not(.dwb-hf-alt)");
+      const fBottom = shownF ? (sr.bottom - shownF.getBoundingClientRect().bottom) / scale : 0;
+      for (let j = 0; j < n - 1; j++) {
+        const v = hfVersion(sec, "footer", j, start + j);
+        if (!v) continue;
+        const show = v.classList.contains("dwb-hf-alt");
+        if (show) { v.style.display = "block"; shownF.style.display = "none"; }
+        const b = v.getBoundingClientRect();
+        if (show) { v.style.display = ""; shownF.style.display = ""; }
+        add.push(hfCopy(v, "footer", j, bands[j] - fBottom - b.height / scale, b, start + j, total, n));
+      }
+      add.forEach((el) => sec.appendChild(el));
+    });
+    // numery w oryginałach (nagłówek strony 1, stopka ostatniej) — liczba stron z odstępów
+    if (typeof composeUi !== "undefined" && composeUi.fixPreviewPageNumbers) composeUi.fixPreviewPageNumbers();
   }
   function repeatedHeadOverlay(sec, head) {
     const r = sec.getBoundingClientRect();

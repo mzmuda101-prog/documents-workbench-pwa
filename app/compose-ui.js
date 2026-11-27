@@ -4176,8 +4176,11 @@ const composeUi = (() => {
     const out = [];
     let page = 1;
     (h ? Array.from(h.querySelectorAll("section.docx")) : []).forEach((sec) => {
-      const ph = parseFloat(getComputedStyle(sec).minHeight) || sec.offsetHeight || 1;
-      const n = Math.max(1, Math.ceil((sec.offsetHeight - 2) / ph));
+      // strony z page-breaks.js (pasy odstępów / kreski granic); min-height kartki z odstępami to
+      // suma stron — dzielenie przez nią dawało zawsze 1 („Strona 1 z 1” w 2-stronicowym piśmie)
+      const marks = sec.querySelectorAll(":scope > .dwb-page-gap-band, :scope > .dwb-page-break").length;
+      const ph = parseFloat(sec.dataset.dwbPageH) || parseFloat(getComputedStyle(sec).minHeight) || sec.offsetHeight || 1;
+      const n = marks ? marks + 1 : Math.max(1, Math.ceil((sec.offsetHeight - 2) / ph));
       out.push({ sec, first: page, last: page + n - 1 });
       page += n;
     });
