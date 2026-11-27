@@ -236,6 +236,64 @@ async function run() {
     `${JSON.stringify(lockedSel)} ${errs6.join(" | ")}`);
   await ctx6.close();
 
+  // ── 7. Nowy wiersz tabeli dziedziczy czcionkę i pogrubienie źródłowego wiersza (#12) ──
+  const ctx7 = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: "block" });
+  await ctx7.addInitScript(() => sessionStorage.setItem("introPlayed", "true"));
+  const p7 = await ctx7.newPage();
+  const { buildDocx: buildDocx7 } = require("../tools/word-oracle/build-docx");
+  const tblBytes = await buildDocx7({
+    body: [
+      `<w:tbl><w:tblGrid><w:gridCol w:w="3000"/><w:gridCol w:w="3000"/></w:tblGrid>` +
+      `<w:tr><w:tc><w:p><w:r><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:b/><w:sz w:val="26"/></w:rPr><w:t>Pozycja</w:t></w:r></w:p></w:tc>` +
+      `<w:tc><w:p><w:r><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:sz w:val="26"/></w:rPr><w:t>100</w:t></w:r></w:p></w:tc></w:tr></w:tbl>`,
+      "Pod tabelą.",
+    ],
+  });
+  await p7.goto(APP_URL, { waitUntil: "load" });
+  await p7.evaluate(() => document.getElementById("heroSplash")?.remove());
+  await p7.locator("#fileInput").setInputFiles({ name: "tbl-font.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer: tblBytes });
+  await p7.waitForFunction(() => !!document.querySelector(".docx-preview-host table"), null, { timeout: 20000 });
+  await p7.evaluate(() => { appFrame.setReadOnly(false); });
+  await p7.waitForFunction(() => !!document.querySelector(".docx-preview-host td p.docx-editable-p"), null, { timeout: 10000 });
+  await p7.evaluate(async () => {
+    const tdP = document.querySelector(".docx-preview-host td p.docx-editable-p");
+    tdP.focus();
+    placeCaret(tdP, 0);
+    await composeUi.tableAction("rowBelow");
+  });
+  await p7.waitForFunction(() => document.querySelectorAll(".docx-preview-host table tr").length === 2, null, { timeout: 10000 });
+  const rowFont = await p7.evaluate(async () => {
+    const z = await JSZip.loadAsync(await buildDocumentForSave());
+    const xml = await z.file("word/document.xml").async("string");
+    const trs = xml.match(/<w:tr[\s\S]*?<\/w:tr>/g) || [];
+    const r2 = trs[1] || "";
+    return { hasGeorgia: /Georgia/.test(r2), hasBold: /<w:b\b/.test(r2), hasSz26: /w:val="26"/.test(r2) };
+  });
+  check("nowy wiersz tabeli dziedziczy krój, rozmiar i pogrubienie poprzedniego wiersza (#12)",
+    rowFont.hasGeorgia && rowFont.hasBold && rowFont.hasSz26, JSON.stringify(rowFont));
+
+  // ── 8. Wklejka tabeli HTML w pliku bez styles.xml (sample.docx) nie zmienia kroju na Calibri 11 (#14) ──
+  await p7.locator("#fileInput").setInputFiles(require("path").join(__dirname, "../docs/samples/sample.docx"));
+  await p7.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && document.querySelector(".docx-preview-host")?.textContent.includes("przykładowy"), null, { timeout: 20000 });
+  await p7.waitForTimeout(300);
+  await p7.evaluate(() => {
+    const p = [...document.querySelectorAll(".docx-editable-p")][1];
+    placeCaret(p, 0);
+    const dt = new DataTransfer();
+    dt.setData("text/html", "<table><tr><td>A</td><td>B</td></tr><tr><td>1</td><td>2</td></tr></table>");
+    dt.setData("text/plain", "A\tB\n1\t2");
+    p.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+  });
+  await p7.waitForFunction(() => !!document.querySelector(".docx-preview-host table") && document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 20000 });
+  const pasteStyles = await p7.evaluate(async () => {
+    const z = await JSZip.loadAsync(await buildDocumentForSave());
+    const st = await z.file("word/styles.xml")?.async("string") || "";
+    return { hasAptos: /Aptos/.test(st), hasCalibri: /Calibri/.test(st), hasSz24: /w:val="24"/.test(st) };
+  });
+  check("wklejka tabeli HTML w pliku bez styles.xml zachowuje Aptos 12 zamiast Calibri 11 (#14)",
+    pasteStyles.hasAptos && !pasteStyles.hasCalibri && pasteStyles.hasSz24, JSON.stringify(pasteStyles));
+  await ctx7.close();
+
   await browser.close();
   if (fails.length) { console.error(`❌ bughunt-fixes (${ENGINE}): ${fails.length} błąd(y)`); process.exit(1); }
   console.log(`✅ bughunt-fixes (${ENGINE}) OK`);

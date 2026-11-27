@@ -809,11 +809,14 @@ const dwbMargin = (() => {
     document.addEventListener("dwb:undo-step", schedule);
     document.addEventListener("selectionchange", () => { if (showing) onSelection(); });
     // dymek pod tekstem: stuknięcie obok (poza dymkiem i znacznikiem przy pasku) go zamyka —
-    // w Czytaniu na telefonie stuknięcie w tekst nie przesuwa kursora, więc samo zaznaczenie nie wystarcza
+    // w Czytaniu na telefonie stuknięcie w tekst nie przesuwa kursora, więc samo zaznaczenie nie wystarcza.
+    // W treści dokumentu zamykamy w następnej klatce, żeby synchroniczna przebudowa DOM/podświetleń
+    // w capture pointerdown nie przerywała startu zaznaczania przeciągnięciem (iPad/WebKit, AUDYT-MOBILE #14).
     document.addEventListener("pointerdown", (e) => {
       const it = items.find((x) => x.pop && x.key === active);
       if (!it || it.el.contains(e.target) || e.target.closest?.(".mk-bar-hit") || e.target.closest?.(".compose-pop, .app-dialog")) return;
-      focusItem(null);
+      if (docCanvasEl?.contains(e.target)) requestAnimationFrame(() => { if (active === it.key) focusItem(null); });
+      else focusItem(null);
     }, true);
     // Esc w dymku — z powrotem do dokumentu
     document.addEventListener("keydown", (e) => {

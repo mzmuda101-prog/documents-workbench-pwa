@@ -290,6 +290,13 @@ async function phone(browser) {
   await until(page, isExpanded);
   const afterTap = await page.evaluate(isCollapsed);
   check("telefon: tap w uchwyt rozwija nagłówek", beforeTap && !afterTap, JSON.stringify({ beforeTap, afterTap }));
+  const gripHeight = await page.evaluate(() => {
+    document.getElementById("heroGrip").click();
+    const h = Math.round(document.getElementById("heroGrip").getBoundingClientRect().height);
+    document.getElementById("heroGrip").click();
+    return h;
+  });
+  check("telefon: zwinięty uchwyt nagłówka ma ≥ 28 px (bez przypadkowego stuknięcia w skróty sekcji)", gripHeight >= 28, `h=${gripHeight}`);
 
   // Blokada przewijania całej strony przy otwartym dokumencie (iOS: krótki 1-stronicowy plik omijał overscroll-behavior: contain)
   const shellLock = await page.evaluate(() => {

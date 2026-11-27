@@ -71,7 +71,7 @@ Object.assign(COMPOSE_STYLE_DEFS, {
 const COMPOSE_STYLE_KEYS = ["normal", "title", "subtitle", "h1", "h2", "h3", "quote", "callout"];
 const COMPOSE_TOC_KEYS = ["toc1", "toc2", "toc3"];
 
-const COMPOSE_DOC_DEFAULTS = `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="Calibri" w:cs="Calibri"/><w:sz w:val="22"/><w:szCs w:val="22"/><w:lang w:val="pl-PL" w:eastAsia="en-US" w:bidi="ar-SA"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="259" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>`;
+const COMPOSE_DOC_DEFAULTS = `<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Aptos" w:hAnsi="Aptos" w:eastAsia="Aptos" w:cs="Aptos"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="pl-PL" w:eastAsia="en-US" w:bidi="ar-SA"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="259" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>`;
 const COMPOSE_NORMAL_STYLE = `<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>`;
 
 function composeEl(doc, localName, attrs) {
@@ -2062,11 +2062,26 @@ function composeBlankCell(doc, tc) {
   const firstP = Array.from(tc.childNodes).find((n) => n.localName === "p");
   const np = composeEl(doc, "p");
   const pPr = firstP && composeDirectChild(firstP, "pPr");
+  let npPr = null;
   if (pPr) {
-    const c = pPr.cloneNode(true);
-    Array.from(c.childNodes).filter((n) => ["sectPr", "numPr"].includes(n.localName)).forEach((n) => c.removeChild(n));
-    np.appendChild(c);
-    freshRevisionIds(c, doc);
+    npPr = pPr.cloneNode(true);
+    Array.from(npPr.childNodes).filter((n) => ["sectPr", "numPr"].includes(n.localName)).forEach((n) => npPr.removeChild(n));
+    np.appendChild(npPr);
+    freshRevisionIds(npPr, doc);
+  }
+  // Dziedziczenie kroju/rozmiaru/pogrubienia z poprzedniego wiersza (jak w Wordzie przy Tab / Wiersz poniżej):
+  // jeśli wzorcowy akapit nie miał w:pPr/w:rPr, bierzemy w:rPr pierwszego przebiegu tekstu.
+  if (firstP && !(npPr && composeDirectChild(npPr, "rPr"))) {
+    const firstR = Array.from(firstP.childNodes).find((n) => n.localName === "r" && composeDirectChild(n, "rPr"));
+    const srcRPr = firstR && composeDirectChild(firstR, "rPr");
+    if (srcRPr) {
+      const rPr = srcRPr.cloneNode(true);
+      Array.from(rPr.childNodes).filter((n) => ["rPrChange", "ins", "del", "moveFrom", "moveTo"].includes(n.localName)).forEach((n) => rPr.removeChild(n));
+      if (rPr.firstElementChild) {
+        if (!npPr) { npPr = composeEl(doc, "pPr"); np.appendChild(npPr); }
+        composeSetPPrChild(npPr, "rPr", rPr);
+      }
+    }
   }
   nc.appendChild(np);
   return nc;
