@@ -53,6 +53,14 @@ async function run() {
   const l2 = drive("look", "t-desk");
   check("open-file: dokument widać", o.code === 0 && /przewodnik/i.test(JSON.stringify(l2.out)), o.raw + JSON.stringify(l2.out?.elements?.slice(0, 5)));
 
+  // dokument otwiera się w Czytaniu — jak człowiek: „Edytuj”, potem stuknięcie w tekst
+  check("tap po tekście przycisku (Edytuj)", drive("tap", "t-desk", "Edytuj").code === 0, "");
+  check("w Edycji dokument jest polem edycji", (drive("look", "t-desk").out?.elements || []).some((x) => x.role === "editable"), "");
+  drive("tap", "t-desk", "--xy=700,300");
+  const ps = drive("paste", "t-desk", "--html=<table><tr><td>WKLEJKA</td><td>123</td></tr></table>", "--text=WKLEJKA\t123");
+  await sleep(1200);
+  const tx = drive("text", "t-desk");
+  check("paste: tabela z HTML w dokumencie (text)", ps.code === 0 && /WKLEJKA/.test(tx.out?.text || ""), ps.raw + (tx.out?.text || "").slice(0, 200));
   drive("type", "t-desk", "x");
   drive("key", "t-desk", "Control+s");
   let dl = [];
@@ -64,6 +72,7 @@ async function run() {
     await sleep(2000);
     const er = drive("errors", "t-desk");
     check("ponowne otwarcie zapisanego pliku bez błędów", re.code === 0 && Array.isArray(er.out?.errors) && er.out.errors.length === 0, re.raw + JSON.stringify(er.out));
+    check("po ponownym otwarciu wklejka jest w tekście", /WKLEJKA/.test(drive("text", "t-desk").out?.text || ""), "");
   }
   const tap = drive("tap", "t-iphone", "--xy=195,400");
   check("tap --xy na telefonie", tap.code === 0, tap.raw);

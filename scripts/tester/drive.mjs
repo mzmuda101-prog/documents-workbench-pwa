@@ -242,6 +242,29 @@ async function serve(name, device, dir) {
       await page.waitForTimeout(500);
       return { ok: true };
     },
+    // wklejenie jak z innej apki (Excel, strona WWW, mail): zdarzenie paste w miejscu kursora,
+    // tak samo jak w testach wklejania — prawdziwy schowek systemu jest poza zasięgiem
+    async paste(args) {
+      const text = flag(args, "text"), html = flag(args, "html");
+      if (text == null && html == null) return { error: "paste --text=… [--html=…]" };
+      const ok = await page.evaluate(({ text, html }) => {
+        const sel = getSelection();
+        const n = sel && sel.rangeCount ? sel.anchorNode : null;
+        const target = (n && (n.nodeType === 1 ? n : n.parentElement)) || document.activeElement;
+        if (!target || target === document.body) return false;
+        const dt = new DataTransfer();
+        if (text != null) dt.setData("text/plain", text);
+        if (html != null) dt.setData("text/html", html);
+        target.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }));
+        return true;
+      }, { text, html });
+      await page.waitForTimeout(400);
+      return ok ? { ok: true } : { error: "brak kursora — najpierw stuknij w miejsce wklejenia" };
+    },
+    async text() {
+      const t = await page.evaluate(() => [...document.querySelectorAll("section.docx")].map((s) => /** @type {HTMLElement} */ (s).innerText).join("\n\n"));
+      return { text: t.replace(/\n{3,}/g, "\n\n").slice(0, 6000), length: t.length };
+    },
     async wait(args) { await page.waitForTimeout(Math.min(5000, Math.max(0, Number(args[0]) || 1000))); return { ok: true }; },
     async errors() { const e = errors.splice(0); return { errors: e }; },
     async stop() { setTimeout(async () => { await browser.close().catch(() => {}); fs.rmSync(sessFile(name), { force: true }); process.exit(0); }, 50); return { ok: true }; },
