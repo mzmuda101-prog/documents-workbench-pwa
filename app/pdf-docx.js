@@ -462,7 +462,7 @@
           if (cell.blocks?.some((block) => block.rotated)) tcPr.push('<w:textDirection w:val="btLr"/>');
           let body;
           if (r === cell.r0 && cell.blocks?.length) {
-            body = this.blocksXml(cell.blocks, { x0: cell.x0 + pad, x1: cell.x1 - pad, top: cell.y0 }, { images: ctx.images, minIndRight: bd.right ? -pad : undefined });
+            body = this.blocksXml(cell.blocks, { x0: cell.x0 + pad, x1: cell.x1 - pad, top: cell.y0 }, { images: ctx.images, minIndRight: bd.right || cell.fill || cell.c1 < nC - 1 ? -pad : undefined });
           } else if (r === cell.r0) body = this.cellEmptyPara(Y[cell.r1 + 1] - Y[cell.r0]);
           else body = this.emptyPara({}, 1);
           if (!body.endsWith("</w:p>")) body += this.emptyPara({}, 1); // komórka musi kończyć się akapitem

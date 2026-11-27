@@ -6,8 +6,10 @@
 //   4) cieniowany nagłówek + poziome linie poniżej (5×3 jako jedna tabela, nagłówek podzielony na kolumny),
 //   5) zebra bez pionowych linii (5×3 i parzysta 4×3 z końcowym białym wierszem, jedna tabela z cieniowaniem),
 //   6) sama ramka zewnętrzna bez linii wewnętrznych (5×3),
-//   7) strażniki: spis treści z kropkami oraz dwie ozdobne linie wokół cytatu NIE stają się tabelą,
-//   8) edycja komórki + zapis + walidacja OOXML + widok telefonu 390 px bez przewijania w bok.
+//   7) strażniki: spis treści z kropkami, dwie ozdobne linie wokół cytatu oraz artykuł 2-kolumnowy NIE stają się tabelą danych,
+//   8) harmonogram z szarymi pasami i wyśrodkowaną w pionie 3. kolumną (nagłówek nie zjedzony przez zakreślacz, 7× 1×3, krótki odstęp, brak wystawania fokusu),
+//   9) Etap 2 — tabele bez linii i bez cieniowania (5×3, klucz–wartość 4×2, mała 2×3) z tytułem nad tabelą,
+//  10) edycja komórki + zapis + walidacja OOXML + widok telefonu 390 px bez przewijania w bok.
 //   node scripts/pdf-tables-word-playwright.js / ENGINE=webkit node scripts/pdf-tables-word-playwright.js
 
 const fs = require("fs");
@@ -59,6 +61,10 @@ const drawRows = (arr, cols, yArr) => arr.flatMap((r, ri) => r.map((s, ci) => tx
 
 async function convertAndInspect(page, file, marker) {
   await page.evaluate(() => {
+    if (typeof setDirtyState === "function") setDirtyState(false);
+    if (typeof dwbOpenDocs !== "undefined" && dwbOpenDocs.list) {
+      for (const d of dwbOpenDocs.list()) if (!d.active) dwbOpenDocs.closeTab(d.id);
+    }
     const s = document.querySelector(".docx-preview-host section");
     if (s) s.setAttribute("data-prev-doc", "1");
   });
@@ -74,11 +80,17 @@ async function convertAndInspect(page, file, marker) {
     const doc = new DOMParser().parseFromString(xml, "application/xml");
     const NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
     const tbls = [...doc.getElementsByTagNameNS(NS, "tbl")].map((t) => {
+      const style = t.getElementsByTagNameNS(NS, "tblStyle")[0]?.getAttributeNS(NS, "val") || null;
       const trs = [...t.children].filter((e) => e.localName === "tr");
       const rows = trs.map((tr) => [...tr.children].filter((e) => e.localName === "tc").map((tc) => {
         const s = new XMLSerializer().serializeToString(tc);
+        const ps = [...tc.getElementsByTagNameNS(NS, "p")].map((p) => ({
+          text: [...p.getElementsByTagNameNS(NS, "t")].map((x) => x.textContent).join("").trim(),
+          right: Number(p.getElementsByTagNameNS(NS, "ind")[0]?.getAttributeNS(NS, "right") || 0),
+        }));
         return {
           text: [...tc.getElementsByTagNameNS(NS, "t")].map((x) => x.textContent).join(" ").replace(/\s+/g, " ").trim(),
+          ps,
           shd: /<w:shd\b[^>]*w:fill="([^"]+)"/.exec(s)?.[1] || null,
           top: /<w:top\b[^>]*w:val="single"/.test(s),
           bottom: /<w:bottom\b[^>]*w:val="single"/.test(s),
@@ -86,7 +98,7 @@ async function convertAndInspect(page, file, marker) {
           right: /<w:right\b[^>]*w:val="single"/.test(s),
         };
       }));
-      return { nR: rows.length, nC: Math.max(0, ...rows.map((r) => r.length)), rows };
+      return { style, nR: rows.length, nC: Math.max(0, ...rows.map((r) => r.length)), rows };
     });
     const imgs = doc.getElementsByTagNameNS("http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing", "anchor").length
       + doc.getElementsByTagNameNS("http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing", "inline").length;
@@ -167,6 +179,58 @@ async function convertAndInspect(page, file, marker) {
     hline(54, 510, 668),
   ].join("\n"));
 
+  const fSchedule = makePdf("schedule-bands.pdf", [
+    txt(220, 770, "Schedule Centered Col", "F2"),
+    rect(52, 694, 490.8, 18, 0.88),
+    txt(56, 699, "DATA", "F2"), txt(196, 699, "MIEJSCE", "F2"), txt(462, 699, "PROWADZACY", "F2"),
+    ...[
+      ["6 grudzien 2025", "SOBOTA", "godz. 10:00", "Jan Kowalski", "ul. Dluga 55", "Jan Kowalski"],
+      ["10 grudzien 2025", "SRODA", "godz. 17:00", "Jan Kowalski", "ul. Dluga 100", "Jan Kowalski"],
+      ["13 grudzien 2025", "SOBOTA", "godz. 11:00", "Jan Kowalski", "ul. Kowalska 55/7", "Jan Kowalski"],
+      ["27 grudzien 2025", "SOBOTA", "godz. 15:00", "Jan Kowalski", "", "Jan Kowalski"],
+    ].flatMap((e, i) => {
+      const y = 636 - i * 56;
+      return [
+        rect(52, y, 490.8, 38, 0.88),
+        txt(56, y + 22, e[0]), txt(56, y + 6, e[1], "F2"), txt(116, y + 6, e[2], "F2"),
+        txt(196, y + 22, e[3]), ...(e[4] ? [txt(196, y + 6, e[4])] : []),
+        txt(470, y + 14, e[5]),
+      ];
+    }),
+    rect(52, 636 - 4 * 56, 490.8, 38, 0.88),
+  ].join("\n"));
+
+  const fBorderless3 = makePdf("borderless-3col.pdf", [
+    txt(60, 750, "Borderless 3-Col Grid", "F2"),
+    ...drawRows(ROWS, XS, YS),
+  ].join("\n"));
+
+  const fBorderlessKV = makePdf("borderless-kv.pdf", [
+    txt(60, 750, "Key Value Summary", "F2"),
+    txt(60, 700, "Customer:", "F2"), txt(220, 700, "Jan Kowalski", "F2"),
+    txt(60, 678, "Invoice date:"), txt(220, 678, "2026-11-27"),
+    txt(60, 656, "Payment due:"), txt(220, 656, "2026-12-11"),
+    txt(60, 634, "Total amount:"), txt(220, 634, "1 210.00 PLN"),
+  ].join("\n"));
+
+  const fBorderless2Row = makePdf("borderless-2row.pdf", [
+    txt(60, 750, "Small 2-Row Grid", "F2"),
+    txt(60, 700, "Name", "F2"), txt(240, 700, "Role", "F2"), txt(400, 700, "Ext", "F2"),
+    txt(60, 678, "Anna Nowak"), txt(240, 678, "Manager"), txt(400, 678, "104"),
+  ].join("\n"));
+
+  const fTwoColArticle = makePdf("two-col-article.pdf", [
+    txt(60, 750, "Newspaper Article", "F2"),
+    txt(60, 710, "First column starts with a full"),
+    txt(60, 694, "sentence that wraps across lines"),
+    txt(60, 678, "in a natural paragraph flow here"),
+    txt(60, 662, "and continues down the left side."),
+    txt(310, 710, "Second column has independent"),
+    txt(310, 694, "prose paragraphs on the right"),
+    txt(310, 678, "side of the page with standard"),
+    txt(310, 662, "body text and normal spacing."),
+  ].join("\n"));
+
   const browser = await pw[ENGINE].launch({ headless: true });
   const errors = [];
   const docxBuffers = [];
@@ -244,6 +308,58 @@ async function convertAndInspect(page, file, marker) {
     check("strażnik: spis treści z kropkami między dwiema liniami NIE staje się tabelą", r7.tbls.length === 0, JSON.stringify(r7.tbls));
     const r8 = await convertAndInspect(page, fQuote, "Regular Article");
     check("strażnik: cytat między dwiema liniami bez kolumn NIE staje się tabelą", r8.tbls.length === 0, JSON.stringify(r8.tbls));
+
+    // 8. Harmonogram z szarymi pasami i wyśrodkowaną w pionie 3. kolumną
+    const rSched = await convertAndInspect(page, fSchedule, "Schedule Centered Col");
+    docxBuffers.push(["schedule-bands.docx", Buffer.from(rSched.bytes)]);
+    const schedDom = await page.evaluate(() => {
+      const tbls = [...document.querySelectorAll(".docx-preview-host section table")];
+      return tbls.map((t) => {
+        const td0 = t.querySelector("td");
+        const p0 = td0?.querySelector("p");
+        return {
+          h: Math.round(t.getBoundingClientRect().height),
+          overflowR: p0 && td0 ? Math.round(p0.getBoundingClientRect().right - td0.getBoundingClientRect().right) : 0,
+        };
+      });
+    });
+    check("harmonogram z szarymi pasami: 6× tabela 1×3 (nagłówek, 4 wpisy z wyśrodkowaną 3. kolumną, pusty pas), bez zjadania nagłówka i bez puchnięcia wysokości",
+      rSched.tbls.length === 6 && rSched.imgs === 0
+      && rSched.tbls.every((t) => t.nR === 1 && t.nC === 3 && t.rows[0].every((c) => !!c.shd))
+      && rSched.tbls[0].rows[0][0].text === "DATA" && rSched.tbls[0].rows[0][2].text === "PROWADZACY"
+      && rSched.tbls[1].rows[0][1].ps.length === 2 && rSched.tbls[1].rows[0][1].ps.every((p) => p.right <= 0 && p.right >= -40)
+      && rSched.tbls[1].rows[0][2].text === "Jan Kowalski"
+      && rSched.tbls[4].rows[0][2].text === "Jan Kowalski"
+      && schedDom.slice(1).every((d) => d.h <= 58 && d.overflowR <= 3),
+      JSON.stringify({ n: rSched.tbls.length, dims: rSched.tbls.map((t) => `${t.nR}x${t.nC}`), b1c1: rSched.tbls[1]?.rows[0]?.[1]?.ps, schedDom }));
+
+    // 9. Etap 2: tabele bez linii i bez cieniowania (5×3, klucz–wartość 4×2, 2×3) + strażnik artykułu 2-kolumnowego
+    const rB3 = await convertAndInspect(page, fBorderless3, "Borderless 3-Col Grid");
+    docxBuffers.push(["borderless-3col.docx", Buffer.from(rB3.bytes)]);
+    check("bez linii 3-kolumnowa: tabela 5×3 z tytułem nad tabelą, bez ramek i bez obrazów",
+      rB3.tbls.length === 1 && !rB3.tbls[0].style && rB3.tbls[0].nR === 5 && rB3.tbls[0].nC === 3 && rB3.imgs === 0
+      && rB3.tbls[0].rows[0][0].text === "Item" && rB3.tbls[0].rows[4][2].text === "65.00"
+      && !rB3.tbls[0].rows[0][0].top && !rB3.tbls[0].rows[0][0].bottom,
+      JSON.stringify({ n: rB3.tbls.length, dim: rB3.tbls[0] && `${rB3.tbls[0].nR}x${rB3.tbls[0].nC}`, style: rB3.tbls[0]?.style, r0: rB3.tbls[0]?.rows[0]?.map((c) => c.text) }));
+
+    const rBKV = await convertAndInspect(page, fBorderlessKV, "Key Value Summary");
+    docxBuffers.push(["borderless-kv.docx", Buffer.from(rBKV.bytes)]);
+    check("bez linii klucz–wartość: tabela 4×2 z tytułem nad tabelą (nie wchłoniętym do kolumny 0)",
+      rBKV.tbls.length === 1 && !rBKV.tbls[0].style && rBKV.tbls[0].nR === 4 && rBKV.tbls[0].nC === 2 && rBKV.imgs === 0
+      && rBKV.tbls[0].rows[0][0].text === "Customer:" && rBKV.tbls[0].rows[3][1].text === "1 210.00 PLN",
+      JSON.stringify({ n: rBKV.tbls.length, dim: rBKV.tbls[0] && `${rBKV.tbls[0].nR}x${rBKV.tbls[0].nC}`, style: rBKV.tbls[0]?.style, r0: rBKV.tbls[0]?.rows[0]?.map((c) => c.text) }));
+
+    const rB2 = await convertAndInspect(page, fBorderless2Row, "Small 2-Row Grid");
+    docxBuffers.push(["borderless-2row.docx", Buffer.from(rB2.bytes)]);
+    check("bez linii mała 2×3: tabela 2×3 z tytułem nad tabelą",
+      rB2.tbls.length === 1 && !rB2.tbls[0].style && rB2.tbls[0].nR === 2 && rB2.tbls[0].nC === 3 && rB2.imgs === 0
+      && rB2.tbls[0].rows[0][0].text === "Name" && rB2.tbls[0].rows[1][2].text === "104",
+      JSON.stringify({ n: rB2.tbls.length, dim: rB2.tbls[0] && `${rB2.tbls[0].nR}x${rB2.tbls[0].nC}`, r0: rB2.tbls[0]?.rows[0]?.map((c) => c.text), r1: rB2.tbls[0]?.rows[1]?.map((c) => c.text) }));
+
+    const rArt = await convertAndInspect(page, fTwoColArticle, "Newspaper Article");
+    check("strażnik: 2-kolumnowy artykuł prozą NIE staje się tabelą wierszową 4×2",
+      rArt.tbls.every((t) => t.style === "DWBLayout" && t.nR === 1),
+      JSON.stringify(rArt.tbls.map((t) => ({ style: t.style, dim: `${t.nR}x${t.nC}` }))));
 
     // 8. Edycja komórki + zapis + ponowne otwarcie + telefon 390 px
     await convertAndInspect(page, fHoriz, "Horizontal Lines Only");

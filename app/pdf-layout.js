@@ -433,10 +433,14 @@
     // zakreślenie zawiniętego tekstu: prostokąty linii pod sobą o innych brzegach — to nie komórki
     const stackedLine = (a, o) => !o.line && Math.abs(a.x0 - o.x0) > 2 && Math.abs(a.x1 - o.x1) > 2;
     const alone = (r) => !edges.some((o) => o !== r && near(r, o, 1) && !stackedLine(r, o));
+    // prostokąt o tym samym kolorze i szerokości co inne pasy na stronie (np. nagłówek tabeli nad szarymi
+    // pasami harmonogramu) to wiersz tabeli, nie zakreślenie tekstu
+    const nonPageRects = raw.rects.filter((o) => o.color && o.color !== "ffffff" && o.x1 - o.x0 >= 4 && o.y1 - o.y0 >= 4 && (o.x1 - o.x0 < raw.width * 0.97 || o.y1 - o.y0 < raw.height * 0.97));
+    const hasSiblingBand = (r) => nonPageRects.some((o) => o !== r && o.color === r.color && Math.abs(o.x0 - r.x0) <= 2 && Math.abs(o.x1 - r.x1) <= 2);
     for (const r of raw.rects) {
       const w = r.x1 - r.x0, h = r.y1 - r.y0;
       if (!r.color || r.color === "ffffff" || w < 4 || h < 4) continue;
-      if (!r.annot && !alone(r)) continue;
+      if (!r.annot && (!alone(r) || hasSiblingBand(r))) continue;
       const inside = glyphs.filter((g) => {
         const cx = (g.x + g.x1) / 2, cy = g.y - g.size * 0.3;
         return cx >= r.x0 - 0.5 && cx <= r.x1 + 0.5 && cy >= r.y0 - 0.5 && cy <= r.y1 + 0.5;
@@ -449,6 +453,16 @@
       if (h > size * 1.9) continue;
       const x0 = Math.min(...ink.map((g) => g.x)), x1 = Math.max(...ink.map((g) => g.x1));
       if (x1 - x0 < w * 0.6) continue; // tekst zajmuje mały kawałek prostokąta = komórka, nie zakreślenie
+      // wiersz nagłówków kolumn („DATA      MIEJSCE      PROWADZĄCY”) ma szerokie puste przerwy — to pas tabeli, nie zakreślenie
+      if (!r.annot) {
+        const sortedInk = ink.slice().sort((a, b) => a.x - b.x);
+        let wideGapSum = 0;
+        for (let i = 1; i < sortedInk.length; i++) {
+          const gap = sortedInk[i].x - sortedInk[i - 1].x1;
+          if (gap >= size * 3) wideGapSum += gap;
+        }
+        if (wideGapSum > w * 0.3) continue;
+      }
       for (const g of inside) g.shade = r.color;
       taken.add(r);
     }
@@ -550,16 +564,19 @@
   }
 
   // Podział tekstu w prostokącie na wiersze i niejawne kolumny (bez pionowych linii).
-  // Używane dla tabel z poziomymi liniami, zebry oraz tabel z samą ramką zewnętrzną.
-  function lineSpansInBox(inBox, ms) {
+  // Używane dla tabel z poziomymi liniami, zebry, pasów harmonogramu, tabel z samą ramką oraz tabel bez linii.
+  function lineSpansInBox(inBox, ms, opts = {}) {
     const tolY = Math.max(2, ms * 0.4);
     const byY = clusterValues(inBox.map((f) => f.y), tolY);
-    const spanGap = Math.max(ms * 0.85, 7);
+    const gapMul = opts.spanGapMul ?? 0.85;
+    const minGap = opts.minGapPt ?? 7;
     const lines = [];
     for (const y of byY) {
       const fs = inBox.filter((f) => Math.abs(f.y - y) <= tolY);
       const gs = fs.flatMap((f) => f.glyphs.filter((g) => !g.isSpace)).sort((a, b) => a.x - b.x || a.order - b.order);
       if (!gs.length) continue;
+      const lineMs = median(fs.map((f) => f.size)) || ms;
+      const spanGap = Math.max(lineMs * gapMul, minGap);
       const spans = [];
       for (const g of gs) {
         const last = spans[spans.length - 1];
@@ -570,22 +587,27 @@
       }
       const top = Math.min(...fs.map((f) => f.top));
       const bottom = Math.max(...fs.map((f) => f.bottom));
-      lines.push({ y, top, bottom, spans });
+      lines.push({ y, top, bottom, size: lineMs, spans, frags: fs });
     }
     return lines.sort((a, b) => a.y - b.y);
   }
 
-  function inferTextColumns(inBox, bx0, bx1) {
+  function inferTextColumns(inBox, bx0, bx1, opts = {}) {
     if (inBox.length < 2) return null;
     // spis treści z kropkami wiodącymi — to akapity z tabulatorem, nie tabela
     if (inBox.some((f) => /\.{4,}|…{2,}/.test(f.text || ""))) return null;
     const ms = median(inBox.map((f) => f.size)) || 10;
-    const lines = lineSpansInBox(inBox, ms);
+    const lines = lineSpansInBox(inBox, ms, opts);
     const multi = lines.filter((l) => l.spans.length >= 2);
-    if (multi.length < 2 || multi.length < lines.length * 0.3) return null;
-    // rzutowanie wszystkich odcinków z wierszy wielokolumnowych na oś X
-    const iv = multi.flatMap((l) => l.spans.map((s) => [s.x0, s.x1])).sort((a, b) => a[0] - b[0]);
-    const minGap = Math.max(ms * 0.85, 7);
+    const minMulti = opts.minMultiLines ?? 2;
+    if (multi.length < minMulti || multi.length < lines.length * 0.3) return null;
+    // rzutowanie na oś X: bierzemy wiersze wielokolumnowe ORAZ wąskie jednosłupkowe linie (np. wyśrodkowana
+    // w pionie 3. kolumna w pasie harmonogramu albo zawinięty opis jednej kolumny — bez nich znikają granice kolumn)
+    const boxW = Math.max(1, bx1 - bx0);
+    const projLines = lines.filter((l) => l.spans.length >= 2 || (l.spans.length === 1 && l.spans[0].x1 - l.spans[0].x0 <= boxW * 0.65));
+    const iv = projLines.flatMap((l) => l.spans.map((s) => [s.x0, s.x1])).sort((a, b) => a[0] - b[0]);
+    if (!iv.length) return null;
+    const minGap = Math.max(ms * (opts.spanGapMul ?? 0.85), opts.minGapPt ?? 7);
     const gutters = [];
     let end = iv[0][1];
     for (let i = 1; i < iv.length; i++) {
@@ -595,22 +617,23 @@
     if (!gutters.length) return null;
     // granica kolumny: przy lewostronnym wyrównaniu kolumny po prawej — tuż przed jej tekstem (indLeft ≈ 0),
     // inaczej (np. liczby do prawej) — w połowie przerwy
+    const padCut = opts.padCut ?? 3;
     const cuts = gutters.map((g, gi) => {
       const nextFrom = gi + 1 < gutters.length ? gutters[gi + 1].from : bx1 + 2;
-      const rightStarts = multi.flatMap((l) => l.spans.filter((s) => s.x0 >= g.to - 1 && s.x1 <= nextFrom + 1).map((s) => s.x0));
+      const rightStarts = projLines.flatMap((l) => l.spans.filter((s) => s.x0 >= g.to - 1 && s.x1 <= nextFrom + 1).map((s) => s.x0));
       const leftAligned = rightStarts.length >= 2 && Math.max(...rightStarts) - Math.min(...rightStarts) <= 3.5;
-      if (leftAligned) return Math.max(g.from + 2, Math.min(g.to - 2, Math.min(...rightStarts) - 3));
+      if (leftAligned) return Math.max(g.from + 2, Math.min(g.to - 1.5, Math.min(...rightStarts) - padCut));
       return (g.from + g.to) / 2;
     });
     const X = [bx0, ...cuts, bx1];
-    // upewnij się, że co najmniej 2 wiersze obsadzają ≥ 2 różne kolumny
+    // upewnij się, że co najmniej minMulti wierszy obsadza ≥ 2 różne kolumny
     const colOf = (s) => {
       const cx = (s.x0 + s.x1) / 2;
       for (let c = 0; c < X.length - 1; c++) if (cx >= X[c] - 1 && cx <= X[c + 1] + 1) return c;
       return 0;
     };
     const multiCols = lines.filter((l) => new Set(l.spans.map(colOf)).size >= 2);
-    if (multiCols.length < 2) return null;
+    if (multiCols.length < minMulti) return null;
     return { X, lines, colOf, ms };
   }
 
@@ -730,11 +753,54 @@
     return out;
   }
 
-  // Podział tabel jednokolumnowych (np. sama ramka zewnętrzna 1×1 albo sklejona zebra nR×1),
-  // gdy tekst wewnątrz tworzy wyraźną siatkę wielokolumnową, oraz podział pełnoszerokościowego
-  // wiersza (np. cieniowany nagłówek sklejony z tabelą z poziomych linii), jeśli jego tekst
-  // mieści się czysto w kolumnach tabeli bez przecinania granic.
+  // Podział tabel jednokolumnowych (np. sama ramka zewnętrzna 1×1, sklejona zebra nR×1 albo pasy
+  // harmonogramu z wyśrodkowaną w pionie kolumną), gdy tekst wewnątrz tworzy wyraźną siatkę
+  // wielokolumnową, oraz podział pełnoszerokościowego wiersza (np. cieniowany nagłówek sklejony
+  // z tabelą z poziomych linii), jeśli jego tekst mieści się czysto w kolumnach tabeli.
   function refineImplicitTables(tables, frags) {
+    const isBorderlessBand = (t) => t.X.length === 2 && t.Y.length === 2 && !!t.cellOf?.[0]?.[0]?.fill
+      && !t.cellOf[0][0].borders?.top && !t.cellOf[0][0].borders?.bottom
+      && !t.cellOf[0][0].borders?.left && !t.cellOf[0][0].borders?.right;
+    const fragsIn = (t) => frags.filter((f) => f.type === "text" && !f.rotated && (f.x0 + f.x1) / 2 >= t.x0 - 1 && (f.x0 + f.x1) / 2 <= t.x1 + 1 && f.y >= t.y0 - 1 && f.y <= t.y1 + 1);
+    const hasStaggeredCol = (lines, colOf, nC) => {
+      const ys = Array.from({ length: nC }, () => []);
+      for (const l of lines) {
+        for (const c of new Set(l.spans.map(colOf))) ys[c].push(l.y);
+      }
+      for (let c = 0; c < nC; c++) ys[c].sort((a, b) => a - b);
+      for (let c1 = 0; c1 < nC; c1++) {
+        if (ys[c1].length !== 1) continue;
+        const ym = ys[c1][0];
+        for (let c2 = 0; c2 < nC; c2++) {
+          if (c2 === c1 || ys[c2].length < 2) continue;
+          if (ys[c2][0] + 2 < ym && ym < ys[c2][ys[c2].length - 1] - 2) return true;
+        }
+      }
+      return false;
+    };
+    // Siostrzane pasy cieniowane o tych samych brzegach (np. harmonogram: nagłówek + wiersze + pusty pas):
+    // wspólny podział na kolumny działa też dla 1-wierszowego nagłówka, pasów z brakującym polem i pustych pasów.
+    const bandGroups = [];
+    for (const t of tables) {
+      if (!isBorderlessBand(t)) continue;
+      const g = bandGroups.find((gr) => Math.abs(gr.x0 - t.x0) <= 3 && Math.abs(gr.x1 - t.x1) <= 3 && gr.fill === t.cellOf[0][0].fill);
+      if (g) g.bands.push(t);
+      else bandGroups.push({ x0: t.x0, x1: t.x1, fill: t.cellOf[0][0].fill, bands: [t] });
+    }
+    const sharedBandX = new Map();
+    for (const g of bandGroups) {
+      if (g.bands.length < 2) continue;
+      const allFrags = g.bands.flatMap((b) => fragsIn(b));
+      const inferred = inferTextColumns(allFrags, g.x0, g.x1, { padCut: 2 });
+      if (!inferred || inferred.X.length < 3) continue;
+      const cuts = inferred.X.slice(1, -1);
+      for (const b of g.bands) {
+        const gs = fragsIn(b).flatMap((f) => f.glyphs.filter((gl) => !gl.isSpace));
+        const crosses = gs.some((gl) => cuts.some((x) => gl.x < x - 1 && gl.x1 > x + 1));
+        if (!crosses) sharedBandX.set(b, [b.x0, ...cuts, b.x1]);
+      }
+    }
+
     return tables.map((t) => {
       const nC = t.X.length - 1, nR = t.Y.length - 1;
       if (nC >= 2) {
@@ -778,15 +844,23 @@
         return changed ? { ...t, cells, cellOf } : t;
       }
       if (nC !== 1) return t;
-      const inBox = frags.filter((f) => f.type === "text" && !f.rotated && (f.x0 + f.x1) / 2 >= t.x0 - 1 && (f.x0 + f.x1) / 2 <= t.x1 + 1 && f.y >= t.y0 - 1 && f.y <= t.y1 + 1);
-      const inferred = inferTextColumns(inBox, t.x0, t.x1);
-      if (!inferred) return t;
-      const { X, lines, colOf } = inferred;
-      let Y = t.Y;
-      // 1×1 (np. sama ramka zewnętrzna): podziel także na wiersze
-      if (nR === 1) Y = splitBandRows(lines, t.y0, t.y1, colOf);
+      let X, Y;
+      if (sharedBandX.has(t)) {
+        // pojedynczy pas harmonogramu z serii pasów → 1 wiersz × N kolumn (nie rozcina wyśrodkowanej kolumny)
+        X = sharedBandX.get(t);
+        Y = t.Y;
+      } else {
+        const inBox = fragsIn(t);
+        const inferred = inferTextColumns(inBox, t.x0, t.x1);
+        if (!inferred) return t;
+        X = inferred.X;
+        Y = t.Y;
+        const keepSingleRow = isBorderlessBand(t) && hasStaggeredCol(inferred.lines, inferred.colOf, X.length - 1);
+        // 1×1 (np. sama ramka zewnętrzna): podziel także na wiersze, chyba że pas ma kolumnę wyśrodkowaną w pionie
+        if (nR === 1 && !keepSingleRow) Y = splitBandRows(inferred.lines, t.y0, t.y1, inferred.colOf);
+      }
       const newR = Y.length - 1, newC = X.length - 1;
-      if (newR < 2 || newC < 2) return t;
+      if (newC < 2 || (newR < 2 && !sharedBandX.has(t) && !isBorderlessBand(t))) return t;
       const srcRowOf = (r) => {
         if (nR === 1) return t.cellOf[0][0];
         const cy = (Y[r] + Y[r + 1]) / 2;
@@ -818,6 +892,177 @@
       }
       return { type: "table", x0: X[0], x1: X[newC], y0: Y[0], y1: Y[newR], top: Y[0], bottom: Y[newR], X, Y, cells, cellOf };
     });
+  }
+
+  // Etap 2 (jak w Wordzie): wykrywanie tabel całkowicie bez linii i bez cieniowania (np. 3-kolumnowe
+  // cenniki, 2-kolumnowe zestawienia klucz–wartość, małe 2-wierszowe tabelki). Ostre strażniki
+  // odrzucają tekst dwukolumnowy (artykuły / proba.pdf), spisy treści z kropkami i pola formularzy.
+  function detectBorderlessTables(freeFrags, existingTables, rawImages, W, H) {
+    const textFrags = freeFrags.filter((f) => f.type === "text" && !f.rotated && !f.fromField);
+    if (textFrags.length < 4) return [];
+    const ms = median(textFrags.map((f) => f.size)) || 10;
+    const allLines = lineSpansInBox(textFrags, ms, { spanGapMul: 1.35, minGapPt: 11 });
+    if (allLines.length < 2) return [];
+
+    const imgBoxes = (rawImages || []).map((im) => im.clipped || im).filter((b) => {
+      const w = b.x1 - b.x0, h = b.y1 - b.y0;
+      return w * h >= 16 && !(w > W * 0.85 && h > H * 0.85);
+    });
+    const blockedBox = (x0, x1, y0, y1) => existingTables.some((t) => overlap1d(t.x0, t.x1, x0, x1) > 2 && overlap1d(t.y0, t.y1, y0, y1) > 2)
+      || imgBoxes.some((b) => overlap1d(b.x0, b.x1, x0, x1) > 2 && overlap1d(b.y0, b.y1, y0, y1) > 2);
+    const spanText = (s) => {
+      let out = "";
+      for (let i = 0; i < s.glyphs.length; i++) {
+        const g = s.glyphs[i];
+        if (i > 0 && g.x - s.glyphs[i - 1].x1 > (g.size || 10) * 0.17) out += " ";
+        out += g.u;
+      }
+      return out.trim();
+    };
+    const isLineEligible = (l) => l.spans.length >= 2
+      && !l.frags.some((f) => f.fromField || /\.{4,}|…{2,}|_{4,}/.test(f.text || ""));
+
+    // ciągłe pasma kolejnych wierszy wielokolumnowych o zbliżonym kroju i bez dużych przerw pionowych
+    const runs = [];
+    let cur = [];
+    const flushRun = () => {
+      if (cur.length >= 2) runs.push(cur);
+      cur = [];
+    };
+    for (const l of allLines) {
+      if (!isLineEligible(l)) {
+        flushRun();
+        continue;
+      }
+      if (cur.length) {
+        const prev = cur[cur.length - 1];
+        const dy = l.y - prev.y;
+        const maxSz = Math.max(prev.size, l.size);
+        const minSz = Math.min(...cur.map((x) => x.size), l.size);
+        const hiSz = Math.max(...cur.map((x) => x.size), l.size);
+        const dys = cur.slice(1).map((x, k) => x.y - cur[k].y);
+        const medDy = dys.length ? median(dys) : dy;
+        const bigJump = cur.length >= 2 && dy > medDy * 1.75 && dy > maxSz * 1.8;
+        const midX0 = Math.min(prev.spans[0].x0, l.spans[0].x0);
+        const midX1 = Math.max(prev.spans[prev.spans.length - 1].x1, l.spans[l.spans.length - 1].x1);
+        const objBetween = existingTables.some((t) => overlap1d(t.x0, t.x1, midX0, midX1) > 2 && t.y0 > prev.bottom - 1 && t.y1 < l.top + 1);
+        if (dy <= 0 || dy > maxSz * 3.2 || bigJump || hiSz / Math.max(1, minSz) > 1.35 || objBetween) flushRun();
+      }
+      cur.push(l);
+    }
+    flushRun();
+
+    const out = [];
+    for (const run of runs) {
+      const runFrags = run.flatMap((l) => l.frags);
+      const bx0 = Math.min(...run.map((l) => l.spans[0].x0));
+      const bx1 = Math.max(...run.map((l) => l.spans[l.spans.length - 1].x1));
+      const by0 = run[0].top, by1 = run[run.length - 1].bottom;
+      if (blockedBox(bx0, bx1, by0, by1)) continue;
+      const inferred = inferTextColumns(runFrags, bx0 - 2, bx1 + 4, { spanGapMul: 1.35, minGapPt: 11, padCut: 2 });
+      if (!inferred) continue;
+      const { X, lines, colOf, ms: rMs } = inferred;
+      const nC = X.length - 1, nR = lines.length;
+      if (nC < 2 || nR < 2) continue;
+      if (X.slice(1).some((x, c) => x - X[c] < 10)) continue;
+
+      // macierz (r, c) → połączone odcinki w tej komórce
+      const grid = Array.from({ length: nR }, () => Array.from({ length: nC }, () => null));
+      let filled = 0;
+      let allRowsMulti = true;
+      for (let r = 0; r < nR; r++) {
+        const colsHit = new Set();
+        for (const s of lines[r].spans) {
+          const c = colOf(s);
+          colsHit.add(c);
+          if (!grid[r][c]) {
+            grid[r][c] = { x0: s.x0, x1: s.x1, glyphs: s.glyphs.slice() };
+            filled++;
+          } else {
+            grid[r][c].x0 = Math.min(grid[r][c].x0, s.x0);
+            grid[r][c].x1 = Math.max(grid[r][c].x1, s.x1);
+            grid[r][c].glyphs.push(...s.glyphs);
+          }
+        }
+        if (colsHit.size < 2) { allRowsMulti = false; break; }
+      }
+      if (!allRowsMulti || filled / (nR * nC) < 0.72) continue;
+
+      // sprawdzenie wyrównania kolumn (do lewej, prawej lub środka)
+      let alignedCols = 0;
+      let col0Aligned = false, col1Aligned = false;
+      for (let c = 0; c < nC; c++) {
+        const items = [];
+        for (let r = 0; r < nR; r++) if (grid[r][c]) items.push(grid[r][c]);
+        if (items.length < 2) { alignedCols++; if (c === 0) col0Aligned = true; if (c === 1) col1Aligned = true; continue; }
+        const leftOk = Math.max(...items.map((x) => x.x0)) - Math.min(...items.map((x) => x.x0)) <= Math.max(4, rMs * 0.45);
+        const rightOk = Math.max(...items.map((x) => x.x1)) - Math.min(...items.map((x) => x.x1)) <= Math.max(4, rMs * 0.45);
+        const cxs = items.map((x) => (x.x0 + x.x1) / 2);
+        const centerOk = Math.max(...cxs) - Math.min(...cxs) <= Math.max(5, rMs * 0.55);
+        if (leftOk || rightOk || centerOk) {
+          alignedCols++;
+          if (c === 0) col0Aligned = true;
+          if (c === 1) col1Aligned = true;
+        }
+      }
+      if (!col0Aligned || !col1Aligned || alignedCols < nC - 1) continue;
+
+      // strażnik przed prozą wielokolumnową (artykuł 2-kolumnowy: zdania zawijane z wiersza na wiersz)
+      const cellTexts = grid.map((row) => row.map((cell) => (cell ? spanText(cell) : "")));
+      let wrappedProse = 0;
+      for (let c = 0; c < nC; c++) {
+        const ws = [];
+        for (let r = 0; r < nR; r++) if (grid[r][c]) ws.push(grid[r][c].x1 - grid[r][c].x0);
+        const maxW = Math.max(1, ...ws);
+        for (let r = 0; r + 1 < nR; r++) {
+          const a = grid[r][c], b = grid[r + 1][c];
+          if (!a || !b) continue;
+          const ta = cellTexts[r][c], tb = cellTexts[r + 1][c];
+          const wA = a.x1 - a.x0;
+          if (wA >= maxW * 0.78 && ta.split(/\s+/).length >= 3 && !/[.:?!;)]$/.test(ta) && /^\p{Ll}/u.test(tb)) wrappedProse++;
+        }
+      }
+      if (wrappedProse >= (nC === 2 ? 1 : 2)) continue;
+
+      // zaostrzony strażnik dla 2 kolumn (rozróżnia zestawienie klucz–wartość od 2-kolumnowego tekstu w proba.pdf)
+      if (nC === 2) {
+        const wordsCol = (c) => median(cellTexts.map((row) => row[c]).filter(Boolean).map((t) => t.split(/\s+/).length)) || 0;
+        const w0 = wordsCol(0), w1 = wordsCol(1);
+        if (w0 >= 5 && w1 >= 5) continue;
+        const c0List = cellTexts.map((row) => row[0]).filter(Boolean);
+        const hasColonKeys = c0List.filter((t) => /:$/.test(t)).length >= Math.ceil(c0List.length * 0.6) && w0 <= 4 && w1 <= 5;
+        const rowBoldRatio = (r) => {
+          const gs = grid[r].filter(Boolean).flatMap((c) => c.glyphs);
+          return gs.length ? gs.filter((g) => g.bold).length / gs.length : 0;
+        };
+        const bodyBold = median(Array.from({ length: nR - 1 }, (_, k) => rowBoldRatio(k + 1)));
+        const hasBoldHeader = rowBoldRatio(0) >= 0.7 && bodyBold <= 0.3 && w0 <= 4 && w1 <= 4;
+        // bez nagłówka i dwukropków 2-kolumnowe „towar … cena” (paragon, ocr-layout) zostaje wierszami z tabulatorem
+        if (!hasColonKeys && !hasBoldHeader) continue;
+        if (nR === 2 && !hasBoldHeader && !hasColonKeys) continue;
+      }
+
+      const Y = [lines[0].top - 2];
+      for (let r = 1; r < nR; r++) Y.push((lines[r - 1].bottom + lines[r].top) / 2);
+      Y.push(lines[nR - 1].bottom + 2);
+      const cellOf = Array.from({ length: nR }, () => new Array(nC).fill(null));
+      const cells = [];
+      for (let r = 0; r < nR; r++) {
+        for (let c = 0; c < nC; c++) {
+          const cell = {
+            r0: r, r1: r, c0: c, c1: c,
+            x0: X[c], x1: X[c + 1], y0: Y[r], y1: Y[r + 1],
+            fill: null,
+            borders: { top: null, bottom: null, left: null, right: null },
+            frags: [],
+          };
+          cells.push(cell);
+          cellOf[r][c] = cell;
+        }
+      }
+      out.push({ type: "table", borderless: true, x0: X[0], x1: X[nC], y0: Y[0], y1: Y[nR], top: Y[0], bottom: Y[nR], X, Y, cells, cellOf, _frags: new Set(runFrags) });
+    }
+    return out;
   }
 
   // Tabela z Worda bywa narysowana w kawałkach przedzielonych wierszami bez tła i krawędzi
@@ -1495,6 +1740,12 @@
     if (!prevFill) return false;
     const fw = firstWordWidth(l);
     if (fw > 0 && right - prev.x1 > fw + size * 0.3) return false;
+    // dwa bardzo krótkie wiersze w szerokiej komórce/obszarze („Jan Kowalski” / „ul. Długa 55” zajmujące
+    // < 55% szerokości komórki, gdzie pierwsze słowo kolejnego wiersza spokojnie mieści się na poprzednim)
+    // to osobne wiersze, nie zawinięty akapit z wcięciem z prawej
+    const bc0 = (box.x0 + box.x1) / 2, ctol0 = Math.max(3, size * 0.4);
+    const looksCentered = (isCenteredLine(prev, box) && isCenteredLine(l, box)) || (Math.abs((prev.x0 + prev.x1) / 2 - bc0) < ctol0 && Math.abs((l.x0 + l.x1) / 2 - bc0) < ctol0);
+    if (!looksCentered && para.lines.length === 1 && prev.x1 - box.x0 < width * 0.55 && prev.x1 + size * 0.3 + fw < box.x1 - size * 1.5) return false;
     // lewa krawędź: równa z poprzednim (lub z wcięciem pierwszego wiersza / wiszącym)
     const first = para.lines[0];
     const leftRef = para.lines.length >= 2 ? prev.x0 : first.list ? first.list.textX : first.x0;
@@ -2013,14 +2264,7 @@
     const rules = applyUnderlines(frags, leftovers.hSegs);
 
     // przypisanie tekstu do komórek
-    const free = [];
-    for (const f of frags) {
-      const cx = (f.x0 + f.x1) / 2, cy = (f.top + f.bottom) / 2;
-      const t = tables.find((t) => cx >= t.x0 - 1 && cx <= t.x1 + 1 && cy >= t.y0 - 1 && cy <= t.y1 + 1);
-      if (!t) {
-        free.push(f);
-        continue;
-      }
+    const assignFragToTable = (f, t) => {
       // fragment może przechodzić przez kilka komórek (tekst bez podziału) — dzielimy po znakach
       const byCell = new Map();
       for (const g of f.glyphs) {
@@ -2033,6 +2277,31 @@
         if (byCell.size === 1) c.frags.push(f);
         else c.frags.push(finishFrag({ glyphs: gl, x0: gl[0].x, x1: gl[gl.length - 1].x1, size: f.size }));
       }
+    };
+    let free = [];
+    for (const f of frags) {
+      const cx = (f.x0 + f.x1) / 2, cy = (f.top + f.bottom) / 2;
+      const t = tables.find((t) => cx >= t.x0 - 1 && cx <= t.x1 + 1 && cy >= t.y0 - 1 && cy <= t.y1 + 1);
+      if (!t) {
+        free.push(f);
+        continue;
+      }
+      assignFragToTable(f, t);
+    }
+
+    // Etap 2: tabele bez linii i bez cieniowania w wolnym tekście strony
+    const bTables = detectBorderlessTables(free, tables, raw.images, W, H);
+    if (bTables.length) {
+      const taken = new Set();
+      for (const bt of bTables) {
+        for (const f of bt._frags) {
+          taken.add(f);
+          assignFragToTable(f, bt);
+        }
+        delete bt._frags;
+        tables.push(bt);
+      }
+      free = free.filter((f) => !taken.has(f));
     }
 
     // Plan zajęć z Excela ma bardzo wąską kolumnę z pionowymi nazwami dni. Czasem PDF nie
