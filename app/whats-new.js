@@ -7,6 +7,17 @@
 
 const WHATS_NEW = [
   {
+    v: "v1.01.51",
+    pl: [
+      "Konwersja PDF na Worda: wąskie podświetlenia wewnątrz ramek (np. wyróżniona komenda w bloku kodu) zostają teraz zakreśleniem tekstu zamiast tworzyć pustą tabelę i psuć odstępy pod ramką, a osobne ramki bez tła nie sklejają się już w jedną tabelę zebrową.",
+      "Nagłówki i stopki z PDF: numerowane polecenia w treści na różnych wysokościach strony nie trafiają już omyłkowo do nagłówka, a wyśrodkowane numery stron ze spacją wiodącą zostają na środku stopki.",
+    ],
+    en: [
+      "PDF to Word conversion: narrow highlights inside bordered boxes (such as a highlighted command in a code block) now stay as inline text shading instead of creating an empty nested table and breaking spacing below the box, and separate unshaded frames no longer merge into a zebra table.",
+      "PDF headers and footers: numbered body prompts at different vertical positions are no longer mistaken for running page headers, and centered page numbers with a leading space stay centered in the footer.",
+    ],
+  },
+  {
     v: "v1.01.50",
     pl: [
       "Poprawki z audytu na iPadzie, telefonie i komputerze: czerwone paski zmian z marginesu nie przebijają już przez panel „Zmiany i komentarze”, okno nowego komentarza otwiera się przy zaznaczonym tekście zamiast w lewym górnym rogu, a panel „Znajdź i zamień” pokazuje teraz jedno „Brak trafień” po zamianie wszystkich wystąpień.",
