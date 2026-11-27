@@ -7,6 +7,17 @@
 
 const WHATS_NEW = [
   {
+    v: "v1.01.45",
+    pl: [
+      "Tabele: nowy wiersz lub kolumna dziedziczą krój, rozmiar i pogrubienie tekstu z sąsiedniego wiersza (jak w Wordzie), a wklejenie tabeli HTML w prostym dokumencie bez własnych stylów zachowuje domyślny Aptos 12 zamiast przełączać na Calibri 11.",
+      "iPhone i iPad: wyższy uchwyt zwiniętego nagłówka na telefonie (łatwiej w niego trafić bez przypadkowego kliknięcia paska sekcji pod spodem), podświetlenia z dokumentu nie nachodzą na tytuły okienek (np. „Zapisz jako”), a przeciągnięcie po tekście przy otwartym dymku komentarza od razu zaznacza treść.",
+    ],
+    en: [
+      "Tables: inserting a new row or column now inherits the font, size, and bold styling from the adjacent row (like Word), and pasting an HTML table into a minimal document without styles keeps default Aptos 12 instead of switching to Calibri 11.",
+      "iPhone and iPad: the collapsed header grip on phones is taller so tapping it doesn't hit the section bar underneath, document highlights no longer bleed onto dialog titles (like Save As), and dragging across text while a comment bubble is open selects immediately.",
+    ],
+  },
+  {
     v: "v1.01.44",
     pl: [
       "Telefon (iPhone): otwarty krótki 1-stronicowy dokument nie ciągnie już całej aplikacji w górę i w dół, nie ucina góry kartki po zwinięciu nagłówka ani nie rysuje niebieskiej ramki wokół ekranu po stuknięciu tła. W plikach bez nagłówków zniknął też pusty pasek u góry ekranu.",
