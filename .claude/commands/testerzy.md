@@ -65,9 +65,17 @@ Dopisz potwierdzone do tabeli „Znaleziska” w `docs/AUDYT-MOBILE.md`, kolejne
 `testerzy <R>`, Stan `nowe`. Zrzut jako ścieżka w `output/` (zostaje lokalnie). Bez nazw plików
 z puli.
 
+Odczucie: zbierz z raportów sekcje „Odczucie” i linie `feel.jsonl` testerów
+(`output/testerzy/$R/*/feel.jsonl`). Policz razem i wg urządzenia: martwe stuknięcia (bez stuknięć
+w puste tło — sprawdź po `args` i zrzutach), mediana i p90 reakcji, czynności > 300 ms, skoki.
+Powtarzające się martwe stuknięcia w ten sam element, wolne reakcje tej samej czynności i skoki
+to znaleziska jak inne (odtwórz). Dopisz pod tabelą „Znaleziska” w `docs/AUDYT-MOBILE.md` jedną
+linię „Odczucie <R>: …” z liczbami, żeby było widać zmianę między przebiegami.
+
 ## 5. Raport dla Mateusza (w czacie, po polsku, krótko)
 
 - Ilu testerów, ile ukończyło zadanie, czas przebiegu, zużycie (suma `subagent_tokens`).
+- Odczucie: średnie oceny 1–5 (wysiłek, pewność, płynność, jak Word) i pomiary, najgorsze miejsca.
 - Liczby: zgłoszone → potwierdzone → odrzucone (z jednym zdaniem dlaczego).
 - Potwierdzone od najważniejszych, jedna linia każde, z numerem z tabeli.
 - Propozycja, co naprawić najpierw. **Nic nie naprawiaj bez jego decyzji.**

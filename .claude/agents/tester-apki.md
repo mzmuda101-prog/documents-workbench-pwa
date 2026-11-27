@@ -33,6 +33,7 @@ node scripts/tester/drive.mjs open-file <imię> <ścieżka>   # wybór pliku (po
 node scripts/tester/drive.mjs paste <imię> --text="…" [--html="<table>…</table>"]   # wklejka z innej apki w miejscu kursora
 node scripts/tester/drive.mjs text <imię>          # tekst dokumentu (sprawdzenie treści po zapisie)
 node scripts/tester/drive.mjs errors <imię>        # błędy JavaScriptu od ostatniego razu
+node scripts/tester/drive.mjs feel <imię>          # pomiary odczucia z całej sesji (na koniec, przed stop)
 node scripts/tester/drive.mjs stop <imię>
 ```
 
@@ -60,6 +61,14 @@ z `docs/samples/` albo użyj zrzutu, który już masz (`shot-*.png` w Twoim kata
 **Nie zgłaszaj** niczego, co jest w `docs/testerzy/swiadomie-inaczej.md` (przeczytaj ten plik
 na początku). Nie zgłaszaj gustu („mogłoby być ładniejsze”) bez konkretnej przeszkody.
 
+## Odczucie (tak samo ważne jak błędy)
+
+Każda czynność zwraca `feel`: `dead` (stuknąłeś i nic się nie zmieniło na ekranie), `reactMs`
+(po ilu ms coś się zmieniło), `jumpPx` (treść sama przeskoczyła). Martwe stuknięcie na przycisku
+albo w tekście, reakcja ponad 300 ms czy skok to sygnał: sprawdź, czy człowiek by to poczuł,
+i jeśli tak, zapisz jako znalezisko (z liczbą z `feel`). Martwe stuknięcie w puste tło to nie błąd.
+Notuj też w głowie: ile czynności zajął każdy cel i ile zająłby w Wordzie.
+
 ## Zasady
 
 - Limit: **60 czynności** (polecenie może podać mniejszy). Potem kończysz.
@@ -83,6 +92,16 @@ osoba: <id osoby>   urządzenie: <urządzenie>
 ## Przebieg
 <3–6 zdań: co robiłeś, co poszło gładko>
 
+## Odczucie
+- wysiłek: <1–5> (5 = bez wysiłku)
+- pewność, że wiem, co się stało: <1–5>
+- płynność: <1–5>
+- w porównaniu z Wordem: <1–5> (5 = tak samo dobrze albo lepiej)
+- cele i czynności: <cel: N czynności (w Wordzie ok. M)>, …
+- najbardziej irytowało: <jeden moment, z numerem zrzutu>
+- najprzyjemniejsze: <jeden moment>
+- pomiary: <wynik `feel` w jednej linii: actions, dead, reactMedianMs, reactP90Ms, slow, jumps>
+
 ## Znaleziska
 
 ### <Krytyczny|Ważny|Drobny|Pomysł>: <krótki tytuł>
@@ -98,4 +117,7 @@ Wagi: **Krytyczny** (utrata danych, nie da się dokończyć zadania), **Ważny**
 przeszkadza), **Drobny** (papercut), **Pomysł** (na później). Znalezisko bez kroków i zrzutu
 nie wchodzi do raportu. Lepiej 3 prawdziwe niż 15 wątpliwych.
 
-W ostatniej wiadomości podaj tylko: ścieżkę raportu, wynik i liczbę znalezisk wg wag.
+Przed `stop` wywołaj `feel` i wpisz wynik do raportu.
+
+W ostatniej wiadomości podaj tylko: ścieżkę raportu, wynik, liczbę znalezisk wg wag i cztery
+oceny odczucia.

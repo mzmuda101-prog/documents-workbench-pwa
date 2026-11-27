@@ -315,6 +315,55 @@ async function serve(name, device, dir) {
     async stop() { setTimeout(async () => { await browser.close().catch(() => {}); fs.rmSync(sessFile(name), { force: true }); process.exit(0); }, 50); return { ok: true }; },
   };
 
+  // ---- odczucie: każda czynność mierzona. Martwe = ekran po 700 ms taki sam jak przed (zrzuty).
+  // Reakcja = czas do pierwszej zmiany DOM, zaznaczenia albo przewinięcia. Skok = treść pod
+  // środkiem ekranu przesunęła się o > 80 px po stuknięciu lub pisaniu (nie po przewijaniu).
+  // zrzut do porównania: bez kursora i dymków (znikają same z czasu — to nie reakcja na czynność)
+  const CMP_SHOT = { scale: /** @type {"css"} */ ("css"), caret: /** @type {"hide"} */ ("hide"), style: ".toast{visibility:hidden!important}" };
+  const MEASURED = new Set(["tap", "type", "key", "paste", "drag", "scroll"]);
+  const feelLog = path.join(dir, "feel.jsonl");
+  const feelBefore = () => page.evaluate(() => {
+    const st = { t0: performance.now(), first: /** @type {number|null} */ (null) };
+    const mark = () => { if (st.first == null) st.first = performance.now(); };
+    const mo = new MutationObserver(mark);
+    mo.observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+    document.addEventListener("selectionchange", mark, true);
+    addEventListener("scroll", mark, true);
+    const el = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+    /** @type {any} */ (window).__dwbFeel = { st, mo, mark, el, top: el ? el.getBoundingClientRect().top : null };
+  }).catch(() => {});
+  const feelAfter = async (cmd) => {
+    await page.waitForTimeout(700);
+    return page.evaluate((cmd) => {
+      const f = /** @type {any} */ (window).__dwbFeel;
+      if (!f) return null; // strona przeładowana w trakcie — to reakcja
+      f.mo.disconnect();
+      document.removeEventListener("selectionchange", f.mark, true);
+      removeEventListener("scroll", f.mark, true);
+      delete /** @type {any} */ (window).__dwbFeel;
+      const reactMs = f.st.first == null ? null : Math.max(0, Math.round(f.st.first - f.st.t0));
+      let jumpPx = 0;
+      if ((cmd === "tap" || cmd === "type") && f.el && f.el.isConnected && f.top != null) {
+        const d = Math.round(f.el.getBoundingClientRect().top - f.top);
+        if (Math.abs(d) > 80) jumpPx = d;
+      }
+      return { reactMs, dead: reactMs == null, jumpPx };
+    }, cmd).catch(() => ({ reactMs: null, dead: false, jumpPx: 0, reloaded: true }));
+  };
+  commands.feel = async () => {
+    const rows = fs.existsSync(feelLog) ? fs.readFileSync(feelLog, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)) : [];
+    const react = rows.map((r) => r.reactMs).filter((v) => typeof v === "number").sort((a, b) => a - b);
+    const q = (p) => (react.length ? react[Math.min(react.length - 1, Math.floor(p * react.length))] : null);
+    return {
+      actions: rows.length,
+      dead: rows.filter((r) => r.dead).length,
+      deadExamples: rows.filter((r) => r.dead).slice(-5).map((r) => `${r.cmd} ${r.args.join(" ")}`.slice(0, 80)),
+      reactMedianMs: q(0.5), reactP90Ms: q(0.9),
+      slow: rows.filter((r) => r.reactMs > 300).length,
+      jumps: rows.filter((r) => r.jumpPx).length,
+    };
+  };
+
   let idle = setTimeout(() => commands.stop(), IDLE_MS);
   const server = http.createServer((req, res) => {
     let body = "";
@@ -326,7 +375,24 @@ async function serve(name, device, dir) {
       try {
         const { cmd, args = [] } = JSON.parse(body || "{}");
         const fn = commands[cmd];
-        result = fn ? await fn(args) : { error: `nieznane polecenie: ${cmd}` };
+        if (!fn) result = { error: `nieznane polecenie: ${cmd}` };
+        else if (MEASURED.has(cmd)) {
+          const shot0 = await page.screenshot(CMP_SHOT).catch(() => null);
+          await feelBefore();
+          result = await fn(args);
+          const feel = await feelAfter(cmd);
+          // martwe = ekran po czynności identyczny jak przed (to widzi człowiek; zmiany DOM bez
+          // widocznego skutku się nie liczą)
+          if (feel && shot0) {
+            const shot1 = await page.screenshot(CMP_SHOT).catch(() => null);
+            feel.dead = !!shot1 && shot0.equals(shot1);
+            if (feel.dead) feel.reactMs = null;
+          }
+          if (!result.error && feel) {
+            result.feel = feel;
+            fs.appendFileSync(feelLog, `${JSON.stringify({ t: Date.now(), cmd, args, ...feel })}\n`);
+          }
+        } else result = await fn(args);
       } catch (e) { result = { error: String(e?.message || e) }; }
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify(result));

@@ -81,6 +81,16 @@ async function run() {
   await sleep(2500);
   const sc = drive("scroll", "t-iphone", "600", "--xy=195,500");
   check("scroll na telefonie przewija (moved > 0)", sc.code === 0 && sc.out?.moved > 0, sc.raw);
+  // odczucie: martwe stuknięcie (nic się nie zmienia), reakcja przycisku z czasem, podsumowanie
+  drive("tap", "t-desk", "--xy=1420,600"); // pierwsze zdejmuje kursor z dokumentu — to widoczna reakcja
+  const dead = drive("tap", "t-desk", "--xy=1420,600");
+  check("feel: stuknięcie w puste miejsce = martwe", dead.out?.feel?.dead === true, dead.raw);
+  const live = drive("tap", "t-desk", "Plik");
+  check("feel: przycisk reaguje, czas reakcji w ms", live.out?.feel?.dead === false && typeof live.out.feel.reactMs === "number", live.raw);
+  drive("key", "t-desk", "Escape");
+  const fs1 = drive("feel", "t-desk");
+  check("feel: podsumowanie (czynności, martwe, mediana reakcji)", fs1.out?.actions >= 3 && fs1.out.dead >= 1 && typeof fs1.out.reactMedianMs === "number", fs1.raw);
+  check("feel: dziennik feel.jsonl", fs.existsSync(path.join(ROOT, "output/testerzy/selftest/t-desk/feel.jsonl")), "");
   const tap = drive("tap", "t-iphone", "--xy=195,400");
   check("tap --xy na telefonie", tap.code === 0, tap.raw);
   const e = drive("errors", "t-iphone");
