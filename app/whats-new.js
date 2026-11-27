@@ -7,6 +7,15 @@
 
 const WHATS_NEW = [
   {
+    v: "v1.01.41",
+    pl: [
+      "Telefon: tabele z PDF-a są teraz czytelne — cienkie linie komórek nie znikają, wcięcia w wąskich komórkach nie łamią słów litera po literze, a wąskie kolumny dostają szerokość na najdłuższe słowo kosztem szerszych obok.",
+    ],
+    en: [
+      "Phone: tables from PDFs are now readable — thin cell borders no longer vanish, paragraph indents in narrow cells no longer break words letter by letter, and narrow columns get enough room for their longest word from wider neighbours.",
+    ],
+  },
+  {
     v: "v1.01.40",
     pl: [
       "Edycja wygląda jak wydruk: nagłówek i stopka są na każdej stronie, a „Strona N z M” pokazuje właściwe numery (dawniej nagłówek był tylko na pierwszej stronie, a stopka tylko na ostatniej, z „Strona 1 z 1”). Wysoki nagłówek spycha tekst na każdej stronie, jak w Wordzie.",
