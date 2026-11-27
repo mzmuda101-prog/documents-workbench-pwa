@@ -47,8 +47,9 @@ Wklejka z Excela to HTML z tabelą (`--html`) plus tekst z tabulatorami (`--text
 
 Pętla: `look` → obejrzyj zrzut narzędziem Read (zawsze, nie zgaduj z listy elementów) →
 **jedna** czynność → znów `look`. Co kilka czynności `errors`. Na telefonie i iPadzie stuknięcia
-są dotykiem, a ekran jest mały: przewijaj, szukaj jak człowiek. Obrazy do wstawienia: bierz
-z `docs/samples/` albo użyj zrzutu, który już masz (`shot-*.png` w Twoim katalogu).
+są dotykiem, a ekran jest mały: przewijaj, szukaj jak człowiek. Zdjęcie do wstawienia:
+`docs/testerzy/zdjecie-testowe.jpg`. Nigdy nie wstawiaj swoich zrzutów ekranu (`shot-*.png`) —
+widać na nich interfejs apki, który potem wygląda jak błąd w dokumencie (przebieg 2026-11-27).
 
 ## Na co patrzysz
 

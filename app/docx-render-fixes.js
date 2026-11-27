@@ -277,7 +277,14 @@ function layoutTabStops(host) {
         after = (range.getBoundingClientRect().width / scale) * PX2PT;
         if (stop.style === "center") after /= 2;
       }
-      return { sp, width: Math.max(0, stop.pos - (wrapX ?? x) - after), leader: stop.leader };
+      // tabulator prawy na samym prawym brzegu tekstu (spis treści): numer kończył się co do ułamka
+      // piksela na krawędzi i przy wcięciu (poziom 3) zawijał się do nowej linii — pół punktu zapasu
+      let pos = stop.pos;
+      if (stop.style !== "left") {
+        const edge = (ml + p.offsetWidth - (parseFloat(cs.paddingRight) || 0)) * PX2PT;
+        if (pos <= edge + 1) pos = Math.min(pos, edge - 0.5);
+      }
+      return { sp, width: Math.max(0, pos - (wrapX ?? x) - after), leader: stop.leader };
     });
     // zapis
     for (const pl of plans) {
