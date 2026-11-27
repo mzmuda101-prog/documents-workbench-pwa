@@ -203,7 +203,7 @@
           const symbolic = /symbol|wingding|webding|dingbat/i.test(lv.font || "") && !/[\uF000-\uF0FF]/.test(lv.text);
           if (lv.font && !symbolic) rPr.push(`<w:rFonts w:ascii="${esc(lv.font)}" w:hAnsi="${esc(lv.font)}" w:cs="${esc(lv.font)}" w:hint="default"/>`);
           if (lv.size) rPr.push(`<w:sz w:val="${Math.round(lv.size * 2)}"/><w:szCs w:val="${Math.round(lv.size * 2)}"/>`);
-          abs += `<w:lvl w:ilvl="${i}"><w:start w:val="${lv.start}"/><w:numFmt w:val="${lv.fmt}"/><w:lvlText w:val="${esc(lv.text)}"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="${TW(lv.left)}" w:hanging="${TW(lv.hanging)}"/></w:pPr>${rPr.length ? `<w:rPr>${rPr.join("")}</w:rPr>` : ""}</w:lvl>`;
+          abs += `<w:lvl w:ilvl="${i}"><w:start w:val="${lv.start}"/><w:numFmt w:val="${lv.fmt}"/>${lv.suff ? `<w:suff w:val="${lv.suff}"/>` : ""}<w:lvlText w:val="${esc(lv.text)}"/><w:lvlJc w:val="left"/><w:pPr><w:ind w:left="${TW(lv.left)}" w:hanging="${TW(lv.hanging)}"/></w:pPr>${rPr.length ? `<w:rPr>${rPr.join("")}</w:rPr>` : ""}</w:lvl>`;
         });
         abs += "</w:abstractNum>";
         nums += `<w:num w:numId="${d.id}"><w:abstractNumId w:val="${d.id}"/></w:num>`;

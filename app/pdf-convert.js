@@ -159,7 +159,8 @@
     for (const p of pages) collect(p.blocks, containers[0]);
     for (const blocks of containers) {
       let run = [];
-      const flushRun = () => { if (run.length) makeList(run, defs); run = []; };
+      const seen = {}; // ostatnia lista numerowana w tym obszarze (ciąg dalszy po nagłówku)
+      const flushRun = () => { if (run.length) makeList(run, defs, seen); run = []; };
       for (const b of blocks) {
         if (b.type === "para" && b.list && b.listMarker) run.push(b);
         else flushRun();
@@ -168,7 +169,7 @@
     }
     return defs;
   }
-  function makeList(run, defs) {
+  function makeList(run, defs, seen = {}) {
     // poziomy: położenie znacznika od lewej krawędzi obszaru (tolerancja 4 pt)
     const pos = (b) => b.indLeft + b.firstLine;
     const cols = [];
@@ -210,13 +211,27 @@
           start: lv.kind === "bullet" ? 1 : lv.start,
           left: sample.indLeft,
           hanging: Math.max(0, -sample.firstLine),
+          suff: sample.listSuff || null,
           font: lv.tok?.font,
           size: lv.tok?.size,
         };
       }),
     };
+    // punkty 1–2, nagłówek, punkty 3–5 (z podpunktami): jedna lista Worda — inaczej po usunięciu punktu
+    // numery się nie przeliczają, a każdy kawałek zaczyna od własnego startu (AUDYT-MOBILE #15)
+    const prev = seen.def;
+    const same = (x, y) => x.kind === y.kind && x.fmt === y.fmt && x.text === y.text && x.suff === y.suff && Math.abs(x.left - x.hanging - (y.left - y.hanging)) < 4;
+    if (prev && def.levels[0].kind === "number" && levels[0].start === seen.last + 1 &&
+      def.levels.every((lv, i) => !prev.levels[i] || same(prev.levels[i], lv))) {
+      for (let i = prev.levels.length; i < def.levels.length; i++) prev.levels.push(def.levels[i]);
+      for (const b of run) b.numbering = { numId: prev.id, ilvl: lvlOf(b) };
+      seen.last = last[0];
+      return;
+    }
     defs.push(def);
     for (const b of run) b.numbering = { numId: def.id, ilvl: lvlOf(b) };
+    seen.def = def;
+    seen.last = last[0];
   }
 
   // Treść: atomy drzewa układu (do marginesów).

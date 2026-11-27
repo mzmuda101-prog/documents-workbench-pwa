@@ -171,6 +171,13 @@ async function makePdfs() {
     <tr><td class="z"><div class="i"><span class="n">2.</span><span>Przejść całą posesję i pozbierać wszystkie śmieci przed wjazdem</span></div></td><td class="b"></td></tr>
   </table></body></html>`, { waitUntil: "load" });
   await page.pdf({ path: path.join(TMP, "plan-prac-komorki.pdf"), format: "A4", printBackground: true });
+  // punkty „1. …” zawinięte pod sam numer, nagłówek między 2. a 3. (AUDYT-MOBILE #15: każdy punkt był osobną listą
+  // rozciętą na dwa akapity, więc dopisany / usunięty punkt nie przenumerowywał reszty)
+  const LONG = "dalszy ciąg punktu biegnie przez kilka wierszy, aż zawinie się pod sam numer, tak jak w regulaminie wydrukowanym z edytora bez wcięcia wiszącego";
+  await page.setContent(`<!doctype html><html lang="pl"><head><meta charset="utf-8"><style>body{font-family:Arial;font-size:11pt}p{text-align:justify;margin:0 0 9pt}h2{font-size:11pt;margin:12pt 0 9pt}</style></head><body>
+    <p>1. Punkt pierwszy: ${LONG}.</p><p>2. Punkt drugi: ${LONG}.</p><h2>NAGŁÓWEK MIĘDZY PUNKTAMI</h2><p>3. Punkt trzeci: ${LONG}.</p>
+  </body></html>`, { waitUntil: "load" });
+  await page.pdf({ path: path.join(TMP, "punkty-pod-numer.pdf"), format: "A4", margin: { top: "20mm", bottom: "20mm", left: "25mm", right: "25mm" } });
   // skan tabeli obrócony o 180° + 3° (kartka odwrotnie i krzywo w skanerze) — prostowanie + tabela Worda
   await page.setViewportSize({ width: 794, height: 1123 });
   await page.setContent(`<!doctype html><html lang="pl"><head><meta charset="utf-8"><style>body{margin:70px;font-family:Arial;font-size:15px;color:#111}table{border-collapse:collapse;width:100%}td,th{border:1.5px solid #222;padding:8px 10px;text-align:left}th{background:#ddd}</style></head><body><h2>Protokół przekazania sprzętu</h2><table><tr><th>Nazwa</th><th>Numer seryjny</th><th>Stan</th></tr><tr><td>Wiertarka udarowa</td><td>WU-2231-778</td><td>sprawna</td></tr><tr><td>Szlifierka kątowa</td><td>SK-0912-114</td><td>uszkodzona osłona</td></tr><tr><td>Poziomica laserowa</td><td>PL-5520-031</td><td>sprawna</td></tr></table><p>Przekazał: Jan Kowalczyk. Odebrał: Zofia Wójcik.</p></body></html>`, { waitUntil: "load" });
@@ -431,6 +438,28 @@ async function run() {
   });
   check("punkt listy zawinięty w komórce = jeden akapit", cellList.some((p) => /Przejść.*wjazdem/.test(p.text)), JSON.stringify(cellList));
   check("komórka z ramką: wcięcie z prawej nie wychodzi za linię (≥ −2 pt)", cellList.length && cellList.every((p) => p.right >= -40), JSON.stringify(cellList));
+
+  // --- 1d. punkty zawinięte pod numer + nagłówek w środku: jedna lista Worda, punkt = jeden akapit
+  await page.evaluate(() => { setDirtyState(false); });
+  await convert(page, path.join(TMP, "punkty-pod-numer.pdf"));
+  const wrapList = await page.evaluate(async () => {
+    const z = await JSZip.loadAsync(originalFileBytes);
+    const doc = await z.file("word/document.xml").async("string");
+    const numbering = (await z.file("word/numbering.xml")?.async("string")) || "";
+    const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+    const xml = new DOMParser().parseFromString(doc, "application/xml");
+    const paras = [...xml.getElementsByTagNameNS(W, "p")].map((p) => ({
+      text: [...p.getElementsByTagNameNS(W, "t")].map((t) => t.textContent).join(""),
+      numId: p.getElementsByTagNameNS(W, "numId")[0]?.getAttributeNS(W, "val") || null,
+    })).filter((p) => p.text.trim());
+    const labels = [...document.querySelectorAll(".docx-wrapper p[data-dwb-num]")].map((p) => p.getAttribute("data-dwb-num").trim());
+    return { paras, suff: /<w:suff w:val="space"\/>/.test(numbering), labels };
+  });
+  const pts = wrapList.paras.filter((p) => /^Punkt (pierwszy|drugi|trzeci)/.test(p.text));
+  check("punkty zawinięte pod numer: 3 punkty, każdy jednym akapitem (bez osobnego „dalszego ciągu”)",
+    pts.length === 3 && pts.every((p) => /regulaminie wydrukowanym/.test(p.text)) && !wrapList.paras.some((p) => !p.numId && /regulaminie|wiersz|numer/.test(p.text) && !/^Punkt/.test(p.text)), JSON.stringify(wrapList.paras));
+  check("punkty przedzielone nagłówkiem: jedna lista Worda (ten sam numId), numer i tekst rozdzielone spacją jak w PDF",
+    pts.length === 3 && pts.every((p) => p.numId && p.numId === pts[0].numId) && wrapList.suff, JSON.stringify({ pts: pts.map((p) => p.numId), suff: wrapList.suff, labels: wrapList.labels }));
 
   // --- 2. duży plik: płynność
   await page.evaluate(() => { setDirtyState(false); });

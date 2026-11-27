@@ -1672,8 +1672,8 @@
     const weak = /^[o\-*]$/.test(word);
     // „§” z liczbą („§ 1.”, „§ 12a”) to numer paragrafu, nie punktor (kwadracik Wingdings bywa „§”)
     if (word === "§" && /\d/.test(after.u)) return null;
-    if (BULLET_RE.test(word) && gap > gl[0].size * (weak ? 0.45 : 0.2)) return { kind: "bullet", marker: word, textX: after.x, markerX: gl[0].x };
-    if (NUMBER_RE.test(word) && gap > gl[0].size * 0.25) return { kind: "number", marker: word, textX: after.x, markerX: gl[0].x };
+    if (BULLET_RE.test(word) && gap > gl[0].size * (weak ? 0.45 : 0.2)) return { kind: "bullet", marker: word, textX: after.x, markerX: gl[0].x, markerX1: gl[k - 1].x1 };
+    if (NUMBER_RE.test(word) && gap > gl[0].size * 0.25) return { kind: "number", marker: word, textX: after.x, markerX: gl[0].x, markerX1: gl[k - 1].x1 };
     return null;
   }
 
@@ -1788,7 +1788,10 @@
     // kolejne, nieco krótsze wiersze wyśrodkowanego akapitu (lista 3.11; PDF z Worda, wcięcia 3 cm).
     const wrapW = para.lines.length >= 2 ? Math.min(width, Math.max(...para.lines.map((x) => x.x1 - x.x0))) : width;
     if (centered && prev.x1 - prev.x0 + size * 0.3 + fw < wrapW - size * 0.5) return false;
-    if (dx > size * 0.6 && !centered) {
+    // punkt listy zawinięty pod sam numer („1. Porządkowymi…” / „w swoim życiu…” od lewej krawędzi):
+    // to dalszy ciąg punktu, nie nowy akapit — inaczej każdy punkt był osobną listą (AUDYT-MOBILE #15)
+    const wrapsAtMarker = para.lines.length === 1 && first.list && Math.abs(l.x0 - first.list.markerX) < size * 0.6;
+    if (dx > size * 0.6 && !centered && !wrapsAtMarker) {
       // wcięcie pierwszego wiersza: drugi wiersz bardziej na lewo niż pierwszy
       if (!(para.lines.length === 1 && l.x0 < first.x0 && first.x0 - l.x0 < size * 4)) return false;
     }
@@ -1888,7 +1891,11 @@
     // wcięcia
     let indLeft, firstLine = 0;
     const list = first.list;
-    if (list) {
+    // punkt zawinięty pod numer: wcięcie od numeru, tekst za numerem na tabulatorze (jak Word bez wiszącego)
+    const listWrapsAtMarker = list && multi && Math.abs(lines[1].x0 - list.markerX) < size * 0.6;
+    if (listWrapsAtMarker) {
+      indLeft = list.markerX - box.x0;
+    } else if (list) {
       indLeft = list.textX - box.x0;
       firstLine = list.markerX - list.textX; // ujemne = wiszące
     } else if (multi) {
@@ -1979,6 +1986,10 @@
       const stopPos = t.align === "right" && t.leaderTo ? t.leaderTo - box.x0 : t.pos;
       tabs.push({ pos: stopPos, leader: t.leader, align: t.fill && t.align === "right" ? "right" : t.align === "right" ? "right" : "left" });
     }
+    // bez wcięcia wiszącego tabulator za numerem listy szedłby do domyślnego (1,25 cm): zwykły odstęp
+    // („1. Porządkowymi”) = spacja za numerem (w:suff), szeroki = tabulator do tekstu z PDF
+    const listSuff = listWrapsAtMarker && list.textX - list.markerX1 < size * 0.6 ? "space" : null;
+    if (listWrapsAtMarker && !listSuff) tabs.unshift({ pos: list.textX - box.x0, align: "left" });
     // Jeśli to tabulator z kropkami do numeru strony: pozycja tabulatora prawego = prawy brzeg numeru.
     for (let k = 0; k < tokens.length; k++) {
       const t = tokens[k];
@@ -2014,6 +2025,7 @@
       nLines: lines.length,
       list: list ? list.kind : null,
       listMarker: list ? list.marker : null, // pdf-convert.js robi z tego prawdziwą listę Worda
+      listSuff,
       rotated: first.rotated,
     };
   }
