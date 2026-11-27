@@ -7,6 +7,15 @@
 
 const WHATS_NEW = [
   {
+    v: "v1.01.44",
+    pl: [
+      "Telefon (iPhone): otwarty krótki 1-stronicowy dokument nie ciągnie już całej aplikacji w górę i w dół, nie ucina góry kartki po zwinięciu nagłówka ani nie rysuje niebieskiej ramki wokół ekranu po stuknięciu tła. W plikach bez nagłówków zniknął też pusty pasek u góry ekranu.",
+    ],
+    en: [
+      "Phone (iPhone): short one-page documents no longer drag the whole app up and down, clip the top of the page when collapsing the header, or show a blue focus outline around the screen after tapping the background. The empty top bar strip is also gone for documents without headings.",
+    ],
+  },
+  {
     v: "v1.01.43",
     pl: [
       "Tabele: kliknięcie w puste miejsce wysokiej lub pustej komórki (np. w jej dolnej połowie) stawia kursor w tej komórce zamiast przeskakiwać do sąsiedniej kolumny albo kolejnego wiersza.",
