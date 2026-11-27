@@ -2357,6 +2357,8 @@ section.docx { isolation: isolate; }
 /* ── przypisy (doc-notes.js) ── jak w Wordzie: krótka kreska nad listą, numer w tekście
    przypisu (wyspa „note-mark”), bez wcięcia listy; odnośnik w treści z dymkiem treści */
 section.docx > ol.dwb-notes { list-style: none; margin: 10pt 0 0; padding: 5pt 0 0; position: relative; }
+section.docx > ol.dwb-notes-paged { position: absolute; visibility: hidden; pointer-events: none; margin: 0; padding: 0; height: 0; overflow: hidden; }
+section.docx > ol.dwb-page-notes { position: absolute; z-index: 2; margin: 0; }
 section.docx > ol.dwb-notes::before { content: ""; position: absolute; top: 0; left: 0; width: min(144pt, 33%); border-top: 0.75pt solid currentColor; opacity: 0.75; }
 section.docx > ol.dwb-notes > li { margin: 0; padding: 0; }
 section.docx > ol.dwb-notes > li.dwb-note-native { list-style: decimal outside; margin-left: 1.6em; }

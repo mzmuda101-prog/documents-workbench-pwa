@@ -31,11 +31,12 @@ const dwbPageBreaks = (() => {
   const KEY = "dwb-page-breaks-v1";
   const GAP_KEY = "dwb-page-gaps-v1";
   const GAP = 22; // przerwa między kartkami — jak między kartkami z jawnym podziałem
-  // odstępy stron w kartce: między blokami i między wierszami tabeli (dwb-gap-row)
-  const GAP_SEL = ":scope > article > .dwb-page-gap, :scope > article > table .dwb-page-gap";
+  // odstępy stron w kartce: między blokami, między wierszami tabeli (dwb-gap-row) i przed listą końcowych
+  const GAP_SEL = ":scope > article > .dwb-page-gap, :scope > article > table .dwb-page-gap, :scope > .dwb-page-gap";
   const box = document.getElementById("showPageBreaks");
   const gapBox = document.getElementById("hideWhiteSpace");
   let timer = 0;
+  let contentMo = null;
 
   function enabled() {
     try { return localStorage.getItem(KEY) !== "0"; } catch (_) { return true; }
@@ -53,7 +54,46 @@ const dwbPageBreaks = (() => {
     return docCanvasEl?.querySelector(".docx-preview-host");
   }
 
+  // Żywe <li> przypisów dolnych wracają do macierzystego <ol> zanim usuniemy pojemniki stron
+  // (.dwb-page-notes) — inaczej clear() usunęłoby edytowalne przypisy z DOM.
+  function restoreFootnotes(h = host()) {
+    if (!h) return;
+    h.querySelectorAll("section.docx").forEach((sec) => {
+      const home = sec.querySelector(":scope > ol.dwb-notes-footnote:not(.dwb-page-notes)");
+      const extras = [...sec.querySelectorAll(":scope > ol.dwb-page-notes")];
+      if (home && extras.length) {
+        const items = [...home.querySelectorAll(":scope > li"), ...extras.flatMap((ol) => [...ol.querySelectorAll(":scope > li")])];
+        items.sort((a, b) => (Number(a.dataset.dwbNoteOrder) || 0) - (Number(b.dataset.dwbNoteOrder) || 0));
+        items.forEach((li) => home.appendChild(li));
+      }
+      extras.forEach((ol) => ol.remove());
+      home?.classList.remove("dwb-notes-paged");
+    });
+  }
+  function captureNoteCaret(h) {
+    const sel = window.getSelection?.();
+    if (!sel?.rangeCount) return null;
+    const r = sel.getRangeAt(0);
+    const el = r.startContainer.nodeType === 1 ? r.startContainer : r.startContainer.parentElement;
+    const p = el?.closest?.("ol.dwb-notes-footnote p[data-note-key]");
+    if (!p || !h?.contains(p)) return null;
+    return { p, startContainer: r.startContainer, startOffset: r.startOffset, endContainer: r.endContainer, endOffset: r.endOffset };
+  }
+  function restoreNoteCaret(saved) {
+    if (!saved?.p?.isConnected) return;
+    try {
+      saved.p.focus({ preventScroll: true });
+      const sel = window.getSelection?.();
+      const r = document.createRange();
+      r.setStart(saved.startContainer, saved.startOffset);
+      r.setEnd(saved.endContainer, saved.endOffset);
+      sel?.removeAllRanges();
+      sel?.addRange(r);
+    } catch (_) { /* zakres nieaktualny — zostaje fokus na przypisie */ }
+  }
+
   function clear(h = host()) {
+    restoreFootnotes(h);
     h?.querySelectorAll(".dwb-page-break, .dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-margin-guide, .dwb-page-repeat, .dwb-page-hf").forEach((el) => el.remove());
     h?.querySelectorAll("section[data-dwb-hf-sig]").forEach((sec) => delete sec.dataset.dwbHfSig);
     h?.querySelectorAll("section.dwb-gapped").forEach((sec) => { sec.classList.remove("dwb-gapped"); sec.style.removeProperty("--dwb-sec-min"); });
@@ -433,33 +473,43 @@ const dwbPageBreaks = (() => {
     // przeliczenie nie musi ich zdejmować (dawniej zdejmowanie i wstawianie co chwilę przestawiało
     // przewijanie: skok do sekcji, „Wróć”, zoom, zmiana widoku).
     const gaps = [...sec.querySelectorAll(GAP_SEL)].map((g) => ({ top: (g.getBoundingClientRect().top - secRect.top) / scale, shift: gapDisplacement(g) }));
-    if (gaps.length) u.forEach((x) => { let d = 0; for (const g of gaps) if (g.top <= x.top) d += g.shift; x.top -= d; x.bottom -= d; });
-    // Przypisy DOLNE na dole strony z odnośnikiem (jak w Wordzie; podgląd wydruku: includeNotes).
+    const unshiftY = (y) => { if (!gaps.length) return y; let d = 0; for (const g of gaps) if (g.top <= y) d += g.shift; return y - d; };
+    if (gaps.length) u.forEach((x) => { const d = x.top - unshiftY(x.top); x.top -= d; x.bottom -= d; });
+    // Przypisy DOLNE na dole strony z odnośnikiem (jak w Wordzie; Edycja i podgląd wydruku: includeNotes).
     // Każda linijka zna przypisy, do których ma odnośnik; mieści się na stronie tylko razem z nimi
     // (i kreską nad przypisami przy pierwszym na stronie) — inaczej idzie na następną stronę.
     // Wynik: out.pageNotes[i] = przypisy strony i. Przypisy końcowe — dalej na końcu sekcji.
     let footOl = null, noteH = null, sepH = 0;
     if (includeNotes) {
-      footOl = sec.querySelector(":scope > ol.dwb-notes-footnote");
-      if (footOl?.children.length) {
+      footOl = sec.querySelector(":scope > ol.dwb-notes-footnote:not(.dwb-page-notes)");
+      const footItems = [...sec.querySelectorAll(":scope > ol.dwb-notes-footnote > li[data-dwb-note]")];
+      if (footOl && footItems.length) {
         noteH = new Map();
-        for (const li of footOl.children) {
+        footItems.forEach((li, idx) => {
+          if (li.dataset.dwbNoteOrder == null) li.dataset.dwbNoteOrder = String(idx);
           const lcs = getComputedStyle(li);
           noteH.set(li.dataset.dwbNote, li.getBoundingClientRect().height / scale + (parseFloat(lcs.marginTop) || 0) + (parseFloat(lcs.marginBottom) || 0));
-        }
+        });
         const ocs = getComputedStyle(footOl);
-        sepH = (parseFloat(ocs.marginTop) || 0) + (parseFloat(ocs.paddingTop) || 0);
+        sepH = parseFloat(footOl.dataset.dwbSepH) || ((parseFloat(ocs.marginTop) || 0) + (parseFloat(ocs.paddingTop) || 0));
+        if (sepH > 0) footOl.dataset.dwbSepH = String(sepH);
         const refs = [...sec.querySelectorAll(":scope > article sup[data-dwb-note^='footnote:']")].map((el) => {
           const r = el.getBoundingClientRect();
-          return { id: el.dataset.dwbNote, el, y: ((r.top + r.bottom) / 2 - secRect.top) / scale };
+          return { id: el.dataset.dwbNote, el, y: unshiftY(((r.top + r.bottom) / 2 - secRect.top) / scale) };
         }).filter((r) => noteH.has(r.id));
         const used = new Set();
         u.forEach((x) => {
           x.notes = refs.filter((r) => !used.has(r) && x.el.contains(r.el) && (x.row || (r.y >= x.top - 1 && r.y <= x.bottom + 1))).map((r) => { used.add(r); return r.id; });
         });
       }
-      sec.querySelectorAll(":scope > ol").forEach((ol) => { if (ol !== footOl || !noteH) u.push(...lineUnits(ol, secRect.top, scale)); });
+      sec.querySelectorAll(":scope > ol").forEach((ol) => {
+        if (ol.classList.contains("dwb-notes-footnote") && noteH) return;
+        const olUnits = lineUnits(ol, secRect.top, scale);
+        if (gaps.length) olUnits.forEach((x) => { const d = x.top - unshiftY(x.top); x.top -= d; x.bottom -= d; });
+        u.push(...olUnits);
+      });
     }
+    if (footOl && noteH) out.footOl = footOl;
     u.sort((a, b) => a.top - b.top);
     let pageNotes = new Set(), pageNoteH = 0;
     const noteExtra = (x) => {
@@ -493,7 +543,11 @@ const dwbPageBreaks = (() => {
         let block = null;
         let line = 0; // > 0: granica w środku akapitu, przed jego wierszem nr line
         if (blockBreaks) {
-          if (u[b].multi) {
+          if (!u[b].el.closest("article")) {
+            // przypis końcowy (<ol> poza <article>): odstęp strony przed całą listą, gdy zaczyna nową stronę
+            const ol = u[b].el.closest("ol");
+            if (ol && u[b].i === 0 && !u.slice(first, b).some((x) => x.el.closest("ol") === ol)) block = ol;
+          } else if (u[b].multi) {
             block = u[b].el; // zestaw kolumn (strona) w całości: odstęp przed nim (column-span: all)
           } else if (u[b].row) {
             // Tabela dzieli się między wierszami, jak w Wordzie i w podglądzie wydruku (dawniej szła
@@ -698,11 +752,11 @@ const dwbPageBreaks = (() => {
     const plan = [];
     const decided = new WeakMap();
     h.querySelectorAll(".docx-wrapper > section.docx").forEach((sec) => {
-      const res = paginateSection(sec, { blockBreaks: gaps, decided });
+      const res = paginateSection(sec, { includeNotes: gaps, blockBreaks: gaps, decided });
       if (res) plan.push(res);
     });
     lastFit = decided;
-    // co powinno stać w kartkach: odstępy (przed którym blokiem, jaka wysokość), pasy, kreski
+    // co powinno stać w kartkach: odstępy (przed którym blokiem, jaka wysokość), pasy, kreski, przypisy stron
     const want = [];
     plan.forEach((res, si) => {
       if (si > 0) page += 1; // jawny podział = nowa kartka = nowa strona
@@ -743,14 +797,28 @@ const dwbPageBreaks = (() => {
       // Nie obrysowujemy całego pola tekstu: na czterech rogach kartki dajemy tylko
       // prowadnice biegnące OD marginesu do krawędzi arkusza (jak znaki cięcia w DTP).
       const guides = guideTops.map((top) => ({ top: Math.round(top * 10) / 10, height: res.pageH, insetTop: res.padT, insetBottom: res.padB, insetLeft: res.padL, insetRight: res.padR }));
-      want.push({ sec: res.sec, items, guides, minH: gaps && sheetTop > 0 ? Math.ceil(sheetTop + res.pageH) : 0 });
+      const minH = gaps && sheetTop > 0 ? Math.ceil(sheetTop + res.pageH) : 0;
+      // Przypisy dolne wielostronicowej sekcji: na dole swoich stron (nad stopką i dolnym marginesem),
+      // jak w Wordzie i w podglądzie wydruku (AUDYT-MOBILE #7). Żywe <li> pozostają edytowalne.
+      const gapBands = items.filter((x) => x.kind === "gap");
+      const pageNotePlan = [];
+      if (gaps && res.footOl && res.pageNotes && gapBands.length) {
+        const lastBottom = minH || Math.ceil(sheetTop + res.pageH);
+        res.pageNotes.forEach((ids, j) => {
+          if (!ids?.length) return;
+          const pageBottom = j < gapBands.length ? gapBands[j].bandTop : lastBottom;
+          pageNotePlan.push({ page: j, ids, left: res.padL, right: res.padR, bottomY: pageBottom - res.bottomZone });
+        });
+      }
+      want.push({ sec: res.sec, items, guides, minH, footOl: res.footOl, pageNotePlan });
     });
     // bez zmian (np. przeliczenie po przewinięciu, zoomie, skoku) — nic nie ruszamy
-    const same = want.every(({ sec, items, guides, minH }) => {
+    const same = want.every(({ sec, items, guides, minH, pageNotePlan }) => {
       const gapEls = [...sec.querySelectorAll(GAP_SEL)];
       const bands = [...sec.querySelectorAll(":scope > .dwb-page-gap-band")];
       const seams = [...sec.querySelectorAll(":scope > .dwb-page-break")];
       const guideEls = [...sec.querySelectorAll(":scope > .dwb-page-margin-guide")];
+      const noteEls = [...sec.querySelectorAll(":scope > ol.dwb-page-notes")];
       const wg = items.filter((x) => x.kind === "gap");
       const ws = items.filter((x) => x.kind === "seam");
       return gapEls.length === wg.length && bands.length === wg.length && seams.length === ws.length
@@ -765,13 +833,18 @@ const dwbPageBreaks = (() => {
           && parseFloat(guideEls[i].style.getPropertyValue("--dwb-guide-bottom")) === x.insetBottom
           && parseFloat(guideEls[i].style.getPropertyValue("--dwb-guide-left")) === x.insetLeft
           && parseFloat(guideEls[i].style.getPropertyValue("--dwb-guide-right")) === x.insetRight)
+        && noteEls.length === pageNotePlan.length
+        && pageNotePlan.every((pnp, i) => noteEls[i].dataset.page === String(pnp.page)
+          && [...noteEls[i].querySelectorAll(":scope > li")].map((li) => li.dataset.dwbNote).join(",") === pnp.ids.join(",")
+          && Math.abs(parseFloat(noteEls[i].style.top) - Math.round((pnp.bottomY - noteEls[i].offsetHeight) * 10) / 10) < 1)
         && (sec.style.getPropertyValue("--dwb-sec-min") || "") === (minH ? `${minH}px` : "");
     }) && h.querySelectorAll(".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-break, .dwb-page-margin-guide, .dwb-page-repeat:not(.dwb-page-hf)").length === want.reduce((n, w) => n + w.items.reduce((m, x) => m + (x.kind === "gap" ? (x.line ? 3 : 2) + (x.head ? 1 : 0) : 1), 0) + w.guides.length, 0);
-    if (same) { pageHeadersFooters(h); return; }
+    if (same) { pageHeadersFooters(h); contentMo?.takeRecords(); return; }
     // zmiana: akapit widoczny u góry zostaje na swoim miejscu na ekranie (jak zakotwiczenie przewijania);
     // tuż po przerysowaniu — akapit sprzed przerysowania (document.js, reloadFromBytes)
     const pending = typeof takeRenderScrollAnchor === "function" ? takeRenderScrollAnchor() : null;
     const anchor = pending ? null : viewportAnchor(h);
+    const noteCaret = captureNoteCaret(h);
     clear(h);
     const bandBg = canvasBackground();
     const hint = (el) => {
@@ -781,7 +854,7 @@ const dwbPageBreaks = (() => {
       el.dataset.hintDelay = "0.8";
     };
     const splits = []; // odstępy w środku akapitów — do dociągnięcia po wstawieniu wszystkiego
-    want.forEach(({ sec, items, guides, minH }) => {
+    want.forEach(({ sec, items, guides, minH, footOl, pageNotePlan }) => {
       guides.forEach((g) => {
         const guide = document.createElement("div");
         guide.className = "dwb-page-margin-guide";
@@ -852,10 +925,29 @@ const dwbPageBreaks = (() => {
         sec.classList.add("dwb-gapped");
         sec.style.setProperty("--dwb-sec-min", `${minH}px`);
       }
+      if (footOl && pageNotePlan.length) {
+        const byId = new Map([...footOl.querySelectorAll(":scope > li[data-dwb-note]")].map((li) => [li.dataset.dwbNote, li]));
+        footOl.classList.add("dwb-notes-paged");
+        pageNotePlan.forEach((pnp) => {
+          const ol = document.createElement("ol");
+          ol.className = `${footOl.className.replace(/\bdwb-notes-paged\b/g, "").trim()} dwb-page-notes`;
+          ol.dataset.page = String(pnp.page);
+          if (editable) ol.contentEditable = "false";
+          pnp.ids.forEach((id) => { const li = byId.get(id); if (li) ol.appendChild(li); });
+          if (!ol.children.length) return;
+          ol.style.left = `${pnp.left}px`;
+          ol.style.right = `${pnp.right}px`;
+          // przed macierzystym <ol>: zachowuje kolejność DOM (przypisy dolne przed końcowymi)
+          footOl.before(ol);
+          ol.style.top = `${Math.round((pnp.bottomY - ol.offsetHeight) * 10) / 10}px`;
+        });
+      }
     });
     splits.forEach(fitSplit);
     relayoutTextboxes(h); // pola tekstowe za swoimi akapitami / na swoich kartkach
     pageHeadersFooters(h);
+    restoreNoteCaret(noteCaret);
+    contentMo?.takeRecords();
     if (typeof syncPageScaleHeightNow === "function") syncPageScaleHeightNow(); // inaczej przewinięcie niżej obcina stary, krótszy obszar
     if (pending) restoreDocScrollAnchor(pending);
     else if (anchor && docViewportEl) {
@@ -1094,7 +1186,7 @@ const dwbPageBreaks = (() => {
     // (ostatnia kartka ma wysokość pełnych stron) — obserwator rozmiaru milczał. Odstęp strony
     // zostawał przy starym akapicie: tekst wjeżdżał pod pas „str. N” albo zostawała pusta dziura
     // (zgłoszenie 2026-10-05). Każda zmiana akapitów → przeliczenie; własne odstępy pomijamy.
-    const ours = (n) => n.nodeType === 1 && n.matches?.(".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-break, .dwb-page-margin-guide, .dwb-page-repeat");
+    const ours = (n) => n.nodeType === 1 && n.matches?.(".dwb-page-gap, .dwb-page-gap-spacer, .dwb-page-gap-band, .dwb-page-break, .dwb-page-margin-guide, .dwb-page-repeat, .dwb-page-notes");
     // Raz na zawsze (zgłoszenie 2026-10-06: „przy różnych manewrach coś wjeżdża, jakby nie było
     // układu strony”): obserwujemy rozmiar KAŻDEGO bloku treści kartki (akapit, tabela, obraz).
     // Cokolwiek zmieni wysokość bloku — suwak obrazu, formatowanie, pole formularza, krój, który
@@ -1119,7 +1211,7 @@ const dwbPageBreaks = (() => {
         if (!watched.has(b) && !ours(b)) { watched.add(b); blockRO.observe(b); }
       });
     };
-    new MutationObserver((records) => {
+    contentMo = new MutationObserver((records) => {
       let content = false;
       for (const r of records) {
         if (r.type === "childList") { if ([...r.addedNodes, ...r.removedNodes].some((n) => !ours(n))) content = true; }
@@ -1129,7 +1221,8 @@ const dwbPageBreaks = (() => {
       if (!content) return;
       watchBlocks();
       schedule(150);
-    }).observe(docCanvasEl, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["style", "width", "height", "src"] });
+    });
+    contentMo.observe(docCanvasEl, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["style", "width", "height", "src"] });
     watchBlocks();
   }
   document.fonts?.ready?.then(() => schedule(0));
