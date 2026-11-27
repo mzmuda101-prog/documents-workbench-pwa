@@ -7,6 +7,17 @@
 
 const WHATS_NEW = [
   {
+    v: "v1.01.52",
+    pl: [
+      "Tabulatory (prawy, środkowy, dziesiętny i z kropkami): po ustawieniu tabulatora w akapicie naciśnięcie klawisza Tab i pisanie od razu wyrównuje tekst na żywo do wybranej pozycji, bez czekania na przerysowanie dokumentu.",
+      "iPad (pionowo 769–1023 px): panel „Znajdź i zamień” staje teraz obok dokumentu (nie zasłania podświetlonych trafień), a przycisk pinezki pozwala przypiąć obok także pozostałe panele.",
+    ],
+    en: [
+      "Tab stops (right, center, decimal, and leaders): after setting a tab stop on a paragraph, pressing Tab and typing now aligns text live to that stop right away without waiting for a redraw.",
+      "iPad (portrait 769–1023 px): the Find & Replace panel now docks beside the document so highlighted matches stay visible, and the pin button also works for docking other panels on tablets.",
+    ],
+  },
+  {
     v: "v1.01.51",
     pl: [
       "Konwersja PDF na Worda: wąskie podświetlenia wewnątrz ramek (np. wyróżniona komenda w bloku kodu) zostają teraz zakreśleniem tekstu zamiast tworzyć pustą tabelę i psuć odstępy pod ramką, a osobne ramki bez tła nie sklejają się już w jedną tabelę zebrową.",
