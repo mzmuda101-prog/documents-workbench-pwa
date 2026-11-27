@@ -7,6 +7,21 @@
 
 const WHATS_NEW = [
   {
+    v: "v1.01.42",
+    pl: [
+      "Edycja jak wydruk: przypisy dolne stoją na dole swojej strony (nad stopką), tak samo jak w podglądzie wydruku i w Wordzie, i można je od razu edytować na miejscu. Liczba stron w Edycji zgadza się z wydrukiem.",
+      "iPhone i Safari: skasowanie całego tekstu punktu listy klawiszem Backspace zostawia pusty punkt z kursorem — można od razu pisać dalej (dawniej znikał punktor i kursor).",
+      "Komentarze i zablokowane akapity: kliknięcie Komentarza w przypisie nie powoduje już błędu, a zaznaczenie fragmentu w akapicie tylko do odczytu nie przeskakuje po cichu do poprzedniego słowa — pojawia się wyjaśnienie blokady.",
+      "Drobne poprawki: numer „Str. N/M” aktualizuje się po przewinięciu na kolejną stronę, otwarcie innego pliku czyści starą frazę i podświetlenia szukania, pole Szukaj na tablecie jest szersze, a podpowiedź po wstawieniu spisu treści wskazuje „Wstaw → Spis treści → Aktualizuj”.",
+    ],
+    en: [
+      "Editing looks like print: footnotes now sit at the bottom of their own page (above the footer), just like in Print Preview and Word, and stay directly editable in place. Page count in Editing matches print.",
+      "iPhone and Safari: clearing all text of a list item with Backspace keeps the empty item and cursor so you can keep typing right away (previously the bullet and cursor disappeared).",
+      "Comments and locked paragraphs: clicking Comment while inside a footnote no longer throws an error, and selecting text in a read-only paragraph no longer jumps back to an earlier word — it explains why the paragraph is locked.",
+      "Polish: the “Page N/M” status updates reliably as you scroll to the next page, opening a new file clears the previous search query and highlights, the tablet search box is wider, and the table-of-contents hint points to “Insert → Table of contents → Update”.",
+    ],
+  },
+  {
     v: "v1.01.41",
     pl: [
       "Telefon: tabele z PDF-a są teraz czytelne — cienkie linie komórek nie znikają, wcięcia w wąskich komórkach nie łamią słów litera po literze, a wąskie kolumny dostają szerokość na najdłuższe słowo kosztem szerszych obok.",
