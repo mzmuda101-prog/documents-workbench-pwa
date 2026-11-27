@@ -90,6 +90,40 @@ const check = (name, ok, detail) => results.push({ name, ok: !!ok, detail });
     return n;
   });
   check("bez zmian treści: kopie i pasy nie są wstawiane od nowa", churn === 0, String(churn));
+  // w spoczynku kartka stoi: żadnych zapisów (numery stron wpisywane w kółko budziły przeliczanie
+  // stron co 150 ms — psuło m.in. kursor w pustym akapicie pod tabelą)
+  const idleMuts = await page.evaluate(async () => {
+    const sec = document.querySelector(".docx-preview-host section.docx");
+    let n = 0;
+    const mo = new MutationObserver((ms) => { n += ms.length; });
+    mo.observe(sec, { childList: true, subtree: true, characterData: true });
+    await new Promise((r) => setTimeout(r, 1500));
+    mo.disconnect();
+    return n;
+  });
+  check("w spoczynku żadnych zmian w kartce (bez pętli przeliczania)", idleMuts === 0, String(idleMuts));
+  // nagłówek wyższy niż górny margines (w:header daleko od krawędzi): Word spycha tekst KAŻDEJ strony
+  // pod nagłówek; kopia nagłówka nie może zakrywać tekstu strony (dawniej leżała na pierwszej linijce)
+  const tall = await buildDocx({
+    body: Array.from({ length: 70 }, (_, i) => `${i + 1}. ${lorem}`),
+    sectPr: '<w:headerReference w:type="default" r:id="rIdX0"/>',
+    extraParts: { "header1.xml": { type: HDR, rel: `${REL}header`, xml: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr ${W}><w:p><w:r><w:t>NAGŁÓWEK</w:t></w:r></w:p><w:p><w:r><w:t>druga linia nagłówka</w:t></w:r></w:p><w:p><w:r><w:t>trzecia linia nagłówka</w:t></w:r></w:p><w:p><w:r><w:t>czwarta linia nagłówka</w:t></w:r></w:p></w:hdr>` } },
+  });
+  await page.locator("#fileInput").setInputFiles({ name: "wysoki-naglowek.docx", mimeType: DOCX_MIME, buffer: tall });
+  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && !inlineLocksPending, null, { timeout: 30000 });
+  await page.evaluate(() => appFrame.setReadOnly(false));
+  await page.waitForFunction(() => document.querySelectorAll(".docx-preview-host .dwb-page-hf").length >= 1, null, { timeout: 15000 });
+  await page.waitForTimeout(1000);
+  const over = await page.evaluate(() => {
+    const ps = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"));
+    return [...document.querySelectorAll(".docx-preview-host .dwb-page-hf[data-kind=header]")].map((c) => {
+      const r = c.getBoundingClientRect();
+      // linijki tekstu (akapit podzielony między strony ma prostokąt przez odstęp — liczą się linijki)
+      const hit = ps.find((p) => { const rg = document.createRange(); rg.selectNodeContents(p); return [...rg.getClientRects()].some((q) => q.height > 2 && q.bottom > r.top + 1 && q.top < r.bottom - 1); });
+      return { top: Math.round(r.top), bottom: Math.round(r.bottom), hit: hit ? hit.textContent.slice(0, 30) : null };
+    });
+  });
+  check("wysoki nagłówek: kopia nagłówka nie zakrywa tekstu strony (tekst pod nagłówkiem, jak w Wordzie)", over.length >= 1 && over.every((o) => !o.hit), JSON.stringify(over));
   check("bez błędów na stronie", !errors.length, errors.join(" | "));
 
   await browser.close();

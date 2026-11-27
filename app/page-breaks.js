@@ -421,7 +421,12 @@ const dwbPageBreaks = (() => {
       columnPages(a, top < pageH - bottomZone ? pageH - bottomZone - top : bodyH, bodyH, scale);
     }
     const contentTop = (article.getBoundingClientRect().top - secRect.top) / scale;
-    const out = { sec, pageW, pageH, padT, padB, padL, padR, bodyH, bottomZone, contentTop, cuts: [], end: contentTop };
+    // Nagłówek wyższy niż górny margines spycha tekst KAŻDEJ strony (jak w Wordzie i w podglądzie
+    // wydruku, który zaczyna treść stron od contentTop) — dawniej od strony 2 tekst zaczynał się na
+    // marginesie, pod kopią nagłówka (testerzy AI 2026-11-27). Lustro bottomZone dla stopki.
+    const topZone = Math.max(padT, contentTop);
+    const nextBodyH = pageH - topZone - bottomZone;
+    const out = { sec, pageW, pageH, padT, padB, padL, padR, bodyH, bottomZone, topZone, contentTop, cuts: [], end: contentTop };
     if (!(bodyH > 40)) return out;
     const u = articles.flatMap((a) => lineUnits(a, secRect.top, scale));
     // Położenia BEZ obecnych odstępów między stronami (każdy przesuwa dalszą treść o data-shift) —
@@ -522,7 +527,7 @@ const dwbPageBreaks = (() => {
         out.cuts.push({ y, top: u[b].top, h: u[b].bottom - u[b].top, block, line, el: u[b].el, header });
         if (noteH) { out.pageNotes.push(notesOf(first, b)); pageNotes = new Set(); pageNoteH = 0; }
         first = b;
-        limit = u[b].top + bodyH - (header?.h || 0);
+        limit = u[b].top + nextBodyH - (header?.h || 0);
         k = b - 1; // od nowej strony sprawdzamy jeszcze raz
       } else {
         // jedna rzecz wyższa niż strona (duży obraz, wysoki wiersz) — granica w środku niej
@@ -531,7 +536,7 @@ const dwbPageBreaks = (() => {
           out.cuts.push({ y: limit, top: limit });
           if (noteH) out.pageNotes.push(firstCut ? notesOf(first, k + 1) : []);
           firstCut = false;
-          limit += bodyH;
+          limit += nextBodyH;
         }
         if (noteH) { pageNotes = new Set(); pageNoteH = 0; }
         first = k + 1;
@@ -711,7 +716,7 @@ const dwbPageBreaks = (() => {
           const block = cut.block;
           // wiersz tabeli na nowej stronie stoi pod powtórzonym nagłówkiem (cut.header, jak w Wordzie)
           const head = block.tagName === "TR" && cut.header ? cut.header : null;
-          const move = sheetTop + res.pageH + GAP + res.padT + (head?.h || 0) - (cut.top + shift); // pierwsza linijka nowej strony
+          const move = sheetTop + res.pageH + GAP + res.topZone + (head?.h || 0) - (cut.top + shift); // pierwsza linijka nowej strony
           if (cut.line) {
             // w środku akapitu: pas pływający od linijki granicy (at), wysokość dociągana po wstawieniu
             items.push({ kind: "gap", block, line: cut.line, el: cut.el, at: Math.round((cut.top + shift) * 10) / 10, inset: Math.round(Math.max(1, cut.h / 2) * 10) / 10, height: Math.round(move * 10) / 10, shift: move, bandTop: Math.round(sheetTop + res.pageH), label });
@@ -725,12 +730,12 @@ const dwbPageBreaks = (() => {
           const mt = Math.max(0, parseFloat(getComputedStyle(block).marginTop) || 0);
           // z odstępem między blokami ich marginesy już się nie łączą (mb + mt zamiast max)
           items.push({ kind: "gap", block, line: 0, height: Math.max(0, Math.round((move - Math.min(mb, mt)) * 10) / 10), shift: move, bandTop: Math.round(sheetTop + res.pageH), label,
-            head: head && { rows: head.rows, table: head.table, top: Math.round((sheetTop + res.pageH + GAP + res.padT) * 10) / 10 } });
+            head: head && { rows: head.rows, table: head.table, top: Math.round((sheetTop + res.pageH + GAP + res.topZone) * 10) / 10 } });
           shift += move;
           sheetTop += res.pageH + GAP;
         } else {
           items.push({ kind: "seam", top: Math.round(cut.y + shift), label });
-          sheetTop = cut.top + shift - res.padT;
+          sheetTop = cut.top + shift - res.topZone;
         }
       }
       const guideTops = [0];

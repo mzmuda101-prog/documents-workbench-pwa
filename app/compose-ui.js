@@ -4234,7 +4234,10 @@ const composeUi = (() => {
       const f = text[s.dataset.dwbField];
       if (!f) return;
       any = true;
-      s.textContent = prev && s.previousElementSibling === prev && prev.dataset.dwbField === s.dataset.dwbField ? "" : f();
+      // zapis tylko przy zmianie: każdy zapis budził przeliczanie stron (page-breaks.js), a ono znów
+      // wpisywało numery — pętla co 150 ms
+      const v = prev && s.previousElementSibling === prev && prev.dataset.dwbField === s.dataset.dwbField ? "" : f();
+      if (s.textContent !== v) s.textContent = v;
       prev = s;
     });
     return any;
@@ -4247,8 +4250,9 @@ const composeUi = (() => {
     part.querySelectorAll("p").forEach((p) => {
       if (p.querySelector("span[data-dwb-field]")) return;
       const spans = Array.from(p.querySelectorAll(sel));
-      if (spans[0]) spans[0].textContent = pageNumberText(page);
-      if (spans[1]) spans[1].textContent = String(total);
+      const set = (el, v) => { if (el && el.textContent !== v) el.textContent = v; };
+      set(spans[0], pageNumberText(page));
+      set(spans[1], String(total));
     });
   }
   function fixPreviewPageNumbers() {
