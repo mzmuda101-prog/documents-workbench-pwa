@@ -1948,6 +1948,10 @@ body.kb-open .section-strip, body.kb-open .status-bar { display: none !important
 .skip-link:focus { transform: none; outline: none; }
 /* dokument z fokusem (strzałki / PgUp / PgDn przewijają) — widać, gdzie jest klawiatura */
 .doc-viewport:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* dotyk (iOS): tapnięcie tła/wyjście z edycji potrafi dać #docViewport :focus-visible — bez klawiatury bez niebieskiej ramki */
+@media (pointer: coarse) {
+  html:not(.kbd-focus) .doc-viewport:focus-visible { outline: none; }
+}
 .section-chip:focus-visible, .mode-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .app-menu-kbd { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
@@ -4548,6 +4552,20 @@ body.rb-on .app { padding-bottom: max(4px, var(--safe-bottom)); }
    (ustawienie „Wyspa szukania u dołu”, wyłączona = jak w makiecie). */
 .ph-cmd[hidden], .ph-cmd [hidden] { display: none !important; }
 body.tb-float .doc-toolbar-row-2, body.tb-float #formatToolbar { display: none !important; }
+/* bez paska sekcji (dokument bez nagłówków) pusty #docToolbar znika całkowicie (jak przy wstążce) */
+body.tb-float .doc-toolbar { padding: 0; border-bottom: 0; gap: 0; }
+body.tb-float .doc-toolbar .section-strip:not([hidden]) { padding: 8px; border-bottom: 1px solid var(--border-subtle); }
+/* z otwartym dokumentem na telefonie przewija się tylko #docViewport — blokada na html/body
+   nie pozwala iOS ciągnąć i sprężynować całej aplikacji przy 1-stronicowym pliku bez przepełnienia */
+@media screen and (max-width: 768px) {
+  html:has(body.has-document),
+  body.has-document {
+    height: 100%;
+    height: 100dvh;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+}
 body.ph-no-island .doc-island { display: none !important; }
 body.ph-bar-on .doc-dismiss.is-done { display: none; } /* „Gotowe” przy pisaniu = ⌄ w rzędzie */
 body.tb-float.ph-bar-on .doc-viewport {

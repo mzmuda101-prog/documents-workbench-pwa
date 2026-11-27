@@ -218,6 +218,24 @@ async function run() {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   check("nic nie wychodzi poza ekran w bok", !overflow);
 
+  // Dotyk (iOS): fokus na #docViewport bez klawiatury nie może rysować niebieskiej ramki wokół ekranu
+  const vpOutlineTouch = await page.evaluate(() => {
+    const vp = document.getElementById("docViewport");
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    vp.focus({ preventScroll: true });
+    const kbdCls = document.documentElement.classList.contains("kbd-focus");
+    const kbdCs = getComputedStyle(vp);
+    const kbdHasOutline = kbdCs.outlineStyle !== "none" && parseFloat(kbdCs.outlineWidth) > 0;
+    document.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+    const touchCls = document.documentElement.classList.contains("kbd-focus");
+    const touchCs = getComputedStyle(vp);
+    const touchHasOutline = touchCs.outlineStyle !== "none" && parseFloat(touchCs.outlineWidth) > 0;
+    vp.blur();
+    return { kbdCls, kbdHasOutline, touchCls, touchHasOutline };
+  });
+  check("dotyk: fokus na #docViewport bez klawiatury bez niebieskiej ramki (klawiatura włącza .kbd-focus)",
+    vpOutlineTouch.kbdCls && !vpOutlineTouch.touchCls && !vpOutlineTouch.touchHasOutline, JSON.stringify(vpOutlineTouch));
+
   if (errors.length) check("brak błędów strony", false, errors.slice(0, 3).join(" | "));
   await browser.close();
 

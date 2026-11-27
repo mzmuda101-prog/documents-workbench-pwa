@@ -660,6 +660,8 @@ const appFrame = (() => {
   const origClear = window.clearDocumentState;
   window.clearDocumentState = function clearDocumentStateAndFrame(...args) {
     const r = origClear.apply(this, args);
+    manualExpandAt = null;
+    if (!originalFileBytes) setHeroCollapsed(false);
     renderSectionChips();
     syncFile();
     syncToolbarFloat();
@@ -679,7 +681,7 @@ const appFrame = (() => {
     heroCollapsed = on;
     document.body.classList.toggle("hero-collapsed", on);
     heroGrip?.setAttribute("aria-expanded", String(!on));
-    syncDocViewportHeight();
+    syncDocViewportHeight(true);
   }
   let scrollQueued = false;
   docViewportEl?.addEventListener("scroll", () => {
@@ -694,7 +696,12 @@ const appFrame = (() => {
         if (Math.abs(y - manualExpandAt) < 80) return;
         manualExpandAt = null;
       }
-      if (!heroCollapsed && y > 48) setHeroCollapsed(true);
+      // Krótki 1-stronicowy dokument: zwinięcie nagłówka (+ paska kart) zjadłoby cały zapas
+      // przewijania, przez co na iOS #docViewport tracił przewijanie z uciętą górą treści.
+      const collapseGain = (document.querySelector(".hero")?.offsetHeight || 0)
+        + (document.getElementById("docTabs")?.offsetHeight || 0);
+      const maxScroll = docViewportEl.scrollHeight - docViewportEl.clientHeight;
+      if (!heroCollapsed && y > 48 && maxScroll > collapseGain + 80) setHeroCollapsed(true);
     });
   }, { passive: true });
 
@@ -896,8 +903,8 @@ const appFrame = (() => {
         const y = docViewportEl.scrollTop;
         const dy = y - tbLastY;
         tbLastY = y;
-        // pod samym paskiem: schowany zostawiłby pusty pas nad tekstem
-        if (y < tbH) { revealToolbar(); return; }
+        // pod samym paskiem: schowany zostawiłby pusty pas nad tekstem (bez paska sekcji: na górze)
+        if (y <= Math.max(tbH, 8)) { revealToolbar(); return; }
         // sprężynowanie na dole (iOS) wraca w górę — to nie jest „chcę pasek”
         if (y >= docViewportEl.scrollHeight - docViewportEl.clientHeight - 2) { tbTravel = 0; return; }
         if (tbPinching || performance.now() < tbZoomUntil) { tbTravel = 0; return; }

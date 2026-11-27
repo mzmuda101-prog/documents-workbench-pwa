@@ -200,7 +200,7 @@
   function isBackdrop(t) {
     if (!t || t.nodeType !== 1) return false;
     if (t === docViewportEl || t === docCanvasEl) return true;
-    return t.matches(".docx-preview-host, .docx-edit-root") || !!t.closest(".dwb-page-gap-band");
+    return t.matches(".doc-zoom-shell, .docx-preview-host, .docx-wrapper, .docx-edit-root") || !!t.closest(".dwb-page-gap-band");
   }
   const backdropTap = (e) => coarse.matches && e.button === 0 && isBackdrop(e.target);
   docViewportEl?.addEventListener("mousedown", (e) => {

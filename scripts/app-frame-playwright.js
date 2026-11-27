@@ -290,6 +290,54 @@ async function phone(browser) {
   await until(page, isExpanded);
   const afterTap = await page.evaluate(isCollapsed);
   check("telefon: tap w uchwyt rozwija nagłówek", beforeTap && !afterTap, JSON.stringify({ beforeTap, afterTap }));
+
+  // Blokada przewijania całej strony przy otwartym dokumencie (iOS: krótki 1-stronicowy plik omijał overscroll-behavior: contain)
+  const shellLock = await page.evaluate(() => {
+    const h = getComputedStyle(document.documentElement);
+    const b = getComputedStyle(document.body);
+    return {
+      hOv: h.overflowY, bOv: b.overflowY,
+      hOb: h.overscrollBehaviorY, bOb: b.overscrollBehaviorY,
+    };
+  });
+  check("telefon: przy otwartym dokumencie html i body nie przewijają się ani nie sprężynują",
+    shellLock.hOv === "hidden" && shellLock.bOv === "hidden" && shellLock.hOb === "none" && shellLock.bOb === "none",
+    JSON.stringify(shellLock));
+
+  // Krótki 1-stronicowy dokument bez nagłówków: brak pustego paska #docToolbar,
+  // nagłówek nie zwija się sam, gdy zniknięcie zjadłoby cały zapas przewijania,
+  // a ręczne zwinięcie/rozwinięcie dopasowuje panel od razu bez wystawania za ekran.
+  const SAMPLE_DOCX = path.resolve(__dirname, "../docs/samples/sample.docx");
+  await page.locator("#fileInput").setInputFiles({ name: "Krotki.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer: require("fs").readFileSync(SAMPLE_DOCX) });
+  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && !document.getElementById("docToolbar").querySelector(".section-chip"), null, { timeout: 20000 });
+  await frames(page, 4);
+  const emptyTb = await page.evaluate(() => document.getElementById("docToolbar").offsetHeight);
+  check("telefon: bez nagłówków pusty #docToolbar ma 0 px wysokości", emptyTb === 0, `tbH=${emptyTb}`);
+
+  const shortDoc = await page.evaluate(async () => {
+    const vp = document.getElementById("docViewport");
+    const sec = document.querySelector("section.docx");
+    // Ustaw wysokość kartki tak, by przepełnienie wynosiło ~65 px przy rozwiniętym nagłówku
+    const extra = 65 - (vp.scrollHeight - vp.clientHeight);
+    if (extra > 0) sec.style.minHeight = `${Math.round(sec.getBoundingClientRect().height + extra)}px`;
+    vp.scrollTop = 55;
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const autoCollapsed = document.body.classList.contains("hero-collapsed");
+    // Ręczne zwinięcie (pozwól na rAF), potem rozwinięcie — wysokość panelu i scrollTop pilnowane od razu (w tej samej klatce)
+    document.getElementById("heroGrip").click();
+    const afterCollapseScroll = vp.scrollTop;
+    const afterCollapseMax = Math.max(0, vp.scrollHeight - vp.clientHeight);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    document.getElementById("heroGrip").click();
+    const syncOver = document.documentElement.scrollHeight - window.innerHeight;
+    const panelBottom = Math.round(document.querySelector(".doc-panel").getBoundingClientRect().bottom);
+    return { autoCollapsed, afterCollapseScroll, afterCollapseMax, syncOver, panelBottom, winH: window.innerHeight };
+  });
+  check("telefon: krótki dokument nie zwija sam nagłówka", !shortDoc.autoCollapsed, JSON.stringify(shortDoc));
+  check("telefon: ręczne zwinięcie/rozwinięcie od razu trzyma panel w ekranie i scrollTop w granicach",
+    shortDoc.afterCollapseScroll <= shortDoc.afterCollapseMax + 1 && shortDoc.syncOver <= 0 && shortDoc.panelBottom <= shortDoc.winH + 1,
+    JSON.stringify(shortDoc));
+
   if (errors.length) check("telefon: brak błędów w konsoli", false, errors.slice(0, 3).join(" | "));
   await context.close();
 }

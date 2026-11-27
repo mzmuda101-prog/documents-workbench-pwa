@@ -350,8 +350,16 @@ function toastUndoable(msg, type = "success") {
 // Fokus: TYLKO przy obsłudze klawiaturą trafia do pola albo na bezpieczną akcję (na iPhonie fokus
 // w polu wysunąłby klawiaturę); Tab krąży w oknie; po zamknięciu fokus wraca, skąd przyszedł.
 let lastInputModality = "pointer";
-document.addEventListener("keydown", (e) => { if (!["Shift", "Control", "Alt", "Meta"].includes(e.key)) lastInputModality = "keyboard"; }, true);
-document.addEventListener("pointerdown", () => { lastInputModality = "pointer"; }, true);
+document.addEventListener("keydown", (e) => {
+  if (!["Shift", "Control", "Alt", "Meta"].includes(e.key)) {
+    lastInputModality = "keyboard";
+    document.documentElement.classList.add("kbd-focus");
+  }
+}, true);
+document.addEventListener("pointerdown", () => {
+  lastInputModality = "pointer";
+  document.documentElement.classList.remove("kbd-focus");
+}, true);
 
 const appDialogQueue = [];
 let appDialogBusy = false;
@@ -649,29 +657,30 @@ function syncDocumentShellClass() {
   });
 }
 
-function syncDocViewportHeight() {
+function applyDocViewportHeight() {
   if (!docPanelEl) return;
-  requestAnimationFrame(() => {
-    const rect = docPanelEl.getBoundingClientRect();
-    const kbOpen = document.body.classList.contains("kb-open");
-    // Klawiatura ekranowa (touch.js): liczymy do WIDOCZNEGO obszaru, nie do okna — inaczej
-    // dół dokumentu leży pod klawiaturą, a iOS przesuwa całą stronę (i pasek ucieka).
-    const viewportHeight = (kbOpen && window.visualViewport ? window.visualViewport.height : window.innerHeight)
-      || document.documentElement.clientHeight || 720;
-    const mobile = window.matchMedia("(max-width: 768px)").matches;
-    // Pod dokumentem stoi pasek stanu — obszar dokumentu kończy się nad nim, żeby
-    // całość mieściła się w oknie bez przewijania strony.
-    const statusBar = document.querySelector(".status-bar");
-    const statusH = statusBar && !kbOpen ? statusBar.getBoundingClientRect().height + (mobile ? 0 : 12) : 0;
-    const bottomGap = mobile ? 0 : 16;
-    const available = Math.floor(viewportHeight - rect.top - statusH - bottomGap);
-    const minHeight = kbOpen ? 120 : mobile ? 280 : 420;
-    const height = Math.max(minHeight, available);
-    // zapis tej samej wartości też unieważnia układ panelu z dokumentem — a zaraz niżej
-    // scrollHeight by go wymusił (drugi pełny układ przy każdym Enterze/zmianie paska)
-    const setPanelHeight = (v) => { if (docPanelEl.style.getPropertyValue("--doc-panel-height") !== v) docPanelEl.style.setProperty("--doc-panel-height", v); };
-    setPanelHeight(`${height}px`);
-    if (kbOpen) return;
+  const kbOpen = document.body.classList.contains("kb-open");
+  if (!kbOpen && document.body.classList.contains("has-document") && window.scrollY) window.scrollTo(0, 0);
+  const rect = docPanelEl.getBoundingClientRect();
+  const panelTop = rect.top + (kbOpen ? 0 : (window.scrollY || 0));
+  // Klawiatura ekranowa (touch.js): liczymy do WIDOCZNEGO obszaru, nie do okna — inaczej
+  // dół dokumentu leży pod klawiaturą, a iOS przesuwa całą stronę (i pasek ucieka).
+  const viewportHeight = (kbOpen && window.visualViewport ? window.visualViewport.height : window.innerHeight)
+    || document.documentElement.clientHeight || 720;
+  const mobile = window.matchMedia("(max-width: 768px)").matches;
+  // Pod dokumentem stoi pasek stanu — obszar dokumentu kończy się nad nim, żeby
+  // całość mieściła się w oknie bez przewijania strony.
+  const statusBar = document.querySelector(".status-bar");
+  const statusH = statusBar && !kbOpen ? statusBar.getBoundingClientRect().height + (mobile ? 0 : 12) : 0;
+  const bottomGap = mobile ? 0 : 16;
+  const available = Math.floor(viewportHeight - panelTop - statusH - bottomGap);
+  const minHeight = kbOpen ? 120 : mobile ? 280 : 420;
+  const height = Math.max(minHeight, available);
+  // zapis tej samej wartości też unieważnia układ panelu z dokumentem — a zaraz niżej
+  // scrollHeight by go wymusił (drugi pełny układ przy każdym Enterze/zmianie paska)
+  const setPanelHeight = (v) => { if (docPanelEl.style.getPropertyValue("--doc-panel-height") !== v) docPanelEl.style.setProperty("--doc-panel-height", v); };
+  setPanelHeight(`${height}px`);
+  if (!kbOpen) {
     // Korekta po pomiarze: wyliczenie wyżej nie zna odstępów między panelem a paskiem stanu,
     // marginesu strony ani miejsca na pasek Home (safe-area) — na telefonie strona wystawała
     // o kilkadziesiąt px i dało się ją przewinąć (pasek przewijania, ucięty pasek stanu).
@@ -681,7 +690,19 @@ function syncDocViewportHeight() {
       setPanelHeight(`${height - over}px`);
       if (window.scrollY) window.scrollTo(0, 0);
     }
-  });
+  }
+  // Gdy panel urósł (np. zwinięcie nagłówka na iOS), dociśnij scrollTop do nowego maksimum,
+  // żeby warstwa przewijania WebKit nie została na starej pozycji z uciętą górą dokumentu.
+  if (docViewportEl && docViewportEl.scrollTop > 0) {
+    const maxScroll = Math.max(0, docViewportEl.scrollHeight - docViewportEl.clientHeight);
+    if (docViewportEl.scrollTop > maxScroll) docViewportEl.scrollTop = maxScroll;
+  }
+}
+
+function syncDocViewportHeight(immediate = false) {
+  if (!docPanelEl) return;
+  if (immediate) applyDocViewportHeight();
+  requestAnimationFrame(applyDocViewportHeight);
 }
 
 function formatFileSize(bytes) {
