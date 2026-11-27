@@ -198,6 +198,44 @@ async function run() {
   check("Rozwiąż w dymku: komentarz rozwiązany w pliku", /w15:done="1"/.test(ex));
   check("rozwiązany dymek zwinięty", await page.evaluate(() => document.querySelector('[data-key="c:10"]')?.classList.contains("is-done")));
 
+  // ── warstwa znaczników pod panelem bocznym (AUDYT-MOBILE #16: czerwone paski nie przebijają panelu) ──
+  const zOrder = await page.evaluate(() => {
+    const z = (sel) => parseInt(getComputedStyle(document.querySelector(sel)).zIndex, 10) || 0;
+    return { markup: z(".dwb-markup"), scrim: z(".sidebar-scrim"), sidebar: z(".sidebar") };
+  });
+  check("paski zmian (.dwb-markup) leżą pod panelem bocznym i przyciemnieniem", zOrder.markup > 0 && zOrder.markup < zOrder.scrim && zOrder.markup < zOrder.sidebar, JSON.stringify(zOrder));
+
+  // ── okienko nowego komentarza z ukrytej kotwicy / mini-paska: przy tekście, nie w rogu (8, 6) (AUDYT-MOBILE #16) ──
+  await page.evaluate(() => {
+    if (readModeEl.checked) { readModeEl.checked = false; readModeEl.dispatchEvent(new Event("change")); }
+  });
+  await page.waitForFunction(() => !readOnlyMode && document.querySelector(".docx-edit-root"), null, { timeout: 10000 });
+  await page.waitForTimeout(300);
+  const cmtPos = await page.evaluate(() => {
+    const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).find((x) => x.textContent.includes("Wyśrodkowany"));
+    if (!p) return null;
+    p.scrollIntoView({ block: "center" });
+    const r = document.createRange();
+    r.selectNodeContents(p);
+    getSelection().removeAllRanges();
+    getSelection().addRange(r);
+    const selRect = r.getBoundingClientRect();
+    composeUi.openCommentForm(); // ukryta kotwica insertBtn (w trybie wstążki)
+    const ed = document.querySelector(".compose-pop-comment .cf-rich");
+    if (!ed) return null;
+    ed.textContent = "Sprawdzenie położenia";
+    ed.dispatchEvent(new Event("input", { bubbles: true }));
+    const popRect = document.querySelector(".compose-pop-comment").getBoundingClientRect();
+    document.querySelector(".compose-pop-comment .lf-cancel")?.click();
+    return {
+      popTop: Math.round(popRect.top), popLeft: Math.round(popRect.left), popBottom: Math.round(popRect.bottom),
+      selTop: Math.round(selRect.top), selBottom: Math.round(selRect.bottom),
+    };
+  });
+  check("okienko nowego komentarza nie ląduje w rogu (8, 6) i nie zasłania komentowanego tekstu",
+    cmtPos && !(cmtPos.popLeft <= 12 && cmtPos.popTop <= 12) && (cmtPos.popTop >= cmtPos.selBottom - 1 || cmtPos.popBottom <= cmtPos.selTop + 1),
+    JSON.stringify(cmtPos));
+
   // ── kolor tekstu komentarza z pliku nieczytelny na ciemnym dymku (szary 595959 z Worda) ──
   await page.evaluate(() => { document.documentElement.dataset.theme = "dark"; dwbMargin.schedule(); });
   await page.waitForTimeout(500);

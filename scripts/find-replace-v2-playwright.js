@@ -142,6 +142,14 @@ async function run() {
   const hist = await page.evaluate(() => [...document.querySelectorAll("#frFindHistory option")].map((o) => o.value));
   check("historia wyszukiwań podpowiada ostatnie frazy", hist[0] === "zwierzak" && hist[1] === "(\\d{4})-(\\d{2})-(\\d{2})" && hist.includes("najemca"), hist.join(" | "));
 
+  // ── brak trafień: jeden napis „Brak trafień”, nie dwa (AUDYT-MOBILE #16) ──
+  await scan({ find: "nieistniejaceSlowo12345" });
+  const noHit = await page.evaluate(() => ({
+    status: document.getElementById("frStatus")?.textContent?.trim() || "",
+    count: document.getElementById("searchCount")?.textContent?.trim() || "",
+  }));
+  check("brak trafień: jeden napis „Brak trafień” (nie zdublowany w #searchCount)", noHit.status === "Brak trafień" && noHit.count === "", JSON.stringify(noHit));
+
   // ── Esc czyści dokładne podświetlenie ──────────────────────────────────────
   await scan({ find: "Lokator" });
   await page.evaluate(() => document.getElementById("searchQuery").blur());

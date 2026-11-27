@@ -418,20 +418,31 @@ const composeUi = (() => {
     const { el, anchor } = pop;
     pop = null;
     el.remove();
-    anchor.setAttribute("aria-expanded", "false");
-    anchor.classList.remove("is-on");
-    if (focusAnchor) anchor.focus();
+    anchor?.setAttribute("aria-expanded", "false");
+    anchor?.classList.remove("is-on");
+    if (focusAnchor) anchor?.focus?.();
   }
+
+  const validRect = (r) => !!(r && (r.width > 0 || r.height > 0));
 
   function placePop(el, anchor) {
     const vv = window.visualViewport;
-    const r = anchor.getBoundingClientRect(); // układ widocznego obszaru (iOS z klawiaturą ≠ fixed)
     const viewW = vv ? vv.width : window.innerWidth;
     const viewH = vv ? vv.height : window.innerHeight;
-    const lane = marginLane(el, anchor, viewW);
+    const raw = pop?.fixedRect ? pop.anchorRect : anchor?.getBoundingClientRect?.();
+    let r = validRect(raw) ? raw : pop?.anchorRect;
+    if (validRect(raw) && pop && !pop.fixedRect) pop.anchorRect = raw;
+    const lane = anchor && validRect(anchor.getBoundingClientRect?.()) ? marginLane(el, anchor, viewW) : null;
     el.style.width = lane ? `${lane.width}px` : "";
     el.style.maxWidth = lane ? "none" : "";
     const w = el.offsetWidth;
+    if (!validRect(r)) {
+      // kotwica schowana (np. mini-bar / zwinięte menu) — wyśrodkuj pod paskiem, zamiast (8, 6) w rogu
+      const vpR = docViewportEl?.getBoundingClientRect?.();
+      const top0 = vpR ? Math.max(8, vpR.top + 8) : 64;
+      const cx = vpR ? vpR.left + vpR.width / 2 : viewW / 2;
+      r = { left: cx - w / 2, right: cx + w / 2, top: top0, bottom: top0, width: w, height: 0 };
+    }
     const left = lane ? lane.left : Math.max(8, Math.min(r.left, viewW - w - 8));
     // Pod przyciskiem, a gdy tam się nie mieści — nad nim (jak menu systemowe), żeby okienko nie
     // musiało się przewijać w ścisku (np. „Odpowiedz” w dymku nisko na ekranie laptopa).
@@ -465,8 +476,9 @@ const composeUi = (() => {
     return width >= minW ? { left, width } : null;
   }
 
-  function openPop(anchor, build) {
-    const same = pop?.anchor === anchor;
+  function openPop(anchor, build, opts = {}) {
+    const same = anchor && pop?.anchor === anchor;
+    const initRect = validRect(opts.rect) ? opts.rect : (anchor && validRect(anchor.getBoundingClientRect?.()) ? anchor.getBoundingClientRect() : null);
     closePop();
     hideLinkCard(); // karty pod kursorem nie wiszą pod okienkiem
     if (typeof hideCommentCard === "function") hideCommentCard();
@@ -493,14 +505,14 @@ const composeUi = (() => {
     // pole rośnie przy pisaniu — okienko nad przyciskiem nie może urosnąć w dół na przycisk
     el.addEventListener("input", () => { if (pop?.el === el) placePop(el, anchor); });
     document.body.appendChild(el);
-    pop = { el, anchor };
-    anchor.setAttribute("aria-expanded", "true");
-    anchor.classList.add("is-on");
+    pop = { el, anchor, anchorRect: initRect, fixedRect: !!validRect(opts.rect) };
+    anchor?.setAttribute("aria-expanded", "true");
+    anchor?.classList.add("is-on");
     placePop(el, anchor);
     // z klawiatury (Enter/spacja na przycisku) — fokus do pierwszej pozycji
     const autofocus = el.querySelector("[data-autofocus]");
     if (autofocus) autofocus.focus({ preventScroll: true });
-    else if (document.activeElement === anchor) el.querySelector("button")?.focus();
+    else if (anchor && document.activeElement === anchor) el.querySelector("button")?.focus();
   }
 
   function popItem(el, { label, desc, kbd, icon, onPick }) {
@@ -3914,7 +3926,18 @@ const composeUi = (() => {
     const capKey = editing ? "commentEditTitle" : opts.replyTo ? "commentReply" : "insertComment";
     const spotIndex = ctx ? ctx.index : opts.caret?.paraIndex ?? -1;
     const spot = paragraphSpot(spotIndex);
-    openPop(anchor || insertBtn, (el) => {
+    // Okienko komentarza otwarte z mini-paska, zamykanego menu (wstążka / przepełnienie) albo
+    // bez widocznej kotwicy (skrót, menu kontekstowe): kotwiczymy przy zaznaczonym tekście,
+    // żeby okienko nie zasłaniało komentowanego słowa ani nie uciekało do rogu (8, 6) po zniknięciu mini-paska.
+    const a = anchor || insertBtn;
+    let rect = null;
+    if (ctx && (!a || a.closest?.(".mini-bar, .rb-fly, .compose-pop") || !validRect(a.getBoundingClientRect?.()))) {
+      const sel = window.getSelection();
+      const sr = sel?.rangeCount ? sel.getRangeAt(0).getBoundingClientRect() : null;
+      const pr = ctx.p?.getBoundingClientRect?.();
+      rect = validRect(sr) ? sr : (validRect(pr) ? pr : null);
+    }
+    openPop(a, (el) => {
       el.classList.add("compose-pop-form", "compose-pop-comment");
       el.style.setProperty("--cc-z", String(commentZoom()));
       el.setAttribute("role", "dialog");
@@ -4006,7 +4029,7 @@ const composeUi = (() => {
         r.collapse(false);
         setTimeout(() => { if (document.activeElement === ed) { const s = window.getSelection(); s.removeAllRanges(); s.addRange(r); } }, 0);
       }
-    });
+    }, { rect });
     if (!authorName() && !editing) setTimeout(() => pop?.el.querySelector(".cf-rich")?.focus(), 0);
   }
 

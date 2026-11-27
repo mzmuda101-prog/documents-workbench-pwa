@@ -231,6 +231,19 @@ const paraTexts = (xml) => (xml.match(/<w:p[ >][\s\S]*?<\/w:p>/g) || []).map((p)
   await sleep(800);
   check("„Zachowaj tylko tekst”: jedno Cofnij zdejmuje wklejkę", await page.evaluate(() => !document.body.innerText.includes("Raz") && document.body.innerText.includes("PRZED ZA")));
 
+  // ── tło komórki nagłówka z arkusza (inline i <style>, AUDYT-MOBILE #16) ──
+  await freshPara(page, 2);
+  await paste(page, {
+    "text/html": '<style>.xl65{background-color:#d9ead3}</style><table><tr><th style="background:#ffff00">Dział</th><th style="background:#ffffff">Kwota</th></tr><tr><td class="xl65">IT</td><td>100</td></tr></table>',
+    "text/plain": "Dział\tKwota\nIT\t100",
+  });
+  await page.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 15000 });
+  await sleep(600);
+  const shdXml = (await docXml(page)).doc;
+  check("wklejka tabeli z arkusza: zachowane tło komórki (inline #FFFF00 i klasa #D9EAD3), bez zbędnej bieli",
+    /w:fill="FFFF00"[\s\S]*?Dział/.test(shdXml) && /w:fill="D9EAD3"[\s\S]*?IT/.test(shdXml) && !/w:fill="FFFFFF"/.test(shdXml),
+    (shdXml.match(/<w:shd[^>]*>/g) || []).join(" "));
+
   check("brak błędów JS", !errors.length, errors.slice(0, 3).join(" | "));
   await browser.close();
   const failed = results.filter((r) => !r.ok);

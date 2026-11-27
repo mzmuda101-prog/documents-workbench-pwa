@@ -223,6 +223,20 @@ async function run() {
   await consistent("wytnij");
   await undo();
 
+  // ── wytnij całego akapitu: znika razem ze znacznikiem (bez pustej linijki, jak w Wordzie; AUDYT-MOBILE #16) ──
+  await select(iBeta, 0, iBeta, orig[iBeta].length);
+  const cutWhole = await page.evaluate(() => {
+    const dt = new DataTransfer();
+    docEditRoot().dispatchEvent(new ClipboardEvent("cut", { clipboardData: dt, bubbles: true, cancelable: true }));
+    return dt.getData("text/plain");
+  });
+  await idle();
+  now = await texts();
+  check("Wytnij całego akapitu: nie zostawia pustego akapitu, do schowka sam tekst", cutWhole === orig[iBeta] && now.length === orig.length - 1 && now[iBeta] === orig[iGamma], JSON.stringify({ cutWhole, n: now.length, at: now[iBeta] }));
+  await consistent("wytnij cały akapit");
+  await undo();
+  check("Cofnij po wycięciu całego akapitu przywraca wszystkie akapity", JSON.stringify(await texts()) === JSON.stringify(orig));
+
   // ── klawiatura ekranowa (Android): Enter / Backspace tylko jako beforeinput ──
   await page.evaluate((i) => focusParagraphAtOffset(i, 4), iAlfa);
   await page.evaluate(() => docEditRoot().dispatchEvent(new InputEvent("beforeinput", { inputType: "insertParagraph", bubbles: true, cancelable: true })));

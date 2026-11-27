@@ -154,7 +154,7 @@ function focusFrMatch(index, opts = {}) {
   }
   frPreviewEl?.querySelectorAll(".fr-preview-item").forEach((b) => b.classList.toggle("is-active", Number(b.dataset.index) === i));
   syncFrStatus();
-  if (searchCountEl) searchCountEl.textContent = t("searchMatches", { count: frMatches.length });
+  if (searchCountEl) searchCountEl.textContent = frStatusEl ? "" : t("searchMatches", { count: frMatches.length });
 }
 
 // ── lista trafień z kontekstem ───────────────────────────────────────────────
@@ -238,7 +238,7 @@ async function runFindReplaceScan(opts = {}) {
   frRemember("find", edit.find);
   frScannedFind = edit.find;
 
-  if (searchCountEl) searchCountEl.textContent = frMatches.length ? t("searchMatches", { count: frMatches.length }) : t("searchNoMatches");
+  if (searchCountEl) searchCountEl.textContent = frStatusEl ? "" : (frMatches.length ? t("searchMatches", { count: frMatches.length }) : t("searchNoMatches"));
   paintFrHighlights();
   renderFrPreview();
   if (frMatches.length) focusFrMatch(opts.keepView ? Math.max(0, Math.min(prevActive, frMatches.length - 1)) : 0, { scroll: !opts.keepView });

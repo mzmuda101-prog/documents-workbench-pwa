@@ -1874,12 +1874,14 @@ async function applyPasteBlocksInZip(zip, xml, edit) {
       const grid = composeEl(doc, "tblGrid");
       for (let c = 0; c < cols; c++) grid.appendChild(composeEl(doc, "gridCol", { w: colW }));
       tbl.appendChild(grid);
-      b.rows.forEach((row) => {
+      b.rows.forEach((row, ri) => {
         const tr = composeEl(doc, "tr");
         for (let c = 0; c < cols; c++) {
           const tc = composeEl(doc, "tc");
           const tcPr = composeEl(doc, "tcPr");
           tcPr.appendChild(composeEl(doc, "tcW", { w: colW, type: "dxa" }));
+          const fill = b.shd?.[ri]?.[c];
+          if (fill && /^[0-9A-F]{6}$/i.test(fill)) tcPr.appendChild(composeEl(doc, "shd", { val: "clear", color: "auto", fill: fill.toUpperCase() }));
           tc.appendChild(tcPr);
           const cp = composeEl(doc, "p");
           applyRunsToParagraphXml(cp, row[c] || []);

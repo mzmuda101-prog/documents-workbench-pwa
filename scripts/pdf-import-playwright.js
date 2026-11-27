@@ -317,7 +317,13 @@ const docxState = (page) => page.evaluate(async () => {
   };
 });
 
+const closeTabs = (page) => page.evaluate(() => {
+  if (typeof dwbOpenDocs === "undefined") return;
+  for (const d of dwbOpenDocs.list()) if (!d.active) dwbOpenDocs.closeTab(d.id);
+});
+
 async function convert(page, file, { timeout = 60000 } = {}) {
+  await closeTabs(page);
   await page.evaluate(() => {
     window.__conv = null;
     window.__convErr = null;
@@ -582,6 +588,7 @@ async function run() {
   check("nazwy krojów z Ghostscripta: rodzina bez śmieci, „Demi” pogrubione, „DemiLight” nie", gsn[0].family === "Knoll Text" && gsn[0].bold && gsn[1].family === "Ut Sans" && !gsn[1].bold && gsn[2].bold && !gsn[3].bold, JSON.stringify(gsn.map((g) => [g.family, g.bold])));
 
   // nagłówek firmowy z logo (PrimoPDF): logo i hasło w nagłówku Worda, treść od tytułu
+  await page.evaluate(() => { setDirtyState(false); });
   await convert(page, path.join(TMP, "naglowek-firmowy.pdf"));
   const hf = await page.evaluate(async () => {
     const z = await JSZip.loadAsync(originalFileBytes);
@@ -620,6 +627,7 @@ async function run() {
   check("skan: OCR jednej strony < 25 s", ocrMs < 25000, `${ocrMs} ms`);
   // „Zostaw jako obraz”
   await page.evaluate(() => { setDirtyState(false); window.__conv = null; });
+  await closeTabs(page);
   await page.setInputFiles("#fileInput", path.join(TMP, "skan.pdf"));
   await page.waitForSelector("#pdfConvOcrNo", { state: "visible", timeout: 30000 });
   await page.click("#pdfConvOcrNo");
@@ -632,9 +640,8 @@ async function run() {
   // --- 5b. skan tabeli do góry nogami i krzywo: strona wyprostowana, tabela Worda z komórkami
   page.on("dialog", (d) => d.accept().catch(() => {}));
   await page.addInitScript(() => { window.__dwbAutoDialog = "accept"; }); // własne okna apki jak systemowe
-  const closeTabs = () => page.evaluate(() => { for (const d of dwbOpenDocs.list()) if (!d.active) dwbOpenDocs.closeTab(d.id); });
   await page.evaluate(() => { setDirtyState(false); window.__conv = null; });
-  await closeTabs();
+  await closeTabs(page);
   await page.setInputFiles("#fileInput", path.join(TMP, "skan-tabela.pdf"));
   await page.waitForSelector("#pdfConvOcrYes", { state: "visible", timeout: 30000 });
   await page.click("#pdfConvOcrYes");
@@ -650,7 +657,7 @@ async function run() {
   // --- 5c. tekst jako krzywe (bez znaków w PDF): pytanie o rozpoznanie, tekst zamiast kształtów
   if (fs.existsSync(path.join(TMP, "tekst-krzywe.pdf"))) {
     await page.evaluate(() => { setDirtyState(false); window.__conv = null; });
-    await closeTabs();
+    await closeTabs(page);
     await page.setInputFiles("#fileInput", path.join(TMP, "tekst-krzywe.pdf"));
     await page.waitForSelector("#pdfConvOcrYes", { state: "visible", timeout: 30000 });
     const askTxt = await page.textContent("#pdfConvAskText");
@@ -667,7 +674,7 @@ async function run() {
 
   // --- 5d. dwa zdjęcia kartek naraz = JEDEN dokument, 2 strony (kartka wykryta i wyprostowana)
   await page.evaluate(() => { setDirtyState(false); window.__conv = null; });
-  await closeTabs();
+  await closeTabs(page);
   const tabsBefore = await page.evaluate(() => dwbOpenDocs.list().length);
   await page.setInputFiles("#fileInput", [path.join(TMP, "foto-1.jpg"), path.join(TMP, "foto-2.jpg")]);
   await page.waitForSelector("#pdfConvOcrYes", { state: "visible", timeout: 60000 });

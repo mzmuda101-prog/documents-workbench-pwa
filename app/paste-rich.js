@@ -42,10 +42,77 @@ const dwbPaste = (() => {
   }
   const plain = (runs) => runs.map((r) => (r.break ? "\n" : r.text)).join("");
 
+  // Kolor tła komórki tabeli (arkusz / Word / WWW) → 6-znakowy hex (bez bieli i przezroczystości)
+  let colorCtx = null;
+  const BG_SKIP = /^(none|repeat|repeat-x|repeat-y|no-repeat|scroll|fixed|local|left|right|top|bottom|center|auto|cover|contain|border-box|padding-box|content-box|transparent|initial|inherit|unset)$/i;
+  function cssBgHex(raw) {
+    if (!raw) return null;
+    const s = String(raw).replace(/!important/gi, "").trim();
+    if (!s || BG_SKIP.test(s)) return null;
+    if (!colorCtx && typeof document !== "undefined") {
+      try { colorCtx = document.createElement("canvas").getContext("2d"); } catch (_) {}
+    }
+    const tokens = s.match(/rgba?\([^)]+\)|hsla?\([^)]+\)|#[0-9a-f]{3,8}\b|[a-z]+/gi) || [];
+    for (const tok of tokens) {
+      if (BG_SKIP.test(tok)) continue;
+      let hex = null;
+      if (colorCtx) {
+        colorCtx.fillStyle = "rgba(0, 0, 0, 0)";
+        colorCtx.fillStyle = tok;
+        const out = colorCtx.fillStyle;
+        if (out === "rgba(0, 0, 0, 0)") continue;
+        if (/^#[0-9a-f]{6}$/i.test(out)) hex = out.slice(1).toUpperCase();
+        else {
+          const m = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)$/i.exec(out);
+          if (m) {
+            const a = m[4] == null ? 1 : parseFloat(m[4]);
+            if (a <= 0.01) continue;
+            const blend = (v) => Math.round(+v * a + 255 * (1 - a)).toString(16).padStart(2, "0");
+            hex = `${blend(m[1])}${blend(m[2])}${blend(m[3])}`.toUpperCase();
+          }
+        }
+      } else if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(tok)) {
+        const h = tok.slice(1);
+        hex = (h.length === 3 ? h[0] + h[0] + h[1] + h[1] + h[2] + h[2] : h).toUpperCase();
+      }
+      if (hex && hex !== "FFFFFF") return hex;
+    }
+    return null;
+  }
+
   // ── HTML ───────────────────────────────────────────────────────────────────
   function fromHtml(html) {
     // DOMParser tworzy dokument bez wykonywania skryptów i bez ładowania obrazków
     const doc = new DOMParser().parseFromString(html, "text/html");
+    // Reguły tła komórek z <style> (Excel / Google Sheets często używają np. .xl65 { background: #FFFF00 })
+    const bgRules = new Map();
+    doc.querySelectorAll("style").forEach((st) => {
+      const txt = (st.textContent || "").replace(/\/\*[\s\S]*?\*\//g, "");
+      for (const m of txt.matchAll(/([^{}]+)\{([^{}]+)\}/g)) {
+        const bgM = /(?:^|;)\s*background(?:-color)?\s*:\s*([^;]+)/i.exec(m[2]);
+        const hex = bgM && cssBgHex(bgM[1]);
+        if (!hex) continue;
+        for (const sel of m[1].split(",")) {
+          const k = sel.trim().toLowerCase();
+          if (/^(\.[a-z0-9_-]+|td|th|tr|(?:td|th|tr)\.[a-z0-9_-]+)$/.test(k)) bgRules.set(k, hex);
+        }
+      }
+    });
+    const cellBg = (el) => {
+      if (!el) return null;
+      const css = el.getAttribute("style") || "";
+      const bgM = /(?:^|;)\s*background(?:-color)?\s*:\s*([^;]+)/i.exec(css);
+      if (bgM) return cssBgHex(bgM[1]);
+      const attr = el.getAttribute("bgcolor");
+      if (attr) return cssBgHex(attr);
+      const tag = el.localName;
+      for (const cls of (el.className || "").trim().split(/\s+/).filter(Boolean)) {
+        const k = cls.toLowerCase();
+        if (bgRules.has(`${tag}.${k}`)) return bgRules.get(`${tag}.${k}`);
+        if (bgRules.has(`.${k}`)) return bgRules.get(`.${k}`);
+      }
+      return bgRules.get(tag) || null;
+    };
     doc.querySelectorAll("script, style, meta, link, title, template, svg, iframe, object, embed, img, video, audio, canvas, noscript, head").forEach((n) => n.remove());
     const blocks = [];
     let cur = null; // bieżący blok tekstu
@@ -133,20 +200,27 @@ const dwbPaste = (() => {
       if (tag === "table") {
         flush();
         const rows = [];
+        const shd = [];
         let head = false;
+        let hasShd = false;
         el.querySelectorAll(":scope > tr, :scope > thead > tr, :scope > tbody > tr, :scope > tfoot > tr").forEach((tr, ri) => {
           const cells = [];
+          const fills = [];
+          const trBg = cellBg(tr);
           tr.querySelectorAll(":scope > td, :scope > th").forEach((td) => {
             if (ri === 0 && td.localName === "th") head = true;
+            const fill = cellBg(td) || trBg;
+            if (fill) hasShd = true;
+            fills.push(fill);
             // treść komórki: bloki → jeden akapit (wiersze = łamania)
             const sub = fromHtml(td.innerHTML);
             const runs = [];
             sub.forEach((b, i) => { if (i) runs.push({ break: true }); (b.type === "table" ? [{ text: b.rows.map((r) => r.map(plain).join("\t")).join(" ") }] : b.runs).forEach((r) => runs.push(r)); });
             cells.push(tidy(runs));
           });
-          if (cells.length) rows.push(cells);
+          if (cells.length) { rows.push(cells); shd.push(fills); }
         });
-        if (rows.length) blocks.push({ type: "table", rows, head, runs: [] });
+        if (rows.length) blocks.push({ type: "table", rows, head, ...(hasShd ? { shd } : {}), runs: [] });
         return;
       }
       if (tag === "pre") {

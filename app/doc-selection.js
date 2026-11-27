@@ -157,9 +157,11 @@ const dwbSel = (() => {
       const mergedRuns = extractRunsFromPreviewParagraph(b);
       mirrorBaseline(ia, ib - ia + 1, mergedRuns);
       // początek akapitu b był zaznaczony — pola tekstowe zakotwiczone w nim znikają (Word: kotwica
-      // w zaznaczeniu = kształt usunięty; Ctrl/⌘+A + pisanie zostawiało pole z ostatniego akapitu)
-      if (typeof dwbTextbox !== "undefined") dwbTextbox.dropAnchoredTo?.(b);
-      queue({ op: "deleteRange", from: ia, to: ib, keep: "last", mergedRuns, dropBoxes: true }, crossSection);
+      // w zaznaczeniu = kształt usunięty; Ctrl/⌘+A + pisanie zostawiało pole z ostatniego akapitu).
+      // Gdy end stoi na samym początku b (wycięcie poprzedniego akapitu), pól w b nie ruszamy.
+      const hitB = !atParaStart(b, end.node, end.offset);
+      if (hitB && typeof dwbTextbox !== "undefined") dwbTextbox.dropAnchoredTo?.(b);
+      queue({ op: "deleteRange", from: ia, to: ib, keep: "last", mergedRuns, dropBoxes: hitB }, crossSection);
       return b;
     }
     const tail = document.createRange();
@@ -444,10 +446,22 @@ const dwbSel = (() => {
     }
     // przypis wycięty razem z odnośnikiem czeka na wklejenie (doc-notes.js pruneOrphanNotesInZip)
     noteIdsIn(box).forEach((key) => dwbClipNotes.add(key));
-    // inteligentne wycinanie (Word): całe słowo znika razem z jedną spacją obok (smartCutRange);
-    // do schowka idzie samo zaznaczenie
+    // inteligentne wycinanie (Word): całe słowo znika razem z jedną spacją obok (smartCutRange),
+    // a cały zaznaczony akapit znika razem ze swoim znacznikiem (bez pustej linijki — sprawdzone
+    // w Wordzie na Macu); do schowka idzie samo zaznaczenie
     const smartRange = typeof smartCutRange === "function" ? smartCutRange(cutRange) : null;
-    const delInfo = (smartRange && analyze(smartRange)) || cutInfo;
+    let delInfo = (smartRange && analyze(smartRange)) || cutInfo;
+    if (delInfo.ia === delInfo.ib && !kept.length && !delInfo.a.dataset.lock && !isListParagraph(delInfo.a)
+      && atParaStart(delInfo.a, delInfo.start.node, delInfo.start.offset)
+      && atParaEnd(delInfo.a, delInfo.end.node, delInfo.end.offset)) {
+      const next = delInfo.list[delInfo.ia + 1];
+      const adjacent = next && (delInfo.a.nextElementSibling === next
+        || (delInfo.a.closest("section") !== next.closest("section") && !delInfo.a.nextElementSibling && next.previousElementSibling == null));
+      if (adjacent && next.classList.contains("docx-editable-p") && !next.dataset.lock
+        && (next.dataset.box || "") === (delInfo.a.dataset.box || "")) {
+        delInfo = { ...delInfo, b: next, ib: delInfo.ia + 1, end: { node: next, offset: 0 }, rawCross: true, cross: true };
+      }
+    }
     asUndoStep("undoOpCut", () => {
       const p = deleteSpan(delInfo);
       if (!p || !kept.length) return p;
