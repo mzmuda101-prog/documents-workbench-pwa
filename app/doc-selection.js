@@ -326,10 +326,30 @@ const dwbSel = (() => {
         // spacji i bez spacji przed kropką (docx-inline-edit.js smartCutRange)
         const wider = /^delete(Content|Word|SoftLine|HardLine)/.test(type) && typeof smartCutRange === "function" ? smartCutRange(range) : null;
         const wi = wider && analyze(wider);
-        if (!wi || wi.rawCross) return false; // w jednym akapicie — przeglądarka (i docx-inline-edit.js)
-        e.preventDefault();
-        asUndoStep("undoOpTyping", () => deleteSpan(wi));
-        return true;
+        if (wi && !wi.rawCross) {
+          e.preventDefault();
+          asUndoStep("undoOpTyping", () => deleteSpan(wi));
+          return true;
+        }
+        // WebKit przy skasowaniu CAŁEGO tekstu punktu listy (display: list-item) usuwa sam element <p>
+        // i zastępuje go gołym <br> w <article> — kursor wypada poza akapity, pisanie przestaje działać,
+        // a podgląd traci akapit względem pliku (testerzy AI 2026-11-27, AUDYT-MOBILE #11).
+        if (info && isListParagraph(info.a) && /^delete/.test(type)
+          && atParaStart(info.a, info.start.node, info.start.offset)
+          && atParaEnd(info.a, info.end.node, info.end.offset)) {
+          e.preventDefault();
+          asUndoStep("undoOpTyping", () => {
+            deleteSpan(info);
+            if (!info.a.textContent.replace(/\uFEFF/g, "") && !info.a.querySelector("br, img, svg, canvas, [contenteditable=false]")) {
+              const ph = document.createElement("br");
+              ph.dataset.dwbPh = "1";
+              info.a.appendChild(ph);
+              setCaret(info.a, 0);
+            }
+          });
+          return true;
+        }
+        return false; // w jednym akapicie — przeglądarka (i docx-inline-edit.js)
       }
       e.preventDefault();
       if (type === "insertFromDrop") return true; // przeciąganie kilku akapitów — nie (dragstart też blokuje)

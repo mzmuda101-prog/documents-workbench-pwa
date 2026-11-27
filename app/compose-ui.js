@@ -39,7 +39,10 @@ const composeUi = (() => {
   // ── kursor / akapity ──────────────────────────────────────────────────────
   function caretParagraph() {
     const p = typeof restoreDocCaret === "function" ? restoreDocCaret() : null;
-    if (!p) toast(t("insertNoCaret"), "info");
+    if (!p) {
+      const locked = typeof lockedDocCaret === "function" ? lockedDocCaret() : null;
+      toast(t(locked?.dataset.lock || "insertNoCaret"), "info");
+    }
     return p;
   }
 
@@ -3349,6 +3352,11 @@ const composeUi = (() => {
     if (!a || !b) return null;
     let ia = list.indexOf(a);
     let ib = list.indexOf(b);
+    if (ia < 0 || ib < 0) {
+      // przypis dolny/końcowy ma własne pole (.docx-editable-p), ale leży poza listą akapitów treści
+      if (a.dataset.noteKey || b.dataset.noteKey) toast(t("bodyOnlyAction"), "info");
+      return null;
+    }
     const start = a.contains(range.startContainer) ? textOffset(a, range.startContainer, range.startOffset) : 0;
     let end = b.contains(range.endContainer) ? textOffset(b, range.endContainer, range.endOffset) : plainLen(b);
     while (ib > ia && end === 0) { ib -= 1; b = list[ib]; end = plainLen(b); }

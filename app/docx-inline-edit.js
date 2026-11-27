@@ -976,16 +976,30 @@ document.addEventListener("selectionchange", () => {
   const sel = window.getSelection?.();
   if (!sel?.rangeCount) return;
   const range = sel.getRangeAt(0);
-  const node = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
-  const p = node?.closest?.(".docx-editable-p");
+  const pick = (n) => (n?.nodeType === 1 ? n : n?.parentElement)?.closest?.(".docx-editable-p, .docx-locked-p") || null;
+  const p = pick(range.startContainer) || pick(range.endContainer);
   if (p && docCanvasEl?.contains(p)) lastDocCaret = { p, range: range.cloneRange() };
 });
+
+// Zablokowany akapit pod bieżącym albo ostatnim zaznaczeniem — nie wracamy po cichu do
+// poprzedniego edytowalnego akapitu (testerzy AI 2026-11-27, AUDYT-MOBILE #9).
+function lockedDocCaret() {
+  const sel = window.getSelection?.();
+  if (sel?.rangeCount) {
+    const r = sel.getRangeAt(0);
+    const pick = (n) => (n?.nodeType === 1 ? n : n?.parentElement)?.closest?.(".docx-locked-p") || null;
+    const cur = pick(r.startContainer) || pick(r.endContainer);
+    if (cur && docCanvasEl?.contains(cur)) return cur;
+  }
+  return lastDocCaret?.p?.isConnected && lastDocCaret.p.classList.contains("docx-locked-p") ? lastDocCaret.p : null;
+}
 
 // Akapit z kursorem: bieżący, a gdy fokus uciekł do panelu — ostatni zapamiętany (przywrócony).
 function restoreDocCaret() {
   if (readOnlyMode) return null;
   const active = docCaretParagraph(document.activeElement);
   if (active) return active;
+  if (lockedDocCaret()) return null;
   const saved = lastDocCaret;
   if (!saved || !saved.p.isConnected || !saved.p.classList.contains("docx-editable-p")) return null;
   focusDocParagraph(saved.p);

@@ -147,7 +147,10 @@ const dwbMiniBar = (() => {
     if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
     const a = sel.anchorNode, f = sel.focusNode;
     if (!canvas.contains(a) || !canvas.contains(f)) return null;
-    const ed = (n) => (n.nodeType === 1 ? n : n.parentElement)?.closest("[contenteditable='true']");
+    const ed = (n) => {
+      const el = n.nodeType === 1 ? n : n.parentElement;
+      return !!el?.isContentEditable && !!el.closest("[contenteditable='true']");
+    };
     if (!ed(a) || !ed(f)) return null;
     return sel.getRangeAt(0);
   }

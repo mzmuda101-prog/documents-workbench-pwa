@@ -123,6 +123,119 @@ async function run() {
     `pusty=${JSON.stringify(emptied)} podgląd ${del.preview.length} (było ${target.n}), plik ${del.file.length}; pierwsza różnica ${del.file.findIndex((t, k) => t !== del.preview[k])}; ${del.ck.join(" | ")}`);
   await p3.close();
 
+  // 5) (testerzy AI 2026-11-27, AUDYT-MOBILE #11) lista punktowana: zaznaczenie całego tekstu
+  // punktu i Backspace na WebKit usuwało cały element <p> (zostawało gołe <br> w <article>),
+  // kursor wypadał poza akapity i pisanie / kolejny Backspace przestawały działać.
+  const ctx5 = await browser.newContext({ serviceWorkers: "block", viewport: { width: 390, height: 844 }, hasTouch: true });
+  await ctx5.addInitScript(() => sessionStorage.setItem("introPlayed", "true"));
+  const p5 = await ctx5.newPage();
+  const errs5 = [];
+  p5.on("pageerror", (e) => errs5.push(e.message));
+  await p5.goto(APP_URL, { waitUntil: "load" });
+  await p5.evaluate(() => { document.getElementById("heroSplash")?.remove(); return composeUi.createNew("blank"); });
+  await p5.waitForSelector(".docx-preview-host p.docx-editable-p", { timeout: 30000 });
+  await p5.waitForFunction(() => !inlineLocksPending && document.getElementById("loadingOverlay")?.classList.contains("hidden"));
+  await p5.waitForTimeout(300);
+  await p5.keyboard.type("Lista");
+  await p5.keyboard.press("Enter");
+  await p5.evaluate(() => document.getElementById("fmtListBtn")?.click());
+  await p5.waitForTimeout(150);
+  await p5.evaluate(() => document.querySelector(".compose-pop button")?.click());
+  await p5.waitForTimeout(300);
+  await p5.keyboard.type("Jedzenie");
+  await p5.keyboard.press("Enter");
+  await p5.keyboard.press("Tab");
+  await p5.waitForTimeout(150);
+  await p5.keyboard.type("kanapki");
+  await p5.keyboard.press("Enter");
+  await p5.keyboard.type("woda");
+  await p5.waitForTimeout(300);
+  const kp5 = await p5.evaluate(() => {
+    const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).find((q) => q.textContent.includes("kanapki"));
+    const r = p.getBoundingClientRect();
+    return { x: r.left, y: r.top + r.height / 2, w: r.width };
+  });
+  await p5.mouse.move(kp5.x - 8, kp5.y);
+  await p5.mouse.down();
+  await p5.mouse.move(kp5.x + kp5.w + 8, kp5.y, { steps: 10 });
+  await p5.mouse.up();
+  await p5.waitForTimeout(150);
+  await p5.keyboard.press("Backspace");
+  await p5.waitForTimeout(300);
+  const listAfterBs = await p5.evaluate(() => {
+    const host = document.querySelector(".docx-preview-host");
+    const ps = collectPreviewParagraphElements(host);
+    const s = window.getSelection();
+    const n = s?.rangeCount ? s.getRangeAt(0).startContainer : null;
+    const inP = (n?.nodeType === 1 ? n : n?.parentElement)?.closest?.(".docx-editable-p") || null;
+    return { count: ps.length, inP: !!inP, isList: !!inP && isListParagraph(inP), bareBr: !!host.querySelector("article > br") };
+  });
+  await p5.keyboard.type("owoce");
+  await p5.waitForTimeout(300);
+  const listAfterType = await p5.evaluate(async () => {
+    const ps = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).map((p) => p.textContent.replace(/\uFEFF/g, "").trim());
+    const ck = (await dwbSelfCheck()).problems.filter((x) => x.level === "error").map((x) => x.msg);
+    return { ps, ck };
+  });
+  check("lista: zaznaczenie całego punktu + Backspace zostawia punkt z kursorem i pozwala pisać (#11)",
+    listAfterBs.count === 4 && listAfterBs.inP && listAfterBs.isList && !listAfterBs.bareBr
+    && listAfterType.ps[2] === "owoce" && !listAfterType.ck.length && !errs5.length,
+    `${JSON.stringify(listAfterBs)} ${JSON.stringify(listAfterType)} ${errs5.join(" | ")}`);
+  await ctx5.close();
+
+  // 6) (testerzy AI 2026-11-27, AUDYT-MOBILE #9) komentarz przy kursorze w przypisie nie rzuca
+  // „p.classList”, a zaznaczenie w zablokowanym akapicie (lockPageBreak) nie przeskakuje do
+  // poprzedniego edytowalnego akapitu i nie otwiera okna komentarza przy złym słowie.
+  const ctx6 = await browser.newContext({ serviceWorkers: "block", viewport: { width: 820, height: 1180 }, hasTouch: true });
+  await ctx6.addInitScript(() => sessionStorage.setItem("introPlayed", "true"));
+  const p6 = await ctx6.newPage();
+  const errs6 = [];
+  p6.on("pageerror", (e) => errs6.push(e.message));
+  await p6.goto(APP_URL, { waitUntil: "load" });
+  await p6.evaluate(() => document.getElementById("heroSplash")?.remove());
+  await p6.locator("#fileInput").setInputFiles("docs/samples/notes-sample.docx");
+  await p6.waitForFunction(() => document.getElementById("loadingOverlay")?.classList.contains("hidden") && !!document.querySelector(".docx-preview-host p"), null, { timeout: 30000 });
+  await p6.waitForTimeout(400);
+  await p6.evaluate(() => { readModeEl.checked = false; readModeEl.dispatchEvent(new Event("change")); });
+  await p6.waitForFunction(() => !inlineLocksPending && !!document.querySelector(".docx-preview-host .docx-editable-p"), null, { timeout: 15000 });
+  await p6.waitForTimeout(300);
+  const fnComment = await p6.evaluate(() => {
+    const fnP = document.querySelector(".docx-preview-host ol li p.docx-editable-p");
+    fnP.focus();
+    const r = document.createRange(); r.setStart(fnP, 0); r.collapse(true);
+    const s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+    try { composeUi.openCommentForm(); return { ok: true, pop: !!document.querySelector(".compose-pop-comment") }; }
+    catch (e) { return { ok: false, err: e.message }; }
+  });
+  check("komentarz przy kursorze w przypisie bez błędu p.classList (#9)",
+    fnComment.ok && !fnComment.pop && !errs6.length, `${JSON.stringify(fnComment)} ${errs6.join(" | ")}`);
+
+  const pts6 = await p6.evaluate(() => {
+    const ps = [...document.querySelectorAll(".docx-preview-host section.docx > article > p")];
+    const p1 = ps.find((p) => p.textContent.includes("pozycja"));
+    const pLock = ps.find((p) => p.classList.contains("docx-locked-p"));
+    const r1 = p1.getBoundingClientRect(), rL = pLock.getBoundingClientRect();
+    return { p1: { x: r1.x + 120, y: r1.y + 8 }, pLock: { x: rL.x + 4, y: rL.y + 8 } };
+  });
+  await p6.touchscreen.tap(pts6.p1.x, pts6.p1.y);
+  await p6.waitForTimeout(150);
+  await p6.mouse.move(pts6.pLock.x, pts6.pLock.y);
+  await p6.mouse.down();
+  await p6.mouse.move(pts6.pLock.x + 90, pts6.pLock.y, { steps: 10 });
+  await p6.mouse.up();
+  await p6.waitForTimeout(200);
+  const lockedSel = await p6.evaluate(() => {
+    const miniShown = !document.querySelector(".mini-bar")?.hidden;
+    composeUi.openCommentForm();
+    const pop = !!document.querySelector(".compose-pop-comment");
+    const toastTxt = [...document.querySelectorAll(".toast")].map((x) => x.textContent).join(" | ");
+    return { miniShown, pop, toastTxt };
+  });
+  check("zaznaczenie w zablokowanym akapicie nie otwiera komentarza na poprzednim słowie ani mini-paska (#9)",
+    !lockedSel.miniShown && !lockedSel.pop && !errs6.length && /podział strony|page break/i.test(lockedSel.toastTxt),
+    `${JSON.stringify(lockedSel)} ${errs6.join(" | ")}`);
+  await ctx6.close();
+
   await browser.close();
   if (fails.length) { console.error(`❌ bughunt-fixes (${ENGINE}): ${fails.length} błąd(y)`); process.exit(1); }
   console.log(`✅ bughunt-fixes (${ENGINE}) OK`);
