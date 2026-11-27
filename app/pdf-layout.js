@@ -480,7 +480,24 @@
     rects = rects.filter((r) => r.color !== "ffffff" || (r.x1 - r.x0) < 2.5 || (r.y1 - r.y0) < 2.5);
     // Wewnętrzne prostokąty „marginesu komórki” (ten sam kolor wewnątrz większego) — pomijamy.
     const fills = rects.filter((r) => r.x1 - r.x0 >= 2.5 && r.y1 - r.y0 >= 2.5);
-    const fillsKept = fills.filter((r) => !fills.some((o) => o !== r && o.color === r.color && o.x0 <= r.x0 + 0.2 && o.x1 >= r.x1 - 0.2 && o.y0 <= r.y0 + 0.2 && o.y1 >= r.y1 - 0.2 && (o.x1 - o.x0) * (o.y1 - o.y0) > (r.x1 - r.x0) * (r.y1 - r.y0) + 0.5));
+    const fillsNonNested = fills.filter((r) => !fills.some((o) => o !== r && o.color === r.color && o.x0 <= r.x0 + 0.2 && o.x1 >= r.x1 - 0.2 && o.y0 <= r.y0 + 0.2 && o.y1 >= r.y1 - 0.2 && (o.x1 - o.x0) * (o.y1 - o.y0) > (r.x1 - r.x0) * (r.y1 - r.y0) + 0.5));
+    // Ozdobne pasy tła przy krawędzi kartki (np. szary margines boczny na komentarze Worda na ponad
+    // połowę wysokości kartki albo pusty pas przy górnej/dolnej krawędzi): gdyby weszły do union-find
+    // tabel, sklejałyby sąsiednie ramki w jedną wielką tabelę na całą stronę. Zostają w warstwie
+    // grafiki pod tekstem (leftovers.fills), a ich ewentualny tekst układa xyCut jako osobną kolumnę.
+    const isDecorEdgeStrip = (r) => {
+      const w = r.x1 - r.x0, h = r.y1 - r.y0;
+      const vStrip = (r.x0 <= 3 || r.x1 >= W - 3) && h > H * 0.5 && w < W * 0.45;
+      if (vStrip) {
+        if (h > H * 0.6) return true;
+        return !frags.some((f) => f.type === "text" && (f.x0 + f.x1) / 2 >= r.x0 - 1 && (f.x0 + f.x1) / 2 <= r.x1 + 1 && (f.top + f.bottom) / 2 >= r.y0 - 1 && (f.top + f.bottom) / 2 <= r.y1 + 1);
+      }
+      const hStrip = (r.y0 <= 3 || r.y1 >= H - 3) && w > W * 0.85 && h < H * 0.25;
+      if (!hStrip) return false;
+      return !frags.some((f) => f.type === "text" && (f.x0 + f.x1) / 2 >= r.x0 - 1 && (f.x0 + f.x1) / 2 <= r.x1 + 1 && (f.top + f.bottom) / 2 >= r.y0 - 1 && (f.top + f.bottom) / 2 <= r.y1 + 1);
+    };
+    const decorStrips = fillsNonNested.filter(isDecorEdgeStrip);
+    const fillsKept = fillsNonNested.filter((r) => !isDecorEdgeStrip(r));
     const hSegs = [], vSegs = [], specks = [];
     // Pasek w kolorze sąsiedniego tła (Word rysuje tak marginesy komórek) to część tła, nie linia.
     const touchesSameFill = (r) => fillsKept.some((f) => f.color === r.color && f.x0 <= r.x1 + 0.6 && f.x1 >= r.x0 - 0.6 && f.y0 <= r.y1 + 0.6 && f.y1 >= r.y0 - 0.6);
@@ -531,7 +548,7 @@
       groups.get(r).push(it);
     });
     const tables = [];
-    const leftovers = { hSegs: [], vSegs: [], fills: specks };
+    const leftovers = { hSegs: [], vSegs: [], fills: [...specks, ...decorStrips] };
     const failed = [];
     for (const g of groups.values()) {
       const t = buildGrid(g, frags, tol);
@@ -1511,10 +1528,16 @@
       const inkSizes = glyphs.filter((x) => !x.isSpace).map((x) => x.size || 0);
       const formula = Math.min(...inkSizes) < Math.max(...inkSizes) * 0.85 || glyphs.some((x) => /[=+<>±×÷∑∏∫√∞→←↔≤≥≠≈∂∆∇∈∉⊂⊃∪∩^_|]/.test(x.u || ""));
       const wideGap = (g) => {
-        if (formula) return false;
         const gap = wordGaps.get(g);
-        const size = g.size || 10;
-        if (gap == null || gap < size * 0.9 || gap > size * 1.6) return false;
+        const size = Math.max(ink?.size || 0, g.size || 10);
+        if (gap == null || gap < size * 0.9) return false;
+        // Bardzo szeroka przerwa (> 1,6 em) złożona ze znaków spacji (np. „KMgF3        fluorek…”):
+        // wcześniej wpadała w lukę między progiem !prev.isSpace a górnym limitem wideGap i zwijała się do 1 spacji.
+        if (gap > size * 1.6) {
+          const others = [...wordGaps.values()].filter((v) => v !== gap).sort((a, b) => a - b);
+          return !(others.length >= 2 && gap < others[Math.floor(others.length / 2)] * 2.2);
+        }
+        if (formula) return false;
         const others = [...wordGaps.values()].filter((v) => v !== gap && v <= size * 1.6).sort((a, b) => a - b);
         return !(others.length && gap < others[Math.floor(others.length / 2)] * 2.5);
       };
@@ -2364,13 +2387,19 @@
         floats.push({ ...atom, behind: true, fullPage: true });
         continue;
       }
-      const cell = tables.flatMap((t) => t.cells).find((c) => (b.x0 + b.x1) / 2 >= c.x0 && (b.x0 + b.x1) / 2 <= c.x1 && (b.y0 + b.y1) / 2 >= c.y0 && (b.y0 + b.y1) / 2 <= c.y1);
-      if (cell) {
-        cell.frags.push(atom);
-        continue;
-      }
       // nachodzenie tylko na brzeg obrazu (≤ IMG_INSET) to wciąż „obok” — obraz zostaje w tekście
       const ix0 = b.x1 - b.x0 > IMG_INSET * 4 ? b.x0 + IMG_INSET : b.x0, ix1 = b.x1 - b.x0 > IMG_INSET * 4 ? b.x1 - IMG_INSET : b.x1;
+      const cell = tables.flatMap((t) => t.cells).find((c) => (b.x0 + b.x1) / 2 >= c.x0 && (b.x0 + b.x1) / 2 <= c.x1 && (b.y0 + b.y1) / 2 >= c.y0 && (b.y0 + b.y1) / 2 <= c.y1);
+      if (cell) {
+        // Obraz pokrywający tekst wewnątrz komórki (np. tło ramki kodu) nie może być obrazem w tekście
+        // — inaczej spycha całą treść komórki o swoją wysokość w dół; idzie do floats pod/nad tekstem.
+        const cellText = cell.frags.filter((f) => f.type === "text" && overlap1d(f.x0, f.x1, ix0, ix1) > 0.3 && overlap1d(f.top, f.bottom, b.y0, b.y1) > 2);
+        if (cellText.length) {
+          const firstCellText = Math.min(...cellText.flatMap((f) => f.glyphs.map((g) => g.order)));
+          floats.push({ ...atom, behind: im.order < firstCellText });
+        } else cell.frags.push(atom);
+        continue;
+      }
       // ten sam próg co w podziale na kolumny (xSpan) — inaczej przy zachodzeniu 6–8 pt obraz nie
       // był ani „obok” (brak przerwy), ani „pływający”, i lądował nad tekstem
       const overlapsText = textBoxes.some((t) => overlap1d(t.x0, t.x1, ix0, ix1) > 0.3 && overlap1d(t.y0, t.y1, b.y0, b.y1) > 2);

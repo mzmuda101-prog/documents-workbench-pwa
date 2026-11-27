@@ -24,22 +24,28 @@ const results = [];
 const check = (name, ok, detail) => results.push({ name, ok: !!ok, detail });
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), "dwb-pdf-tblw-"));
 
-function makePdf(name, content) {
+function makePdf(name, content, images = null) {
+  const imgNames = images ? Object.keys(images) : [];
+  const xobjRes = imgNames.length ? ` /XObject << ${imgNames.map((n, k) => `/${n} ${7 + k} 0 R`).join(" ")} >>` : "";
   const objs = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.2 841.8] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>",
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.2 841.8] /Resources << /Font << /F1 4 0 R /F2 5 0 R >>${xobjRes} >> /Contents 6 0 R >>`,
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
-    `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`,
+    `<< /Length ${Buffer.byteLength(content, "latin1")} >>\nstream\n${content}\nendstream`,
+    ...imgNames.map((n) => {
+      const im = images[n];
+      return `<< /Type /XObject /Subtype /Image /Width ${im.w} /Height ${im.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Length ${im.rgb.length} >>\nstream\n${im.rgb}\nendstream`;
+    }),
   ];
   let out = "%PDF-1.4\n";
   const offs = [];
-  objs.forEach((o, i) => { offs.push(Buffer.byteLength(out)); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
-  const xref = Buffer.byteLength(out);
+  objs.forEach((o, i) => { offs.push(Buffer.byteLength(out, "latin1")); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const xref = Buffer.byteLength(out, "latin1");
   out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${offs.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("")}trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
   const file = path.join(TMP, name);
-  fs.writeFileSync(file, out);
+  fs.writeFileSync(file, Buffer.from(out, "latin1"));
   return file;
 }
 
@@ -102,7 +108,9 @@ async function convertAndInspect(page, file, marker) {
     });
     const imgs = doc.getElementsByTagNameNS("http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing", "anchor").length
       + doc.getElementsByTagNameNS("http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing", "inline").length;
-    return { tbls, imgs, bytes: Array.from(bytes) };
+    const inlineInTbl = [...doc.getElementsByTagNameNS(NS, "tbl")].reduce((a, t) => a + t.getElementsByTagNameNS("http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing", "inline").length, 0);
+    const tabs = doc.getElementsByTagNameNS(NS, "tab").length;
+    return { tbls, imgs, inlineInTbl, tabs, bytes: Array.from(bytes) };
   });
 }
 
@@ -229,6 +237,25 @@ async function convertAndInspect(page, file, marker) {
     txt(310, 694, "prose paragraphs on the right"),
     txt(310, 678, "side of the page with standard"),
     txt(310, 662, "body text and normal spacing."),
+  ].join("\n"));
+
+  // 10. Ozdobny boczny pas przy krawędzi kartki (jak margines komentarzy Worda) stykający się z ramką + obraz tła wewnątrz ramki
+  const fSidebarAndBg = makePdf("sidebar-box-bg.pdf", [
+    rect(401, 104, 194.2, 634, 0.95), // pełnowysokościowy boczny pas przy prawej krawędzi
+    txt(412, 420, "Margin note text", "F1"),
+    txt(60, 720, "Sidebar Box Header", "F2"),
+    "q 340 0 0 220 59 350 cm /Bg Do Q", // obraz w tle wewnątrz ramki kodu
+    hline(59, 401, 570), hline(59, 401, 350), vline(59, 350, 570), vline(401, 350, 570),
+    txt(66, 550, "line_one = 1"),
+    txt(66, 534, "line_two = 2"),
+    txt(66, 518, "line_three = 3"),
+    txt(60, 310, "Paragraph below box"),
+  ].join("\n"), { Bg: { w: 4, h: 4, rgb: "\xf8\xf8\xf8".repeat(16) } });
+
+  // 11. Szeroki odstęp ze znaków spacji (> 1,6 em) po indeksie dolnym we wzorze
+  const fSubscriptTab = makePdf("subscript-tab.pdf", [
+    txt(60, 750, "Formula Space Tab", "F2"),
+    "BT /F1 14 Tf 0 0 0 rg 106 700 Td (KMgF) Tj /F1 9 Tf 37 0 Td (3) Tj /F1 14 Tf 5 0 Td (         ) Tj 64 0 Td (fluorek magnezu i potasu) Tj ET",
   ].join("\n"));
 
   const browser = await pw[ENGINE].launch({ headless: true });
@@ -360,6 +387,22 @@ async function convertAndInspect(page, file, marker) {
     check("strażnik: 2-kolumnowy artykuł prozą NIE staje się tabelą wierszową 4×2",
       rArt.tbls.every((t) => t.style === "DWBLayout" && t.nR === 1),
       JSON.stringify(rArt.tbls.map((t) => ({ style: t.style, dim: `${t.nR}x${t.nC}` }))));
+
+    // 10. Ozdobny boczny pas przy krawędzi strony + obraz w tle wewnątrz ramki
+    const rSide = await convertAndInspect(page, fSidebarAndBg, "Sidebar Box Header");
+    docxBuffers.push(["sidebar-box-bg.docx", Buffer.from(rSide.bytes)]);
+    const boxTbl = rSide.tbls.find((t) => !t.style && t.rows.some((r) => r.some((c) => c.text.includes("line_one"))));
+    check("ozdobny boczny pas przy krawędzi kartki nie skleja ramki w tabelę na całą stronę, a obraz tła w komórce nie spycha tekstu (0 inline w tabeli)",
+      !!boxTbl && boxTbl.nR === 1 && boxTbl.nC === 1 && rSide.inlineInTbl === 0
+      && !boxTbl.rows[0][0].text.includes("Sidebar Box Header") && !boxTbl.rows[0][0].text.includes("Paragraph below box"),
+      JSON.stringify({ tbls: rSide.tbls.map((t) => ({ style: t.style, dim: `${t.nR}x${t.nC}`, t0: t.rows[0]?.[0]?.text?.slice(0, 40) })), inlineInTbl: rSide.inlineInTbl }));
+
+    // 11. Szeroka przerwa ze spacji (> 1,6 em) po indeksie dolnym zostaje tabulatorem
+    const rSub = await convertAndInspect(page, fSubscriptTab, "Formula Space Tab");
+    docxBuffers.push(["subscript-tab.docx", Buffer.from(rSub.bytes)]);
+    check("szeroka przerwa ze znaków spacji po indeksie dolnym we wzorze staje się tabulatorem",
+      rSub.tabs >= 1,
+      JSON.stringify({ tabs: rSub.tabs }));
 
     // 8. Edycja komórki + zapis + ponowne otwarcie + telefon 390 px
     await convertAndInspect(page, fHoriz, "Horizontal Lines Only");
