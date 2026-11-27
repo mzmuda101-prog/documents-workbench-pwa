@@ -7,6 +7,15 @@
 
 const WHATS_NEW = [
   {
+    v: "v1.01.49",
+    pl: [
+      "Konwersja PDF na Worda: punkty numerowane („1. …”, „2. …”), których dalsze wiersze zaczynają się pod samym numerem, są teraz jedną zwykłą listą Worda. Każdy punkt to jeden akapit, a punkty rozdzielone nagłówkiem dalej należą do tej samej listy. Dzięki temu po dopisaniu albo usunięciu punktu numery same się przeliczają, a układ zostaje jak w PDF.",
+    ],
+    en: [
+      "PDF to Word conversion: numbered points (\"1. …\", \"2. …\") whose following lines start right under the number now become one regular Word list. Each point is a single paragraph, and points separated by a heading stay in the same list. Adding or deleting a point now renumbers the rest, and the layout still matches the PDF.",
+    ],
+  },
+  {
     v: "v1.01.48",
     pl: [
       "Konwersja PDF na Worda: szary pas na marginesie kartki (np. miejsce na komentarze) nie skleja już ramek i tekstu w jedną wielką tabelę na całą stronę, a jasne tło w ramce z kodem nie spycha tekstu w dół o całą swoją wysokość. Szeroki odstęp po wzorze (np. „KMgF3     fluorek…”) zostaje odstępem, zamiast zwijać się do jednej spacji.",
