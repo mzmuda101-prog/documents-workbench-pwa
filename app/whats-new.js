@@ -7,6 +7,15 @@
 
 const WHATS_NEW = [
   {
+    v: "v1.01.43",
+    pl: [
+      "Tabele: kliknięcie w puste miejsce wysokiej lub pustej komórki (np. w jej dolnej połowie) stawia kursor w tej komórce zamiast przeskakiwać do sąsiedniej kolumny albo kolejnego wiersza.",
+    ],
+    en: [
+      "Tables: clicking the empty space inside a tall or empty cell (for example its lower half) now places the cursor in that cell instead of jumping to a neighbouring column or the next row.",
+    ],
+  },
+  {
     v: "v1.01.42",
     pl: [
       "Edycja jak wydruk: przypisy dolne stoją na dole swojej strony (nad stopką), tak samo jak w podglądzie wydruku i w Wordzie, i można je od razu edytować na miejscu. Liczba stron w Edycji zgadza się z wydrukiem.",
