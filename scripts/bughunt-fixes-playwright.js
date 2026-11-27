@@ -90,6 +90,37 @@ async function run() {
     check(`Esc, potem ${key}: dokument bez zmian, podgląd = plik`, before === after && !ck.length, `${ck.join(" | ")} ${before === after ? "" : "zmiana tekstu"}`);
   };
   for (const key of ["Enter", "Shift+Enter", "type"]) await escCase(key);
+
+  // 4) (testerzy AI 2026-11-27, AUDYT-MOBILE #3) zaznaczony cały tekst akapitu → Backspace zostawia
+  // <br> przeglądarki w pustym akapicie; Delete w nim sklejał akapity tylko w podglądzie — zapis
+  // przesuwał tekst wszystkich dalszych akapitów o jeden (tabela pod spodem: treść w złych komórkach)
+  const target = await p3.evaluate(() => {
+    const list = collectPreviewParagraphElements(document.querySelector(".docx-preview-host"));
+    const i = list.findIndex((q, k) => k > 0 && q.textContent.trim().length > 6 && list[k + 1]?.textContent.trim().length > 3 && (q.dataset.box || "") === (list[k + 1].dataset.box || "") && !q.closest("td") && !q.dataset.lock);
+    const r = list[i].getBoundingClientRect();
+    return { i, n: list.length, x: r.left + 2, y: r.top + Math.min(8, r.height / 2) };
+  });
+  await p3.mouse.click(target.x, target.y);
+  await p3.keyboard.press("Home");
+  await p3.keyboard.press("Shift+End");
+  await p3.keyboard.press("Backspace");
+  await p3.waitForTimeout(400);
+  const emptied = await p3.evaluate((i) => collectPreviewParagraphElements(document.querySelector(".docx-preview-host"))[i].textContent.replace(/﻿/g, ""), target.i);
+  await p3.keyboard.press("Delete");
+  await p3.waitForTimeout(800);
+  await p3.waitForFunction(() => !inlineStructuralPending);
+  const del = await p3.evaluate(async () => {
+    const preview = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).map((p) => p.textContent.replace(/﻿/g, "").trim());
+    const z = await JSZip.loadAsync(await buildDocumentForSave());
+    const xml = new DOMParser().parseFromString(await z.file("word/document.xml").async("string"), "application/xml");
+    const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+    const file = [...xml.getElementsByTagNameNS(W, "body")[0].getElementsByTagNameNS(W, "p")].map((p) => [...p.getElementsByTagNameNS(W, "t")].map((t) => t.textContent).join("").trim());
+    const ck = (await dwbSelfCheck()).problems.filter((x) => x.level === "error").map((x) => x.msg);
+    return { preview, file, ck };
+  });
+  check("pusty akapit po zaznaczeniu i Backspace: Delete skleja w pliku tak jak w podglądzie",
+    emptied === "" && del.preview.length === target.n - 1 && del.file.length === del.preview.length && del.file.every((t, k) => t === del.preview[k]) && !del.ck.length,
+    `pusty=${JSON.stringify(emptied)} podgląd ${del.preview.length} (było ${target.n}), plik ${del.file.length}; pierwsza różnica ${del.file.findIndex((t, k) => t !== del.preview[k])}; ${del.ck.join(" | ")}`);
   await p3.close();
 
   await browser.close();

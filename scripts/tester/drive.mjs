@@ -376,6 +376,11 @@ async function serve(name, device, dir) {
       lastEls = [];
       return { ok: true };
     },
+    // tylko do segregacji (/testerzy krok 4) — testerzy go nie używają: wyrażenie JS na stronie
+    async eval(args) {
+      const value = await page.evaluate((src) => Promise.resolve((0, eval)(src)).then((v) => { try { return JSON.parse(JSON.stringify(v ?? null)); } catch (_) { return String(v); } }), args.join(" "));
+      return { value };
+    },
     async text() {
       const t = await page.evaluate(() => [...document.querySelectorAll("section.docx")].map((s) => /** @type {HTMLElement} */ (s).innerText).join("\n\n"));
       return { text: t.replace(/\n{3,}/g, "\n\n").slice(0, 6000), length: t.length };

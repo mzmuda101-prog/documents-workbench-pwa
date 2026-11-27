@@ -637,7 +637,11 @@ function dropBrowserTrailingBr(e) {
   const head = document.createRange();
   head.setStart(p, 0);
   head.setEndBefore(last);
-  if (!head.toString().replace(/\uFEFF/g, "").trim()) return; // pusty akapit — <br> trzyma wysokość linijki
+  // pusty akapit — <br> trzyma wysokość linijki, ale to znacznik „dla oka”, nie łamanie wiersza:
+  // bez oznaczenia Delete/Backspace uznawały, że za kursorem jest treść, i sklejanie robiła sama
+  // przeglądarka — tylko w podglądzie; zapis przesuwał wtedy tekst dalszych akapitów o jeden
+  // (testerzy AI 2026-11-27: tabela z PDF z treścią w złych komórkach)
+  if (!head.toString().replace(/\uFEFF/g, "").trim()) { last.dataset.dwbPh = "1"; return; }
   const sel = window.getSelection();
   const caretAtBr = sel?.rangeCount && sel.isCollapsed && sel.getRangeAt(0).comparePoint(last, 0) >= 0;
   const parent = last.parentNode;
