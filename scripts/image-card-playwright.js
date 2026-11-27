@@ -228,6 +228,20 @@ async function run() {
   const after30 = await tp.evaluate(() => document.querySelector(".docx-preview-host img").offsetWidth);
   const fp1 = await filePct(tp);
   check("telefon: 30% na suwaku = 30% w pliku, obraz po zapisie tej samej szerokości co podczas przesuwania", Math.abs(fp1 - 30) < 1 && Math.abs(after30 - live) <= 2, JSON.stringify({ fp1, live, after30 }));
+  // szerokie zdjęcie zmniejszone do ekranu: pod nim bez pustki (ramka miała stałą wysokość z pliku —
+  // testerzy AI 2026-11-27, AUDYT-MOBILE #8)
+  await tp.evaluate(() => { const ps = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")); const p = ps[ps.length - 1]; p.closest(".docx-edit-root").focus(); placeCaret(p, p.textContent.length); });
+  await tp.keyboard.press("Enter");
+  const wide = await makeImage(tp, 1600, 800);
+  await tp.evaluate((f) => composeUi.insertImageFile(f), wide);
+  await tp.waitForFunction(() => document.querySelectorAll(".docx-preview-host img").length >= 2 && !inlineLocksPending && document.getElementById("loadingOverlay")?.classList.contains("hidden"), null, { timeout: 15000 });
+  await tp.waitForTimeout(600);
+  const gap = await tp.evaluate(() => {
+    const im = [...document.querySelectorAll(".docx-preview-host img")].pop();
+    const box = im.closest("p").getBoundingClientRect(), r = im.getBoundingClientRect();
+    return { img: Math.round(r.height), para: Math.round(box.height), w: Math.round(r.width), vw: innerWidth };
+  });
+  check("telefon: szerokie zdjęcie zmniejszone do ekranu bez pustego miejsca pod nim", gap.w <= gap.vw && gap.para - gap.img < 40, JSON.stringify(gap));
 
   check("brak błędów strony", !errors.length, errors.join(" | "));
   await browser.close();

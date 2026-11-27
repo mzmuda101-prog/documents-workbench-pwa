@@ -27,6 +27,8 @@ Pracuj w `/Users/mateuszuser/Programistyka/documents-workbench-pwa`.
   zadania z tabelą (przebieg 2026-11-27-1315: „harmonogram” okazał się odręcznym skanem) i skopiuj go do `output/testerzy/$R/pliki/<krótka-nazwa>.pdf`.
   Testerowi podaj tylko tę kopię. Prawdziwej nazwy pliku nie wpisuj nigdzie w repo.
 - Pliki z `docs/samples/` podawaj ścieżką względną.
+- Zdjęcie do wstawienia (osoby ze zdjęciem): zawsze `docs/testerzy/zdjecie-testowe.jpg`, nigdy zrzut
+  ekranu testera — interfejs apki na zrzucie wyglądał jak „zdublowany pasek” w dokumencie.
 
 ## 3. Testerzy (równolegle, w tle)
 

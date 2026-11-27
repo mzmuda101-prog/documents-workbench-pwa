@@ -372,6 +372,10 @@ function applyMobileReflowLayout(host) {
   host.querySelectorAll("img").forEach((img) => {
     img.style.maxWidth = "100%";
     img.style.height = "auto";
+    // ramka obrazu z docx-preview ma wysokość z pliku — zmniejszony obraz zostawiał pod sobą pustkę
+    // (testerzy AI 2026-11-27). Ramka z przycięciem (obraz przesunięty w środku) zostaje.
+    const box = img.parentElement;
+    if (box?.tagName === "DIV" && box.children.length === 1 && box.style.height && !parseFloat(img.style.left || 0) && !parseFloat(img.style.top || 0)) box.style.height = "auto";
   });
   // Linia do wypełnienia (akapit z samych kropek / podkreślników — formularze, podania): Word na
   // iPhonie łamie ją na pełną linię i krótki ogonek. Z opcją „Linie kropek w jednej linijce”
