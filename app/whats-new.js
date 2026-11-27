@@ -7,6 +7,15 @@
 
 const WHATS_NEW = [
   {
+    v: "v1.01.48",
+    pl: [
+      "Konwersja PDF na Worda: szary pas na marginesie kartki (np. miejsce na komentarze) nie skleja już ramek i tekstu w jedną wielką tabelę na całą stronę, a jasne tło w ramce z kodem nie spycha tekstu w dół o całą swoją wysokość. Szeroki odstęp po wzorze (np. „KMgF3     fluorek…”) zostaje odstępem, zamiast zwijać się do jednej spacji.",
+    ],
+    en: [
+      "PDF to Word conversion: a grey strip in the page margin (such as a comment area) no longer merges frames and text into one page-sized table, and a light background behind a code box no longer pushes the text down by its full height. A wide gap after a formula (like \"KMgF3     fluoride…\") stays a gap instead of collapsing to a single space.",
+    ],
+  },
+  {
     v: "v1.01.47",
     pl: [
       "Konwersja PDF na Worda (tabele bez linii i harmonogramy): aplikacja rozpoznaje teraz jak Word także tabele całkowicie bez ramek i cieniowania (np. cenniki 3-kolumnowe, zestawienia klucz–wartość i małe tabelki), nie psując 2-kolumnowych artykułów ani paragonów.",
