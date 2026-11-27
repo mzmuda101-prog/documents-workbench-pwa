@@ -258,6 +258,22 @@ async function convertAndInspect(page, file, marker) {
     "BT /F1 14 Tf 0 0 0 rg 106 700 Td (KMgF) Tj /F1 9 Tf 37 0 Td (3) Tj /F1 14 Tf 5 0 Td (         ) Tj 64 0 Td (fluorek magnezu i potasu) Tj ET",
   ].join("\n"));
 
+  // 12. Dwie ramki kodu z jednakowymi wąskimi podświetleniami komend w środku: podświetlenie nie staje się
+  // osobną zagnieżdżoną tabelą ani nie cofa kursora Y (nie robi gigantycznej luki przed tekstem pod ramką)
+  const fNestedHl = makePdf("nested-code-hl.pdf", [
+    txt(60, 760, "Nested Code Highlight", "F2"),
+    hline(59, 401, 710), hline(59, 401, 590), vline(59, 590, 710), vline(401, 590, 710),
+    rect(64, 692, 65, 11, 0.83),
+    txt(66, 694, "$> git status"),
+    txt(66, 676, "On branch master"),
+    txt(66, 610, "nothing added to commit"),
+    txt(60, 570, "Paragraph right below box one"),
+    hline(59, 401, 470), hline(59, 401, 390), vline(59, 390, 470), vline(401, 390, 470),
+    rect(64, 452, 65, 11, 0.83),
+    txt(66, 454, "$> git status"),
+    txt(66, 434, "Changes to be committed:"),
+  ].join("\n"));
+
   const browser = await pw[ENGINE].launch({ headless: true });
   const errors = [];
   const docxBuffers = [];
@@ -403,6 +419,19 @@ async function convertAndInspect(page, file, marker) {
     check("szeroka przerwa ze znaków spacji po indeksie dolnym we wzorze staje się tabulatorem",
       rSub.tabs >= 1,
       JSON.stringify({ tabs: rSub.tabs }));
+
+    // 12. Dwie ramki z wąskim podświetleniem komendy w środku: 2 ramki (bez pustych zagnieżdżonych tabel) i bez luki > 40 pt
+    const rNH = await convertAndInspect(page, fNestedHl, "Nested Code Highlight");
+    docxBuffers.push(["nested-code-hl.docx", Buffer.from(rNH.bytes)]);
+    const nhXml = await page.evaluate(async () => {
+      const z = await JSZip.loadAsync(originalFileBytes);
+      const doc = await z.file("word/document.xml").async("string");
+      const m = doc.match(/<w:p><w:pPr>(?:(?!<\/w:pPr>).)*?w:before="(\d+)"(?:(?!<\/w:p>).)*?Paragraph right below box one/);
+      return { before: m ? +m[1] : -1, runShd: /<w:shd [^>]*w:fill="D4D4D4"\/><\/w:rPr><w:t[^>]*>\$&gt; git status/.test(doc) || /<w:shd [^>]*w:fill="D[34]D[34]D[34]"\/><\/w:rPr><w:t[^>]*>\$&gt; git status/.test(doc) };
+    });
+    check("wąskie podświetlenia wewnątrz dwóch ramek nie tworzą pustych tabel ani gigantycznej przerwy pod ramką",
+      rNH.tbls.length === 2 && nhXml.before >= 0 && nhXml.before < 800 && nhXml.runShd,
+      JSON.stringify({ tbls: rNH.tbls.length, ...nhXml }));
 
     // 8. Edycja komórki + zapis + ponowne otwarcie + telefon 390 px
     await convertAndInspect(page, fHoriz, "Horizontal Lines Only");

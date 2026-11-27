@@ -855,7 +855,11 @@
         if (p && g.x - p.x < g.size * 0.08 && Math.abs(p.y - g.y) < g.size * 0.08) continue;
         g0.push(g);
       }
-      const x0 = g0[0].x, x1 = Math.max(...g0.map((g) => g.x1));
+      // Wyśrodkowanie i wcięcie liczymy z widocznych znaków — spacja przy lewym marginesie
+      // (częste w stopkach z Worda/LibreOffice) przesuwała wyśrodkowany numer strony na lewo.
+      const ink = g0.filter((g) => !g.isSpace);
+      const vis = ink.length ? ink : g0;
+      const x0 = vis[0].x, x1 = Math.max(...vis.map((g) => g.x1));
       const size = row.size;
       const center = (x0 + x1) / 2;
       const align = Math.abs(center - W / 2) < 12 ? "center" : x1 > W - m.mr - 8 && x0 > W / 2 ? "right" : "left";

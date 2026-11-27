@@ -381,8 +381,11 @@
         }
         // Ujemny odstęp się zeruje — blok w rzeczywistości stoi niżej o tyle; kursor musi to
         // wiedzieć, inaczej przesunięcie ciągnęło się do końca strony (następne bloki go nie odrabiały).
+        // Kursor nie może też cofnąć się wstecz, gdyby dwa bloki nakładały się w pionie.
+        const prevCursor = cursor;
         cursor = blockBottom(b) + (b.type === "para" ? Math.max(0, -local.spaceBefore) : 0);
         if (b.type === "table" || b.type === "columns") cursor = Math.max(cursor, top) + tailExtra(b);
+        cursor = Math.max(prevCursor, cursor);
       }
       if (!n) xml += this.emptyPara({ pageBreakBefore: ctx.pageBreakBefore, anchors: ctx.anchors, sectPr: ctx.sectPr, spaceBefore: 0 }, 1);
       return xml;

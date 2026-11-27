@@ -136,6 +136,26 @@ async function makePdfs() {
     F1: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
     F2: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
   }, { Logo: { w: 8, h: 4, rgb: "\x20\x40\xa0".repeat(32) } }));
+  // 2-stronicowe zadania z wyśrodkowanym numerem strony ze spacją wiodącą przy lewym marginesie:
+  // „1. Obliczyc granice:” (y=115) na s.1 i „3. Obliczyc granice:” (y=58) na s.2 to treść, nie nagłówek strony,
+  // a numer strony w stopce (poprzedzony spacją na x=71) ma zostać wyśrodkowany (nie do lewej).
+  fs.writeFileSync(path.join(TMP, "zadania-stopka.pdf"), handPdfPages([
+    [
+      "BT /F2 16 Tf 72 784 Td (Granice ciagow) Tj ET",
+      "BT /F1 12 Tf 72 758 Td (Zadania) Tj ET",
+      "BT /F1 11 Tf 72 727 Td (1. Obliczyc granice ciagu:) Tj ET",
+      "BT /F1 11 Tf 72 700 Td (Pierwsze zadanie na stronie pierwszej.) Tj ET",
+      "BT /F1 10 Tf 71 38 Td ( ) Tj 224 0 Td (1) Tj ET",
+    ],
+    [
+      "BT /F1 11 Tf 72 784 Td (3. Obliczyc granice ciagu:) Tj ET",
+      "BT /F1 11 Tf 72 756 Td (Trzecie zadanie na stronie drugiej.) Tj ET",
+      "BT /F1 10 Tf 71 38 Td ( ) Tj 224 0 Td (2) Tj ET",
+    ],
+  ], {
+    F1: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+    F2: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
+  }));
   // „skan”: zrzut strony z tekstem jako obraz, PDF z samym obrazem (bez warstwy tekstu)
   await page.setViewportSize({ width: 794, height: 1123 });
   await page.setContent(`<!doctype html><html lang="pl"><head><meta charset="utf-8"><style>body{margin:60px;font-family:Arial;font-size:22px;color:#111}h1{font-size:34px}.box{background:#f39a5b;padding:10px 16px}</style></head><body><div class="box"><b>KATEDRA AUTOMATYKI</b></div><h1>Lista obecności — lipiec</h1><p>Spóźnienia usprawiedliwione oraz nieusprawiedliwione.</p><p>Zażółć gęślą jaźń.</p></body></html>`, { waitUntil: "load" });
@@ -608,6 +628,28 @@ async function run() {
   check("nagłówek firmowy: „Rozdzial 1/2” na górze stron zostaje w treści", /Rozdzial 1/.test(hf.bodyText) && /Rozdzial 2/.test(hf.bodyText), hf.bodyText.slice(0, 80));
   check("obraz z pasków 1 px (PrimoPDF) sklejony w jeden obraz 120 × 6 pt", hf.strip, "");
   check("spacje ściśnięte w PDF → zagęszczone spacje w pliku (zawijanie jak w PDF)", hf.spaceFit, "");
+
+  // zadania na 2 stronach: „1. Obliczyc...” / „3. Obliczyc...” na różnych Y to treść (nie nagłówek),
+  // a wyśrodkowany numer strony ze spacją na lewym marginesie ma align="center" w stopce
+  await page.evaluate(() => { setDirtyState(false); });
+  await convert(page, path.join(TMP, "zadania-stopka.pdf"));
+  const zs = await page.evaluate(async () => {
+    const z = await JSZip.loadAsync(originalFileBytes);
+    const doc = await z.file("word/document.xml").async("string");
+    const hdrName = Object.keys(z.files).find((f) => /^word\/header\d+\.xml$/.test(f));
+    const ftrName = Object.keys(z.files).find((f) => /^word\/footer\d+\.xml$/.test(f));
+    const hdr = hdrName ? await z.file(hdrName).async("string") : "";
+    const ftr = ftrName ? await z.file(ftrName).async("string") : "";
+    const matches = doc.match(/Obliczyc granice ciagu:/g) || [];
+    return {
+      hasHdr: !!hdrName,
+      hdrHasTask: /Obliczyc/.test(hdr),
+      bodyCount: matches.length,
+      ftrCenter: /<w:jc w:val="center"\/>/.test(ftr) && /PAGE/.test(ftr),
+    };
+  });
+  check("zadania na 2 stronach: numerowana treść na różnych Y nie staje się nagłówkiem strony, a stopka ze spacją wiodącą jest wyśrodkowana",
+    !zs.hasHdr && !zs.hdrHasTask && zs.bodyCount === 2 && zs.ftrCenter, JSON.stringify(zs));
 
   // --- 5. skan: pytanie o OCR, rozpoznanie na urządzeniu, tekst + obraz tła bez słów
   await page.evaluate(() => { setDirtyState(false); window.__conv = null; });

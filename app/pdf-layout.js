@@ -434,9 +434,14 @@
     const stackedLine = (a, o) => !o.line && Math.abs(a.x0 - o.x0) > 2 && Math.abs(a.x1 - o.x1) > 2;
     const alone = (r) => !edges.some((o) => o !== r && near(r, o, 1) && !stackedLine(r, o));
     // prostokąt o tym samym kolorze i szerokości co inne pasy na stronie (np. nagłówek tabeli nad szarymi
-    // pasami harmonogramu) to wiersz tabeli, nie zakreślenie tekstu
+    // pasami harmonogramu) to wiersz tabeli, nie zakreślenie tekstu — wąskie pojedyncze podświetlenie
+    // (np. komenda w ramce kodu) oddalone od drugiego takiego samego na stronie dalej jest zakreśleniem
     const nonPageRects = raw.rects.filter((o) => o.color && o.color !== "ffffff" && o.x1 - o.x0 >= 4 && o.y1 - o.y0 >= 4 && (o.x1 - o.x0 < raw.width * 0.97 || o.y1 - o.y0 < raw.height * 0.97));
-    const hasSiblingBand = (r) => nonPageRects.some((o) => o !== r && o.color === r.color && Math.abs(o.x0 - r.x0) <= 2 && Math.abs(o.x1 - r.x1) <= 2);
+    const hasSiblingBand = (r) => {
+      const rw = r.x1 - r.x0, rh = r.y1 - r.y0;
+      return nonPageRects.some((o) => o !== r && o.color === r.color && Math.abs(o.x0 - r.x0) <= 2 && Math.abs(o.x1 - r.x1) <= 2
+        && (rw >= raw.width * 0.3 || Math.min(Math.abs(o.y0 - r.y1), Math.abs(r.y0 - o.y1)) <= Math.max(40, rh * 3)));
+    };
     for (const r of raw.rects) {
       const w = r.x1 - r.x0, h = r.y1 - r.y0;
       if (!r.color || r.color === "ffffff" || w < 4 || h < 4) continue;
@@ -547,13 +552,29 @@
       if (!groups.has(r)) groups.set(r, []);
       groups.get(r).push(it);
     });
-    const tables = [];
+    const built = [];
     const leftovers = { hSegs: [], vSegs: [], fills: [...specks, ...decorStrips] };
     const failed = [];
     for (const g of groups.values()) {
       const t = buildGrid(g, frags, tol);
-      if (t) tables.push(t);
+      if (t) built.push({ t, g });
       else failed.push(g);
+    }
+    // Prostokąt całkowicie wewnątrz wykrytej większej tabeli (np. tło wyróżnienia wewnątrz ramki kodu)
+    // nie może zostać osobną siostrzaną tabelą w przepływie strony — trafia do grafiki tła.
+    const areaOf = (t) => (t.x1 - t.x0) * (t.y1 - t.y0);
+    const tables = [];
+    for (const entry of built) {
+      const { t, g } = entry;
+      const nested = built.some((o) => o !== entry && areaOf(o.t) > areaOf(t) + 1
+        && o.t.x0 <= t.x0 + 1 && o.t.x1 >= t.x1 - 1 && o.t.y0 <= t.y0 + 1 && o.t.y1 >= t.y1 - 1);
+      if (nested) {
+        for (const it of g) {
+          if (it.kind === "h") leftovers.hSegs.push(it.ref);
+          if (it.kind === "v") leftovers.vSegs.push(it.ref);
+          if (it.kind === "fill") leftovers.fills.push(it.ref);
+        }
+      } else tables.push(t);
     }
     // Pusty pas w serii pasów-tabel (Excel: szare wiersze, ostatnie jeszcze bez wpisów) — ten sam
     // kolor i te same brzegi co wykryta tabela: też pusty wiersz tabeli, nie obraz pod tekstem
@@ -1096,7 +1117,10 @@
       const gap = b.y0 - a.y1;
       const sameEdges = Math.abs(a.x0 - b.x0) < 3 && Math.abs(a.x1 - b.x1) < 3;
       const maxRowH = Math.max(a.Y[a.Y.length - 1] - a.Y[a.Y.length - 2], b.Y[1] - b.Y[0]);
-      const zebraRow = sameEdges && gap >= 16 && gap <= Math.max(36, maxRowH * 1.8)
+      // zebra: tylko cieniowane pasy przedzielone białym wierszem tabeli — nie dwie osobne ramki
+      // bez wypełnienia (np. bloki kodu) rozdzielone zwykłym akapitem treści
+      const shaded = a.cells.some((c) => c.fill) && b.cells.some((c) => c.fill);
+      const zebraRow = sameEdges && shaded && gap >= 16 && gap <= Math.max(36, maxRowH * 1.8)
         && frags.some((f) => f.type === "text" && !f.rotated && (f.x0 + f.x1) / 2 >= a.x0 - 1 && (f.x0 + f.x1) / 2 <= a.x1 + 1 && f.y > a.y1 + 1 && f.y < b.y0 - 1);
       if (sameEdges && ((gap > -1 && gap < 16) || zebraRow)) {
         const joined = joinTables(a, b);
@@ -2521,7 +2545,7 @@
   }
 
   function detectRunningText(pagesRaw) {
-    const sigs = new Map();
+    const sigs = new Map(); // sig -> { pages: Set, minY, maxY }
     const n = pagesRaw.length;
     if (n < 2) return new Set();
     pagesRaw.forEach((raw, pi) => {
@@ -2529,25 +2553,34 @@
       const rows = new Map();
       for (const g of raw.glyphs) {
         if (g.invisible) continue;
-        const zone = runningZone(g.y, H)?.replace("+", "");
-        if (!zone) continue;
+        const z = runningZone(g.y, H);
+        if (!z) continue;
+        const zone = z.replace("+", "");
         const k = zone + ":" + Math.round(g.y);
-        if (!rows.has(k)) rows.set(k, []);
-        rows.get(k).push(g);
+        if (!rows.has(k)) rows.set(k, { gl: [], wide: z.endsWith("+"), y: g.y });
+        rows.get(k).gl.push(g);
       }
-      for (const [k, gl] of rows) {
-        const exact = gl.sort((a, b) => a.x - b.x).map((g) => g.u).join("").replace(/\s+/g, " ").trim();
+      for (const [k, row] of rows) {
+        const exact = row.gl.sort((a, b) => a.x - b.x).map((g) => g.u).join("").replace(/\s+/g, " ").trim();
         if (!exact) continue;
-        // cyfry jako „#” — numer strony; dokładny tekst („=…”) dla strefy poszerzonej, gdzie
-        // „Rozdział 1”, „Rozdział 2”… na górze kolejnych stron to tytuły, nie nagłówek
-        for (const sig of [k.split(":")[0] + "|" + exact.replace(/\d+/g, "#"), "=" + k.split(":")[0] + "|" + exact]) {
-          if (!sigs.has(sig)) sigs.set(sig, new Set());
-          sigs.get(sig).add(pi);
+        const zone = k.split(":")[0];
+        // cyfry jako „#” — numer strony TYLKO w wąskiej strefie nagłówka/stopki (w strefie
+        // poszerzonej „1. Obliczyć…” / „3. Obliczyć…” w treści nie może udawać nagłówka strony);
+        // dokładny tekst („=…”) w obu strefach, z kontrolą stałej wysokości Y na stronach
+        const cand = row.wide ? ["=" + zone + "|" + exact] : [zone + "|" + exact.replace(/\d+/g, "#"), "=" + zone + "|" + exact];
+        for (const sig of cand) {
+          let rec = sigs.get(sig);
+          if (!rec) sigs.set(sig, (rec = { pages: new Set(), minY: row.y, maxY: row.y }));
+          rec.pages.add(pi);
+          rec.minY = Math.min(rec.minY, row.y);
+          rec.maxY = Math.max(rec.maxY, row.y);
         }
       }
     });
     const running = new Set();
-    for (const [sig, pages] of sigs) if (pages.size >= Math.max(2, Math.ceil(n * 0.5))) running.add(sig);
+    for (const [sig, rec] of sigs) {
+      if (rec.pages.size >= Math.max(2, Math.ceil(n * 0.5)) && rec.maxY - rec.minY <= 14) running.add(sig);
+    }
     return running;
   }
 
