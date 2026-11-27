@@ -7,6 +7,15 @@
 
 const WHATS_NEW = [
   {
+    v: "v1.01.46",
+    pl: [
+      "Konwersja PDF na Worda: aplikacja rozpoznaje teraz jak Word także tabele bez pionowych linii — nowoczesne tabele z samymi poziomymi liniami, styl akademicki (linia pod nagłówkiem i na dole), tabele z cieniowanym nagłówkiem, tabele zebrowe (naprzemienne pasy tła) oraz tabele z samą ramką zewnętrzną. Linie stają się prawdziwymi ramkami komórek zamiast obrazka w tle.",
+    ],
+    en: [
+      "PDF to Word conversion: the app now detects tables without vertical lines just like Word — modern horizontal-rule tables, academic booktabs tables, shaded-header tables, zebra-striped tables, and outer-box-only grids. Rules become real cell borders instead of a background image.",
+    ],
+  },
+  {
     v: "v1.01.45",
     pl: [
       "Tabele: nowy wiersz lub kolumna dziedziczą krój, rozmiar i pogrubienie tekstu z sąsiedniego wiersza (jak w Wordzie), a wklejenie tabeli HTML w prostym dokumencie bez własnych stylów zachowuje domyślny Aptos 12 zamiast przełączać na Calibri 11.",
