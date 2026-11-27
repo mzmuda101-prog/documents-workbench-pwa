@@ -667,22 +667,31 @@
   }
 
   // Klik obok tekstu: najbliższy edytowalny akapit na tej wysokości (albo najbliższy pionowo).
+  // W komórce tabeli szukamy wyłącznie w obrębie KLIKNIĘTEJ komórki (dawniej klik w dolną połowę
+  // wysokiej pustej komórki trafiał w <td> i porównanie samego dy przerzucało kursor do 1. kolumny
+  // albo kolejnego wiersza). Przy równej wysokości (np. układ dwukolumnowy) rozstrzyga odległość dx.
   function onClick(e) {
     if (readOnlyMode || e.button !== 0 || e.detail > 1) return;
     const h = host();
     if (!h || !h.contains(e.target) || e.target.closest(".docx-editable-p, .docx-locked-p, a, button, input, textarea, select")) return;
     if (!window.getSelection()?.isCollapsed) return;
-    const list = paras();
+    const td = e.target.closest("td, th");
+    const list = td ? paras().filter((p) => p.closest("td, th") === td) : paras();
     if (!list.length) return;
     let best = null;
-    let bestDist = Infinity;
+    let bestDy = Infinity;
+    let bestDx = Infinity;
     for (const p of list) {
       const r = p.getBoundingClientRect();
-      if (r.bottom < e.clientY - 400 || r.top > e.clientY + 400) continue; // tylko w okolicy
+      if (!td && (r.bottom < e.clientY - 400 || r.top > e.clientY + 400)) continue; // tylko w okolicy
       const dy = e.clientY < r.top ? r.top - e.clientY : e.clientY > r.bottom ? e.clientY - r.bottom : 0;
-      if (dy < bestDist) { bestDist = dy; best = p; if (!dy) break; }
+      const dx = e.clientX < r.left ? r.left - e.clientX : e.clientX > r.right ? e.clientX - r.right : 0;
+      if (dy < bestDy - 0.5 || (Math.abs(dy - bestDy) <= 0.5 && dx < bestDx)) {
+        bestDy = dy; bestDx = dx; best = p;
+        if (!dy && !dx) break;
+      }
     }
-    if (!best || bestDist > 60) return;
+    if (!best || (!td && bestDy > 60)) return;
     const r = best.getBoundingClientRect();
     const y = Math.max(r.top + 2, Math.min(r.bottom - 2, e.clientY));
     if (!placeAtPoint(best, e.clientX, y)) placeAt(best, e.clientX < r.left + r.width / 2 ? 0 : textLength(best));

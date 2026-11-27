@@ -105,6 +105,42 @@ const idle = (page) => page.waitForFunction(() => document.getElementById("loadi
     const w = await page.evaluate(() => [...document.querySelector(".docx-preview-host table").rows[0].cells].map((c) => getComputedStyle(c).writingMode));
     check("8: komórka „lrTb” z pliku poziomo, „tbRl” / „btLr” pionowo", JSON.stringify(w) === JSON.stringify(["horizontal-tb", "vertical-rl", "vertical-rl"]), JSON.stringify(w));
   }
+
+  // 9. klik w wolne miejsce (dolna połowa) wysokiej pustej komórki zostawia kursor w TEJ komórce
+  {
+    const { buildDocx } = require("../tools/word-oracle/build-docx");
+    const B = '<w:tcBorders><w:top w:val="single" w:sz="4" w:color="000000"/><w:left w:val="single" w:sz="4" w:color="000000"/><w:bottom w:val="single" w:sz="4" w:color="000000"/><w:right w:val="single" w:sz="4" w:color="000000"/></w:tcBorders>';
+    const tc = (txt) => `<w:tc><w:tcPr><w:tcW w:w="2800" w:type="dxa"/>${B}</w:tcPr><w:p>${txt ? `<w:r><w:t>${txt}</w:t></w:r>` : ""}</w:p></w:tc>`;
+    const tr = (a, b, c) => `<w:tr><w:trPr><w:trHeight w:val="720" w:hRule="atLeast"/></w:trPr>${tc(a)}${tc(b)}${tc(c)}</w:tr>`;
+    const bytes = await buildDocx({ body: [`<w:tbl><w:tblPr><w:tblW w:w="8400" w:type="dxa"/></w:tblPr><w:tblGrid><w:gridCol w:w="2800"/><w:gridCol w:w="2800"/><w:gridCol w:w="2800"/></w:tblGrid>${tr("Pierwszy host", "", "")}${tr("Ostatni host", "", "")}${tr("Liczba hostów", "", "")}</w:tbl>`] });
+    await page.locator("#fileInput").setInputFiles({ name: "puste-komorki.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", buffer: bytes });
+    await idle(page);
+    if (await page.evaluate(() => readOnlyMode)) {
+      await page.evaluate(() => appFrame.setReadOnly(false));
+      await idle(page);
+    }
+    const r12 = await page.evaluate(() => document.querySelector(".docx-preview-host table").rows[1].cells[2].getBoundingClientRect());
+    await page.mouse.click(r12.x + r12.width / 2, r12.bottom - 5);
+    await page.waitForTimeout(150);
+    await page.keyboard.type("192.168.1.254");
+    await page.waitForTimeout(150);
+    const hit = await page.evaluate(() => {
+      const t = document.querySelector(".docx-preview-host table");
+      const s = window.getSelection();
+      const n = s?.rangeCount ? s.anchorNode : null;
+      const td = (n?.nodeType === 1 ? n : n?.parentElement)?.closest("td, th");
+      return {
+        row: td?.parentElement?.rowIndex ?? -1,
+        col: td?.cellIndex ?? -1,
+        cellText: t.rows[1].cells[2].textContent.trim(),
+        col0Text: t.rows[1].cells[0].textContent.trim(),
+        nextRowText: t.rows[2].cells[0].textContent.trim(),
+      };
+    });
+    check("9: klik w dolną połowę wysokiej pustej komórki stawia kursor i wpisuje tekst w TEJ komórce",
+      hit.row === 1 && hit.col === 2 && hit.cellText === "192.168.1.254" && hit.col0Text === "Ostatni host" && hit.nextRowText === "Liczba hostów",
+      JSON.stringify(hit));
+  }
   await browser.close();
   let failed = 0;
   for (const r of results) { console.log(`${r.ok ? "✅" : "❌"} ${r.name}${!r.ok && r.detail ? `\n   ${r.detail}` : ""}`); if (!r.ok) failed++; }
