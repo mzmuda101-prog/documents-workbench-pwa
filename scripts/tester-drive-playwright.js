@@ -57,6 +57,8 @@ async function run() {
   check("tap po tekście przycisku (Edytuj)", drive("tap", "t-desk", "Edytuj").code === 0, "");
   check("w Edycji dokument jest polem edycji", (drive("look", "t-desk").out?.elements || []).some((x) => x.role === "editable"), "");
   drive("tap", "t-desk", "--xy=700,300");
+  const caret = drive("look", "t-desk").out?.caret;
+  check("look: kursor (akapit z tekstem) po stuknięciu w tekst", !!caret && typeof caret.text === "string" && caret.text.length > 0, JSON.stringify(caret));
   const ps = drive("paste", "t-desk", "--html=<table><tr><td>WKLEJKA</td><td>123</td></tr></table>", "--text=WKLEJKA\t123");
   await sleep(1200);
   const tx = drive("text", "t-desk");
@@ -74,6 +76,11 @@ async function run() {
     check("ponowne otwarcie zapisanego pliku bez błędów", re.code === 0 && Array.isArray(er.out?.errors) && er.out.errors.length === 0, re.raw + JSON.stringify(er.out));
     check("po ponownym otwarciu wklejka jest w tekście", /WKLEJKA/.test(drive("text", "t-desk").out?.text || ""), "");
   }
+  // telefon: przewijanie palcem (mouse.wheel nie działa w mobilnym WebKit) i miejsce kursora
+  drive("open-file", "t-iphone", "docs/samples/przewodnik.docx");
+  await sleep(2500);
+  const sc = drive("scroll", "t-iphone", "600", "--xy=195,500");
+  check("scroll na telefonie przewija (moved > 0)", sc.code === 0 && sc.out?.moved > 0, sc.raw);
   const tap = drive("tap", "t-iphone", "--xy=195,400");
   check("tap --xy na telefonie", tap.code === 0, tap.raw);
   const e = drive("errors", "t-iphone");

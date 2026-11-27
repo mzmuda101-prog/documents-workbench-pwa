@@ -193,7 +193,23 @@ async function serve(name, device, dir) {
         const dlg = [...document.querySelectorAll("dialog[open], [role=dialog]:not([hidden]), [role=alertdialog]:not([hidden])")].find((d) => d.getBoundingClientRect().height > 0);
         // otwarte okno: tylko jego elementy (reszta i tak pod spodem)
         const list = (dlg ? els.filter((e) => dlg.contains(e.el)) : els).slice(0, 120).map(({ el, ...e }) => e);
-        return { url: location.href, title: document.title, dialog: dlg ? (dlg.getAttribute("aria-label") || dlg.querySelector("h1,h2,h3")?.textContent || "okno").trim().slice(0, 80) : null, elements: list, viewport: { width: vw, height: vh } };
+        // kursor: akapit, w którym stoi, i komórka tabeli (wiersz/kolumna od 1)
+        let caret = null;
+        const cur = getSelection();
+        const an = cur && cur.rangeCount ? cur.anchorNode : null;
+        const at = an && (an.nodeType === 1 ? /** @type {Element} */ (an) : an.parentElement);
+        if (at && at.closest("section.docx")) {
+          const para = at.closest("p, li, h1, h2, h3, h4, h5, h6") || at;
+          const td = at.closest("td, th");
+          const tr = td?.parentElement;
+          caret = {
+            text: (para.textContent || "").replace(/\s+/g, " ").trim().slice(0, 100),
+            offset: cur.anchorOffset,
+            collapsed: cur.isCollapsed,
+            cell: td && tr ? { row: [...tr.parentElement.children].indexOf(tr) + 1, col: [...tr.children].indexOf(td) + 1 } : null,
+          };
+        }
+        return { url: location.href, title: document.title, caret, dialog: dlg ? (dlg.getAttribute("aria-label") || dlg.querySelector("h1,h2,h3")?.textContent || "okno").trim().slice(0, 80) : null, elements: list, viewport: { width: vw, height: vh } };
       });
       lastEls = info.elements;
       return { shot, ...info, elements: info.elements.map((e, i) => ({ i, ...e })), downloads: [...downloads], fileChooserOpen: !!chooser };
@@ -230,10 +246,39 @@ async function serve(name, device, dir) {
       } else { await page.mouse.move(a[0], a[1]); await page.mouse.down(); await page.mouse.move(b[0], b[1], { steps: 12 }); await page.mouse.up(); }
       return { ok: true };
     },
+    // Przewija to, co jest pod punktem (najbliższy przewijany przodek, jak pod palcem/kółkiem).
+    // Mobilny WebKit w Playwrighcie nie ma kółka ani gestu przesunięcia — tam przewijamy wprost.
     async scroll(args) {
-      const dy = Number(args[0]) || 400, p = xy(flag(args, "xy")) || [page.viewportSize().width / 2, page.viewportSize().height / 2];
-      await page.mouse.move(p[0], p[1]); await page.mouse.wheel(0, dy); await page.waitForTimeout(300);
-      return { ok: true };
+      const dy = Number(args[0]) || 400, vp = page.viewportSize() || { width: 400, height: 800 };
+      const p = xy(flag(args, "xy")) || [vp.width / 2, vp.height / 2];
+      const where = (pt) => page.evaluate(([x, y]) => {
+        let el = document.elementFromPoint(x, y);
+        while (el && el !== document.documentElement) {
+          const st = getComputedStyle(el);
+          if (/(auto|scroll)/.test(st.overflowY) && el.scrollHeight > el.clientHeight + 1) break;
+          el = el.parentElement;
+        }
+        const s = el && el !== document.documentElement ? el : document.scrollingElement || document.documentElement;
+        if (!s.id) s.dataset.dwbScrollProbe = "1";
+        return s.scrollTop;
+      }, pt);
+      const before = await where(p);
+      if (touch) {
+        await page.evaluate(([x, y, d]) => {
+          let el = document.elementFromPoint(x, y);
+          while (el && el !== document.documentElement) {
+            const st = getComputedStyle(el);
+            if (/(auto|scroll)/.test(st.overflowY) && el.scrollHeight > el.clientHeight + 1) break;
+            el = el.parentElement;
+          }
+          (el && el !== document.documentElement ? el : document.scrollingElement || document.documentElement).scrollBy({ top: d });
+        }, [p[0], p[1], dy]);
+      } else {
+        await page.mouse.move(p[0], p[1]);
+        await page.mouse.wheel(0, dy);
+      }
+      await page.waitForTimeout(350);
+      return { ok: true, moved: Math.round((await where(p)) - before) };
     },
     async "open-file"(args) {
       const f = path.resolve(ROOT, args.join(" "));
