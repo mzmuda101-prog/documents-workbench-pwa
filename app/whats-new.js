@@ -7,6 +7,17 @@
 
 const WHATS_NEW = [
   {
+    v: "v1.01.53",
+    pl: [
+      "Konwersja PDF na Worda: wyrazy dzielone dywizem na końcu wiersza (np. „zachowy-” / „wać”) zapisują się teraz jako prawdziwy miękki dywiz Worda — wiersz łamie się jak w PDF, a po edycji albo na ekranie telefonu wyraz skleja się w całość i da się go normalnie wyszukać oraz zamienić. Takie akapity są też w pełni edytowalne (również w plikach z Worda).",
+      "Telefon: rząd poleceń nad klawiaturą nie przesuwa już przycisków w bok przy chowaniu klawiatury, a nowy pusty dokument tworzony podczas edycji zawsze od razu dostaje kursor w pierwszym akapicie.",
+    ],
+    en: [
+      "PDF to Word conversion: words hyphenated across line breaks now use Word's native optional hyphen — lines still break like the PDF, while editing or reflowing on a phone joins the word cleanly and Find & Replace matches the whole word. Paragraphs containing optional hyphens are now fully editable (including in documents from Word).",
+      "Phone: the command bar above the keyboard no longer shifts buttons horizontally when the keyboard closes, and creating a new blank document while already editing always places the cursor in the first paragraph right away.",
+    ],
+  },
+  {
     v: "v1.01.52",
     pl: [
       "Tabulatory (prawy, środkowy, dziesiętny i z kropkami): po ustawieniu tabulatora w akapicie naciśnięcie klawisza Tab i pisanie od razu wyrównuje tekst na żywo do wybranej pozycji, bez czekania na przerysowanie dokumentu.",
