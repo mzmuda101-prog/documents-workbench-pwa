@@ -60,6 +60,20 @@ async function run() {
   // ── 7b: rząd poleceń i arkusz kart ─────────────────────────────────────────
   check("Edycja: rząd poleceń u dołu, karta Główne, dawny pasek nad dokumentem schowany",
     (await vis("#phCmd")) && (await page.evaluate(() => document.querySelector(".ph-tsw-t").textContent)) === "Główne" && !(await vis("#formatToolbar")) && !(await vis(".doc-toolbar-row-2")));
+  // #14: przy otwartej i schowanej klawiaturze (.is-kb) przyciski rzędu trzymają ten sam X
+  const kbX = await page.evaluate(() => {
+    const cmd = document.getElementById("phCmd");
+    const tsw = document.querySelector(".ph-tsw");
+    const b0 = document.querySelector(".ph-strip button");
+    const xClosed = { tsw: Math.round(tsw.getBoundingClientRect().left * 10) / 10, b0: Math.round(b0.getBoundingClientRect().left * 10) / 10 };
+    cmd.classList.add("is-kb");
+    const xOpen = { tsw: Math.round(tsw.getBoundingClientRect().left * 10) / 10, b0: Math.round(b0.getBoundingClientRect().left * 10) / 10 };
+    cmd.classList.remove("is-kb");
+    return { xClosed, xOpen };
+  });
+  check("rząd: przyciski nie skaczą w bok przy chowaniu klawiatury (.is-kb)",
+    Math.abs(kbX.xClosed.tsw - kbX.xOpen.tsw) <= 0.5 && Math.abs(kbX.xClosed.b0 - kbX.xOpen.b0) <= 0.5,
+    JSON.stringify(kbX));
   const selectWord = () => page.evaluate(() => {
     const p = collectPreviewParagraphElements(document.querySelector(".docx-preview-host")).find((x) => x.isContentEditable && /\w{6,}/.test(x.textContent));
     const w = document.createTreeWalker(p, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode()) && !/\w{6,}/.test(n.textContent));

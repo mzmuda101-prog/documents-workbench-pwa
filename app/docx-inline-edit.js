@@ -75,8 +75,8 @@ const INLINE_LOCK_TAGS = [
   ["rPrChange", "lockTracked"],
   ["drawing", "lockObject"], ["pict", "lockObject"], ["object", "lockObject"],
   ["fldChar", "lockField"], ["fldSimple", "lockField"],
-  // model akapitu zna tylko w:t / w:br / w:tab — zapis kasował twardy/miękki dywiz („e‑mail” → „email”)
-  ["noBreakHyphen", "lockSpecialChar"], ["softHyphen", "lockSpecialChar"], ["ptab", "lockSpecialChar"],
+  // model akapitu zna w:t / w:br / w:tab / w:softHyphen — zapis kasował twardy dywiz („e‑mail” → „email”)
+  ["noBreakHyphen", "lockSpecialChar"], ["ptab", "lockSpecialChar"],
 ];
 // Równanie (m:oMath) — inna przestrzeń nazw: podgląd czyta je jako zwykły tekst, więc akapit
 // zawsze wyglądał na zmieniony, a zapis przesuwał równanie na początek i dublował jego treść.
@@ -258,7 +258,7 @@ function stampCommentMarks(xp, el, nextKey, noteLabels = []) {
     afterObj = null;
     Array.from(n.childNodes).forEach((c) => {
       if (c.localName === "t") offset += (c.textContent || "").length;
-      else if (c.localName === "br" || c.localName === "tab") offset += 1;
+      else if (c.localName === "br" || c.localName === "tab" || c.localName === "softHyphen") offset += 1;
     });
   });
   groups.forEach((spans, at) => {
@@ -335,7 +335,7 @@ function stampRevisionWraps(xp, el) {
     if (n.localName !== "r") return;
     const rev = n.parentNode?.localName === "ins" || n.parentNode?.localName === "moveTo" ? revKey(n.parentNode) : null;
     Array.from(n.childNodes).forEach((c) => {
-      const len = c.localName === "t" ? (c.textContent || "").length : c.localName === "tab" || c.localName === "br" ? 1 : 0;
+      const len = c.localName === "t" ? (c.textContent || "").length : c.localName === "tab" || c.localName === "br" || c.localName === "softHyphen" ? 1 : 0;
       if (rev && len) spans.push({ start: pos, end: pos + len, rev });
       pos += len;
     });

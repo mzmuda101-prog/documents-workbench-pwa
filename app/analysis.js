@@ -203,7 +203,7 @@ function buildDocumentOutline(content, headings) {
 //   • akapity = tylko z jakimś znakiem innym niż odstęp (puste i same spacje — nie).
 const WORD_SPLIT_RE = /[ \t\n\r\f\u0001\u000b\u00a0\u3000\u2013\u2014\u2022\uf0a8\uf0b7]+/; // F0B7/F0A8 = punktory z kroju Symbol
 const WORD_SPACE_RE = /[ \t\n\r\u000b\u00a0\u3000]/g;
-const WORD_ZERO_WIDTH_RE = /[\u200b-\u200d\u2060\ufeff]/g;
+const WORD_ZERO_WIDTH_RE = /[\u00ad\u200b-\u200d\u2060\ufeff]/g;
 
 // tekst akapitu podglądu tak, jak widzi go Word: numer listy, łamania, tabulatory; bez ukrytego
 function wordParagraphText(p) {

@@ -94,6 +94,7 @@ async function renderDocxPreview(bytes, container, opts = {}) {
   await loadFallbackDocFont(wrapper); // plik bez kroju: zamiennik wczytany przed pomiarami
   fixDocxBulletRendering(wrapper);
   if (typeof dwbListNum !== "undefined") await dwbListNum.apply(wrapper, bytes); // numery list jak w Wordzie
+  await restoreSoftHyphens(wrapper, bytes); // miękkie dywizy Worda (<w:softHyphen/> → U+00AD w DOM)
   fixPageAnchoredDrawings(wrapper);
   applyJustifySpaceCompression(wrapper); // wyjustowane: łamanie jak Word (spacja ściskana o ¼)
   applyWordLineMetrics(wrapper); // odstępy między wierszami jak w Wordzie (też granice stron)

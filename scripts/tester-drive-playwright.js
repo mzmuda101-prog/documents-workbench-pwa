@@ -92,8 +92,10 @@ async function run() {
   check("w Edycji dokument jest polem edycji", (drive("look", "t-desk").out?.elements || []).some((x) => x.role === "editable"), "");
   drive("tap", "t-desk", "--xy=700,300");
   const caret = drive("look", "t-desk").out?.caret;
-  check("look: kursor (akapit z tekstem) po stuknięciu w tekst", !!caret && typeof caret.text === "string" && caret.text.length > 0, JSON.stringify(caret));
+  check("look: kursor (akapit z tekstem, offset i around) po stuknięciu w tekst", !!caret && typeof caret.text === "string" && caret.text.length > 0 && typeof caret.offset === "number" && typeof caret.around === "string" && caret.around.includes("|"), JSON.stringify(caret));
   const endKey = drive("key", "t-desk", "End");
+  const caretEnd = drive("look", "t-desk").out?.caret;
+  check("look: End przesuwa caret.offset w całym akapicie (nie zeruje na kolejnym <span>)", !!caretEnd && caretEnd.offset >= caret.offset && caretEnd.offset > 0, JSON.stringify({ before: caret?.offset, after: caretEnd?.offset, around: caretEnd?.around }));
   check("feel: klawisz przesuwający tylko kursor nie jest martwy", endKey.out?.feel?.dead === false, JSON.stringify(endKey.out?.feel));
 
   // natywna lista wyboru (krój, styl akapitu)

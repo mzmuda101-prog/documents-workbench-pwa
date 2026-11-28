@@ -173,6 +173,12 @@
     textRun(t) {
       const text = clean(t.text);
       if (!text) return "";
+      // Miękki dywiz (\u00AD) → natywny <w:softHyphen/> Worda (Word i aplikacja szukają całego wyrazu).
+      const runXml = (s, props) => {
+        if (!s.includes("\u00ad")) return `<w:r>${props}<w:t xml:space="preserve">${esc(s)}</w:t></w:r>`;
+        const body = s.split("\u00ad").map((p) => (p ? `<w:t xml:space="preserve">${esc(p)}</w:t>` : "")).join("<w:softHyphen/>");
+        return `<w:r>${props}${body}</w:r>`;
+      };
       // Znak, który mógł się źle odczytać (zły kod w PDF: „?” albo samotny akcent w środku
       // słowa, znak zastępczy, kod prywatny) — żółte zaznaczenie, żeby łatwo go znaleźć.
       if (SUSPECT.test(text)) {
@@ -180,15 +186,15 @@
         let out = "", last = 0, m;
         const re = new RegExp(SUSPECT.source, "gu");
         while ((m = re.exec(text))) {
-          if (m.index > last) out += `<w:r>${this.runProps(t)}<w:t xml:space="preserve">${esc(text.slice(last, m.index))}</w:t></w:r>`;
-          out += `<w:r>${this.runProps({ ...t, hl: true })}<w:t xml:space="preserve">${esc(m[0])}</w:t></w:r>`;
+          if (m.index > last) out += runXml(text.slice(last, m.index), this.runProps(t));
+          out += runXml(m[0], this.runProps({ ...t, hl: true }));
           this.suspect++;
           last = m.index + m[0].length;
         }
-        if (last < text.length) out += `<w:r>${this.runProps(t)}<w:t xml:space="preserve">${esc(text.slice(last))}</w:t></w:r>`;
+        if (last < text.length) out += runXml(text.slice(last), this.runProps(t));
         return out;
       }
-      return `<w:r>${this.runProps(t)}<w:t xml:space="preserve">${esc(text)}</w:t></w:r>`;
+      return runXml(text, this.runProps(t));
     }
 
     // ---------------- listy (numbering.xml)

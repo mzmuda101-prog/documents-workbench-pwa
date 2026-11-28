@@ -92,11 +92,27 @@ function clearFrHighlights() {
 function frDomRange(match, re) {
   const el = match.el;
   if (!el) return null;
-  const text = el.textContent || "";
+  const raw = el.textContent || "";
+  // Miękki dywiz (U+00AD z <w:softHyphen/>) w DOM jest niewidoczny w szukaniu jak w Wordzie:
+  // dopasowujemy bez niego, a zakres podświetlenia mapujemy z powrotem na surowe przesunięcia DOM.
+  let text = raw;
+  let posMap = null;
+  if (raw.includes("\u00ad")) {
+    posMap = [];
+    let stripped = "";
+    for (let i = 0; i < raw.length; i++) {
+      if (raw[i] === "\u00ad") continue;
+      posMap.push(i);
+      stripped += raw[i];
+    }
+    text = stripped;
+  }
   const dom = findAllMatches(text, re);
   let hit = dom[match.occurrence];
   if (!hit || text.slice(hit.start, hit.end) !== match.text) hit = dom.find((d) => text.slice(d.start, d.end) === match.text && Math.abs(d.start - match.start) < 8);
   if (!hit) return null;
+  const hitStart = posMap ? posMap[hit.start] : hit.start;
+  const hitEnd = posMap ? posMap[hit.end - 1] + 1 : hit.end;
   const range = document.createRange();
   let pos = 0;
   let startSet = false;
@@ -104,8 +120,8 @@ function frDomRange(match, re) {
   let n = walker.nextNode();
   while (n) {
     const len = n.textContent.length;
-    if (!startSet && hit.start < pos + len) { range.setStart(n, hit.start - pos); startSet = true; }
-    if (startSet && hit.end <= pos + len) { range.setEnd(n, hit.end - pos); return range; }
+    if (!startSet && hitStart < pos + len) { range.setStart(n, hitStart - pos); startSet = true; }
+    if (startSet && hitEnd <= pos + len) { range.setEnd(n, hitEnd - pos); return range; }
     pos += len;
     n = walker.nextNode();
   }
@@ -230,7 +246,7 @@ async function runFindReplaceScan(opts = {}) {
     return { pending, bytes: originalFileBytes };
   };
   const snap = typeof withQuietFile === "function" ? await withQuietFile(read) : await read();
-  const override = new Map(snap.pending.filter((e) => !e.note).map((e) => [e.index, previewRunsToPlainText(e.runs).replace(/\n/g, "")]));
+  const override = new Map(snap.pending.filter((e) => !e.note).map((e) => [e.index, previewRunsToPlainText(e.runs).replace(/[\n\u00ad]/g, "")]));
   const doc = await getDocumentXmlDom(snap.bytes);
   const paras = docBodyParagraphs(docCanvasEl);
   frMatches = doc ? scanFindMatchesInDoc(doc, edit, edit.scope, override).map((m) => ({ ...m, el: paras[m.paraIndex] })) : [];

@@ -90,10 +90,14 @@ function setParagraphText(pEl, text) {
   parts.forEach((part, i) => {
     const r = doc.createElementNS(W_NS, "r");
     if (part) {
-      const t = doc.createElementNS(W_NS, "t");
-      if (/^\s|\s$/.test(part)) t.setAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:space", "preserve");
-      t.textContent = part;
-      r.appendChild(t);
+      part.split(/(\u00ad)/).forEach((seg) => {
+        if (seg === "\u00ad") { r.appendChild(doc.createElementNS(W_NS, "softHyphen")); return; }
+        if (!seg) return;
+        const t = doc.createElementNS(W_NS, "t");
+        if (/^\s|\s$/.test(seg)) t.setAttributeNS("http://www.w3.org/XML/1998/namespace", "xml:space", "preserve");
+        t.textContent = seg;
+        r.appendChild(t);
+      });
     }
     pEl.appendChild(r);
     if (i < parts.length - 1) {
@@ -521,6 +525,21 @@ function replaceInParagraphXml(p, re, edit, pick) {
   let acc = 0;
   texts.forEach((s) => { starts.push(acc); acc += s.length; });
   const matches = findParagraphMatches(p, re, texts.join(""));
+  // Miękkie dywizy leżące ściśle wewnątrz zamienianego zakresu znikają razem ze słowem.
+  const softHyphs = [];
+  if (matches.length && p.getElementsByTagNameNS(W_NS, "softHyphen").length) {
+    let pos = 0;
+    const walkHyph = (node) => {
+      for (const n of Array.from(node.childNodes)) {
+        if (n.nodeType !== 1) continue;
+        if (n.namespaceURI === W_NS && n.localName === "p" && n !== p) continue;
+        if (n.namespaceURI === W_NS && n.localName === "t") { pos += (n.textContent || "").length; continue; }
+        if (n.namespaceURI === W_NS && n.localName === "softHyphen" && n.parentNode?.localName === "r") { softHyphs.push({ el: n, pos }); continue; }
+        walkHyph(n);
+      }
+    };
+    walkHyph(p);
+  }
   let count = 0;
   for (let k = matches.length - 1; k >= 0; k--) { // od końca: wcześniejsze przesunięcia się nie zmieniają
     if (!pick(k)) continue;
@@ -528,6 +547,7 @@ function replaceInParagraphXml(p, re, edit, pick) {
     let repl = expandReplacement(edit.replace, m, !!edit.regex && !edit.literalReplace);
     if (edit.wordLike && !edit.regex && edit.matchCase === false) repl = wordReplaceCase(m[0], repl);
     spliceTextNodes(texts, starts, start, end, sanitizeXmlText(repl));
+    softHyphs.forEach((h) => { if (h.pos > start && h.pos < end && h.el.parentNode) h.el.parentNode.removeChild(h.el); });
     count++;
   }
   if (!count) return 0;

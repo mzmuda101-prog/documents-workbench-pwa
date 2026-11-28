@@ -524,6 +524,7 @@ function wordJustifyBreaks(host) {
             if (ch === " ") gap += spw * fs;
             continue;
           }
+          if (ch === "\u00ad") { cur = null; continue; } // miękki dywiz ma czasem height=0 w Range, ale to nadal granica łamania
           range.setStart(t, i);
           range.setEnd(t, i + 1);
           const r = range.getBoundingClientRect();
@@ -531,7 +532,7 @@ function wordJustifyBreaks(host) {
           if (!cur || Math.abs(r.top - cur.y) > 2) { cur = { t, i, x: r.left, y: r.top, end: r.right, endT: t, endI: i, sp: spw * fs, nb: 0, gap }; words.push(cur); gap = 0; }
           else { cur.end = r.right; cur.endT = t; cur.endI = i; }
           if (ch === "\u00a0") cur.nb += 1; // twardą spację CSS też ściska — Word nie
-          if (/[-\u2010\u00ad]/.test(ch)) cur = null; // za łącznikiem można złamać
+          if (/[-\u2010]/.test(ch)) cur = null; // za łącznikiem można złamać
         }
       }
       let fixed = false;
@@ -1618,4 +1619,83 @@ function addGenericFontFallbacks(host) {
     }
   });
   return n;
+}
+
+// docx-preview pomija <w:softHyphen/> podczas rysowania — wstawiamy U+00AD w te same miejsca DOM,
+// żeby łamanie wyrazów (np. z konwersji PDF → Word) działało jak w Wordzie: dywiz na końcu linii,
+// sklejony wyraz w środku i po edycji, bez blokowania akapitu.
+async function restoreSoftHyphens(host, bytes) {
+  if (!host || !bytes || typeof getDocumentXmlDom !== "function" || typeof collectParagraphElements !== "function" || typeof collectPreviewParagraphElements !== "function") return 0;
+  const doc = await getDocumentXmlDom(bytes);
+  if (!doc || !doc.getElementsByTagNameNS(W_NS, "softHyphen").length) return 0;
+  const xmlPs = collectParagraphElements(doc.documentElement, "all");
+  const domPs = collectPreviewParagraphElements(host);
+  const allArtP = Array.from(host.querySelectorAll("section.docx > article p"));
+  let restored = 0;
+  xmlPs.forEach((xp, i) => {
+    const el = domPs[i];
+    if (!el || !xp.getElementsByTagNameNS(W_NS, "softHyphen").length) return;
+    let xmlText = "";
+    const marks = [];
+    const walkXml = (node) => {
+      for (const n of Array.from(node.childNodes)) {
+        if (n.nodeType !== 1 || n.namespaceURI !== W_NS) continue;
+        if (n.localName === "p" || n.localName === "del" || n.localName === "moveFrom" || n.localName === "instrText" || n.localName === "fldChar") continue;
+        if (n.localName === "r") {
+          const rPr = Array.from(n.childNodes).find((c) => c.nodeType === 1 && c.localName === "rPr");
+          if (rPr && Array.from(rPr.childNodes).some((c) => c.localName === "vanish" && c.getAttributeNS(W_NS, "val") !== "0" && c.getAttributeNS(W_NS, "val") !== "false")) continue;
+          for (const c of Array.from(n.childNodes)) {
+            if (c.nodeType !== 1 || c.namespaceURI !== W_NS) continue;
+            if (c.localName === "t") xmlText += c.textContent || "";
+            else if (c.localName === "softHyphen") marks.push(xmlText.length);
+          }
+          continue;
+        }
+        walkXml(n);
+      }
+    };
+    walkXml(xp);
+    if (!marks.length) return;
+    // Jeśli akapit został rozcięty podziałem strony (data-dwb-cont), zbieramy obie części po kolei.
+    const parts = [el];
+    const idxArt = allArtP.indexOf(el);
+    if (idxArt >= 0) {
+      for (let k = idxArt + 1; k < allArtP.length && allArtP[k].dataset.dwbCont; k++) parts.push(allArtP[k]);
+    }
+    const nodes = [];
+    let domText = "";
+    for (const part of parts) {
+      const w = document.createTreeWalker(part, NodeFilter.SHOW_TEXT);
+      for (let tn = w.nextNode(); tn; tn = w.nextNode()) {
+        const pe = tn.parentElement;
+        if (pe?.closest(".docx-tab, [data-dwb-note], sup.docx-footnote-ref")) continue;
+        if (pe && pe.style?.display === "none") continue;
+        const len = tn.data.length;
+        if (!len) continue;
+        nodes.push({ node: tn, start: domText.length, len });
+        domText += tn.data;
+      }
+    }
+    if (!nodes.length) return;
+    for (let m = marks.length - 1; m >= 0; m--) {
+      const pos = marks[m];
+      let at = domText.length === xmlText.length ? pos : -1;
+      if (at < 0) {
+        const before = xmlText.slice(Math.max(0, pos - 3), pos);
+        const after = xmlText.slice(pos, pos + 3);
+        const hit = before + after ? domText.indexOf(before + after, Math.max(0, pos - 12)) : -1;
+        if (hit >= 0) at = hit + before.length;
+      }
+      if (at < 0 || at > domText.length) continue;
+      // Na styku dwóch fragmentów wstawiamy na końcu wcześniejszego (tam leżał <w:softHyphen/> w XML).
+      const target = nodes.find((x) => at >= x.start && at <= x.start + x.len);
+      if (!target) continue;
+      const local = at - target.start;
+      const d = target.node.data;
+      if (d[local] === "\u00ad" || d[local - 1] === "\u00ad") continue;
+      target.node.data = `${d.slice(0, local)}\u00ad${d.slice(local)}`;
+      restored++;
+    }
+  });
+  return restored;
 }

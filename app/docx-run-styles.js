@@ -458,6 +458,7 @@ function extractRunsFromParagraphXml(pEl) {
       if (n.namespaceURI !== W_NS) return;
       if (n.localName === "br") runs.push({ break: true });
       else if (n.localName === "tab") runs.push({ tab: true, text: "\t", ...style });
+      else if (n.localName === "softHyphen") runs.push({ text: "\u00ad", ...style });
       else if (n.localName === "t" && n.textContent) runs.push({ text: n.textContent, ...style });
     });
   });
@@ -567,10 +568,11 @@ function createRunElement(doc, run) {
     Array.from(rPr.childNodes).sort((x, y) => RPR_ORDER.indexOf(x.localName) - RPR_ORDER.indexOf(y.localName)).forEach((n) => rPr.appendChild(n));
     r.appendChild(rPr);
   }
-  // Tekst z tabulatorami: „\t” → <w:tab/> (w <w:t> Word pokazałby go jako spację). Bez względu
-  // na znacznik „tab” — fragment mógł odziedziczyć go razem ze stylem sąsiada.
-  String(run.text || "").split("\t").forEach((seg, i) => {
-    if (i) r.appendChild(doc.createElementNS(W_NS, "tab"));
+  // Tekst z tabulatorami i miękkimi dywizami: „\t” → <w:tab/>, „\u00AD” → <w:softHyphen/>
+  // (w <w:t> Word pokazałby tabulator jako spację, a nie szukałby wyrazu z \u00AD).
+  String(run.text || "").split(/(\t|\u00ad)/).forEach((seg) => {
+    if (seg === "\t") { r.appendChild(doc.createElementNS(W_NS, "tab")); return; }
+    if (seg === "\u00ad") { r.appendChild(doc.createElementNS(W_NS, "softHyphen")); return; }
     const text = sanitizeXmlText(seg);
     if (!text) return;
     const t = doc.createElementNS(W_NS, "t");

@@ -732,6 +732,71 @@ async function run() {
   const phText = ph.text.replace(/\s+/g, " ");
   check("zdjęcia: tekst obu kartek rozpoznany (obrót i blat nie przeszkadzają)", /Zawiadomienie o zebraniu/.test(phText) && /Porządek obrad/.test(phText) && /świetlicy osiedlowej/.test(phText), phText.slice(0, 200));
 
+  // --- 5e. dywizy łamania wyrazów z PDF (#16): „zachowy-” + „wac” → <w:softHyphen/>, edycja, szukanie, zamiana
+  {
+    const f = { F1: "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>" };
+    const dywPdf = path.join(TMP, "dywizy.pdf");
+    fs.writeFileSync(dywPdf, handPdf([
+      "BT /F1 12 Tf 70 740 Td (Regulamin tego obiektu nakazuje starannie i konsekwentnie zachowy-) Tj ET",
+      "BT /F1 12 Tf 70 724 Td (wac porzadek oraz wysylac wiadomosc na wskazany adres skrzynki e-) Tj ET",
+      "BT /F1 12 Tf 70 708 Td (mail w latach 2020-) Tj ET",
+      "BT /F1 12 Tf 70 692 Td (2025 zgodnie z umowa.) Tj ET",
+    ], f));
+    await closeTabs(page);
+    await convert(page, dywPdf);
+    await keepDocx(page, "dywizy");
+    const dyw = await page.evaluate(async () => {
+      const z = await JSZip.loadAsync(originalFileBytes);
+      const xml = await z.file("word/document.xml").async("string");
+      const d = new DOMParser().parseFromString(xml, "application/xml");
+      const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+      const softCount = d.getElementsByTagNameNS(W, "softHyphen").length;
+      const text = [...d.getElementsByTagNameNS(W, "p")].map((p) => [...p.getElementsByTagNameNS(W, "t")].map((t) => t.textContent).join("")).join("\n");
+      const p0 = document.querySelector(".docx-preview-host section.docx > article p");
+      return { softCount, text, domHasSoft: (p0?.textContent || "").includes("zachowy\u00adwac"), lock: p0?.dataset?.lock || "" };
+    });
+    check("dywizy PDF: łamanie wyrazu → <w:softHyphen/> (bez „e-” i „2020-”), DOM ma U+00AD, akapit edytowalny",
+      dyw.softCount === 1 && dyw.text.includes("zachowywac") && !dyw.text.includes("zachowy- wac") && dyw.text.includes("e-") && dyw.text.includes("2020-") && dyw.domHasSoft && !dyw.lock,
+      JSON.stringify(dyw));
+    // Edycja akapitu z miękkim dywizem: zapis zachowuje <w:softHyphen/>
+    await page.evaluate(() => { readModeEl.checked = false; readModeEl.dispatchEvent(new Event("change")); });
+    await page.waitForTimeout(350);
+    await page.evaluate(() => {
+      const p = document.querySelector(".docx-preview-host section.docx > article p");
+      if (typeof focusDocParagraph === "function") focusDocParagraph(p);
+      placeCaret(p, p.textContent.length);
+    });
+    await page.waitForTimeout(200);
+    await page.keyboard.type(" OK", { delay: 10 });
+    await page.waitForTimeout(400);
+    await page.evaluate(async () => { await mergeInlineEditsIntoBytes(); });
+    await page.waitForTimeout(200);
+    const afterEdit = await page.evaluate(async () => {
+      const z = await JSZip.loadAsync(originalFileBytes);
+      const xml = await z.file("word/document.xml").async("string");
+      const d = new DOMParser().parseFromString(xml, "application/xml");
+      const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+      return { softCount: d.getElementsByTagNameNS(W, "softHyphen").length, ok: xml.includes("OK") };
+    });
+    check("dywizy PDF: edycja akapitu zachowuje <w:softHyphen/> w pliku", afterEdit.softCount === 1 && afterEdit.ok, JSON.stringify(afterEdit));
+    // Znajdź i zamień przez miękki dywiz (jak w Wordzie) + usunięcie osieroconego <w:softHyphen/>
+    const fr = await page.evaluate(async () => {
+      const doc = await getDocumentXmlDom(originalFileBytes);
+      const edit = { op: "replace", find: "zachowywac", replace: "stosowac", matchCase: false, wordLike: true };
+      const hits = scanFindMatchesInDoc(doc, edit, "all");
+      const res = await buildPatchedDocx(originalFileBytes, [edit]);
+      const z = await JSZip.loadAsync(res.bytes);
+      const xml = await z.file("word/document.xml").async("string");
+      const d = new DOMParser().parseFromString(xml, "application/xml");
+      const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+      const txt = [...d.getElementsByTagNameNS(W, "t")].map((t) => t.textContent).join("");
+      return { hits: hits.length, replaced: res.changeCount, softAfter: d.getElementsByTagNameNS(W, "softHyphen").length, hasStosowac: txt.includes("stosowac") };
+    });
+    check("dywizy PDF: Znajdź i zamień znajduje „zachowywac” i czyści <w:softHyphen/> przy zamianie",
+      fr.hits === 1 && fr.replaced === 1 && fr.softAfter === 0 && fr.hasStosowac,
+      JSON.stringify(fr));
+  }
+
   // --- 6. opcjonalnie: próbki spoza repo
   const dir = process.env.PDF_SAMPLES;
   if (dir && fs.existsSync(dir)) {

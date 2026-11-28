@@ -4591,6 +4591,8 @@ body.tb-float.ph-bar-on .doc-viewport {
   box-shadow: 0 1px 0 color-mix(in srgb, var(--ink) 10%, transparent);
 }
 .ph-cmd.is-kb { left: 0; right: 0; border-radius: 0; border-width: 1px 0 0; }
+/* Stały X przycisków rzędu (10px left + 1px ramki + 6px padding = 17px), bez przeskoku po schowaniu klawiatury (#14) */
+.ph-cmd.is-kb .ph-row { padding-inline: 17px; }
 .ph-row { display: flex; align-items: center; gap: 4px; padding: 4px 6px; }
 .ph-tsw {
   flex: none; display: inline-flex; align-items: center; gap: 4px; height: 44px; padding: 0 10px; border: 0; border-radius: 10px;

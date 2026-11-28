@@ -4566,9 +4566,11 @@ const composeUi = (() => {
       });
       const loaded = await window.ingestFile(file, { silent: true, fresh: true });
       if (!loaded) return false;
-      // od razu pisanie: Edycja + kursor na początku (zużyje go syncInlineEditMode)
+      // od razu pisanie: Edycja + kursor na początku (zużyje go syncInlineEditMode; gdy dokument
+      // jest już w Edycji i setupInlineEditingAfterRender zdążył skończyć — stawiamy kursor od razu)
       pendingInlineCursor = { paraIndex: 0, offset: 0 };
       if (typeof appFrame !== "undefined") appFrame.setReadOnly(false);
+      if (typeof inlineLocksPending !== "undefined" && !inlineLocksPending && typeof syncInlineEditMode === "function") syncInlineEditMode();
       toast(t("newDocCreated"), "success");
       return true;
     } catch (err) {

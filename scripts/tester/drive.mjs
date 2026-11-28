@@ -246,9 +246,20 @@ async function serve(name, device, dir) {
           const para = at.closest("p, li, h1, h2, h3, h4, h5, h6") || at;
           const td = at.closest("td, th");
           const tr = td?.parentElement;
+          const full = para.textContent || "";
+          let offset = cur.anchorOffset;
+          try {
+            const r = document.createRange();
+            r.selectNodeContents(para);
+            r.setEnd(an, cur.anchorOffset);
+            offset = r.toString().length;
+          } catch (_) {}
+          const a = Math.max(0, offset - 20);
+          const b = Math.min(full.length, offset + 20);
           caret = {
-            text: (para.textContent || "").replace(/\s+/g, " ").trim().slice(0, 100),
-            offset: cur.anchorOffset,
+            text: full.replace(/\s+/g, " ").trim().slice(0, 100),
+            offset,
+            around: `${full.slice(a, offset)}|${full.slice(offset, b)}`.replace(/\s+/g, " "),
             collapsed: cur.isCollapsed,
             cell: td && tr ? { row: [...tr.parentElement.children].indexOf(tr) + 1, col: [...tr.children].indexOf(td) + 1 } : null,
           };

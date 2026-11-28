@@ -1934,6 +1934,19 @@
       firstLine = 0;
     }
     if (indLeft < 0.5) indLeft = Math.max(0, indLeft);
+    // Dzielenie wyrazu na końcu wiersza („zachowy-” + „wać”): zwykły dywiz na pełnym wierszu przed
+    // wyrazem z małej litery → miękki dywiz Worda (<w:softHyphen/>), nie „zachowy- wać”.
+    const maxRAll = Math.max(...rights);
+    const softBreaks = lines.map((l, i) => {
+      if (i + 1 >= lines.length) return false;
+      const nx = lines[i + 1];
+      const prevT = l.tokens[l.tokens.length - 1];
+      const nextT = nx.tokens[0];
+      if (!prevT || prevT.type !== "text" || prevT.field || prevT.link) return false;
+      if (!nextT || nextT.type !== "text" || nextT.field || nextT.link) return false;
+      if (!/\p{L}{2}[-\u2010]$/u.test(prevT.text) || !/^\p{Ll}{2}/u.test(nextT.text)) return false;
+      return l.x1 >= (l.x0 + maxRAll) / 2 && l.x1 + firstWordWidth(nx, size) >= maxRAll - size * 1.5;
+    });
     let indRight = 0;
     if (align === "right") indRight = Math.max(0, box.x1 - Math.max(...rights));
     else if (!multi && align === "left" && !first.tokens.some((t) => t.type === "tab" && t.align === "right")) {
@@ -1945,9 +1958,12 @@
       // zastępczy bywa minimalnie szerszy — „ADMINISTRACYJNE” w DC-85 łamało się na kawałki),
       // ale mniejszy niż to, co wciągnęłoby pierwsze słowo następnego wiersza do poprzedniego:
       // w PDF wiersz i skończył się, bo x1(i) + spacja + pierwsze słowo(i+1) > szerokość.
-      const maxR = Math.max(...rights);
+      const maxR = maxRAll;
       let safe = maxR + size * 1.2;
-      for (let i = 0; i + 1 < lines.length; i++) safe = Math.min(safe, lines[i].x1 + size * 0.25 + firstWordWidth(lines[i + 1], size) - 0.5);
+      for (let i = 0; i + 1 < lines.length; i++) {
+        const pull = softBreaks[i] ? Math.max(size * 0.4, firstWordWidth(lines[i + 1], size) - size * 0.35) : size * 0.25 + firstWordWidth(lines[i + 1], size);
+        safe = Math.min(safe, lines[i].x1 + pull - 0.5);
+      }
       indRight = Math.max(0, box.x1 - Math.max(maxR + size * 0.15 + 1, safe));
       if (align === "both") {
         // Wyjustowany wiersz w PDF bywa WĘŻSZY niż jego tekst ze zwykłymi spacjami: Word 2013+
@@ -1961,7 +1977,10 @@
         const want = Math.max(...nat.slice(0, -1)) + 0.3;
         if (want > right) {
           let cap = Infinity;
-          for (let i = 0; i + 1 < lines.length; i++) cap = Math.min(cap, nat[i] + size * 0.25 + firstWordWidth(lines[i + 1]) - 0.5);
+          for (let i = 0; i + 1 < lines.length; i++) {
+            const pull = softBreaks[i] ? Math.max(size * 0.4, firstWordWidth(lines[i + 1]) - size * 0.35) : size * 0.25 + firstWordWidth(lines[i + 1]);
+            cap = Math.min(cap, nat[i] + pull - 0.5);
+          }
           right = Math.max(right, Math.min(want, cap));
         }
         indRight = right <= box.x1 ? box.x1 - right : Math.max(box.x1 - right, -Math.min(28, size * 2));
@@ -1998,8 +2017,9 @@
       }
       if (i > 0) {
         const prevT = tokens[tokens.length - 1];
-        // dzielenie wyrazu na końcu wiersza: „przy-” + „kład” → zostawiamy myślnik (bezpieczniej)
-        if (prevT && prevT.type === "text" && !/[ ­]$/.test(prevT.text)) {
+        if (softBreaks[i - 1] && prevT && prevT.type === "text" && /[-\u2010]$/.test(prevT.text)) {
+          tokens[tokens.length - 1] = { ...prevT, text: `${prevT.text.slice(0, -1)}\u00ad` };
+        } else if (prevT && prevT.type === "text" && !/[ ­]$/.test(prevT.text)) {
           tokens.push({ ...prevT, type: "text", text: " " });
         }
       }
